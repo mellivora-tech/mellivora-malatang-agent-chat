@@ -32,6 +32,7 @@ export interface AgentState {
 	setDraft(sessionId: string, value: string): void;
 	setActiveAuxiliaryTab(tab: AuxiliaryTab): void;
 	sendMessage(sessionId: string): Promise<void>;
+	cancelTurn(sessionId: string): Promise<void>;
 	applyEvent(event: AgentEvent): void;
 }
 
@@ -121,6 +122,34 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 			for await (const event of get().provider.sendMessage(sessionId, { text: draft })) {
 				get().applyEvent(event);
 			}
+		},
+
+		async cancelTurn(sessionId: string) {
+			const inFlightTurnId = get().inFlightTurnsBySessionId[sessionId];
+			if (!inFlightTurnId) {
+				return;
+			}
+
+			const now = new Date().toISOString();
+			set(state => {
+				const session = state.sessionsById[sessionId];
+				const messages = state.messagesBySessionId[sessionId] ?? [];
+
+				return {
+					messagesBySessionId: {
+						...state.messagesBySessionId,
+						[sessionId]: messages.map(message =>
+							message.turnId === inFlightTurnId ? { ...message, streaming: false } : message
+						)
+					},
+					inFlightTurnsBySessionId: omitKey(state.inFlightTurnsBySessionId, sessionId),
+					sessionsById: session
+						? { ...state.sessionsById, [sessionId]: { ...session, status: 'idle', updatedAt: now } }
+						: state.sessionsById
+				};
+			});
+
+			await get().provider.cancelTurn(sessionId, inFlightTurnId);
 		},
 
 		applyEvent(event: AgentEvent) {

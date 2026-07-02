@@ -10,7 +10,7 @@ export function Composer({ sessionId }: ComposerProps) {
 	const inFlightTurnId = useAgentStore(state => state.inFlightTurnsBySessionId[sessionId]);
 	const setDraft = useAgentStore(state => state.setDraft);
 	const sendMessage = useAgentStore(state => state.sendMessage);
-	const provider = useAgentStore(state => state.provider);
+	const cancelTurn = useAgentStore(state => state.cancelTurn);
 
 	return (
 		<form
@@ -36,13 +36,7 @@ export function Composer({ sessionId }: ComposerProps) {
 					disabled={!inFlightTurnId}
 					onClick={() => {
 						if (inFlightTurnId) {
-							useAgentStore.setState(state => {
-								const nextInFlightTurnsBySessionId = { ...state.inFlightTurnsBySessionId };
-								delete nextInFlightTurnsBySessionId[sessionId];
-
-								return { inFlightTurnsBySessionId: nextInFlightTurnsBySessionId };
-							});
-							void provider.cancelTurn(sessionId, inFlightTurnId);
+							void cancelTurn(sessionId);
 						}
 					}}
 				>
