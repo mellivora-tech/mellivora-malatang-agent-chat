@@ -14,10 +14,9 @@ export default defineConfig({
 		emptyOutDir: true
 	},
 	test: {
-		include: ['src/**/*.{test,spec}.{ts,tsx}'],
 		environment: 'jsdom',
 		globals: true,
 		setupFiles: './src/test/setup.ts',
-		exclude: ['e2e/**']
+		exclude: ['e2e/**', 'node_modules/**']
 	}
 });

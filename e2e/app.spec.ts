@@ -22,8 +22,16 @@ test('desktop app launches and streams a mock response', async () => {
 	await expect(window.locator('.message.assistant .message-content').last()).toContainText('The safest first change is to isolate the UI state');
 	await expect(window.locator('.message.assistant .message-content').last()).toContainText('renderer can stay deterministic while the provider streams updates');
 
+	await window.getByRole('tab', { name: 'Changes' }).click();
+	await expect(window.getByRole('tabpanel', { name: 'Changes' })).toContainText('modified • +42 / -18');
+	await expect(window.getByRole('tabpanel', { name: 'Changes' })).toContainText('src/auth/redirect.ts');
+
 	await window.getByRole('tab', { name: 'Files' }).click();
 	await expect(window.getByRole('tabpanel', { name: 'Files' })).toContainText('src/auth/redirect.ts');
+
+	await window.getByRole('tab', { name: 'Details' }).click();
+	await expect(window.getByRole('tabpanel', { name: 'Details' })).toContainText('Mock Agent');
+	await expect(window.getByRole('tabpanel', { name: 'Details' })).toContainText('mellivora-malatang');
 
 	await mkdir('test-results', { recursive: true });
 	await window.setViewportSize({ width: 1440, height: 900 });
