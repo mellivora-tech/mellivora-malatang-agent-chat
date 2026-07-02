@@ -60,13 +60,16 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 				sessionOrder,
 				activeSessionId: sessionOrder[0] ?? null,
 				messagesBySessionId: cloneRecord(seedMessagesBySessionId),
+				toolCallsBySessionId: {},
 				fileChangesBySessionId: cloneRecord(seedFileChangesBySessionId),
-				filesBySessionId: cloneRecord(seedFilesBySessionId)
+				filesBySessionId: cloneRecord(seedFilesBySessionId),
+				draftsBySessionId: {},
+				inFlightTurnsBySessionId: {}
 			});
 		},
 
 		async createSession() {
-			const session = await provider.createSession({});
+			const session = await get().provider.createSession({});
 			set(state => ({
 				sessionsById: { ...state.sessionsById, [session.id]: session },
 				sessionOrder: [session.id, ...state.sessionOrder],
