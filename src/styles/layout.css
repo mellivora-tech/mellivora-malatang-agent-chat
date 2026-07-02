@@ -516,3 +516,26 @@
 	cursor: default;
 	opacity: 0.4;
 }
+
+.session-row:focus-visible,
+.aux-tab:focus-visible,
+.icon-button:focus-visible {
+	outline: 1px solid var(--app-focusBorder);
+	outline-offset: -1px;
+}
+
+.message {
+	border-radius: 5px;
+}
+
+.transcript::-webkit-scrollbar {
+	width: 10px;
+}
+
+.transcript::-webkit-scrollbar-thumb {
+	background: #424242;
+}
+
+.transcript::-webkit-scrollbar-track {
+	background: transparent;
+}
