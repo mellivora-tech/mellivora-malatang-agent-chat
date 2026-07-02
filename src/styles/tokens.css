@@ -11,6 +11,18 @@
 	--app-border: #2b2b2b;
 	--app-focusBorder: #0078d4;
 	--app-input-background: #2b2b2b;
+	--app-chat-surface-background: #1f1f1f;
+	--app-chat-header-background: #202020;
+	--app-chat-status-pill-background: #303030;
+	--app-chat-message-background: #252526;
+	--app-chat-message-user-background: #223246;
+	--app-chat-message-assistant-background: #20262c;
+	--app-chat-tool-call-background: #1b2b20;
+	--app-chat-composer-background: #181818;
+	--app-chat-status-running: #cca700;
+	--app-chat-status-completed: #89d185;
+	--app-chat-status-failed: #f14c4c;
+	--app-chat-status-idle: #8f8f8f;
 	--app-success: #89d185;
 	--app-warning: #cca700;
 	--app-error: #f14c4c;
