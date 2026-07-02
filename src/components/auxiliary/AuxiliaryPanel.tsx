@@ -88,61 +88,69 @@ export function AuxiliaryPanel() {
 					</button>
 				))}
 			</div>
-			<div
-				className="aux-panel-body"
-				role="tabpanel"
-				id={auxiliaryPanelId(activeAuxiliaryTab)}
-				aria-labelledby={auxiliaryTabId(activeAuxiliaryTab)}
-			>
-				{!session ? (
-					<div className="aux-empty">Select a session to inspect changes, files, and details.</div>
-				) : activeAuxiliaryTab === 'changes' ? (
-					fileChanges.length > 0 ? (
-						<ul className="aux-list">
-							{fileChanges.map(change => (
-								<li key={change.id} className="aux-list-item">
-									<div>{change.path}</div>
-									<div className="change-meta">
-										{change.status} • +{change.additions} / -{change.deletions}
-									</div>
-								</li>
-							))}
-						</ul>
-					) : (
-						<div className="aux-empty">No tracked changes for this session.</div>
-					)
-				) : activeAuxiliaryTab === 'files' ? (
-					files.length > 0 ? (
-						<ul className="aux-list">
-							{files.map(file => (
-								<li key={file.id} className="aux-list-item">
-									<div>{file.path}</div>
-									<div className="file-meta">
-										{file.type} • depth {file.depth}
-									</div>
-								</li>
-							))}
-						</ul>
-					) : (
-						<div className="aux-empty">No files in this session workspace.</div>
-					)
-				) : (
-					<div className="details-grid">
-						<div className="details-key">Provider</div>
-						<div className="details-value">{session.providerName}</div>
-						<div className="details-key">Workspace</div>
-						<div className="details-value">{session.workspaceLabel}</div>
-						<div className="details-key">Updated</div>
-						<div className="details-value">{new Date(session.updatedAt).toLocaleString()}</div>
-						<div className="details-key">Status</div>
-						<div className="details-value">{session.status}</div>
-						<div className="details-key">Pinned</div>
-						<div className="details-value">{session.pinned ? 'Yes' : 'No'}</div>
-						<div className="details-key">Unread</div>
-						<div className="details-value">{session.unread ? 'Yes' : 'No'}</div>
+			{auxiliaryTabs.map(({ tab }) => {
+				const isActive = activeAuxiliaryTab === tab;
+
+				return (
+					<div
+						key={tab}
+						className="aux-panel-body"
+						role="tabpanel"
+						id={auxiliaryPanelId(tab)}
+						aria-labelledby={auxiliaryTabId(tab)}
+						hidden={!isActive}
+					>
+						{!session ? (
+							<div className="aux-empty">Select a session to inspect changes, files, and details.</div>
+						) : tab === 'changes' ? (
+							fileChanges.length > 0 ? (
+								<ul className="aux-list">
+									{fileChanges.map(change => (
+										<li key={change.id} className="aux-list-item">
+											<div>{change.path}</div>
+											<div className="change-meta">
+												{change.status} • +{change.additions} / -{change.deletions}
+											</div>
+										</li>
+									))}
+								</ul>
+							) : (
+								<div className="aux-empty">No tracked changes for this session.</div>
+							)
+						) : tab === 'files' ? (
+							files.length > 0 ? (
+								<ul className="aux-list">
+									{files.map(file => (
+										<li key={file.id} className="aux-list-item">
+											<div>{file.path}</div>
+											<div className="file-meta">
+												{file.type} • depth {file.depth}
+											</div>
+										</li>
+									))}
+								</ul>
+							) : (
+								<div className="aux-empty">No files in this session workspace.</div>
+							)
+						) : (
+							<div className="details-grid">
+								<div className="details-key">Provider</div>
+								<div className="details-value">{session.providerName}</div>
+								<div className="details-key">Workspace</div>
+								<div className="details-value">{session.workspaceLabel}</div>
+								<div className="details-key">Updated</div>
+								<div className="details-value">{new Date(session.updatedAt).toLocaleString()}</div>
+								<div className="details-key">Status</div>
+								<div className="details-value">{session.status}</div>
+								<div className="details-key">Pinned</div>
+								<div className="details-value">{session.pinned ? 'Yes' : 'No'}</div>
+								<div className="details-key">Unread</div>
+								<div className="details-value">{session.unread ? 'Yes' : 'No'}</div>
+							</div>
+						)}
 					</div>
-				)}
-			</div>
+				);
+			})}
 		</aside>
 	);
 }

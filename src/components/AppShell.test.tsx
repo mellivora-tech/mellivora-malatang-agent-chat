@@ -24,13 +24,24 @@ test('links auxiliary tabs and tabpanel with accessible relations', async () => 
 	const changesTab = screen.getByRole('tab', { name: 'Changes' });
 	const filesTab = screen.getByRole('tab', { name: 'Files' });
 	const detailsTab = screen.getByRole('tab', { name: 'Details' });
-	const tabPanel = screen.getByRole('tabpanel');
+	const tabPanels = screen.getAllByRole('tabpanel', { hidden: true });
+	const changesPanel = tabPanels.find(panel => panel.id === 'aux-tabpanel-changes');
+	const filesPanel = tabPanels.find(panel => panel.id === 'aux-tabpanel-files');
+	const detailsPanel = tabPanels.find(panel => panel.id === 'aux-tabpanel-details');
 
 	expect(changesTab).toHaveAttribute('aria-controls', 'aux-tabpanel-changes');
 	expect(filesTab).toHaveAttribute('aria-controls', 'aux-tabpanel-files');
 	expect(detailsTab).toHaveAttribute('aria-controls', 'aux-tabpanel-details');
-	expect(tabPanel.id).toBe(changesTab.getAttribute('aria-controls'));
-	expect(tabPanel).toHaveAttribute('aria-labelledby', changesTab.id);
+	expect(tabPanels).toHaveLength(3);
+	expect(changesPanel).toBeDefined();
+	expect(filesPanel).toBeDefined();
+	expect(detailsPanel).toBeDefined();
+	expect(changesPanel!.id).toBe(changesTab.getAttribute('aria-controls'));
+	expect(filesPanel!.id).toBe(filesTab.getAttribute('aria-controls'));
+	expect(detailsPanel!.id).toBe(detailsTab.getAttribute('aria-controls'));
+	expect(changesPanel!).toHaveAttribute('aria-labelledby', changesTab.id);
+	expect(filesPanel!).toHaveAttribute('aria-labelledby', filesTab.id);
+	expect(detailsPanel!).toHaveAttribute('aria-labelledby', detailsTab.id);
 });
 
 test('creates and selects a new session from the sidebar', async () => {
@@ -55,7 +66,7 @@ test('switches auxiliary tabs', async () => {
 	await user.click(changesTab);
 	await user.keyboard('{ArrowRight}');
 	expect(filesTab).toHaveAttribute('aria-selected', 'true');
-	expect(screen.getByText('src/auth/redirect.ts')).toBeInTheDocument();
+	expect(within(screen.getByRole('tabpanel')).getByText('src/auth/redirect.ts')).toBeInTheDocument();
 	await user.keyboard('{End}');
 	expect(detailsTab).toHaveAttribute('aria-selected', 'true');
 	expect(within(screen.getByRole('tabpanel')).getByText('Mock Agent')).toBeInTheDocument();
