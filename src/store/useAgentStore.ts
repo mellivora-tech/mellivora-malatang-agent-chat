@@ -26,6 +26,8 @@ export interface AgentState {
 	draftsBySessionId: Record<string, string>;
 	activeAuxiliaryTab: AuxiliaryTab;
 	inFlightTurnsBySessionId: Record<string, string>;
+	cancelledTurnIds: Record<string, true>;
+	cancelledTurnsBySessionId: Record<string, string>;
 	initialize(): Promise<void>;
 	createSession(): Promise<void>;
 	selectSession(sessionId: string): void;
@@ -50,6 +52,8 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 		draftsBySessionId: {},
 		activeAuxiliaryTab: 'changes',
 		inFlightTurnsBySessionId: {},
+		cancelledTurnIds: {},
+		cancelledTurnsBySessionId: {},
 
 		async initialize() {
 			const sessions = await get().provider.listSessions();
@@ -65,7 +69,9 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 				fileChangesBySessionId: cloneRecord(seedFileChangesBySessionId),
 				filesBySessionId: cloneRecord(seedFilesBySessionId),
 				draftsBySessionId: {},
-				inFlightTurnsBySessionId: {}
+				inFlightTurnsBySessionId: {},
+				cancelledTurnIds: {},
+				cancelledTurnsBySessionId: {}
 			});
 		},
 
@@ -78,7 +84,8 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 				messagesBySessionId: { ...state.messagesBySessionId, [session.id]: [] },
 				fileChangesBySessionId: { ...state.fileChangesBySessionId, [session.id]: [] },
 				filesBySessionId: { ...state.filesBySessionId, [session.id]: [] },
-				draftsBySessionId: { ...state.draftsBySessionId, [session.id]: '' }
+				draftsBySessionId: { ...state.draftsBySessionId, [session.id]: '' },
+				cancelledTurnsBySessionId: omitKey(state.cancelledTurnsBySessionId, session.id)
 			}));
 		},
 
@@ -153,6 +160,8 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 						[sessionId]: settledToolCalls
 					},
 					inFlightTurnsBySessionId: omitKey(state.inFlightTurnsBySessionId, sessionId),
+					cancelledTurnIds: { ...state.cancelledTurnIds, [inFlightTurnId]: true },
+					cancelledTurnsBySessionId: { ...state.cancelledTurnsBySessionId, [sessionId]: inFlightTurnId },
 					sessionsById: session
 						? { ...state.sessionsById, [sessionId]: { ...session, status: 'idle', updatedAt: now } }
 						: state.sessionsById
@@ -163,13 +172,18 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 		},
 
 		applyEvent(event: AgentEvent) {
+			if ('turnId' in event && get().cancelledTurnIds[event.turnId]) {
+				return;
+			}
+
 			if (event.type === 'message.created') {
 				set(state => ({
 					messagesBySessionId: {
 						...state.messagesBySessionId,
 						[event.sessionId]: [...(state.messagesBySessionId[event.sessionId] ?? []), event.message]
 					},
-					inFlightTurnsBySessionId: { ...state.inFlightTurnsBySessionId, [event.sessionId]: event.turnId }
+					inFlightTurnsBySessionId: { ...state.inFlightTurnsBySessionId, [event.sessionId]: event.turnId },
+					cancelledTurnsBySessionId: omitKey(state.cancelledTurnsBySessionId, event.sessionId)
 				}));
 				return;
 			}
@@ -222,6 +236,16 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 			}
 
 			if (event.type === 'session.updated') {
+				const state = get();
+				const sessionId = event.session.id;
+				if (
+					event.session.status === 'running' &&
+					state.cancelledTurnsBySessionId[sessionId] &&
+					!state.inFlightTurnsBySessionId[sessionId]
+				) {
+					return;
+				}
+
 				set(state => ({
 					sessionsById: { ...state.sessionsById, [event.session.id]: event.session }
 				}));
@@ -255,6 +279,8 @@ export function resetAgentStoreForTests() {
 		filesBySessionId: {},
 		draftsBySessionId: {},
 		activeAuxiliaryTab: 'changes',
-		inFlightTurnsBySessionId: {}
+		inFlightTurnsBySessionId: {},
+		cancelledTurnIds: {},
+		cancelledTurnsBySessionId: {}
 	});
 }

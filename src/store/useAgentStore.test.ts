@@ -93,3 +93,120 @@ test('initialize() resets stale tool calls, drafts, and in-flight turns', async 
 	expect(store.getState().draftsBySessionId).toEqual({});
 	expect(store.getState().inFlightTurnsBySessionId).toEqual({});
 });
+
+test('ignores late events for a canceled turn', async () => {
+	const store = createAgentStore(createMockAgentProvider({ chunkDelayMs: 0 }));
+	await act(async () => {
+		await store.getState().initialize();
+	});
+
+	store.setState(state => ({
+		sessionsById: {
+			...state.sessionsById,
+			'session-auth': {
+				...state.sessionsById['session-auth'],
+				status: 'running'
+			}
+		},
+		messagesBySessionId: {
+			...state.messagesBySessionId,
+			'session-auth': [
+				...(state.messagesBySessionId['session-auth'] ?? []),
+				{
+					id: 'msg-canceled',
+					sessionId: 'session-auth',
+					turnId: 'turn-canceled',
+					role: 'assistant',
+					content: 'partial',
+					createdAt: '2026-07-02T00:00:00.000Z',
+					streaming: true
+				}
+			]
+		},
+		toolCallsBySessionId: {
+			...state.toolCallsBySessionId,
+			'session-auth': [
+				{
+					id: 'tool-canceled',
+					sessionId: 'session-auth',
+					turnId: 'turn-canceled',
+					title: 'Inspect Mock Workspace',
+					description: 'Late events should be ignored',
+					status: 'pending'
+				}
+			]
+		},
+		inFlightTurnsBySessionId: {
+			...state.inFlightTurnsBySessionId,
+			'session-auth': 'turn-canceled'
+		}
+	}));
+
+	await act(async () => {
+		await store.getState().cancelTurn('session-auth');
+	});
+
+	act(() => {
+		store.getState().applyEvent({
+			type: 'message.delta',
+			sessionId: 'session-auth',
+			turnId: 'turn-canceled',
+			messageId: 'msg-canceled',
+			delta: ' should not land'
+		});
+		store.getState().applyEvent({
+			type: 'tool.pending',
+			sessionId: 'session-auth',
+			turnId: 'turn-canceled',
+			toolCall: {
+				id: 'tool-late',
+				sessionId: 'session-auth',
+				turnId: 'turn-canceled',
+				title: 'Late Tool',
+				description: 'Should be ignored',
+				status: 'pending'
+			}
+		});
+		store.getState().applyEvent({
+			type: 'tool.completed',
+			sessionId: 'session-auth',
+			turnId: 'turn-canceled',
+			toolCallId: 'tool-canceled'
+		});
+		store.getState().applyEvent({
+			type: 'message.completed',
+			sessionId: 'session-auth',
+			turnId: 'turn-canceled',
+			messageId: 'msg-canceled'
+		});
+		store.getState().applyEvent({
+			type: 'session.updated',
+			session: {
+				...store.getState().sessionsById['session-auth'],
+				status: 'running'
+			}
+		});
+	});
+
+	expect(store.getState()).toMatchObject({
+		sessionsById: {
+			'session-auth': {
+				status: 'idle'
+			}
+		},
+		inFlightTurnsBySessionId: {}
+	});
+	expect(store.getState().messagesBySessionId['session-auth']).toContainEqual(
+		expect.objectContaining({
+			id: 'msg-canceled',
+			content: 'partial',
+			streaming: false
+		})
+	);
+	expect(store.getState().toolCallsBySessionId['session-auth']).toEqual([
+		expect.objectContaining({
+			id: 'tool-canceled',
+			status: 'failed'
+		})
+	]);
+});
