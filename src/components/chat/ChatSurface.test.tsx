@@ -43,5 +43,7 @@ test('cancels an active turn and settles streaming UI state', async () => {
 	await waitFor(() => {
 		expect(screen.queryByText('Streaming')).not.toBeInTheDocument();
 		expect(within(screen.getByRole('main', { name: 'Chat' })).queryByText('running')).not.toBeInTheDocument();
+		expect(screen.getByText('failed')).toBeInTheDocument();
+		expect(screen.queryByText('pending')).not.toBeInTheDocument();
 	});
 });

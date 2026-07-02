@@ -134,6 +134,12 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 			set(state => {
 				const session = state.sessionsById[sessionId];
 				const messages = state.messagesBySessionId[sessionId] ?? [];
+				const toolCalls = state.toolCallsBySessionId[sessionId] ?? [];
+				const settledToolCalls: ToolCall[] = toolCalls.map(toolCall =>
+					toolCall.turnId !== inFlightTurnId || toolCall.status !== 'pending'
+						? toolCall
+						: { ...toolCall, status: 'failed' as const }
+				);
 
 				return {
 					messagesBySessionId: {
@@ -141,6 +147,10 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 						[sessionId]: messages.map(message =>
 							message.turnId === inFlightTurnId ? { ...message, streaming: false } : message
 						)
+					},
+					toolCallsBySessionId: {
+						...state.toolCallsBySessionId,
+						[sessionId]: settledToolCalls
 					},
 					inFlightTurnsBySessionId: omitKey(state.inFlightTurnsBySessionId, sessionId),
 					sessionsById: session
