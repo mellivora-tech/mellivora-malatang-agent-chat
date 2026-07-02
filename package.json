@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "e2e": "npm run build && playwright test"
+    "e2e": "npm run build && playwright test",
+    "playwright-install": "npx playwright install chromium"
   },
   "dependencies": {
     "electron": "^31.7.7",
