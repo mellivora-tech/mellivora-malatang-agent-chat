@@ -24,6 +24,12 @@ export function Composer({ sessionId }: ComposerProps) {
 				aria-label="Message"
 				value={draft}
 				onChange={event => setDraft(sessionId, event.currentTarget.value)}
+				onKeyDown={event => {
+					if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && draft.trim() && !inFlightTurnId) {
+						event.preventDefault();
+						void sendMessage(sessionId);
+					}
+				}}
 			/>
 			<div className="composer-actions">
 				<button className="icon-button" type="submit" aria-label="Send Message" disabled={!draft.trim() || Boolean(inFlightTurnId)}>

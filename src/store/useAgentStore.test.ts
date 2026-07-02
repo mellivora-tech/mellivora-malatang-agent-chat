@@ -42,6 +42,27 @@ test('sends a message and applies streaming provider events', async () => {
 	expect(state.toolCallsBySessionId['session-auth']).toHaveLength(1);
 });
 
+test('marks a failed turn as failed and clears in-flight state', async () => {
+	const store = createAgentStore(createMockAgentProvider({ chunkDelayMs: 0 }));
+	await act(async () => {
+		await store.getState().initialize();
+		store.getState().setDraft('session-auth', '/fail');
+		await store.getState().sendMessage('session-auth');
+	});
+
+	const state = store.getState();
+	const messages = state.messagesBySessionId['session-auth'];
+	expect(messages.at(-1)).toMatchObject({
+		role: 'assistant',
+		content: 'The mock provider failed this turn on request.',
+		streaming: false,
+		failed: true
+	});
+	expect(state.sessionsById['session-auth'].status).toBe('failed');
+	expect(state.inFlightTurnsBySessionId['session-auth']).toBeUndefined();
+	expect(state.toolCallsBySessionId['session-auth'] ?? []).toHaveLength(0);
+});
+
 test('resetAgentStoreForTests restores createSession to a fresh provider', async () => {
 	resetAgentStoreForTests();
 	const store = useAgentStore;

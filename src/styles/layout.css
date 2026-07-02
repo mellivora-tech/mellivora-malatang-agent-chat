@@ -430,6 +430,23 @@
 	background: var(--app-chat-message-assistant-background);
 }
 
+.message.failed {
+	border-color: var(--app-chat-status-failed);
+}
+
+.message.failed .message-content {
+	color: #ffb3b3;
+}
+
+.message.failed button {
+	justify-self: start;
+	padding: 4px 8px;
+	color: var(--app-mutedForeground);
+	background: transparent;
+	border: 1px solid var(--app-border);
+	border-radius: 4px;
+}
+
 .message-role {
 	color: var(--app-mutedForeground);
 	font-size: 11px;

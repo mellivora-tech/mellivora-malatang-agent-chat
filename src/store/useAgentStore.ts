@@ -212,6 +212,19 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 				return;
 			}
 
+			if (event.type === 'message.failed') {
+				set(state => ({
+					messagesBySessionId: {
+						...state.messagesBySessionId,
+						[event.sessionId]: (state.messagesBySessionId[event.sessionId] ?? []).map(message =>
+							message.id === event.messageId ? { ...message, content: event.error, streaming: false, failed: true } : message
+						)
+					},
+					inFlightTurnsBySessionId: omitKey(state.inFlightTurnsBySessionId, event.sessionId)
+				}));
+				return;
+			}
+
 			if (event.type === 'tool.pending') {
 				set(state => ({
 					toolCallsBySessionId: {

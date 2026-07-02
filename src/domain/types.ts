@@ -71,6 +71,7 @@ export type AgentEvent =
 	| { type: 'message.created'; sessionId: string; turnId: string; message: ChatMessage }
 	| { type: 'message.delta'; sessionId: string; turnId: string; messageId: string; delta: string }
 	| { type: 'message.completed'; sessionId: string; turnId: string; messageId: string }
+	| { type: 'message.failed'; sessionId: string; turnId: string; messageId: string; error: string }
 	| { type: 'tool.pending'; sessionId: string; turnId: string; toolCall: ToolCall }
 	| { type: 'tool.completed'; sessionId: string; turnId: string; toolCallId: string }
 	| SessionUpdatedEvent;

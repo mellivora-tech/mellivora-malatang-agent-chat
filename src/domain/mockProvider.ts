@@ -78,6 +78,21 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 			yield { type: 'message.created', sessionId, turnId, message: assistantMessage };
 			yield { type: 'session.updated', sessionId, turnId, session: { ...runningSession } };
 
+			if (input.text.trim() === '/fail') {
+				const failedSession: AgentSession = { ...runningSession, status: 'failed', updatedAt: new Date().toISOString() };
+				sessions.set(sessionId, failedSession);
+				inFlightTurnIds.delete(turnId);
+				yield {
+					type: 'message.failed',
+					sessionId,
+					turnId,
+					messageId,
+					error: 'The mock provider failed this turn on request.'
+				};
+				yield { type: 'session.updated', sessionId, turnId, session: { ...failedSession } };
+				return;
+			}
+
 			const toolCall: ToolCall = {
 				id: `tool-${turnId}`,
 				sessionId,

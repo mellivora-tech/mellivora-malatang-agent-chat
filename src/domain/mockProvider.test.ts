@@ -59,6 +59,47 @@ test('streams message and tool events in deterministic order', async () => {
 	]);
 });
 
+test('fails deterministically when the draft contains /fail', async () => {
+	const provider = createMockAgentProvider({ chunkDelayMs: 0 });
+	const sessions = await provider.listSessions();
+	const events = [];
+	const sessionUpdates = [];
+
+	for await (const event of provider.sendMessage(sessions[0].id, { text: '/fail' })) {
+		events.push(event.type);
+		if (event.type === 'session.updated') {
+			sessionUpdates.push(event);
+		}
+	}
+
+	expect(events).toEqual([
+		'message.created',
+		'session.updated',
+		'message.failed',
+		'session.updated'
+	]);
+	expect(sessionUpdates).toEqual([
+		expect.objectContaining({
+			type: 'session.updated',
+			sessionId: sessions[0].id,
+			turnId: 'turn-1',
+			session: expect.objectContaining({
+				id: sessions[0].id,
+				status: 'running'
+			})
+		}),
+		expect.objectContaining({
+			type: 'session.updated',
+			sessionId: sessions[0].id,
+			turnId: 'turn-1',
+			session: expect.objectContaining({
+				id: sessions[0].id,
+				status: 'failed'
+			})
+		})
+	]);
+});
+
 test('cancelTurn resolves for known in-flight turn ids', async () => {
 	const provider = createMockAgentProvider({ chunkDelayMs: 0 });
 	const sessions = await provider.listSessions();
