@@ -28,6 +28,7 @@ test('desktop app launches and streams a mock response', async () => {
 		await expect(window.getByRole('tabpanel', { name: 'Files' })).toBeVisible();
 		await expect(window.getByRole('tab', { name: 'Changes' })).toHaveAttribute('aria-selected', 'false');
 		await expect(window.locator('#aux-tabpanel-changes')).toHaveAttribute('hidden', '');
+		await expect(window.locator('#aux-tabpanel-changes')).toBeHidden();
 		await expect(window.getByRole('tabpanel', { name: 'Files' })).toContainText('src/auth/redirect.ts');
 
 		await window.getByRole('tab', { name: 'Details' }).click();
@@ -35,6 +36,7 @@ test('desktop app launches and streams a mock response', async () => {
 		await expect(window.getByRole('tabpanel', { name: 'Details' })).toBeVisible();
 		await expect(window.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'false');
 		await expect(window.locator('#aux-tabpanel-files')).toHaveAttribute('hidden', '');
+		await expect(window.locator('#aux-tabpanel-files')).toBeHidden();
 		await expect(window.getByRole('tabpanel', { name: 'Details' })).toContainText('Mock Agent');
 		await expect(window.getByRole('tabpanel', { name: 'Details' })).toContainText('mellivora-malatang');
 
@@ -43,6 +45,7 @@ test('desktop app launches and streams a mock response', async () => {
 		await expect(window.getByRole('tabpanel', { name: 'Changes' })).toBeVisible();
 		await expect(window.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'false');
 		await expect(window.locator('#aux-tabpanel-details')).toHaveAttribute('hidden', '');
+		await expect(window.locator('#aux-tabpanel-details')).toBeHidden();
 		await expect(window.getByRole('tabpanel', { name: 'Changes' })).toContainText('modified • +42 / -18');
 		await expect(window.getByRole('tabpanel', { name: 'Changes' })).toContainText('src/auth/redirect.ts');
 
