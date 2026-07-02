@@ -1,4 +1,5 @@
 import { Files, FileDiff, Info, type LucideIcon } from 'lucide-react';
+import { type KeyboardEvent } from 'react';
 import { useAgentStore, type AuxiliaryTab } from '../../store/useAgentStore';
 
 const auxiliaryTabs: Array<{ tab: AuxiliaryTab; label: string; icon: LucideIcon }> = [
@@ -6,6 +7,9 @@ const auxiliaryTabs: Array<{ tab: AuxiliaryTab; label: string; icon: LucideIcon 
 	{ tab: 'files', label: 'Files', icon: Files },
 	{ tab: 'details', label: 'Details', icon: Info }
 ];
+
+const auxiliaryTabId = (tab: AuxiliaryTab) => `aux-tab-${tab}`;
+const auxiliaryPanelId = (tab: AuxiliaryTab) => `aux-tabpanel-${tab}`;
 
 export function AuxiliaryPanel() {
 	const activeAuxiliaryTab = useAgentStore(state => state.activeAuxiliaryTab);
@@ -15,28 +19,81 @@ export function AuxiliaryPanel() {
 	const fileChanges = useAgentStore(state => (state.activeSessionId ? state.fileChangesBySessionId[state.activeSessionId] ?? [] : []));
 	const files = useAgentStore(state => (state.activeSessionId ? state.filesBySessionId[state.activeSessionId] ?? [] : []));
 
+	const currentTabIndex = auxiliaryTabs.findIndex(tabConfig => tabConfig.tab === activeAuxiliaryTab);
+	const safeTabIndex = currentTabIndex === -1 ? 0 : currentTabIndex;
+
+	const focusTab = (tab: AuxiliaryTab) => {
+		const tabElement = document.getElementById(auxiliaryTabId(tab));
+		tabElement?.focus();
+	};
+
+	const selectTab = (tab: AuxiliaryTab) => {
+		setActiveAuxiliaryTab(tab);
+		focusTab(tab);
+	};
+
+	const handleTabListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		let nextIndex = safeTabIndex;
+
+		switch (event.key) {
+			case 'ArrowRight': {
+				event.preventDefault();
+				nextIndex = (safeTabIndex + 1) % auxiliaryTabs.length;
+				break;
+			}
+			case 'ArrowLeft': {
+				event.preventDefault();
+				nextIndex = (safeTabIndex - 1 + auxiliaryTabs.length) % auxiliaryTabs.length;
+				break;
+			}
+			case 'Home': {
+				event.preventDefault();
+				nextIndex = 0;
+				break;
+			}
+			case 'End': {
+				event.preventDefault();
+				nextIndex = auxiliaryTabs.length - 1;
+				break;
+			}
+			default:
+				return;
+		}
+
+		setActiveAuxiliaryTab(auxiliaryTabs[nextIndex]!.tab);
+		focusTab(auxiliaryTabs[nextIndex]!.tab);
+	};
+
 	return (
 		<aside aria-label="Auxiliary Panel" className="auxiliary-panel">
 			<div className="panel-header">
 				<span>Auxiliary Panel</span>
 				<span className="aux-meta">{activeSessionId ? session?.title : 'No session'}</span>
 			</div>
-			<div className="aux-tabs" role="tablist" aria-label="Auxiliary Panel Tabs">
+			<div className="aux-tabs" role="tablist" aria-label="Auxiliary Panel Tabs" onKeyDown={handleTabListKeyDown}>
 				{auxiliaryTabs.map(({ tab, label, icon: Icon }) => (
 					<button
 						key={tab}
+						id={auxiliaryTabId(tab)}
 						aria-selected={activeAuxiliaryTab === tab}
+						aria-controls={auxiliaryPanelId(tab)}
+						tabIndex={activeAuxiliaryTab === tab ? 0 : -1}
 						className="aux-tab"
 						role="tab"
 						type="button"
-						onClick={() => setActiveAuxiliaryTab(tab)}
+						onClick={() => selectTab(tab)}
 					>
 						<Icon size={14} aria-hidden="true" />
 						<span>{label}</span>
 					</button>
 				))}
 			</div>
-			<div className="aux-panel-body" role="tabpanel">
+			<div
+				className="aux-panel-body"
+				role="tabpanel"
+				id={auxiliaryPanelId(activeAuxiliaryTab)}
+				aria-labelledby={auxiliaryTabId(activeAuxiliaryTab)}
+			>
 				{!session ? (
 					<div className="aux-empty">Select a session to inspect changes, files, and details.</div>
 				) : activeAuxiliaryTab === 'changes' ? (

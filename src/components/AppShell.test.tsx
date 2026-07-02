@@ -17,6 +17,22 @@ test('renders the VS Code-inspired agent shell', async () => {
 	expect(within(screen.getByRole('navigation', { name: 'Sessions' })).getByText('Refactor Auth Flow')).toBeInTheDocument();
 });
 
+test('links auxiliary tabs and tabpanel with accessible relations', async () => {
+	render(<App />);
+
+	await screen.findByRole('tab', { name: 'Changes' });
+	const changesTab = screen.getByRole('tab', { name: 'Changes' });
+	const filesTab = screen.getByRole('tab', { name: 'Files' });
+	const detailsTab = screen.getByRole('tab', { name: 'Details' });
+	const tabPanel = screen.getByRole('tabpanel');
+
+	expect(changesTab).toHaveAttribute('aria-controls', 'aux-tabpanel-changes');
+	expect(filesTab).toHaveAttribute('aria-controls', 'aux-tabpanel-files');
+	expect(detailsTab).toHaveAttribute('aria-controls', 'aux-tabpanel-details');
+	expect(tabPanel.id).toBe(changesTab.getAttribute('aria-controls'));
+	expect(tabPanel).toHaveAttribute('aria-labelledby', changesTab.id);
+});
+
 test('creates and selects a new session from the sidebar', async () => {
 	const user = userEvent.setup();
 	render(<App />);
@@ -32,7 +48,33 @@ test('switches auxiliary tabs', async () => {
 	render(<App />);
 
 	await screen.findByRole('heading', { name: 'Refactor Auth Flow' });
-	await user.click(screen.getByRole('tab', { name: 'Files' }));
+	const changesTab = screen.getByRole('tab', { name: 'Changes' });
+	const filesTab = screen.getByRole('tab', { name: 'Files' });
+	const detailsTab = screen.getByRole('tab', { name: 'Details' });
 
+	await user.click(changesTab);
+	await user.keyboard('{ArrowRight}');
+	expect(filesTab).toHaveAttribute('aria-selected', 'true');
 	expect(screen.getByText('src/auth/redirect.ts')).toBeInTheDocument();
+	await user.keyboard('{End}');
+	expect(detailsTab).toHaveAttribute('aria-selected', 'true');
+	expect(within(screen.getByRole('tabpanel')).getByText('Mock Agent')).toBeInTheDocument();
+});
+
+test('moves focus when using keyboard tab navigation', async () => {
+	const user = userEvent.setup();
+	render(<App />);
+
+	await screen.findByRole('heading', { name: 'Refactor Auth Flow' });
+	const changesTab = screen.getByRole('tab', { name: 'Changes' });
+	const filesTab = screen.getByRole('tab', { name: 'Files' });
+	const detailsTab = screen.getByRole('tab', { name: 'Details' });
+
+	await user.click(changesTab);
+	await user.keyboard('{Home}');
+	expect(changesTab).toHaveAttribute('aria-selected', 'true');
+	await user.keyboard('{ArrowRight}');
+	expect(filesTab).toHaveFocus();
+	await user.keyboard('{End}');
+	expect(detailsTab).toHaveFocus();
 });
