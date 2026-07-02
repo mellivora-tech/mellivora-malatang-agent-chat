@@ -1,5 +1,14 @@
 import { seedFileChangesBySessionId, seedFilesBySessionId, seedMessagesBySessionId, seedSessions } from './mockData';
-import type { AgentEvent, AgentProvider, AgentSession, ChatMessage, CreateSessionInput, SendMessageInput, ToolCall } from './types';
+import type {
+	AgentEvent,
+	AgentProvider,
+	AgentSession,
+	AgentSessionSnapshot,
+	ChatMessage,
+	CreateSessionInput,
+	SendMessageInput,
+	ToolCall
+} from './types';
 
 export interface MockProviderOptions {
 	chunkDelayMs?: number;
@@ -29,6 +38,14 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 	return {
 		async listSessions() {
 			return [...sessions.values()].map(session => ({ ...session }));
+		},
+
+		async getSessionSnapshot(sessionId: string): Promise<AgentSessionSnapshot> {
+			return {
+				messages: cloneList(messagesBySessionId.get(sessionId) ?? []),
+				fileChanges: cloneList(fileChangesBySessionId.get(sessionId) ?? []),
+				files: cloneList(filesBySessionId.get(sessionId) ?? [])
+			};
 		},
 
 		async createSession(input: CreateSessionInput) {
@@ -129,4 +146,8 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 			inFlightTurnIds.delete(turnId);
 		}
 	};
+}
+
+function cloneList<T>(items: T[]): T[] {
+	return items.map(item => ({ ...item }));
 }

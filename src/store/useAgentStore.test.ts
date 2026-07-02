@@ -1,5 +1,6 @@
 import { act } from '@testing-library/react';
 import { createMockAgentProvider } from '../domain/mockProvider';
+import type { AgentProvider, AgentSession, ChatMessage, FileChange, SessionFile } from '../domain/types';
 import { createAgentStore, resetAgentStoreForTests, useAgentStore } from './useAgentStore';
 
 test('initializes sessions and selects the first session', async () => {
@@ -113,6 +114,87 @@ test('initialize() resets stale tool calls, drafts, and in-flight turns', async 
 	expect(store.getState().toolCallsBySessionId).toEqual({});
 	expect(store.getState().draftsBySessionId).toEqual({});
 	expect(store.getState().inFlightTurnsBySessionId).toEqual({});
+});
+
+test('initialize() hydrates provider snapshots instead of seed fixtures', async () => {
+	const snapshotMessages: ChatMessage[] = [
+		{
+			id: 'msg-provider-1',
+			sessionId: 'session-provider',
+			turnId: 'turn-provider-1',
+			role: 'assistant',
+			content: 'Loaded from provider snapshot',
+			createdAt: '2026-07-02T00:00:00.000Z'
+		}
+	];
+	const snapshotFileChanges: FileChange[] = [
+		{
+			id: 'change-provider-1',
+			sessionId: 'session-provider',
+			path: 'provider-only.ts',
+			status: 'added',
+			additions: 7,
+			deletions: 0
+		}
+	];
+	const snapshotFiles: SessionFile[] = [
+		{
+			id: 'file-provider-1',
+			sessionId: 'session-provider',
+			path: 'provider-only.ts',
+			type: 'file',
+			depth: 0
+		}
+	];
+	const session: AgentSession = {
+		id: 'session-provider',
+		title: 'Provider Snapshot Session',
+		providerName: 'Custom Provider',
+		status: 'idle',
+		workspaceLabel: 'provider-workspace',
+		updatedAt: '2026-07-02T00:00:00.000Z',
+		pinned: false,
+		unread: false,
+		archived: false
+	};
+	const provider: AgentProvider = {
+		async listSessions() {
+			return [session];
+		},
+		async getSessionSnapshot(sessionId) {
+			expect(sessionId).toBe('session-provider');
+			return {
+				messages: snapshotMessages,
+				fileChanges: snapshotFileChanges,
+				files: snapshotFiles
+			};
+		},
+		async createSession() {
+			return session;
+		},
+		sendMessage(): AsyncIterable<never> {
+			throw new Error('not implemented');
+		},
+		async cancelTurn() {}
+	};
+	const store = createAgentStore(provider);
+
+	await act(async () => {
+		await store.getState().initialize();
+	});
+
+	expect(store.getState().messagesBySessionId).toEqual({
+		'session-provider': snapshotMessages
+	});
+	expect(store.getState().fileChangesBySessionId).toEqual({
+		'session-provider': snapshotFileChanges
+	});
+	expect(store.getState().filesBySessionId).toEqual({
+		'session-provider': snapshotFiles
+	});
+	expect(store.getState().messagesBySessionId['session-auth']).toBeUndefined();
+	expect(store.getState().fileChangesBySessionId['session-auth']).toBeUndefined();
+	expect(store.getState().filesBySessionId['session-auth']).toBeUndefined();
 });
 
 test('ignores late events for a canceled turn', async () => {

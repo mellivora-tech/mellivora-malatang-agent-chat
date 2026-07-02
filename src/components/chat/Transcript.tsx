@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ChatMessage, ToolCall } from '../../domain/types';
 
 interface TranscriptProps {
@@ -6,6 +7,18 @@ interface TranscriptProps {
 }
 
 export function Transcript({ messages, toolCalls }: TranscriptProps) {
+	const endRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (messages.length === 0 && toolCalls.length === 0) {
+			return;
+		}
+
+		if (typeof endRef.current?.scrollIntoView === 'function') {
+			endRef.current.scrollIntoView({ block: 'end' });
+		}
+	}, [messages, toolCalls]);
+
 	return (
 		<section className="transcript" aria-label="Transcript">
 			{messages.length === 0 && toolCalls.length === 0 ? (
@@ -27,6 +40,7 @@ export function Transcript({ messages, toolCalls }: TranscriptProps) {
 							<em>{toolCall.status}</em>
 						</div>
 					))}
+					<div ref={endRef} aria-hidden="true" />
 				</>
 			)}
 		</section>

@@ -4,12 +4,12 @@ import type {
 	AgentEvent,
 	AgentProvider,
 	AgentSession,
+	AgentSessionSnapshot,
 	ChatMessage,
 	FileChange,
 	SessionFile,
 	ToolCall
 } from '../domain/types';
-import { seedFileChangesBySessionId, seedFilesBySessionId, seedMessagesBySessionId } from '../domain/mockData';
 
 export type AuxiliaryTab = 'changes' | 'files' | 'details';
 
@@ -57,17 +57,34 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 
 		async initialize() {
 			const sessions = await get().provider.listSessions();
+			const snapshotsBySessionId = Object.fromEntries(
+				await Promise.all(
+				sessions.map(async session => [session.id, await get().provider.getSessionSnapshot(session.id)] as const)
+				)
+			) as Record<string, AgentSessionSnapshot>;
+			const clonedSnapshotsBySessionId = Object.fromEntries(
+				sessions.map(session => [session.id, cloneSnapshot(snapshotsBySessionId[session.id])])
+			) as Record<string, AgentSessionSnapshot>;
 			const sessionsById = Object.fromEntries(sessions.map(session => [session.id, session]));
 			const sessionOrder = sessions.map(session => session.id);
+			const messagesBySessionId = Object.fromEntries(
+				sessions.map(session => [session.id, clonedSnapshotsBySessionId[session.id].messages])
+			);
+			const fileChangesBySessionId = Object.fromEntries(
+				sessions.map(session => [session.id, clonedSnapshotsBySessionId[session.id].fileChanges])
+			);
+			const filesBySessionId = Object.fromEntries(
+				sessions.map(session => [session.id, clonedSnapshotsBySessionId[session.id].files])
+			);
 			set({
 				initialized: true,
 				sessionsById,
 				sessionOrder,
 				activeSessionId: sessionOrder[0] ?? null,
-				messagesBySessionId: cloneRecord(seedMessagesBySessionId),
+				messagesBySessionId,
 				toolCallsBySessionId: {},
-				fileChangesBySessionId: cloneRecord(seedFileChangesBySessionId),
-				filesBySessionId: cloneRecord(seedFilesBySessionId),
+				fileChangesBySessionId,
+				filesBySessionId,
 				draftsBySessionId: {},
 				inFlightTurnsBySessionId: {},
 				cancelledTurnIds: {},
@@ -267,8 +284,16 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 	}));
 }
 
-function cloneRecord<T>(record: Record<string, T[]>): Record<string, T[]> {
-	return Object.fromEntries(Object.entries(record).map(([key, values]) => [key, values.map(value => ({ ...value }))]));
+function cloneSnapshot(snapshot: AgentSessionSnapshot): AgentSessionSnapshot {
+	return {
+		messages: cloneList(snapshot.messages),
+		fileChanges: cloneList(snapshot.fileChanges),
+		files: cloneList(snapshot.files)
+	};
+}
+
+function cloneList<T>(items: T[]): T[] {
+	return items.map(item => ({ ...item }));
 }
 
 function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {

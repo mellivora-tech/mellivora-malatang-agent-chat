@@ -131,3 +131,18 @@ test('createSession does not mutate shared seed fixtures', async () => {
 	expect(seedFileChangesBySessionId).toEqual(seedFileChangesFixture);
 	expect(seedFilesBySessionId).toEqual(seedFilesFixture);
 });
+
+test('getSessionSnapshot returns cloned snapshot data', async () => {
+	const provider = createMockAgentProvider({ chunkDelayMs: 0 });
+
+	const firstSnapshot = await provider.getSessionSnapshot('session-auth');
+	firstSnapshot.messages[0].content = 'mutated';
+	firstSnapshot.fileChanges[0].path = 'mutated.ts';
+	firstSnapshot.files[0].path = 'mutated';
+
+	const secondSnapshot = await provider.getSessionSnapshot('session-auth');
+
+	expect(secondSnapshot.messages[0].content).toBe('Can you simplify the auth redirect flow?');
+	expect(secondSnapshot.fileChanges[0].path).toBe('src/auth/redirect.ts');
+	expect(secondSnapshot.files[0].path).toBe('src');
+});

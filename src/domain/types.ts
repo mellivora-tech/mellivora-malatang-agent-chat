@@ -60,6 +60,12 @@ export interface SendMessageInput {
 	text: string;
 }
 
+export interface AgentSessionSnapshot {
+	messages: ChatMessage[];
+	fileChanges: FileChange[];
+	files: SessionFile[];
+}
+
 export interface SessionUpdatedEvent {
 	type: 'session.updated';
 	sessionId: string;
@@ -78,6 +84,7 @@ export type AgentEvent =
 
 export interface AgentProvider {
 	listSessions(): Promise<AgentSession[]>;
+	getSessionSnapshot(sessionId: string): Promise<AgentSessionSnapshot>;
 	createSession(input: CreateSessionInput): Promise<AgentSession>;
 	sendMessage(sessionId: string, input: SendMessageInput): AsyncIterable<AgentEvent>;
 	cancelTurn(sessionId: string, turnId: string): Promise<void>;
