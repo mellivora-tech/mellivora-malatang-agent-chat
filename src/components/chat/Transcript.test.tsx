@@ -1,13 +1,18 @@
 import { render } from '@testing-library/react';
 import { Transcript } from './Transcript';
 
-test('scrolls the latest transcript content into view when messages change', () => {
+function mockScrollIntoView() {
 	const scrollIntoView = vi.fn();
 	Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
 		configurable: true,
 		value: scrollIntoView
 	});
 
+	return scrollIntoView;
+}
+
+test('scrolls the latest transcript content into view when messages change', () => {
+	const scrollIntoView = mockScrollIntoView();
 	const { rerender } = render(
 		<Transcript
 			messages={[]}
@@ -30,6 +35,36 @@ test('scrolls the latest transcript content into view when messages change', () 
 				}
 			]}
 			toolCalls={[]}
+		/>
+	);
+
+	expect(scrollIntoView).toHaveBeenCalledTimes(1);
+});
+
+test('scrolls the latest transcript content into view when tool calls change', () => {
+	const scrollIntoView = mockScrollIntoView();
+	const { rerender } = render(
+		<Transcript
+			messages={[]}
+			toolCalls={[]}
+		/>
+	);
+
+	expect(scrollIntoView).not.toHaveBeenCalled();
+
+	rerender(
+		<Transcript
+			messages={[]}
+			toolCalls={[
+				{
+					id: 'tool-1',
+					sessionId: 'session-1',
+					turnId: 'turn-1',
+					title: 'Inspect Mock Workspace',
+					description: 'Read mock context',
+					status: 'pending'
+				}
+			]}
 		/>
 	);
 
