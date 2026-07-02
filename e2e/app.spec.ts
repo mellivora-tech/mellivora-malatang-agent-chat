@@ -9,6 +9,12 @@ test('desktop app launches and streams a mock response', async () => {
 	await expect(window.getByRole('navigation', { name: 'Sessions' })).toBeVisible();
 	await expect(window.getByRole('main', { name: 'Chat' })).toBeVisible();
 
+	const platform = await window.evaluate(() => {
+		const bridge = (window as Window & { agentDesktop?: { platform(): string } }).agentDesktop;
+		return bridge?.platform() ?? '';
+	});
+	expect(platform).not.toBe('');
+
 	await window.getByRole('textbox', { name: 'Message' }).fill('hello from e2e');
 	await window.getByRole('button', { name: 'Send Message' }).click();
 

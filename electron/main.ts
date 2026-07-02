@@ -14,6 +14,7 @@ function createWindow(): void {
 		title: 'Agent Chat',
 		backgroundColor: '#1f1f1f',
 		webPreferences: {
+			preload: path.join(__dirname, 'preload.cjs'),
 			contextIsolation: true,
 			nodeIntegration: false
 		}

@@ -31,3 +31,30 @@ I also ran `npx playwright install chromium` while getting the smoke test enviro
 ## Concerns
 
 None.
+
+## Task 7 Fix
+
+### Files Changed
+
+- `electron/main.ts`
+- `electron/preload.cts`
+- `tsconfig.node.json`
+- `e2e/app.spec.ts`
+- `.superpowers/sdd/task-7-report.md`
+
+### Commit
+
+- `f6549aa` `test: restore electron preload bridge`
+
+### Commands Run
+
+- `npm run typecheck`
+- `npm run test`
+- `npm run build`
+- `npm run e2e`
+
+### Results
+
+- Restored the Electron preload bridge wiring so `window.agentDesktop` is available at runtime.
+- Added an E2E assertion that verifies `window.agentDesktop.platform()` returns a non-empty value.
+- Verified the app still launches, streams the mock response, switches to the Files tab, and captures screenshots successfully.
