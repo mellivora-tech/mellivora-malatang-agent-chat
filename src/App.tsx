@@ -1,7 +1,16 @@
+import { useEffect } from 'react';
+import { AppShell } from './components/layout/AppShell';
+import { useAgentStore } from './store/useAgentStore';
+
 export function App() {
-	return (
-		<main aria-label="Agent Chat Desktop" className="app-root">
-			Agent Chat
-		</main>
-	);
+	const initialize = useAgentStore(state => state.initialize);
+	const initialized = useAgentStore(state => state.initialized);
+
+	useEffect(() => {
+		if (!initialized) {
+			void initialize();
+		}
+	}, [initialize, initialized]);
+
+	return <AppShell />;
 }
