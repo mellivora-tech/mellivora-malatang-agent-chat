@@ -1,4 +1,5 @@
 import { createMockAgentProvider } from './mockProvider';
+import { seedFileChangesBySessionId, seedFilesBySessionId } from './mockData';
 
 test('lists deterministic seed sessions', async () => {
 	const provider = createMockAgentProvider({ chunkDelayMs: 0 });
@@ -42,5 +43,26 @@ test('cancelTurn resolves for known in-flight turn ids', async () => {
 
 	expect(first.value.type).toBe('message.created');
 	await expect(provider.cancelTurn(sessions[0].id, first.value.turnId)).resolves.toBeUndefined();
-	await iterator.return?.();
+
+	const events = [];
+	while (true) {
+		const nextEvent = await iterator.next();
+		if (nextEvent.done) {
+			break;
+		}
+		events.push(nextEvent.value.type);
+	}
+
+	expect(events).toEqual(['session.updated', 'tool.pending']);
+});
+
+test('createSession does not mutate shared seed fixtures', async () => {
+	const seedFileChangesFixture = JSON.parse(JSON.stringify(seedFileChangesBySessionId));
+	const seedFilesFixture = JSON.parse(JSON.stringify(seedFilesBySessionId));
+	const provider = createMockAgentProvider({ chunkDelayMs: 0 });
+
+	await provider.createSession({ title: 'Fresh session' });
+
+	expect(seedFileChangesBySessionId).toEqual(seedFileChangesFixture);
+	expect(seedFilesBySessionId).toEqual(seedFilesFixture);
 });

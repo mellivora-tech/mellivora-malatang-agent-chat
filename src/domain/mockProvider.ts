@@ -17,7 +17,14 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 	const chunkDelayMs = options.chunkDelayMs ?? 180;
 	const sessions = new Map(seedSessions.map(session => [session.id, { ...session }]));
 	const messagesBySessionId = new Map(Object.entries(seedMessagesBySessionId).map(([id, messages]) => [id, messages.map(message => ({ ...message }))]));
+	const fileChangesBySessionId = new Map(
+		Object.entries(seedFileChangesBySessionId).map(([id, fileChanges]) => [id, fileChanges.map(fileChange => ({ ...fileChange }))])
+	);
+	const filesBySessionId = new Map(
+		Object.entries(seedFilesBySessionId).map(([id, files]) => [id, files.map(file => ({ ...file }))])
+	);
 	const inFlightTurnIds = new Set<string>();
+	let turnCounter = 1;
 
 	return {
 		async listSessions() {
@@ -40,8 +47,8 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 
 			sessions.set(session.id, session);
 			messagesBySessionId.set(session.id, []);
-			seedFileChangesBySessionId[session.id] = [];
-			seedFilesBySessionId[session.id] = [];
+			fileChangesBySessionId.set(session.id, []);
+			filesBySessionId.set(session.id, []);
 			return { ...session };
 		},
 
@@ -51,7 +58,7 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 				throw new Error(`Unknown session: ${sessionId}`);
 			}
 
-			const turnId = `turn-${Date.now()}`;
+			const turnId = `turn-${turnCounter++}`;
 			const messageId = `msg-${turnId}`;
 			inFlightTurnIds.add(turnId);
 
@@ -83,11 +90,15 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 			yield { type: 'tool.pending', sessionId, turnId, toolCall };
 
 			for (const delta of responseChunks) {
-				if (!inFlightTurnIds.has(turnId)) {
-					break;
-				}
+				if (!inFlightTurnIds.has(turnId)) break;
 				await delay(chunkDelayMs);
+				if (!inFlightTurnIds.has(turnId)) break;
 				yield { type: 'message.delta', sessionId, turnId, messageId, delta };
+			}
+
+			if (!inFlightTurnIds.has(turnId)) {
+				inFlightTurnIds.delete(turnId);
+				return;
 			}
 
 			yield { type: 'tool.completed', sessionId, turnId, toolCallId: toolCall.id };
