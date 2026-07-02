@@ -181,6 +181,7 @@ test('ignores late events for a canceled turn', async () => {
 		});
 		store.getState().applyEvent({
 			type: 'session.updated',
+			sessionId: 'session-auth',
 			session: {
 				...store.getState().sessionsById['session-auth'],
 				status: 'running'
@@ -209,4 +210,101 @@ test('ignores late events for a canceled turn', async () => {
 			status: 'failed'
 		})
 	]);
+});
+
+test('ignores late turn-scoped session updates from a canceled turn after the next turn starts', async () => {
+	const store = createAgentStore(createMockAgentProvider({ chunkDelayMs: 0 }));
+	await act(async () => {
+		await store.getState().initialize();
+	});
+
+	store.setState(state => ({
+		sessionsById: {
+			...state.sessionsById,
+			'session-auth': {
+				...state.sessionsById['session-auth'],
+				status: 'running',
+				updatedAt: '2026-07-02T00:00:00.000Z'
+			}
+		},
+		messagesBySessionId: {
+			...state.messagesBySessionId,
+			'session-auth': [
+				...(state.messagesBySessionId['session-auth'] ?? []),
+				{
+					id: 'msg-turn-a',
+					sessionId: 'session-auth',
+					turnId: 'turn-a',
+					role: 'assistant',
+					content: 'partial from A',
+					createdAt: '2026-07-02T00:00:00.000Z',
+					streaming: true
+				}
+			]
+		},
+		inFlightTurnsBySessionId: {
+			...state.inFlightTurnsBySessionId,
+			'session-auth': 'turn-a'
+		}
+	}));
+
+	await act(async () => {
+		await store.getState().cancelTurn('session-auth');
+	});
+
+	act(() => {
+		store.getState().applyEvent({
+			type: 'message.created',
+			sessionId: 'session-auth',
+			turnId: 'turn-b',
+			message: {
+				id: 'msg-turn-b',
+				sessionId: 'session-auth',
+				turnId: 'turn-b',
+				role: 'assistant',
+				content: '',
+				createdAt: '2026-07-02T00:00:02.000Z',
+				streaming: true
+			}
+		});
+		store.getState().applyEvent({
+			type: 'session.updated',
+			sessionId: 'session-auth',
+			turnId: 'turn-b',
+			session: {
+				...store.getState().sessionsById['session-auth'],
+				status: 'running',
+				updatedAt: '2026-07-02T00:00:02.000Z'
+			}
+		});
+		store.getState().applyEvent({
+			type: 'session.updated',
+			sessionId: 'session-auth',
+			turnId: 'turn-a',
+			session: {
+				...store.getState().sessionsById['session-auth'],
+				status: 'running',
+				updatedAt: '2026-07-02T00:00:01.000Z'
+			}
+		});
+	});
+
+	expect(store.getState()).toMatchObject({
+		sessionsById: {
+			'session-auth': {
+				status: 'running',
+				updatedAt: '2026-07-02T00:00:02.000Z'
+			}
+		},
+		inFlightTurnsBySessionId: {
+			'session-auth': 'turn-b'
+		}
+	});
+	expect(store.getState().messagesBySessionId['session-auth']).toContainEqual(
+		expect.objectContaining({
+			id: 'msg-turn-b',
+			turnId: 'turn-b',
+			streaming: true
+		})
+	);
 });

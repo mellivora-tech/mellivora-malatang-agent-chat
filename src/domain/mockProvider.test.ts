@@ -17,9 +17,13 @@ test('streams message and tool events in deterministic order', async () => {
 	const provider = createMockAgentProvider({ chunkDelayMs: 0 });
 	const sessions = await provider.listSessions();
 	const events = [];
+	const sessionUpdates = [];
 
 	for await (const event of provider.sendMessage(sessions[0].id, { text: 'hello' })) {
 		events.push(event.type);
+		if (event.type === 'session.updated') {
+			sessionUpdates.push(event);
+		}
 	}
 
 	expect(events).toEqual([
@@ -32,6 +36,26 @@ test('streams message and tool events in deterministic order', async () => {
 		'tool.completed',
 		'message.completed',
 		'session.updated'
+	]);
+	expect(sessionUpdates).toEqual([
+		expect.objectContaining({
+			type: 'session.updated',
+			sessionId: sessions[0].id,
+			turnId: 'turn-1',
+			session: expect.objectContaining({
+				id: sessions[0].id,
+				status: 'running'
+			})
+		}),
+		expect.objectContaining({
+			type: 'session.updated',
+			sessionId: sessions[0].id,
+			turnId: 'turn-1',
+			session: expect.objectContaining({
+				id: sessions[0].id,
+				status: 'completed'
+			})
+		})
 	]);
 });
 

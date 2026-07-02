@@ -172,7 +172,7 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 		},
 
 		applyEvent(event: AgentEvent) {
-			if ('turnId' in event && get().cancelledTurnIds[event.turnId]) {
+			if ('turnId' in event && event.turnId && get().cancelledTurnIds[event.turnId]) {
 				return;
 			}
 
@@ -182,8 +182,7 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 						...state.messagesBySessionId,
 						[event.sessionId]: [...(state.messagesBySessionId[event.sessionId] ?? []), event.message]
 					},
-					inFlightTurnsBySessionId: { ...state.inFlightTurnsBySessionId, [event.sessionId]: event.turnId },
-					cancelledTurnsBySessionId: omitKey(state.cancelledTurnsBySessionId, event.sessionId)
+					inFlightTurnsBySessionId: { ...state.inFlightTurnsBySessionId, [event.sessionId]: event.turnId }
 				}));
 				return;
 			}
@@ -237,8 +236,9 @@ export function createAgentStore(provider: AgentProvider): UseBoundStore<StoreAp
 
 			if (event.type === 'session.updated') {
 				const state = get();
-				const sessionId = event.session.id;
+				const sessionId = event.sessionId;
 				if (
+					!event.turnId &&
 					event.session.status === 'running' &&
 					state.cancelledTurnsBySessionId[sessionId] &&
 					!state.inFlightTurnsBySessionId[sessionId]

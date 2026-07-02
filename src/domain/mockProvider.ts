@@ -76,7 +76,7 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 			sessions.set(sessionId, runningSession);
 
 			yield { type: 'message.created', sessionId, turnId, message: assistantMessage };
-			yield { type: 'session.updated', session: { ...runningSession } };
+			yield { type: 'session.updated', sessionId, turnId, session: { ...runningSession } };
 
 			const toolCall: ToolCall = {
 				id: `tool-${turnId}`,
@@ -107,7 +107,7 @@ export function createMockAgentProvider(options: MockProviderOptions = {}): Agen
 			inFlightTurnIds.delete(turnId);
 			const completedSession: AgentSession = { ...runningSession, status: 'completed', updatedAt: new Date().toISOString() };
 			sessions.set(sessionId, completedSession);
-			yield { type: 'session.updated', session: { ...completedSession } };
+			yield { type: 'session.updated', sessionId, turnId, session: { ...completedSession } };
 		},
 
 		async cancelTurn(_sessionId: string, turnId: string) {

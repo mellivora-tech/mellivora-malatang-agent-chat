@@ -60,13 +60,20 @@ export interface SendMessageInput {
 	text: string;
 }
 
+export interface SessionUpdatedEvent {
+	type: 'session.updated';
+	sessionId: string;
+	session: AgentSession;
+	turnId?: string;
+}
+
 export type AgentEvent =
 	| { type: 'message.created'; sessionId: string; turnId: string; message: ChatMessage }
 	| { type: 'message.delta'; sessionId: string; turnId: string; messageId: string; delta: string }
 	| { type: 'message.completed'; sessionId: string; turnId: string; messageId: string }
 	| { type: 'tool.pending'; sessionId: string; turnId: string; toolCall: ToolCall }
 	| { type: 'tool.completed'; sessionId: string; turnId: string; toolCallId: string }
-	| { type: 'session.updated'; session: AgentSession };
+	| SessionUpdatedEvent;
 
 export interface AgentProvider {
 	listSessions(): Promise<AgentSession[]>;
