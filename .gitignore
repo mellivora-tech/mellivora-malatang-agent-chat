@@ -3,3 +3,4 @@ dist-electron/
 dist-renderer/
 test-results/
 coverage/
+.superpowers/
