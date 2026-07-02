@@ -295,6 +295,10 @@
 	overflow: auto;
 }
 
+.aux-panel-body[hidden] {
+	display: none;
+}
+
 .aux-list {
 	display: grid;
 	gap: 8px;
