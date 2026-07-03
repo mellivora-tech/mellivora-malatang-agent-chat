@@ -7,7 +7,7 @@ import { app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const distRoot = join(fileURLToPath(new URL('../..', import.meta.url)));
+const distRoot = join(fileURLToPath(new URL('..', import.meta.url)));
 
 async function createWindow(): Promise<void> {
 	const win = new BrowserWindow({
@@ -21,7 +21,8 @@ async function createWindow(): Promise<void> {
 		webPreferences: {
 			preload: join(distRoot, 'preload/preload.js'),
 			contextIsolation: true,
-			nodeIntegration: false
+			nodeIntegration: false,
+			sandbox: false
 		}
 	});
 
