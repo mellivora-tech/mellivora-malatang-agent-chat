@@ -1,5 +1,5 @@
 .agent-sessions-workbench .part.auxiliarybar {
-	background: var(--vscode-agentsPanel-background);
+	background: var(--vscode-agents-color-panel-background);
 }
 
 .auxiliary-bar {
@@ -17,7 +17,7 @@
 	gap: 4px;
 	min-width: 0;
 	padding: 8px;
-	border-bottom: 1px solid var(--vscode-agentsPanel-border);
+	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	box-sizing: border-box;
 }
 
@@ -32,26 +32,26 @@
 	border: 1px solid transparent;
 	border-radius: 6px;
 	background: transparent;
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 74%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 74%, transparent);
 	font: inherit;
 	font-size: var(--vscode-agents-fontSize-label1);
 	cursor: default;
 }
 
 .auxiliary-tab:hover {
-	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 9%, transparent);
-	color: var(--vscode-agentsPanel-foreground);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	color: var(--vscode-agents-color-text-primary);
 }
 
 .auxiliary-tab.active {
-	border-color: color-mix(in srgb, var(--vscode-agentsBadge-background) 38%, var(--vscode-agentsPanel-border));
-	background: color-mix(in srgb, var(--vscode-agentsBadge-background) 18%, transparent);
-	color: var(--vscode-agentsPanel-foreground);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-badge-background) 38%, var(--vscode-agents-color-panel-border));
+	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 18%, transparent);
+	color: var(--vscode-agents-color-text-primary);
 }
 
 .auxiliary-tab:focus-visible {
-	outline: 1px solid var(--vscode-agentsBadge-background);
-	outline-offset: 2px;
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-badge-background);
+	outline-offset: var(--vscode-agents-space-2);
 }
 
 .auxiliary-content {
@@ -88,7 +88,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 58%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 58%, transparent);
 	font-size: var(--vscode-agents-fontSize-label2);
 }
 
@@ -104,9 +104,9 @@
 	gap: 2px;
 	min-width: 0;
 	padding: 8px;
-	border: 1px solid var(--vscode-agentsPanel-border);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: 6px;
-	background: color-mix(in srgb, var(--vscode-agents-background) 34%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 34%, transparent);
 	box-sizing: border-box;
 }
 
@@ -123,17 +123,17 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 60%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 60%, transparent);
 	font-size: var(--vscode-agents-fontSize-label3);
 }
 
 .changes-summary-stat.additions .changes-summary-value,
 .changes-file-stats {
-	color: #7ee787;
+	color: var(--vscode-agents-color-success);
 }
 
 .changes-summary-stat.deletions .changes-summary-value {
-	color: #ff7b72;
+	color: var(--vscode-agents-color-danger);
 }
 
 .changes-file-list,
@@ -158,7 +158,7 @@
 
 .changes-file-row:hover,
 .files-tree-row:hover {
-	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 8%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 }
 
 .changes-file-name,
@@ -181,7 +181,7 @@
 	gap: 8px;
 	min-width: 0;
 	padding: 12px 0;
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 62%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 62%, transparent);
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
@@ -197,9 +197,76 @@
 }
 
 .files-tree-row.folder {
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 84%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 84%, transparent);
 }
 
 .files-tree-row.file {
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 72%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 72%, transparent);
+}
+
+.auxiliary-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	background: var(--vscode-agents-color-stage-background);
+}
+
+.auxiliary-empty-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--vscode-agents-space-18);
+	width: min(var(--vscode-agents-size-composer-width), calc(100% - var(--vscode-agents-space-48)));
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.auxiliary-empty-title {
+	margin: 0;
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-heading2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	line-height: var(--vscode-agents-space-24);
+}
+
+.auxiliary-empty-description {
+	margin: calc(-1 * var(--vscode-agents-space-8)) 0 0;
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: var(--vscode-agents-space-18);
+	text-align: center;
+}
+
+.auxiliary-empty-cards {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--vscode-agents-space-8);
+	width: 100%;
+}
+
+.auxiliary-empty-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--vscode-agents-space-8);
+	min-height: var(--vscode-agents-space-86);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-card);
+	background: var(--vscode-agents-color-panel-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	cursor: default;
+}
+
+.auxiliary-empty-card:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+.auxiliary-empty-card:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
 }

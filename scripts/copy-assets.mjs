@@ -14,6 +14,7 @@ const copies = [
   ['dist/src/preload', 'dist/preload'],
   ['dist/src/sessions', 'dist/sessions'],
   ['src/sessions/electron-browser/sessions.html', 'dist/sessions/electron-browser/sessions.html'],
+  ['src/sessions/base/browser/ui', 'dist/sessions/base/browser/ui'],
   ['src/sessions/browser/media', 'dist/sessions/browser/media'],
   ['src/sessions/browser/parts/media', 'dist/sessions/browser/parts/media'],
   ['node_modules/@vscode/codicons/dist/codicon.css', 'dist/assets/codicons/codicon.css'],

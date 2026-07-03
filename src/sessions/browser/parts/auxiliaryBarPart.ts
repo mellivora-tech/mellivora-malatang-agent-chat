@@ -4,9 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { LayoutPriority } from '../../base/browser/grid.js';
-import { MutableDisposable } from '../../base/common/lifecycle.js';
-import { ChangesView } from '../../contrib/changes/browser/changesView.js';
-import { FilesView } from '../../contrib/files/browser/filesView.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import { Part } from '../part.js';
@@ -16,17 +13,10 @@ export interface IAuxiliaryBarPartOptions {
 	readonly sessionsPartService?: ISessionsPartService;
 }
 
-type AuxiliaryTab = 'changes' | 'files';
-
 export class AuxiliaryBarPart extends Part {
 	readonly minimumWidth = 260;
 	readonly minimumHeight = 0;
 	readonly priority = LayoutPriority.Low;
-
-	private readonly currentView = this._register(new MutableDisposable<ChangesView | FilesView>());
-	private activeTab: AuxiliaryTab = 'changes';
-	private tabContainer!: HTMLElement;
-	private contentContainer!: HTMLElement;
 
 	constructor(private readonly options: IAuxiliaryBarPartOptions = {}) {
 		super('workbench.parts.auxiliarybar', 'auxiliarybar');
@@ -36,44 +26,36 @@ export class AuxiliaryBarPart extends Part {
 		container.textContent = '';
 
 		const root = document.createElement('div');
-		root.className = 'auxiliary-bar';
+		root.className = 'auxiliary-bar auxiliary-empty';
 		container.appendChild(root);
 
-		this.tabContainer = document.createElement('div');
-		this.tabContainer.className = 'auxiliary-tabs';
-		root.appendChild(this.tabContainer);
+		const content = document.createElement('div');
+		content.className = 'auxiliary-empty-content';
+		root.appendChild(content);
 
-		this.contentContainer = document.createElement('div');
-		this.contentContainer.className = 'auxiliary-content';
-		root.appendChild(this.contentContainer);
+		const title = document.createElement('h2');
+		title.className = 'auxiliary-empty-title';
+		title.textContent = 'Open tab';
+		content.appendChild(title);
 
-		this.renderTabs();
-		this.renderActiveView();
-	}
+		const description = document.createElement('p');
+		description.className = 'auxiliary-empty-description';
+		description.textContent = 'Choose a tab to open in the side pane.';
+		content.appendChild(description);
 
-	private renderTabs(): void {
-		this.tabContainer.textContent = '';
+		const cards = document.createElement('div');
+		cards.className = 'auxiliary-empty-cards';
+		content.appendChild(cards);
 
 		for (const tab of [
-			{ id: 'changes' as const, label: 'Changes', icon: 'codicon-git-compare' },
-			{ id: 'files' as const, label: 'Files', icon: 'codicon-files' }
+			{ label: 'Review', icon: 'codicon-diff' },
+			{ label: 'Terminal', icon: 'codicon-terminal' },
+			{ label: 'Browser', icon: 'codicon-globe' }
 		]) {
 			const button = document.createElement('button');
-			button.className = 'auxiliary-tab';
+			button.className = 'auxiliary-empty-card';
 			button.type = 'button';
-			button.setAttribute('aria-selected', String(tab.id === this.activeTab));
-			if (tab.id === this.activeTab) {
-				button.classList.add('active');
-			}
-			button.addEventListener('click', () => {
-				if (this.activeTab === tab.id) {
-					return;
-				}
-
-				this.activeTab = tab.id;
-				this.renderTabs();
-				this.renderActiveView();
-			});
+			button.setAttribute('aria-label', tab.label);
 
 			const icon = document.createElement('span');
 			icon.className = `codicon ${tab.icon}`;
@@ -84,21 +66,7 @@ export class AuxiliaryBarPart extends Part {
 			label.textContent = tab.label;
 			button.appendChild(label);
 
-			this.tabContainer.appendChild(button);
+			cards.appendChild(button);
 		}
-	}
-
-	private renderActiveView(): void {
-		this.contentContainer.textContent = '';
-
-		if (this.activeTab === 'changes') {
-			this.currentView.value = new ChangesView(this.contentContainer, {
-				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
-				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {})
-			});
-			return;
-		}
-
-		this.currentView.value = new FilesView(this.contentContainer);
 	}
 }

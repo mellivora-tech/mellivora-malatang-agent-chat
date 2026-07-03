@@ -37,7 +37,16 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return this.getSessions().find(session => session.sessionId === sessionId);
 	}
 
-	async sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession> {
+	async startSession(query: string): Promise<ISession> {
+		const provider = this.providersService.getProviders()[0];
+		if (!provider) {
+			throw new Error('No sessions provider is registered');
+		}
+
+		return provider.startSession(query);
+	}
+
+	async sendMessage(sessionId: string, query: string): Promise<ISession> {
 		const session = this.getSession(sessionId);
 		if (!session) {
 			throw new Error(`Unknown session: ${sessionId}`);
@@ -48,7 +57,7 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 			throw new Error(`Unknown provider: ${session.providerId}`);
 		}
 
-		return provider.sendRequest(sessionId, chatId, query);
+		return provider.sendMessage(sessionId, query);
 	}
 
 	private onProvidersChanged(event: ISessionsProvidersChangeEvent): void {

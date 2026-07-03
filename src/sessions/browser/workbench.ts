@@ -19,8 +19,8 @@ import { ISessionsPartService, SessionsPartService } from '../services/sessions/
 import { ISessionsProvidersService, SessionsProvidersService } from '../services/sessions/browser/sessionsProvidersService.js';
 import { ISessionsService, SessionsService } from '../services/sessions/browser/sessionsService.js';
 
-const TITLEBAR_HEIGHT = 35;
-const SIDEBAR_WIDTH = 300;
+const TITLEBAR_HEIGHT = 52;
+const SIDEBAR_WIDTH = 270;
 const AUXILIARY_WIDTH = 340;
 const PANEL_HEIGHT = 300;
 const CONTENT_MIN_WIDTH = 640;
@@ -129,13 +129,20 @@ export class Workbench {
 			this.root.classList.toggle('mode-new-session', mode === 'newSession');
 			this.root.classList.toggle('mode-session-detail', mode === 'sessionDetail');
 			this.sessionsPart.updateWorkbenchMode(mode);
-			this.grid.setPartVisible('auxiliaryBar', mode === 'sessionDetail');
+			updateAuxiliaryVisibility();
+		};
+		const updateAuxiliaryVisibility = () => {
+			this.grid.setPartVisible(
+				'auxiliaryBar',
+				this.sessionsPartService.mode.get() === 'sessionDetail' && this.sessionsPartService.sidePaneVisible.get()
+			);
 			this.layout();
 		};
 
 		this.partSubscriptions.add(this.sessionsPartService.visibleSessions.subscribe(updateSessionsPart));
 		this.partSubscriptions.add(this.sessionsPartService.activeSession.subscribe(updateSessionsPart));
 		this.partSubscriptions.add(this.sessionsPartService.mode.subscribe(updateMode));
+		this.partSubscriptions.add(this.sessionsPartService.sidePaneVisible.subscribe(updateAuxiliaryVisibility));
 		updateSessionsPart();
 		updateMode();
 	}

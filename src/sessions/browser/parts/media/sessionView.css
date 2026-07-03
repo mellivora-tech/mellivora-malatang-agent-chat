@@ -4,15 +4,15 @@
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
-	background: var(--vscode-activeSessionView-background);
-	color: var(--vscode-agentsPanel-foreground);
+	background: var(--vscode-agents-color-activeSession-background);
+	color: var(--vscode-agents-color-text-primary);
 	overflow: hidden;
 	opacity: 0.64;
 	transition: opacity 120ms ease-out;
 }
 
 .session-view + .session-view {
-	border-left: 1px solid color-mix(in srgb, var(--vscode-agentsPanel-foreground) 11%, transparent);
+	border-left: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 11%, transparent);
 }
 
 .session-view.is-active {
@@ -20,15 +20,96 @@
 }
 
 .session-view:not(.is-active) {
-	background: var(--vscode-inactiveSessionView-background);
+	background: var(--vscode-agents-color-inactiveSession-background);
 }
 
-.session-view-centered-content {
-	width: min(950px, 100%);
-	margin: 0 auto;
-	padding: 0 18px;
+.conversation-context-bar {
+	border-bottom: 0;
+}
+
+.conversation-context {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	max-width: var(--vscode-agents-size-composer-width);
+	min-height: var(--vscode-agents-space-32);
+	margin: 0 auto var(--vscode-agents-space-6);
+	padding: 0 var(--vscode-agents-space-2);
+	border-bottom: 0;
 	box-sizing: border-box;
+}
+
+.conversation-context-left,
+.conversation-context-pill,
+.conversation-context-more {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+}
+
+.conversation-context-left {
+	gap: var(--vscode-agents-space-8);
+	width: 100%;
+}
+
+.conversation-context-title {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-body1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.conversation-context-pill,
+.conversation-context-more {
+	height: var(--vscode-agents-space-28);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-round);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-secondary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-context-pill {
+	gap: var(--vscode-agents-space-5);
+	padding: 0 var(--vscode-agents-space-8);
+}
+
+.conversation-context-pill span:not(.codicon) {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.conversation-context-workspace {
+	max-width: min(var(--vscode-agents-space-180), 32%);
+}
+
+.conversation-context-branch {
+	max-width: min(var(--vscode-agents-size-composer-width), 42%);
+}
+
+.conversation-context-more {
+	justify-content: center;
+	width: var(--vscode-agents-space-28);
+	padding: 0;
 	flex: 0 0 auto;
+}
+
+.conversation-context-pill:hover,
+.conversation-context-more:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-context-pill:focus-visible,
+.conversation-context-more:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
 }
 
 .session-view-content {
@@ -40,7 +121,7 @@
 	overflow: hidden;
 }
 
-.chat-view {
+.conversation-view {
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
@@ -48,139 +129,288 @@
 	min-height: 0;
 }
 
-.chat-view-transcript {
+.conversation-transcript {
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: auto;
-	padding: 20px max(18px, calc((100% - 950px) / 2 + 18px)) 18px;
+	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2 + var(--vscode-agents-space-18))) var(--vscode-agents-space-18);
 	box-sizing: border-box;
 }
 
-.chat-view-empty {
-	max-width: 950px;
-	margin: 24px auto;
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 58%, transparent);
+.conversation-empty {
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: var(--vscode-agents-space-24) auto;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 58%, transparent);
 	font-size: var(--vscode-agents-fontSize-body2);
 }
 
-.chat-view-message {
+.conversation-message {
 	display: grid;
 	grid-template-columns: 28px minmax(0, 1fr);
-	gap: 10px;
-	max-width: 950px;
-	margin: 0 auto 18px;
+	gap: var(--vscode-agents-space-10);
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-18);
 }
 
-.chat-view-message-avatar {
+.conversation-message-avatar {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: 28px;
 	height: 28px;
 	border-radius: 6px;
-	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 9%, transparent);
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 82%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 82%, transparent);
 }
 
-.chat-view-message.user .chat-view-message-avatar {
-	background: color-mix(in srgb, var(--vscode-agentsBadge-background) 22%, transparent);
-	color: var(--vscode-agentsBadge-foreground);
+.conversation-message.user .conversation-message-avatar {
+	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 22%, transparent);
+	color: var(--vscode-agents-color-badge-foreground);
 }
 
-.chat-view-message.tool .chat-view-message-avatar {
-	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 7%, transparent);
+.conversation-message.tool .conversation-message-avatar {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 7%, transparent);
 }
 
-.chat-view-message-body {
+.conversation-message.user {
+	display: flex;
+	justify-content: flex-end;
+	max-width: var(--vscode-agents-size-composer-width);
+}
+
+.conversation-message.user .conversation-message-avatar,
+.conversation-message.user .conversation-message-label {
+	display: none;
+}
+
+.conversation-message.user .conversation-message-body {
+	padding-top: 0;
+}
+
+.conversation-message-body {
 	min-width: 0;
 	padding-top: 2px;
 }
 
-.chat-view-message-label {
+.conversation-message-label {
 	margin-bottom: 4px;
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 68%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 68%, transparent);
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
-.chat-view-message-text,
-.chat-view-tool-detail {
+.conversation-message-text,
+.conversation-tool-detail {
 	font-size: var(--vscode-agents-fontSize-body1);
 	line-height: 1.45;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 
-.chat-view-tool-detail {
+.conversation-message-bubble {
+	max-width: min(var(--vscode-agents-size-composer-width), 62vw);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-card);
+	background: var(--vscode-agents-color-panel-background);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-body1);
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+
+.conversation-tool-detail {
 	margin-top: 8px;
 	padding: 8px 10px;
-	border: 1px solid color-mix(in srgb, var(--vscode-agentsPanel-foreground) 10%, transparent);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
 	border-radius: 6px;
-	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 5%, transparent);
-	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 72%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 5%, transparent);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 72%, transparent);
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-.chat-view-composer {
-	flex: 0 0 auto;
-	padding: 10px max(18px, calc((100% - 950px) / 2 + 18px)) 14px;
-	box-sizing: border-box;
-}
-
-.chat-view-input-wrap {
-	display: flex;
-	align-items: flex-end;
-	gap: 8px;
-	max-width: 950px;
-	min-height: 44px;
+.conversation-working-row,
+.conversation-thinking-row {
+	max-width: var(--vscode-agents-size-composer-width);
 	margin: 0 auto;
-	padding: 6px 6px 6px 12px;
-	box-sizing: border-box;
-	border: 1px solid var(--vscode-agentsChatInput-border);
-	border-radius: 7px;
-	background: var(--vscode-agentsChatInput-background);
-	color: var(--vscode-agentsChatInput-foreground);
-	box-shadow: 0 8px 24px color-mix(in srgb, black 24%, transparent);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-.chat-view-input {
-	flex: 1 1 auto;
+.conversation-working-row {
+	margin-top: var(--vscode-agents-space-8);
+}
+
+.conversation-thinking-row {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	margin-top: var(--vscode-agents-space-6);
+}
+
+.conversation-composer {
+	flex: 0 0 auto;
+	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-composer-width)) / 2)) var(--vscode-agents-space-22);
+	box-sizing: border-box;
+}
+
+.conversation-input-wrap {
+	display: grid;
+	grid-template-rows: minmax(var(--vscode-agents-space-52), 1fr) var(--vscode-agents-space-42);
+	max-width: var(--vscode-agents-size-composer-width);
+	min-height: calc(var(--vscode-agents-space-52) + var(--vscode-agents-space-42) + var(--vscode-agents-space-12));
+	margin: 0 auto;
+	box-sizing: border-box;
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
+	border-radius: var(--vscode-agents-radius-composer);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-24) color-mix(in srgb, var(--vscode-agents-color-shadow) 38%, transparent);
+	overflow: hidden;
+}
+
+.conversation-input {
 	min-width: 0;
-	max-height: 150px;
-	padding: 7px 0;
+	width: 100%;
+	min-height: var(--vscode-agents-space-52);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14) 0;
 	border: 0;
 	outline: 0;
 	resize: none;
 	background: transparent;
-	color: var(--vscode-agentsChatInput-foreground);
+	color: var(--vscode-agents-color-input-foreground);
 	font: inherit;
-	line-height: 1.4;
+	font-size: var(--vscode-agents-fontSize-body1);
+	line-height: 1.45;
+	box-sizing: border-box;
 }
 
-.chat-view-input::placeholder {
-	color: color-mix(in srgb, var(--vscode-agentsChatInput-foreground) 52%, transparent);
+.conversation-input::placeholder {
+	color: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 52%, transparent);
 }
 
-.chat-view-input:disabled {
+.conversation-input:disabled {
 	opacity: 0.72;
 }
 
-.chat-view-send-button {
+.conversation-composer-toolbar,
+.conversation-toolbar-left,
+.conversation-toolbar-right,
+.conversation-access,
+.conversation-model,
+.conversation-agent,
+.conversation-reconnect-status {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+
+.conversation-composer-toolbar {
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-12);
+	padding: 0 var(--vscode-agents-space-12);
+	color: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 72%, transparent);
+	box-sizing: border-box;
+}
+
+.conversation-toolbar-left,
+.conversation-toolbar-right {
+	gap: var(--vscode-agents-space-12);
+}
+
+.conversation-access,
+.conversation-model,
+.conversation-agent,
+.conversation-stop-button,
+.conversation-send-button {
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	cursor: default;
+}
+
+.conversation-access,
+.conversation-model,
+.conversation-agent {
+	gap: var(--vscode-agents-space-5);
+	height: var(--vscode-agents-size-actionMedium);
+	padding: 0;
+}
+
+.conversation-access {
+	color: var(--vscode-agents-color-warning);
+}
+
+.conversation-access span:not(.codicon),
+.conversation-model span:not(.codicon),
+.conversation-agent span:not(.codicon),
+.conversation-reconnect-status span:not(.codicon) {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.conversation-reconnect-status {
+	gap: var(--vscode-agents-space-5);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-stop-button,
+.conversation-send-button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 32px;
-	height: 32px;
+	width: var(--vscode-agents-size-actionMedium);
+	height: var(--vscode-agents-size-actionMedium);
 	flex: 0 0 auto;
-	border: 0;
-	border-radius: 50%;
-	background: var(--vscode-agentsBadge-background);
-	color: var(--vscode-agentsBadge-foreground);
+	padding: 0;
+	border-radius: var(--vscode-agents-radius-control);
 	cursor: pointer;
 }
 
-.chat-view-send-button:disabled {
+.conversation-stop-button {
+	background: color-mix(in srgb, var(--vscode-agents-color-danger) 18%, transparent);
+	color: var(--vscode-agents-color-danger);
+}
+
+.conversation-send-button {
+	background: var(--vscode-agents-color-badge-background);
+	color: var(--vscode-agents-color-badge-foreground);
+}
+
+.conversation-send-button:disabled {
 	opacity: 0.42;
 	cursor: default;
+}
+
+.conversation-access:hover,
+.conversation-model:hover,
+.conversation-agent:hover {
+	color: var(--vscode-agents-color-input-foreground);
+}
+
+.conversation-stop-button:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-danger) 26%, transparent);
+}
+
+.conversation-send-button:hover {
+	background: var(--vscode-agents-color-text-primary);
+	color: var(--vscode-agents-color-text-inverse);
+}
+
+.conversation-access:focus-visible,
+.conversation-model:focus-visible,
+.conversation-agent:focus-visible,
+.conversation-stop-button:focus-visible,
+.conversation-send-button:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
 }

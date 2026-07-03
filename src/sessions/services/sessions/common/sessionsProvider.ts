@@ -19,5 +19,6 @@ export interface ISessionsProvider {
 	readonly order: number;
 	getSessions(): readonly ISession[];
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
-	sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
+	startSession(query: string): Promise<ISession>;
+	sendMessage(sessionId: string, query: string): Promise<ISession>;
 }

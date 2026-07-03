@@ -13,8 +13,18 @@ export interface ISizeToken {
 	readonly value: string;
 }
 
+export type ThemeId = 'dark' | 'light' | 'highContrast';
+
+export interface IThemeDefinition {
+	readonly id: ThemeId;
+	readonly label: string;
+	readonly values: Readonly<Record<string, string>>;
+}
+
 const colorTokens = new Map<string, IColorToken>();
 const sizeTokens = new Map<string, ISizeToken>();
+const themes = new Map<string, IThemeDefinition>();
+let defaultThemeId: ThemeId = 'dark';
 
 export function registerColor(id: string, value: string): IColorToken {
 	const token = { id, value };
@@ -28,13 +38,47 @@ export function registerSize(id: string, value: string): ISizeToken {
 	return token;
 }
 
-export function applyThemeTokens(target: HTMLElement): void {
+export function registerTheme(theme: IThemeDefinition): IThemeDefinition {
+	themes.set(theme.id, theme);
+	return theme;
+}
+
+export function setDefaultTheme(id: ThemeId): void {
+	defaultThemeId = id;
+}
+
+export function getTheme(id: string | undefined = defaultThemeId): IThemeDefinition {
+	return themes.get(id) ?? themes.get(defaultThemeId) ?? {
+		id: 'dark',
+		label: 'Dark',
+		values: {}
+	};
+}
+
+export function resolveThemeTokenValue(id: string, themeId: string | undefined = defaultThemeId): string | undefined {
+	const theme = getTheme(themeId);
+	const themeValue = theme.values[id];
+	if (themeValue !== undefined) {
+		return themeValue;
+	}
+
+	return colorTokens.get(id)?.value ?? sizeTokens.get(id)?.value;
+}
+
+export function getTokenCssVariableName(id: string): string {
+	return toCssVariableName(id);
+}
+
+export function applyThemeTokens(target: HTMLElement, themeId: string = defaultThemeId): void {
+	const theme = getTheme(themeId);
+	target.dataset['agentsTheme'] = theme.id;
+
 	for (const token of colorTokens.values()) {
-		target.style.setProperty(toCssVariableName(token.id), token.value);
+		target.style.setProperty(toCssVariableName(token.id), resolveThemeTokenValue(token.id, theme.id) ?? token.value);
 	}
 
 	for (const token of sizeTokens.values()) {
-		target.style.setProperty(toCssVariableName(token.id), token.value);
+		target.style.setProperty(toCssVariableName(token.id), resolveThemeTokenValue(token.id, theme.id) ?? token.value);
 	}
 }
 

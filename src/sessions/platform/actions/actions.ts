@@ -3,13 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-export interface IAction {
-	readonly id: string;
-	readonly label: string;
-	readonly icon?: string;
-	readonly enabled?: boolean;
-	run(): void | Promise<void>;
-}
+import type { IAction } from '../../base/common/actions.js';
+
+export type { IAction } from '../../base/common/actions.js';
 
 export class MenuId {
 	static readonly TitleBarLeft = new MenuId('TitleBarLeft');

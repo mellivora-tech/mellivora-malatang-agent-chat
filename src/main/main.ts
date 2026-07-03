@@ -6,6 +6,7 @@
 import { app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getInitialWindowBackgroundColor } from './windowTheme.js';
 
 const distRoot = join(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -16,7 +17,7 @@ async function createWindow(): Promise<void> {
 		minWidth: 960,
 		minHeight: 640,
 		title: 'Agent Chat',
-		backgroundColor: '#1e1e1e',
+		backgroundColor: getInitialWindowBackgroundColor(),
 		titleBarStyle: 'hiddenInset',
 		webPreferences: {
 			preload: join(distRoot, 'preload/preload.js'),

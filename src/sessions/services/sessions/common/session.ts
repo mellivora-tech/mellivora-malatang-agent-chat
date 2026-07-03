@@ -13,7 +13,7 @@ export const enum SessionStatus {
 	Error = 4
 }
 
-export const enum ChatInteractivity {
+export const enum SessionInteractivity {
 	Full = 'full',
 	ReadOnly = 'read-only',
 	Hidden = 'hidden'
@@ -31,19 +31,11 @@ export interface ISessionChangesSummary {
 	readonly deletions: number;
 }
 
-export interface IChatMessage {
+export interface ISessionMessage {
 	readonly id: string;
 	readonly role: 'user' | 'assistant' | 'tool';
 	readonly text: string;
 	readonly detail?: string;
-}
-
-export interface IChat {
-	readonly id: string;
-	readonly title: IObservable<string>;
-	readonly messages: IObservable<readonly IChatMessage[]>;
-	readonly status: IObservable<SessionStatus>;
-	readonly interactivity: IObservable<ChatInteractivity>;
 }
 
 export interface ISession {
@@ -60,13 +52,11 @@ export interface ISession {
 	readonly changesSummary: IObservable<ISessionChangesSummary | undefined>;
 	readonly isArchived: IObservable<boolean>;
 	readonly isRead: IObservable<boolean>;
-	readonly chats: IObservable<readonly IChat[]>;
-	readonly activeChat: IObservable<IChat>;
+	readonly messages: IObservable<readonly ISessionMessage[]>;
+	readonly interactivity: IObservable<SessionInteractivity>;
 }
 
 export interface IActiveSession extends ISession {
 	readonly isCreated: IObservable<boolean>;
 	readonly sticky: IObservable<boolean>;
-	readonly openChats: IObservable<readonly IChat[]>;
-	readonly shouldShowChatTabs: IObservable<boolean>;
 }

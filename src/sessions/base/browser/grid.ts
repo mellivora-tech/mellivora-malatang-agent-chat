@@ -51,8 +51,8 @@ interface IHorizontalEntry {
 }
 
 const defaultDimensions: IWorkbenchGridDimensions = {
-	titlebarHeight: 35,
-	sidebarWidth: 300,
+	titlebarHeight: 52,
+	sidebarWidth: 270,
 	auxiliaryBarWidth: 340,
 	editorWidth: 360,
 	panelHeight: 300
@@ -85,22 +85,20 @@ export class WorkbenchGrid {
 
 		this.parts.titlebar.layout(safeWidth, this.dimensions.titlebarHeight, 0, 0);
 
-		const contentTop = this.dimensions.titlebarHeight;
-		const contentHeight = Math.max(0, safeHeight - this.dimensions.titlebarHeight);
-		const panelHeight = this.visibility.panel ? Math.min(contentHeight, Math.max(this.parts.panel.minimumHeight, this.dimensions.panelHeight)) : 0;
-		const topRowHeight = Math.max(0, contentHeight - panelHeight);
-		const sidebarWidth = this.visibility.sidebar ? Math.min(safeWidth, Math.max(this.parts.sidebar.minimumWidth, this.dimensions.sidebarWidth)) : 0;
-		const rightLeft = sidebarWidth;
+		const sidebarWidth = this.visibility.sidebar
+			? Math.min(safeWidth, Math.max(this.parts.sidebar.minimumWidth, this.dimensions.sidebarWidth))
+			: 0;
 		const rightWidth = Math.max(0, safeWidth - sidebarWidth);
+		const auxiliaryWidth = this.visibility.auxiliaryBar
+			? Math.min(rightWidth, Math.max(this.parts.auxiliaryBar.minimumWidth, this.dimensions.auxiliaryBarWidth))
+			: 0;
+		const sessionsWidth = Math.max(0, rightWidth - auxiliaryWidth);
 
-		layoutOrHide(this.parts.sidebar, this.visibility.sidebar, sidebarWidth, contentHeight, contentTop, 0);
-		layoutOrHide(this.parts.panel, this.visibility.panel, rightWidth, panelHeight, contentTop + topRowHeight, rightLeft);
-		this.parts.sessions.element.style.display = 'none';
-		this.parts.editor.element.style.display = 'none';
-		this.parts.auxiliaryBar.element.style.display = 'none';
-
-		const topRowEntries = this.collectTopRowEntries();
-		layoutHorizontalViews(topRowEntries, rightWidth, topRowHeight, contentTop, rightLeft);
+		layoutOrHide(this.parts.sidebar, this.visibility.sidebar, sidebarWidth, safeHeight, 0, 0);
+		layoutOrHide(this.parts.sessions, this.visibility.sessions, sessionsWidth, safeHeight, 0, sidebarWidth);
+		layoutOrHide(this.parts.auxiliaryBar, this.visibility.auxiliaryBar, auxiliaryWidth, safeHeight, 0, sidebarWidth + sessionsWidth);
+		layoutOrHide(this.parts.editor, false, 0, 0, 0, 0);
+		layoutOrHide(this.parts.panel, false, 0, 0, 0, 0);
 	}
 
 	private collectTopRowEntries(): readonly IHorizontalEntry[] {

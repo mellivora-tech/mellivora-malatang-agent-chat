@@ -6,33 +6,35 @@
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { clearNode } from '../../base/browser/dom.js';
 import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
+import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { Part } from '../part.js';
 import { NewSessionView } from './newSessionView.js';
 import { SessionView } from './sessionView.js';
-import type { IChatRequestSender } from './chatView.js';
 
 export class SessionsPart extends Part {
 	readonly minimumWidth = 640;
 	readonly minimumHeight = 0;
 	readonly priority = LayoutPriority.High;
 
-	private readonly slots: SessionView[] = [];
-	private readonly newSessionView = this._register(new NewSessionView());
+	private readonly sessionView: SessionView;
+	private readonly newSessionView: NewSessionView;
 	private container: HTMLElement | undefined;
 	private mode: WorkbenchMode = 'newSession';
-	private visibleSessions: readonly (IActiveSession | undefined)[] = [undefined];
 	private activeSession: IActiveSession | undefined;
 	private width = 0;
 	private height = 0;
 
-	constructor(private readonly requestSender?: IChatRequestSender) {
+	constructor(private readonly sessionsService?: ISessionsService) {
 		super('workbench.parts.sessions', 'sessionspart');
+		this.newSessionView = this._register(new NewSessionView({
+			onStartSession: query => this.sessionsService?.startSession(query) ?? Promise.resolve()
+		}));
+		this.sessionView = this._register(new SessionView(this.sessionsService));
 	}
 
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void {
-		this.visibleSessions = visible;
-		this.activeSession = active;
+		this.activeSession = active ?? visible.find((session): session is IActiveSession => Boolean(session));
 		this.syncContent();
 	}
 
@@ -43,18 +45,16 @@ export class SessionsPart extends Part {
 
 	focusSession(sessionId: string | undefined): void {
 		const targetSessionId = sessionId ?? this.activeSession?.sessionId;
-		const targetIndex = targetSessionId
-			? this.visibleSessions.findIndex(session => session?.sessionId === targetSessionId)
-			: -1;
-		const slot = this.slots[targetIndex] ?? this.slots[0];
-		slot?.focus();
+		if (!targetSessionId || targetSessionId === this.activeSession?.sessionId) {
+			this.sessionView.focus();
+		}
 	}
 
 	override layout(width: number, height: number, top: number, left: number): void {
 		super.layout(width, height, top, left);
 		this.width = this.element.clientWidth;
 		this.height = this.element.clientHeight;
-		this.layoutSlots();
+		this.layoutSessionView();
 	}
 
 	protected override render(container: HTMLElement): void {
@@ -70,11 +70,11 @@ export class SessionsPart extends Part {
 			return;
 		}
 
-		this.container.classList.toggle('is-new-session', this.mode === 'newSession');
-		if (this.mode === 'newSession') {
-			for (const slot of this.slots) {
-				slot.element.remove();
-			}
+		const showNewSession = this.mode === 'newSession' || !this.activeSession;
+		this.container.classList.toggle('is-new-session', showNewSession);
+		if (showNewSession) {
+			this.sessionView.element.remove();
+			this.sessionView.openSession(undefined);
 
 			if (this.newSessionView.element.parentElement !== this.container) {
 				this.container.appendChild(this.newSessionView.element);
@@ -83,49 +83,20 @@ export class SessionsPart extends Part {
 		}
 
 		this.newSessionView.element.remove();
-		this.syncSlots();
+		if (this.sessionView.element.parentElement !== this.container) {
+			this.container.appendChild(this.sessionView.element);
+		}
+		this.sessionView.openSession(this.activeSession);
+		this.sessionView.setActive(true);
+
+		this.layoutSessionView();
 	}
 
-	private syncSlots(): void {
-		if (!this.container) {
+	private layoutSessionView(): void {
+		if (this.mode !== 'sessionDetail' || this.sessionView.element.parentElement !== this.container) {
 			return;
 		}
 
-		const desiredCount = Math.max(this.visibleSessions.length, 1);
-
-		while (this.slots.length < desiredCount) {
-			const slot = this._register(new SessionView(this.requestSender));
-			this.slots.push(slot);
-			this.container.appendChild(slot.element);
-		}
-
-		while (this.slots.length > desiredCount) {
-			const slot = this.slots.pop();
-			slot?.element.remove();
-			slot?.dispose();
-		}
-
-		for (let index = 0; index < this.slots.length; index++) {
-			const slot = this.slots[index]!;
-			const session = this.visibleSessions[index];
-			if (slot.element.parentElement !== this.container) {
-				this.container.appendChild(slot.element);
-			}
-			slot.openSession(session);
-			slot.setActive(this.slots.length === 1 || Boolean(session && session.sessionId === this.activeSession?.sessionId));
-		}
-
-		this.layoutSlots();
-	}
-
-	private layoutSlots(): void {
-		if (this.mode !== 'sessionDetail' || this.slots.length === 0) {
-			return;
-		}
-
-		const slotWidth = this.width > 0 ? this.width / this.slots.length : 0;
-		for (const slot of this.slots) {
-			slot.layout(slotWidth, this.height);
-		}
+		this.sessionView.layout(this.width, this.height);
 	}
 }

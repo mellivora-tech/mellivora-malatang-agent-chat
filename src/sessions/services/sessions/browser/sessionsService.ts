@@ -16,10 +16,11 @@ export interface ISessionsService {
 	readonly visibleSessions: VisibleSessions['visibleSessions'];
 	readonly activeSession: VisibleSessions['activeSession'];
 	getSessions(): readonly ISession[];
+	startSession(query: string): Promise<ISession>;
 	openSession(sessionId: string): void;
 	setActive(sessionId: string): void;
 	closeSession(sessionId: string): void;
-	sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
+	sendMessage(sessionId: string, query: string): Promise<ISession>;
 }
 
 export class SessionsService extends Disposable implements ISessionsService {
@@ -51,6 +52,14 @@ export class SessionsService extends Disposable implements ISessionsService {
 		return this.managementService.getSessions();
 	}
 
+	async startSession(query: string): Promise<ISession> {
+		const session = await this.managementService.startSession(query);
+		this.visibleSessionsModel.setSessions(this.managementService.getSessions());
+		this.visibleSessionsModel.openOnly(session);
+		this.sessionsPartService.showSessionDetail(false);
+		return session;
+	}
+
 	openSession(sessionId: string): void {
 		const session = this.getRequiredSession(sessionId);
 		this.visibleSessionsModel.openSession(session);
@@ -67,8 +76,8 @@ export class SessionsService extends Disposable implements ISessionsService {
 		this.visibleSessionsModel.closeSession(sessionId);
 	}
 
-	async sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession> {
-		const session = await this.managementService.sendRequest(sessionId, chatId, query);
+	async sendMessage(sessionId: string, query: string): Promise<ISession> {
+		const session = await this.managementService.sendMessage(sessionId, query);
 		this.visibleSessionsModel.setSessions(this.managementService.getSessions());
 		this.visibleSessionsModel.setActive(session);
 		this.sessionsPartService.showSessionDetail();

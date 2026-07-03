@@ -2,22 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { observableValue } from '../../src/sessions/base/common/observable.js';
-import { ChatInteractivity, SessionStatus, type IChat, type IChatMessage, type ISession } from '../../src/sessions/services/sessions/common/session.js';
+import { SessionInteractivity, SessionStatus, type ISession, type ISessionMessage } from '../../src/sessions/services/sessions/common/session.js';
 import { VisibleSessions } from '../../src/sessions/services/sessions/browser/visibleSessions.js';
 
-function createChat(id: string, title: string): IChat {
-	return {
-		id,
-		title: observableValue(title),
-		messages: observableValue<readonly IChatMessage[]>([]),
-		status: observableValue(SessionStatus.InProgress),
-		interactivity: observableValue(ChatInteractivity.Full)
-	};
-}
-
-function createSession(sessionId: string, chatCount = 1): ISession {
-	const chats = Array.from({ length: chatCount }, (_, index) => createChat(`${sessionId}-chat-${index + 1}`, `Chat ${index + 1}`));
-
+function createSession(sessionId: string): ISession {
 	return {
 		sessionId,
 		providerId: 'mock',
@@ -32,8 +20,8 @@ function createSession(sessionId: string, chatCount = 1): ISession {
 		changesSummary: observableValue(undefined),
 		isArchived: observableValue(false),
 		isRead: observableValue(true),
-		chats: observableValue(chats),
-		activeChat: observableValue(chats[0]!)
+		messages: observableValue<readonly ISessionMessage[]>([]),
+		interactivity: observableValue(SessionInteractivity.Full)
 	};
 }
 
@@ -46,7 +34,7 @@ test('first session becomes active', () => {
 	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-1']);
 });
 
-test('opening another session changes active session', () => {
+test('opening another session replaces the visible session', () => {
 	const first = createSession('session-1');
 	const second = createSession('session-2');
 	const visibleSessions = new VisibleSessions([first, second]);
@@ -54,10 +42,23 @@ test('opening another session changes active session', () => {
 	visibleSessions.openSession(second);
 
 	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-2');
-	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-1', 'session-2']);
+	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-2']);
 });
 
-test('closing active session selects a fallback', () => {
+test('opening only a session replaces existing visible sessions', () => {
+	const first = createSession('session-1');
+	const second = createSession('session-2');
+	const third = createSession('session-3');
+	const visibleSessions = new VisibleSessions([first, second, third]);
+
+	visibleSessions.openSession(second);
+	visibleSessions.openOnly(third);
+
+	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-3');
+	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-3']);
+});
+
+test('closing active session selects a remaining fallback', () => {
 	const first = createSession('session-1');
 	const second = createSession('session-2');
 	const third = createSession('session-3');
@@ -67,13 +68,6 @@ test('closing active session selects a fallback', () => {
 	visibleSessions.openSession(third);
 	visibleSessions.closeSession('session-3');
 
-	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-2');
-	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-1', 'session-2']);
-});
-
-test('multiple chats make shouldShowChatTabs true', () => {
-	const session = createSession('session-1', 2);
-	const visibleSessions = new VisibleSessions([session]);
-
-	assert.equal(visibleSessions.activeSession.get()?.shouldShowChatTabs.get(), true);
+	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-1');
+	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-1']);
 });

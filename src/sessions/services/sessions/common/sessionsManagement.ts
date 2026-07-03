@@ -11,5 +11,6 @@ export interface ISessionsManagementService {
 	getSessions(): readonly ISession[];
 	getSession(sessionId: string): ISession | undefined;
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
-	sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
+	startSession(query: string): Promise<ISession>;
+	sendMessage(sessionId: string, query: string): Promise<ISession>;
 }

@@ -9,13 +9,9 @@ import { SessionStatus, type IActiveSession, type ISession } from '../common/ses
 class ActiveSession implements IActiveSession {
 	readonly isCreated: IObservable<boolean>;
 	readonly sticky = observableValue(false);
-	readonly openChats: IObservable<readonly ReturnType<ISession['chats']['get']>[number][]>;
-	readonly shouldShowChatTabs: IObservable<boolean>;
 
 	constructor(private readonly session: ISession) {
 		this.isCreated = derived(() => this.session.status.get() !== SessionStatus.Untitled, [this.session.status]);
-		this.openChats = this.session.chats;
-		this.shouldShowChatTabs = derived(() => this.session.chats.get().length > 1, [this.session.chats]);
 	}
 
 	get sessionId() { return this.session.sessionId; }
@@ -31,8 +27,8 @@ class ActiveSession implements IActiveSession {
 	get changesSummary() { return this.session.changesSummary; }
 	get isArchived() { return this.session.isArchived; }
 	get isRead() { return this.session.isRead; }
-	get chats() { return this.session.chats; }
-	get activeChat() { return this.session.activeChat; }
+	get messages() { return this.session.messages; }
+	get interactivity() { return this.session.interactivity; }
 }
 
 export class VisibleSessions {
@@ -70,16 +66,14 @@ export class VisibleSessions {
 
 	openSession(session: ISession): void {
 		const activeSession = this.toActiveSession(session);
-		const currentVisible = this.visibleSessions.get().filter((candidate): candidate is IActiveSession => candidate !== undefined);
-		const existing = currentVisible.find(candidate => candidate.sessionId === session.sessionId);
-		const nextVisible = existing
-			? currentVisible
-			: currentVisible.length === 0
-				? [activeSession]
-				: [...currentVisible, activeSession];
+		this.visibleSessions.set([activeSession]);
+		this.activeSession.set(activeSession);
+	}
 
-		this.visibleSessions.set(nextVisible);
-		this.activeSession.set(existing ?? activeSession);
+	openOnly(session: ISession): void {
+		const activeSession = this.toActiveSession(session);
+		this.visibleSessions.set([activeSession]);
+		this.activeSession.set(activeSession);
 	}
 
 	setActive(session: ISession): void {
