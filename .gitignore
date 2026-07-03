@@ -1,6 +1,0 @@
-node_modules/
-dist-electron/
-dist-renderer/
-test-results/
-coverage/
-.superpowers/
