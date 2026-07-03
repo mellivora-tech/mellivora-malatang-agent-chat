@@ -32,6 +32,11 @@ test('agents window shell renders at desktop sizes', async () => {
 			await captureAndAssert(page, screenshot);
 		}
 
+		await page.locator('.sessions-list-row').first().click();
+		await expect(page.locator('.session-view')).toBeVisible();
+		await expect(page.locator('.part.auxiliarybar')).toBeVisible();
+		await expect(page.locator('.sessions-command-title')).not.toHaveText('New Session');
+
 		await assertDarwinTrafficLightInset(page);
 		expect(rendererErrors).toEqual([]);
 	} finally {
@@ -51,13 +56,18 @@ async function captureAndAssert(
 		'.part.titlebar',
 		'.part.sidebar',
 		'.part.sessionspart',
-		'.session-view',
-		'.part.auxiliarybar'
+		'.sessions-new-session-view'
 	]) {
 		await expect(page.locator(selector)).toBeVisible();
 	}
 
-	const boxes = await page.locator('.part.sessionspart, .part.sidebar, .part.auxiliarybar').evaluateAll(nodes =>
+	await expect(page.locator('.sessions-command-title')).toHaveText('New Session');
+	await expect(page.locator('.sessions-sidebar-header-title')).toHaveText('Sessions');
+	await expect(page.locator('.part.auxiliarybar')).toBeHidden();
+	await expect(page.locator('.new-session-heading')).toContainText('Start by picking a workspace');
+	await expect(page.locator('.new-session-input')).toBeVisible();
+
+	const boxes = await page.locator('.part.sessionspart, .part.sidebar').evaluateAll(nodes =>
 		nodes.map(node => {
 			const rect = node.getBoundingClientRect();
 			return {
@@ -68,7 +78,7 @@ async function captureAndAssert(
 		})
 	);
 
-	expect(boxes).toHaveLength(3);
+	expect(boxes).toHaveLength(2);
 	for (const box of boxes) {
 		expect(box.width).toBeGreaterThan(100);
 		expect(box.height).toBeGreaterThan(100);

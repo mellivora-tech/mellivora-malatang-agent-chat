@@ -59,7 +59,7 @@ export class TitlebarPart extends Part {
 		const brand = document.createElement('div');
 		brand.className = 'sessions-titlebar-brand';
 		const icon = document.createElement('span');
-		icon.className = 'codicon codicon-comment-discussion';
+		icon.className = 'codicon codicon-layout-sidebar-left';
 		icon.setAttribute('aria-hidden', 'true');
 		brand.appendChild(icon);
 		const label = document.createElement('span');
@@ -91,6 +91,11 @@ export class TitlebarPart extends Part {
 
 	private bindActiveSession(): void {
 		const activeSession = this.options.sessionsPartService?.activeSession ?? this.options.sessionsService?.activeSession;
+		const mode = this.options.sessionsPartService?.mode;
+		if (mode) {
+			this._register(mode.subscribe(() => this.renderCommandCenter(activeSession?.get())));
+		}
+
 		if (!activeSession) {
 			this.renderCommandCenter(undefined);
 			return;
@@ -103,8 +108,9 @@ export class TitlebarPart extends Part {
 	private renderCommandCenter(session: IActiveSession | undefined): void {
 		this.activeSessionStore.clear();
 		this.center.textContent = '';
+		const isNewSession = this.options.sessionsPartService?.mode.get() === 'newSession';
 
-		if (session) {
+		if (session && !isNewSession) {
 			for (const observable of [session.title, session.workspace, session.changesSummary]) {
 				this.activeSessionStore.add(observable.subscribe(() => this.renderCommandCenter(session)));
 			}
@@ -116,14 +122,19 @@ export class TitlebarPart extends Part {
 		commandBox.title = 'Active session';
 
 		const providerIcon = document.createElement('span');
-		providerIcon.className = `codicon ${session?.icon ?? 'codicon-copilot'}`;
+		providerIcon.className = `codicon ${isNewSession ? 'codicon-add' : session?.icon ?? 'codicon-copilot'}`;
 		providerIcon.setAttribute('aria-hidden', 'true');
 		commandBox.appendChild(providerIcon);
 
 		const title = document.createElement('span');
 		title.className = 'sessions-command-title';
-		title.textContent = session?.title.get() ?? 'Agent session';
+		title.textContent = isNewSession ? 'New Session' : session?.title.get() ?? 'Agent session';
 		commandBox.appendChild(title);
+
+		if (isNewSession) {
+			this.center.appendChild(commandBox);
+			return;
+		}
 
 		const workspace = session?.workspace.get();
 		if (workspace) {

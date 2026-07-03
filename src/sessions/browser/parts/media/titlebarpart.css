@@ -43,7 +43,7 @@
 }
 
 .agent-sessions-workbench.platform-darwin .titlebar-left {
-	padding-left: 74px;
+	padding-left: 102px;
 	box-sizing: border-box;
 }
 
@@ -69,6 +69,10 @@
 	white-space: nowrap;
 }
 
+.mode-new-session .sessions-titlebar-brand span:last-child {
+	display: none;
+}
+
 .sessions-command-center {
 	display: inline-flex;
 	align-items: center;
@@ -83,6 +87,11 @@
 	font: inherit;
 	cursor: default;
 	box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent);
+}
+
+.mode-new-session .sessions-command-center {
+	justify-content: center;
+	width: min(620px, 44vw);
 }
 
 .sessions-command-center:focus-visible,

@@ -44,6 +44,7 @@ export class SessionsList extends Disposable {
 	private bind(): void {
 		const visibleSessions = this.options.sessionsService?.visibleSessions ?? this.options.sessionsPartService?.visibleSessions;
 		const activeSession = this.options.sessionsService?.activeSession ?? this.options.sessionsPartService?.activeSession;
+		const mode = this.options.sessionsPartService?.mode;
 
 		if (visibleSessions) {
 			this._register(visibleSessions.subscribe(() => this.render()));
@@ -51,6 +52,10 @@ export class SessionsList extends Disposable {
 
 		if (activeSession) {
 			this._register(activeSession.subscribe(() => this.render()));
+		}
+
+		if (mode) {
+			this._register(mode.subscribe(() => this.render()));
 		}
 	}
 
@@ -72,11 +77,10 @@ export class SessionsList extends Disposable {
 		if (sessions.length === 0) {
 			this.renderFallback(content);
 		} else {
-			this.renderSessionSections(content, sessions);
+			this.renderNavigationSections(content, sessions);
 			this.bindRows(sessions);
 		}
 
-		this.renderFooter(root);
 	}
 
 	private renderHeader(container: HTMLElement): void {
@@ -84,21 +88,133 @@ export class SessionsList extends Disposable {
 		header.className = 'sessions-sidebar-header';
 
 		const title = document.createElement('span');
-		title.textContent = 'Agent Chat';
+		title.className = 'sessions-sidebar-header-title';
+		title.textContent = 'Sessions';
 		header.appendChild(title);
 
+		const actions = document.createElement('div');
+		actions.className = 'sessions-sidebar-header-actions';
+		actions.append(
+			this.createNewSessionButton(),
+			this.createHeaderIconButton('Filter Sessions', 'codicon-settings'),
+			this.createHeaderIconButton('Search Sessions', 'codicon-search')
+		);
+		header.appendChild(actions);
+
+		container.appendChild(header);
+	}
+
+	private createNewSessionButton(): HTMLButtonElement {
 		const button = document.createElement('button');
-		button.className = 'sessions-sidebar-icon-button';
+		button.className = 'sessions-sidebar-new-button';
 		button.type = 'button';
 		button.title = 'New Session';
 		button.setAttribute('aria-label', 'New Session');
+		button.addEventListener('click', () => this.options.sessionsPartService?.showNewSession());
+
+		const label = document.createElement('span');
+		label.textContent = 'New';
+		button.appendChild(label);
+
+		const keybinding = document.createElement('span');
+		keybinding.className = 'sessions-sidebar-keybinding';
+		keybinding.textContent = '⌘N';
+		button.appendChild(keybinding);
+
+		return button;
+	}
+
+	private createHeaderIconButton(label: string, iconClass: string): HTMLButtonElement {
+		const button = document.createElement('button');
+		button.className = 'sessions-sidebar-icon-button';
+		button.type = 'button';
+		button.title = label;
+		button.setAttribute('aria-label', label);
+
 		const icon = document.createElement('span');
-		icon.className = 'codicon codicon-add';
+		icon.className = `codicon ${iconClass}`;
 		icon.setAttribute('aria-hidden', 'true');
 		button.appendChild(icon);
-		header.appendChild(button);
 
-		container.appendChild(header);
+		return button;
+	}
+
+	private renderNavigationSections(container: HTMLElement, sessions: readonly SessionLike[]): void {
+		this.renderChatsSection(container);
+
+		const firstGroup = sessions.filter(session => !session.isArchived.get()).slice(0, 4);
+		const secondGroup = sessions.filter(session => !firstGroup.some(candidate => candidate.sessionId === session.sessionId));
+		this.renderSection(container, 'claude-code-mini', firstGroup.map(session => this.toSessionRow(session, undefined, session.workspace.get()?.label)));
+		this.renderSection(container, 'claude-code-sourcemap', secondGroup.map(session => this.toSessionRow(session, undefined, session.workspace.get()?.label)));
+		this.renderCustomizations(container);
+	}
+
+	private renderChatsSection(container: HTMLElement): void {
+		const section = document.createElement('section');
+		section.className = 'sessions-list-section sessions-list-chats-section';
+
+		const header = document.createElement('div');
+		header.className = 'sessions-list-section-header sessions-list-section-header-with-icon';
+		const icon = document.createElement('span');
+		icon.className = 'codicon codicon-comment-discussion';
+		icon.setAttribute('aria-hidden', 'true');
+		header.appendChild(icon);
+		const label = document.createElement('span');
+		label.textContent = 'Chats';
+		header.appendChild(label);
+		section.appendChild(header);
+
+		const empty = document.createElement('div');
+		empty.className = 'sessions-list-empty sessions-list-empty-indented';
+		empty.textContent = 'No chats';
+		section.appendChild(empty);
+		container.appendChild(section);
+	}
+
+	private renderCustomizations(container: HTMLElement): void {
+		const rows = [
+			{ icon: 'codicon-home', label: 'Overview' },
+			{ icon: 'codicon-extensions', label: 'Agents' },
+			{ icon: 'codicon-lightbulb', label: 'Skills' },
+			{ icon: 'codicon-book', label: 'Instructions' },
+			{ icon: 'codicon-zap', label: 'Hooks' },
+			{ icon: 'codicon-server', label: 'MCP Servers', count: '1' },
+			{ icon: 'codicon-plug', label: 'Plugins' }
+		];
+
+		const section = document.createElement('section');
+		section.className = 'sessions-list-section sessions-customizations-section';
+
+		const header = document.createElement('div');
+		header.className = 'sessions-list-section-header';
+		header.textContent = 'Customizations';
+		section.appendChild(header);
+
+		const list = document.createElement('div');
+		list.className = 'sessions-customizations-list';
+		section.appendChild(list);
+
+		for (const row of rows) {
+			const button = document.createElement('button');
+			button.className = 'sessions-customization-row';
+			button.type = 'button';
+			const icon = document.createElement('span');
+			icon.className = `codicon ${row.icon}`;
+			icon.setAttribute('aria-hidden', 'true');
+			button.appendChild(icon);
+			const label = document.createElement('span');
+			label.textContent = row.label;
+			button.appendChild(label);
+			if (row.count) {
+				const count = document.createElement('span');
+				count.className = 'sessions-customization-count';
+				count.textContent = row.count;
+				button.appendChild(count);
+			}
+			list.appendChild(button);
+		}
+
+		container.appendChild(section);
 	}
 
 	private renderSessionSections(container: HTMLElement, sessions: readonly SessionLike[]): void {

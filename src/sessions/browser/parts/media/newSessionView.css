@@ -1,0 +1,150 @@
+.sessions-new-session-view {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--vscode-agentsPanel-background) 72%, var(--vscode-agents-background));
+	color: var(--vscode-agentsPanel-foreground);
+}
+
+.new-session-content {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	width: min(1110px, calc(100% - 96px));
+	margin: 0 auto 88px;
+}
+
+.new-session-heading {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 62%, transparent);
+	font-size: var(--vscode-agents-fontSize-heading2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	letter-spacing: 0;
+}
+
+.new-session-workspace-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	height: 32px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 82%, transparent);
+	font: inherit;
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	cursor: default;
+}
+
+.new-session-workspace-button:hover {
+	color: var(--vscode-agentsPanel-foreground);
+}
+
+.new-session-composer {
+	position: relative;
+	display: grid;
+	grid-template-rows: 1fr auto;
+	min-height: 118px;
+	border: 1px solid color-mix(in srgb, var(--vscode-agentsPanel-foreground) 13%, transparent);
+	border-radius: 9px;
+	background: var(--vscode-agentsChatInput-background);
+	color: var(--vscode-agentsChatInput-foreground);
+	box-shadow: 0 1px 0 color-mix(in srgb, white 4%, transparent);
+	box-sizing: border-box;
+	overflow: hidden;
+}
+
+.new-session-input {
+	min-width: 0;
+	width: 100%;
+	min-height: 62px;
+	padding: 17px 46px 8px 16px;
+	border: 0;
+	outline: 0;
+	resize: none;
+	background: transparent;
+	color: var(--vscode-agentsChatInput-foreground);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-body1);
+	line-height: 1.45;
+	box-sizing: border-box;
+}
+
+.new-session-input::placeholder {
+	color: color-mix(in srgb, var(--vscode-agentsChatInput-foreground) 46%, transparent);
+}
+
+.new-session-composer-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	height: 40px;
+	padding: 0 52px 0 12px;
+	color: color-mix(in srgb, var(--vscode-agentsChatInput-foreground) 52%, transparent);
+	box-sizing: border-box;
+}
+
+.new-session-toolbar-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: inherit;
+	cursor: default;
+}
+
+.new-session-toolbar-button:hover {
+	background: color-mix(in srgb, var(--vscode-agentsChatInput-foreground) 9%, transparent);
+	color: var(--vscode-agentsChatInput-foreground);
+}
+
+.new-session-model-status {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.new-session-send-button {
+	position: absolute;
+	right: 12px;
+	bottom: 12px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 50%;
+	background: var(--vscode-agentsBadge-background);
+	color: var(--vscode-agentsBadge-foreground);
+	cursor: default;
+}
+
+.new-session-send-button:focus-visible,
+.new-session-workspace-button:focus-visible,
+.new-session-toolbar-button:focus-visible {
+	outline: 1px solid var(--vscode-agentsBadge-background);
+	outline-offset: 2px;
+}
+
+@media (max-width: 920px) {
+	.new-session-content {
+		width: min(100% - 40px, 760px);
+	}
+}

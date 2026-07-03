@@ -54,11 +54,13 @@ export class SessionsService extends Disposable implements ISessionsService {
 	openSession(sessionId: string): void {
 		const session = this.getRequiredSession(sessionId);
 		this.visibleSessionsModel.openSession(session);
+		this.sessionsPartService.showSessionDetail();
 	}
 
 	setActive(sessionId: string): void {
 		const session = this.getRequiredSession(sessionId);
 		this.visibleSessionsModel.setActive(session);
+		this.sessionsPartService.showSessionDetail();
 	}
 
 	closeSession(sessionId: string): void {
@@ -69,6 +71,7 @@ export class SessionsService extends Disposable implements ISessionsService {
 		const session = await this.managementService.sendRequest(sessionId, chatId, query);
 		this.visibleSessionsModel.setSessions(this.managementService.getSessions());
 		this.visibleSessionsModel.setActive(session);
+		this.sessionsPartService.showSessionDetail();
 		return session;
 	}
 

@@ -5,8 +5,10 @@
 
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { clearNode } from '../../base/browser/dom.js';
+import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { Part } from '../part.js';
+import { NewSessionView } from './newSessionView.js';
 import { SessionView } from './sessionView.js';
 import type { IChatRequestSender } from './chatView.js';
 
@@ -16,7 +18,9 @@ export class SessionsPart extends Part {
 	readonly priority = LayoutPriority.High;
 
 	private readonly slots: SessionView[] = [];
+	private readonly newSessionView = this._register(new NewSessionView());
 	private container: HTMLElement | undefined;
+	private mode: WorkbenchMode = 'newSession';
 	private visibleSessions: readonly (IActiveSession | undefined)[] = [undefined];
 	private activeSession: IActiveSession | undefined;
 	private width = 0;
@@ -29,7 +33,12 @@ export class SessionsPart extends Part {
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void {
 		this.visibleSessions = visible;
 		this.activeSession = active;
-		this.syncSlots();
+		this.syncContent();
+	}
+
+	updateWorkbenchMode(mode: WorkbenchMode): void {
+		this.mode = mode;
+		this.syncContent();
 	}
 
 	focusSession(sessionId: string | undefined): void {
@@ -53,6 +62,27 @@ export class SessionsPart extends Part {
 		this.container = document.createElement('div');
 		this.container.className = 'sessions-part-container';
 		container.appendChild(this.container);
+		this.syncContent();
+	}
+
+	private syncContent(): void {
+		if (!this.container) {
+			return;
+		}
+
+		this.container.classList.toggle('is-new-session', this.mode === 'newSession');
+		if (this.mode === 'newSession') {
+			for (const slot of this.slots) {
+				slot.element.remove();
+			}
+
+			if (this.newSessionView.element.parentElement !== this.container) {
+				this.container.appendChild(this.newSessionView.element);
+			}
+			return;
+		}
+
+		this.newSessionView.element.remove();
 		this.syncSlots();
 	}
 
@@ -78,6 +108,9 @@ export class SessionsPart extends Part {
 		for (let index = 0; index < this.slots.length; index++) {
 			const slot = this.slots[index]!;
 			const session = this.visibleSessions[index];
+			if (slot.element.parentElement !== this.container) {
+				this.container.appendChild(slot.element);
+			}
 			slot.openSession(session);
 			slot.setActive(this.slots.length === 1 || Boolean(session && session.sessionId === this.activeSession?.sessionId));
 		}
@@ -86,7 +119,7 @@ export class SessionsPart extends Part {
 	}
 
 	private layoutSlots(): void {
-		if (this.slots.length === 0) {
+		if (this.mode !== 'sessionDetail' || this.slots.length === 0) {
 			return;
 		}
 

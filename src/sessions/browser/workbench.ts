@@ -122,10 +122,20 @@ export class Workbench {
 				this.sessionsPartService.activeSession.get()
 			);
 		};
+		const updateMode = () => {
+			const mode = this.sessionsPartService.mode.get();
+			this.root.classList.toggle('mode-new-session', mode === 'newSession');
+			this.root.classList.toggle('mode-session-detail', mode === 'sessionDetail');
+			this.sessionsPart.updateWorkbenchMode(mode);
+			this.grid.setPartVisible('auxiliaryBar', mode === 'sessionDetail');
+			this.layout();
+		};
 
 		this.partSubscriptions.add(this.sessionsPartService.visibleSessions.subscribe(updateSessionsPart));
 		this.partSubscriptions.add(this.sessionsPartService.activeSession.subscribe(updateSessionsPart));
+		this.partSubscriptions.add(this.sessionsPartService.mode.subscribe(updateMode));
 		updateSessionsPart();
+		updateMode();
 	}
 
 	private installResizeListener(): void {
