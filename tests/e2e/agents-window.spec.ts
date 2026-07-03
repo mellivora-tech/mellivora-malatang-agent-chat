@@ -36,6 +36,9 @@ test('agents window shell renders at desktop sizes', async () => {
 
 		await page.locator('.sessions-list-row').first().click();
 		await expect(page.locator('.session-view')).toBeVisible();
+		await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/mode-conversation/);
+		await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).not.toHaveClass(/mode-session-detail/);
+		await expect(page.locator('.conversation-tabs-bar')).toHaveCount(0);
 		await expect(page.locator('.session-chat-tabs-bar')).toHaveCount(0);
 		await expect(page.locator('.part.auxiliarybar')).toBeHidden();
 		await expect(page.locator('.sessions-command-center')).toHaveCount(0);
@@ -113,6 +116,80 @@ test('starting multiple conversations keeps a single active conversation page', 
 		await expect(page.locator('.conversation-context-title')).toHaveText('second task');
 		await expect(page.locator('.sessions-project-task-row').filter({ hasText: 'first task' })).toBeVisible();
 		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'second task' })).toBeVisible();
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('historical conversation messages align by role', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({ args: ['dist/main/main.js'] });
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-sidebar');
+		await page.locator('.sessions-project-task-row').filter({ hasText: '梳理下文档' }).click();
+
+		await expect(page.locator('.conversation-message')).toHaveCount(3);
+		await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('Rebuild the agents window shell.');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toContainText('I have the layout in place');
+		await expect(page.locator('.conversation-message.tool .conversation-tool-detail')).toContainText('Workbench services');
+		await assertHistoricalConversationMessageLayout(page, 'in-progress', 'full', true);
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('completed conversation shows read-only idle message state', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({ args: ['dist/main/main.js'] });
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-sidebar');
+		await page.locator('.sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' }).click();
+
+		await expect(page.locator('.conversation-context-title')).toHaveText('Ship settings sidebar cleanup');
+		await expect(page.locator('.conversation-view')).toHaveAttribute('data-status', 'completed');
+		await expect(page.locator('.conversation-view')).toHaveAttribute('data-interactivity', 'read-only');
+		await expect(page.locator('.conversation-message')).toHaveCount(3);
+		await expect(page.locator('.conversation-working-row')).toHaveCount(0);
+		await expect(page.locator('.conversation-thinking-row')).toHaveCount(0);
+		await expect(page.locator('.conversation-composer')).toHaveAttribute('data-state', 'idle');
+		await expect(page.locator('.conversation-composer')).not.toHaveClass(/running/);
+		await expect(page.locator('.conversation-input')).toHaveAttribute('placeholder', 'Session is read-only');
+		await expect(page.locator('.conversation-input')).toBeDisabled();
+		await expect(page.locator('.conversation-reconnect-status')).toBeHidden();
+		await expect(page.locator('.conversation-stop-button')).toBeHidden();
+		await expect(page.locator('.conversation-send-button')).toBeVisible();
+		await expect(page.locator('.conversation-send-button')).toBeDisabled();
+		await assertHistoricalConversationMessageLayout(page, 'completed', 'read-only', false);
 
 		expect(rendererErrors).toEqual([]);
 	} finally {
@@ -288,6 +365,10 @@ async function assertThemeTokens(page: Page): Promise<void> {
 				sidebarGutter: styles.getPropertyValue('--vscode-agents-size-sidebar-gutter').trim(),
 				conversationWidth: styles.getPropertyValue('--vscode-agents-size-conversation-width').trim(),
 				composerWidth: styles.getPropertyValue('--vscode-agents-size-composer-width').trim(),
+				composerContextHeight: styles.getPropertyValue('--vscode-agents-size-composer-contextHeight').trim(),
+				composerInputHeight: styles.getPropertyValue('--vscode-agents-size-composer-inputHeight').trim(),
+				composerToolbarHeight: styles.getPropertyValue('--vscode-agents-size-composer-toolbarHeight').trim(),
+				composerContextGap: styles.getPropertyValue('--vscode-agents-space-composer-contextGap').trim(),
 				controlRadius: styles.getPropertyValue('--vscode-agents-radius-control').trim(),
 				legacyPanelBackground: styles.getPropertyValue('--vscode-agentsPanel-background').trim()
 		};
@@ -305,6 +386,10 @@ async function assertThemeTokens(page: Page): Promise<void> {
 			sidebarGutter: '14px',
 			conversationWidth: '950px',
 			composerWidth: '640px',
+			composerContextHeight: '28px',
+			composerInputHeight: '106px',
+			composerToolbarHeight: '42px',
+			composerContextGap: '6px',
 			controlRadius: '5px',
 			legacyPanelBackground: '#252526'
 	});
@@ -418,6 +503,8 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 	await expect(projects.locator('.sessions-project-group')).toHaveCount(2);
 	await expect(projects.locator('[data-project-id="obsidian"] .sessions-project-name')).toHaveText('Obsidian');
 	await expect(projects.locator('[data-project-id="zcodeproject"] .sessions-project-name')).toHaveText('ZCodeProject');
+	await expect(projects.locator('[data-project-id="obsidian"] .sessions-project-count')).toHaveText('1');
+	await expect(projects.locator('[data-project-id="zcodeproject"] .sessions-project-count')).toHaveText('1');
 	await expect(projects.locator('.sessions-project-chevron')).toHaveCount(0);
 	await expect(projects.locator('.codicon-chevron-down, .codicon-chevron-right')).toHaveCount(0);
 	await assertProjectListSpacingAndIconInset(projects);
@@ -433,7 +520,11 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 	await expect(firstProject.locator('.sessions-project-session-list')).toBeHidden();
 	await firstProject.locator('.sessions-project-toggle').click();
 	await expect(firstProject.locator('.sessions-project-toggle')).toHaveAttribute('aria-expanded', 'true');
-	await expect(projects.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('No tasks yet');
+	const secondProject = projects.locator('[data-project-id="zcodeproject"]');
+	await expect(secondProject.locator('.sessions-project-empty')).toHaveCount(0);
+	await expect(secondProject.locator('.sessions-project-session-list .sessions-list-row')).toHaveCount(1);
+	await expect(secondProject.locator('.sessions-list-row-title')).toHaveText('Ship settings sidebar cleanup');
+	await expect(secondProject.locator('.sessions-project-task-time')).toHaveText('3d');
 
 	const sidebarMetrics = await firstProject.locator('.sessions-list-row').first().evaluate(row => {
 		const title = row.querySelector('.sessions-list-row-title');
@@ -615,12 +706,12 @@ async function assertSidebarListTitleAlignment(page: Page): Promise<void> {
 
 		return {
 			titleOffsetToken,
-			pinnedTitleLeft: left('[data-session-group="pinned"] .sessions-project-task-title'),
-			obsidianNameLeft: left('[data-project-id="obsidian"] .sessions-project-name'),
-			obsidianEmptyLeft: left('[data-project-id="obsidian"] .sessions-project-empty'),
-			zcodeNameLeft: left('[data-project-id="zcodeproject"] .sessions-project-name'),
-			zcodeEmptyLeft: left('[data-project-id="zcodeproject"] .sessions-project-empty')
-		};
+				pinnedTitleLeft: left('[data-session-group="pinned"] .sessions-project-task-title'),
+				obsidianNameLeft: left('[data-project-id="obsidian"] .sessions-project-name'),
+				obsidianEmptyLeft: left('[data-project-id="obsidian"] .sessions-project-empty'),
+				zcodeNameLeft: left('[data-project-id="zcodeproject"] .sessions-project-name'),
+				zcodeTaskTitleLeft: left('[data-project-id="zcodeproject"] .sessions-project-task-title')
+			};
 	});
 
 	expect(metrics.titleOffsetToken).toBe('48px');
@@ -628,7 +719,7 @@ async function assertSidebarListTitleAlignment(page: Page): Promise<void> {
 	expect(metrics.obsidianNameLeft).toBe(metrics.pinnedTitleLeft);
 	expect(metrics.obsidianEmptyLeft).toBe(metrics.pinnedTitleLeft);
 	expect(metrics.zcodeNameLeft).toBe(metrics.pinnedTitleLeft);
-	expect(metrics.zcodeEmptyLeft).toBe(metrics.pinnedTitleLeft);
+	expect(metrics.zcodeTaskTitleLeft).toBe(metrics.pinnedTitleLeft);
 }
 
 async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
@@ -776,6 +867,8 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	await expect(page.locator('.conversation-composer > .conversation-context-bar')).toHaveCount(1);
 	await expect(page.locator('.conversation-transcript > .conversation-context-bar')).toHaveCount(0);
 	await expect(page.locator('.session-view > .conversation-context-bar')).toHaveCount(0);
+	await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/mode-conversation/);
+	await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).not.toHaveClass(/mode-session-detail/);
 	await expect(page.locator('.chat-view, [class*="chat-view-"]')).toHaveCount(0);
 
 	const headerPosition = await page.locator('.conversation-composer').evaluate(composer => {
@@ -785,17 +878,31 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 		const headerRect = header?.getBoundingClientRect();
 		const inputWrapRect = inputWrap?.getBoundingClientRect();
 		const headerStyle = header ? getComputedStyle(header) : undefined;
+		const root = document.querySelector<HTMLElement>('.agent-sessions-workbench');
+		const rootStyle = root ? getComputedStyle(root) : undefined;
 
 		return {
+			state: (composer as HTMLElement).dataset['state'],
 			headerInsideComposer: header?.parentElement?.parentElement === composer,
 			headerTop: headerRect ? Math.round(headerRect.top - composerRect.top) : null,
 			headerBottom: headerRect ? Math.round(headerRect.bottom - composerRect.top) : null,
+			headerLeft: headerRect ? Math.round(headerRect.left) : null,
+			headerRight: headerRect ? Math.round(headerRect.right) : null,
 			headerWidth: headerRect ? Math.round(headerRect.width) : null,
+			headerHeight: headerRect ? Math.round(headerRect.height) : null,
 			inputWrapTop: inputWrapRect ? Math.round(inputWrapRect.top - composerRect.top) : null,
+			inputWrapLeft: inputWrapRect ? Math.round(inputWrapRect.left) : null,
+			inputWrapRight: inputWrapRect ? Math.round(inputWrapRect.right) : null,
 			inputWrapWidth: inputWrapRect ? Math.round(inputWrapRect.width) : null,
-			borderBottomWidth: headerStyle?.borderBottomWidth
+			inputWrapHeight: inputWrapRect ? Math.round(inputWrapRect.height) : null,
+			borderBottomWidth: headerStyle?.borderBottomWidth,
+			composerWidthToken: rootStyle?.getPropertyValue('--vscode-agents-size-composer-width').trim() ?? '',
+			contextHeightToken: rootStyle?.getPropertyValue('--vscode-agents-size-composer-contextHeight').trim() ?? '',
+			inputHeightToken: rootStyle?.getPropertyValue('--vscode-agents-size-composer-inputHeight').trim() ?? '',
+			contextGapToken: rootStyle?.getPropertyValue('--vscode-agents-space-composer-contextGap').trim() ?? ''
 		};
 	});
+	expect(headerPosition.state).toBe('running');
 	expect(headerPosition.headerInsideComposer).toBe(true);
 	expect(headerPosition.headerTop).not.toBeNull();
 	expect(headerPosition.headerBottom).not.toBeNull();
@@ -803,13 +910,22 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	expect(headerPosition.headerWidth).not.toBeNull();
 	expect(headerPosition.inputWrapWidth).not.toBeNull();
 	expect(headerPosition.headerTop!).toBeLessThan(headerPosition.inputWrapTop!);
-	expect(headerPosition.inputWrapTop! - headerPosition.headerBottom!).toBeLessThanOrEqual(8);
-	expect(headerPosition.headerWidth!).toBeLessThanOrEqual(headerPosition.inputWrapWidth! + 2);
+	expect(headerPosition.inputWrapTop! - headerPosition.headerBottom!).toBe(6);
+	expect(headerPosition.headerLeft).toBe(headerPosition.inputWrapLeft);
+	expect(headerPosition.headerRight).toBe(headerPosition.inputWrapRight);
+	expect(headerPosition.headerWidth).toBe(headerPosition.inputWrapWidth);
+	expect(headerPosition.headerHeight).toBe(28);
+	expect(headerPosition.inputWrapHeight).toBe(106);
+	expect(headerPosition.composerWidthToken).toBe('640px');
+	expect(headerPosition.contextHeightToken).toBe('28px');
+	expect(headerPosition.inputHeightToken).toBe('106px');
+	expect(headerPosition.contextGapToken).toBe('6px');
 	expect(headerPosition.borderBottomWidth).toBe('0px');
 
 	await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('hello');
 	await expect(page.locator('.conversation-working-label')).toHaveText(/Working for \d+s|Working for \d+m \d+s/);
 	await expect(page.locator('.conversation-thinking-row')).toContainText('Thinking');
+	await assertRunningConversationMessageLayout(page);
 
 	const composer = page.locator('.conversation-composer.running');
 	await expect(composer).toBeVisible();
@@ -819,6 +935,177 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	await expect(composer.locator('.conversation-agent')).toContainText('Max');
 	await expect(composer.locator('.conversation-reconnect-status')).toContainText(/Reconnecting\.\.\. \d+\/10/);
 	await expect(composer.locator('.conversation-stop-button')).toBeVisible();
+	await assertConversationToolbarInteraction(composer);
+}
+
+async function assertConversationToolbarInteraction(composer: Locator): Promise<void> {
+	const metrics = await composer.evaluate(element => {
+		const controls = [
+			'.conversation-access',
+			'.conversation-reconnect-status',
+			'.conversation-model',
+			'.conversation-agent',
+			'.conversation-stop-button',
+			'.conversation-send-button'
+		] as const;
+		const read = (selector: string) => {
+			const node = element.querySelector<HTMLElement>(selector);
+			if (!node) {
+				throw new Error(`Missing composer control: ${selector}`);
+			}
+
+			const rect = node.getBoundingClientRect();
+			const style = getComputedStyle(node);
+			return {
+				display: style.display,
+				hidden: node.hidden,
+				width: Math.round(rect.width),
+				height: Math.round(rect.height),
+				backgroundColor: style.backgroundColor,
+				borderRadius: style.borderRadius
+			};
+		};
+
+		return {
+			toolbarHeight: Math.round(element.querySelector<HTMLElement>('.conversation-composer-toolbar')?.getBoundingClientRect().height ?? 0),
+			controls: Object.fromEntries(controls.map(selector => [selector, read(selector)])),
+			leftGap: getComputedStyle(element.querySelector<HTMLElement>('.conversation-toolbar-left')!).gap,
+			rightGap: getComputedStyle(element.querySelector<HTMLElement>('.conversation-toolbar-right')!).gap
+		};
+	});
+
+	expect(metrics.toolbarHeight).toBe(42);
+	expect(metrics.leftGap).toBe('4px');
+	expect(metrics.rightGap).toBe('4px');
+	const control = (selector: string) => metrics.controls[selector]!;
+	expect(control('.conversation-access').height).toBe(28);
+	expect(control('.conversation-reconnect-status').height).toBe(28);
+	expect(control('.conversation-model').height).toBe(28);
+	expect(control('.conversation-agent').height).toBe(28);
+	expect(control('.conversation-stop-button').width).toBe(28);
+	expect(control('.conversation-stop-button').height).toBe(28);
+	expect(control('.conversation-send-button').hidden).toBe(true);
+	expect(control('.conversation-send-button').width).toBe(0);
+	expect(control('.conversation-access').borderRadius).toBe('5px');
+
+	const access = composer.locator('.conversation-access');
+	const beforeHover = await access.evaluate(node => getComputedStyle(node).backgroundColor);
+	const accessBox = await access.boundingBox();
+	expect(accessBox).not.toBeNull();
+	await composer.page().mouse.move(0, 0);
+	await composer.page().mouse.move(accessBox!.x + accessBox!.width / 2, accessBox!.y + accessBox!.height / 2);
+	expect(beforeHover).toBe('rgba(0, 0, 0, 0)');
+	await expect.poll(async () => access.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(beforeHover);
+}
+
+async function assertRunningConversationMessageLayout(page: Page): Promise<void> {
+	const metrics = await page.locator('.conversation-view').evaluate(view => {
+		const inputWrap = document.querySelector<HTMLElement>('.conversation-input-wrap');
+		const userBubble = view.querySelector<HTMLElement>('.conversation-message.user .conversation-message-bubble');
+		const workingLabel = view.querySelector<HTMLElement>('.conversation-working-label');
+		const thinkingRow = view.querySelector<HTMLElement>('.conversation-thinking-row');
+		const thinkingSpinner = thinkingRow?.querySelector<HTMLElement>('.codicon-loading');
+		const thinkingLabel = thinkingRow?.querySelector<HTMLElement>('span:last-child');
+		if (!inputWrap || !userBubble || !workingLabel || !thinkingRow || !thinkingSpinner || !thinkingLabel) {
+			throw new Error('Running conversation layout nodes were not found');
+		}
+
+		const inputRect = inputWrap.getBoundingClientRect();
+		const userBubbleRect = userBubble.getBoundingClientRect();
+		const workingLabelRect = workingLabel.getBoundingClientRect();
+		const thinkingSpinnerRect = thinkingSpinner.getBoundingClientRect();
+		const thinkingLabelRect = thinkingLabel.getBoundingClientRect();
+		return {
+			status: (view as HTMLElement).dataset['status'],
+			interactivity: (view as HTMLElement).dataset['interactivity'],
+			userRole: userBubble.closest<HTMLElement>('.conversation-message')?.dataset['role'],
+			userBubbleRight: Math.round(userBubbleRect.right),
+			inputRight: Math.round(inputRect.right),
+			workingLabelLeft: Math.round(workingLabelRect.left),
+			thinkingLabelLeft: Math.round(thinkingLabelRect.left),
+			thinkingSpinnerLeft: Math.round(thinkingSpinnerRect.left)
+		};
+	});
+
+	expect(metrics.status).toBe('in-progress');
+	expect(metrics.interactivity).toBe('full');
+	expect(metrics.userRole).toBe('user');
+	expect(metrics.userBubbleRight).toBe(metrics.inputRight);
+	expect(metrics.workingLabelLeft).toBe(metrics.thinkingLabelLeft);
+	expect(metrics.thinkingSpinnerLeft).toBeLessThan(metrics.thinkingLabelLeft);
+}
+
+async function assertHistoricalConversationMessageLayout(page: Page, expectedStatus: string, expectedInteractivity: string, expectRunningRows: boolean): Promise<void> {
+	const metrics = await page.locator('.conversation-view').evaluate(view => {
+		const inputWrap = document.querySelector<HTMLElement>('.conversation-input-wrap');
+		const rows = [...view.querySelectorAll<HTMLElement>('.conversation-message')];
+		const read = (role: string) => {
+			const row = rows.find(candidate => candidate.dataset['role'] === role);
+			if (!row) {
+				throw new Error(`Missing ${role} message row`);
+			}
+
+			const avatar = row.querySelector<HTMLElement>('.conversation-message-avatar');
+			const body = row.querySelector<HTMLElement>('.conversation-message-body');
+			const bubble = row.querySelector<HTMLElement>('.conversation-message-bubble');
+			const text = row.querySelector<HTMLElement>('.conversation-message-text');
+			const detail = row.querySelector<HTMLElement>('.conversation-tool-detail');
+			const rowRect = row.getBoundingClientRect();
+			const avatarRect = avatar?.getBoundingClientRect();
+			const bodyRect = body?.getBoundingClientRect();
+			const bubbleRect = bubble?.getBoundingClientRect();
+			const textRect = text?.getBoundingClientRect();
+			const detailRect = detail?.getBoundingClientRect();
+			return {
+				role: row.dataset['role'],
+				rowLeft: Math.round(rowRect.left),
+				rowRight: Math.round(rowRect.right),
+				avatarLeft: avatarRect ? Math.round(avatarRect.left) : null,
+				avatarCenter: avatarRect ? Math.round(avatarRect.left + avatarRect.width / 2) : null,
+				bodyLeft: bodyRect ? Math.round(bodyRect.left) : null,
+				bubbleRight: bubbleRect ? Math.round(bubbleRect.right) : null,
+				textLeft: textRect ? Math.round(textRect.left) : null,
+				detailLeft: detailRect ? Math.round(detailRect.left) : null
+			};
+		};
+
+		const inputRect = inputWrap?.getBoundingClientRect();
+		const workingLabel = view.querySelector<HTMLElement>('.conversation-working-label');
+		const thinkingRow = view.querySelector<HTMLElement>('.conversation-thinking-row');
+		const thinkingSpinner = thinkingRow?.querySelector<HTMLElement>('.codicon-loading');
+		const thinkingLabel = thinkingRow?.querySelector<HTMLElement>('span:last-child');
+		return {
+			status: (view as HTMLElement).dataset['status'],
+			interactivity: (view as HTMLElement).dataset['interactivity'],
+			roles: rows.map(row => row.dataset['role']),
+			inputRight: inputRect ? Math.round(inputRect.right) : null,
+			user: read('user'),
+			assistant: read('assistant'),
+			tool: read('tool'),
+			workingLabelLeft: workingLabel ? Math.round(workingLabel.getBoundingClientRect().left) : null,
+			thinkingSpinnerLeft: thinkingSpinner ? Math.round(thinkingSpinner.getBoundingClientRect().left) : null,
+			thinkingSpinnerCenter: thinkingSpinner ? Math.round(thinkingSpinner.getBoundingClientRect().left + thinkingSpinner.getBoundingClientRect().width / 2) : null,
+			thinkingLabelLeft: thinkingLabel ? Math.round(thinkingLabel.getBoundingClientRect().left) : null
+		};
+	});
+
+	expect(metrics.status).toBe(expectedStatus);
+	expect(metrics.interactivity).toBe(expectedInteractivity);
+	expect(metrics.roles).toEqual(['user', 'assistant', 'tool']);
+	expect(metrics.user.bubbleRight).toBe(metrics.inputRight);
+	expect(metrics.assistant.bodyLeft).toBe(metrics.tool.bodyLeft);
+	expect(metrics.assistant.textLeft).toBe(metrics.assistant.bodyLeft);
+	expect(metrics.tool.textLeft).toBe(metrics.tool.bodyLeft);
+	expect(metrics.tool.detailLeft).toBe(metrics.tool.bodyLeft);
+	if (expectRunningRows) {
+		expect(metrics.workingLabelLeft).toBe(metrics.assistant.bodyLeft);
+		expect(metrics.thinkingLabelLeft).toBe(metrics.assistant.bodyLeft);
+		expect(metrics.thinkingSpinnerCenter).toBe(metrics.assistant.avatarCenter);
+	} else {
+		expect(metrics.workingLabelLeft).toBeNull();
+		expect(metrics.thinkingLabelLeft).toBeNull();
+		expect(metrics.thinkingSpinnerCenter).toBeNull();
+	}
 }
 
 async function assertRightSidePaneInteraction(page: Page): Promise<void> {
@@ -832,8 +1119,34 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
 	await expect(page.locator('.auxiliary-empty-description')).toHaveText('Choose a tab to open in the side pane.');
 	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['Review', 'Terminal', 'Browser']);
+	await expect(page.locator('.auxiliary-tabs')).toHaveCount(0);
+
+	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
+	await assertSidePaneTab(page, 'review', 'Review', 'Review changes');
+
+	await page.locator('.auxiliary-tab[data-tab-id="terminal"]').click();
+	await assertSidePaneTab(page, 'terminal', 'Terminal', 'No terminal session started');
+
+	await page.locator('.auxiliary-tab[data-tab-id="browser"]').click();
+	await assertSidePaneTab(page, 'browser', 'Browser', 'No browser preview open');
 
 	await toggle.click();
 	await expect(page.locator('.part.auxiliarybar')).toBeHidden();
 	await expect(toggle).not.toHaveClass(/active/);
+}
+
+async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyText: string): Promise<void> {
+	const root = page.locator('.auxiliary-bar');
+	await expect(root).toBeVisible();
+	await expect(root).not.toHaveClass(/auxiliary-empty/);
+	await expect(page.locator('.auxiliary-empty-content')).toHaveCount(0);
+	await expect(page.locator('.auxiliary-tabs')).toBeVisible();
+	await expect(page.locator('.auxiliary-tab')).toHaveText(['Review', 'Terminal', 'Browser']);
+
+	const activeTab = page.locator(`.auxiliary-tab[data-tab-id="${tabId}"]`);
+	await expect(activeTab).toHaveAttribute('aria-selected', 'true');
+	await expect(activeTab).toHaveClass(/active/);
+	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"]`)).toBeVisible();
+	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-title`)).toHaveText(title);
+	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-body`)).toContainText(bodyText);
 }

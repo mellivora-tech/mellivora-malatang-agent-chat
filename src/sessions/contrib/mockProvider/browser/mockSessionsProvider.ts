@@ -79,7 +79,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 			messages: [
 				{ id: 'main-user-1', role: 'user', text: 'Rebuild the agents window shell.' },
 				{ id: 'main-assistant-1', role: 'assistant', text: 'I have the layout in place and I am wiring the mock session domain now.' },
-				{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Workbench services, mock provider, and chat UI are wired.' }
+				{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Workbench services, mock provider, and conversation UI are wired.' }
 			],
 			interactivity: SessionInteractivity.Full,
 			changesSummary: {

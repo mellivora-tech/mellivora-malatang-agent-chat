@@ -93,7 +93,7 @@ export class SessionsPart extends Part {
 	}
 
 	private layoutSessionView(): void {
-		if (this.mode !== 'sessionDetail' || this.sessionView.element.parentElement !== this.container) {
+		if (this.mode !== 'conversation' || this.sessionView.element.parentElement !== this.container) {
 			return;
 		}
 

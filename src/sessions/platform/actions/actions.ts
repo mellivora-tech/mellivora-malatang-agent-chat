@@ -12,7 +12,7 @@ export class MenuId {
 	static readonly CommandCenter = new MenuId('CommandCenter');
 	static readonly TitleBarRight = new MenuId('TitleBarRight');
 	static readonly SidebarTitle = new MenuId('SidebarTitle');
-	static readonly SessionHeaderTitle = new MenuId('SessionHeaderTitle');
+	static readonly ConversationContextTitle = new MenuId('ConversationContextTitle');
 	static readonly AuxiliaryBarTitle = new MenuId('AuxiliaryBarTitle');
 
 	constructor(readonly id: string) {

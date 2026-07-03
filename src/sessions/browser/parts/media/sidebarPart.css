@@ -571,7 +571,7 @@
 	visibility: visible;
 }
 
-.mode-session-detail .sessions-list-row.active {
+.mode-conversation .sessions-list-row.active {
 	background: var(--vscode-agents-color-selection-background);
 }
 

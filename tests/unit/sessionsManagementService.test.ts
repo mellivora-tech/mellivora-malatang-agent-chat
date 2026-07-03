@@ -142,9 +142,10 @@ test('sessions service starts a session and marks it active', async () => {
 
 	const session = await sessionsService.startSession('hello');
 
+	assert.equal(typeof sessionsPartService.showConversation, 'function');
 	assert.equal(session.title.get(), 'hello');
 	assert.equal(sessionsService.activeSession.get()?.sessionId, session.sessionId);
 	assert.deepEqual(sessionsService.visibleSessions.get().map(candidate => candidate?.sessionId), [session.sessionId]);
-	assert.equal(sessionsPartService.mode.get(), 'sessionDetail');
+	assert.equal(sessionsPartService.mode.get(), 'conversation');
 	assert.equal(provider.getSessions().some(candidate => candidate.sessionId === session.sessionId), true);
 });

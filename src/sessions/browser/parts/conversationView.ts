@@ -159,6 +159,8 @@ export class ConversationView extends Disposable {
 
 	private render(): void {
 		this.element.classList.toggle('empty', !this.session);
+		this.element.dataset.status = this.session ? conversationStatusId(this.session.status.get()) : 'empty';
+		this.element.dataset.interactivity = this.session?.interactivity.get() ?? 'none';
 		this.header.element.hidden = !this.session;
 		clearNode(this.transcript);
 
@@ -214,6 +216,8 @@ export class ConversationView extends Disposable {
 
 		this.composer.hidden = interactivity === SessionInteractivity.Hidden;
 		this.composer.classList.toggle('running', isRunning);
+		this.composer.classList.toggle('idle', !isRunning);
+		this.composer.dataset.state = isRunning ? 'running' : 'idle';
 		this.input.disabled = !canType;
 		this.sendButton.disabled = isRunning || !canType || !hasText;
 		this.sendButton.hidden = isRunning;
@@ -260,6 +264,7 @@ function appendCodicon(parent: HTMLElement, codicon: string): HTMLElement {
 function createMessageRow(message: ISessionMessage): HTMLElement {
 	const row = document.createElement('article');
 	row.className = `conversation-message ${message.role}`;
+	row.dataset.role = message.role;
 
 	const avatar = append(row, document.createElement('div'));
 	avatar.className = 'conversation-message-avatar';
@@ -324,5 +329,20 @@ function messageLabel(role: ISessionMessage['role']): string {
 			return 'Codex';
 		case 'tool':
 			return 'Tool';
+	}
+}
+
+function conversationStatusId(status: SessionStatus): string {
+	switch (status) {
+		case SessionStatus.Untitled:
+			return 'untitled';
+		case SessionStatus.InProgress:
+			return 'in-progress';
+		case SessionStatus.NeedsInput:
+			return 'needs-input';
+		case SessionStatus.Completed:
+			return 'completed';
+		case SessionStatus.Error:
+			return 'error';
 	}
 }

@@ -76,6 +76,17 @@ export class SessionsList extends Disposable {
 			openSessionId: 'session-in-progress',
 			isPinned: false,
 			isArchived: false
+		},
+		{
+			id: 'project-zcode-settings-cleanup',
+			projectId: 'zcodeproject',
+			icon: 'codicon-check',
+			status: SessionStatus.Completed,
+			title: 'Ship settings sidebar cleanup',
+			timeLabel: '3d',
+			openSessionId: 'session-completed',
+			isPinned: false,
+			isArchived: false
 		}
 	];
 
@@ -261,9 +272,11 @@ export class SessionsList extends Disposable {
 			{
 				id: 'zcodeproject',
 				name: 'ZCodeProject',
-				count: 0,
+				count: activeTasks.filter(task => task.projectId === 'zcodeproject' && !task.isPinned).length,
 				expanded: true,
-				rows: []
+				rows: activeTasks
+					.filter(task => task.projectId === 'zcodeproject' && !task.isPinned)
+					.map(task => toTaskRow(task))
 			}
 		];
 

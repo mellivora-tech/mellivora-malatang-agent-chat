@@ -127,14 +127,14 @@ export class Workbench {
 		const updateMode = () => {
 			const mode = this.sessionsPartService.mode.get();
 			this.root.classList.toggle('mode-new-session', mode === 'newSession');
-			this.root.classList.toggle('mode-session-detail', mode === 'sessionDetail');
+			this.root.classList.toggle('mode-conversation', mode === 'conversation');
 			this.sessionsPart.updateWorkbenchMode(mode);
 			updateAuxiliaryVisibility();
 		};
 		const updateAuxiliaryVisibility = () => {
 			this.grid.setPartVisible(
 				'auxiliaryBar',
-				this.sessionsPartService.mode.get() === 'sessionDetail' && this.sessionsPartService.sidePaneVisible.get()
+				this.sessionsPartService.mode.get() === 'conversation' && this.sessionsPartService.sidePaneVisible.get()
 			);
 			this.layout();
 		};

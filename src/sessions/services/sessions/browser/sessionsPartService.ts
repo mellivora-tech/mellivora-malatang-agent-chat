@@ -9,7 +9,7 @@ import type { IActiveSession } from '../common/session.js';
 
 export const ISessionsPartService = createDecorator<ISessionsPartService>('sessionsPartService');
 
-export type WorkbenchMode = 'newSession' | 'sessionDetail';
+export type WorkbenchMode = 'newSession' | 'conversation';
 
 export interface ISessionsPartService {
 	readonly mode: ReturnType<typeof observableValue<WorkbenchMode>>;
@@ -18,7 +18,7 @@ export interface ISessionsPartService {
 	readonly visibleSessions: ReturnType<typeof observableValue<readonly (IActiveSession | undefined)[]>>;
 	readonly activeSession: ReturnType<typeof observableValue<IActiveSession | undefined>>;
 	showNewSession(): void;
-	showSessionDetail(showAuxiliaryBar?: boolean): void;
+	showConversation(showAuxiliaryBar?: boolean): void;
 	toggleSidePane(): void;
 	hideSidePane(): void;
 	showSidePane(): void;
@@ -37,8 +37,8 @@ export class SessionsPartService implements ISessionsPartService {
 		this.hideSidePane();
 	}
 
-	showSessionDetail(showAuxiliaryBar?: boolean): void {
-		this.mode.set('sessionDetail');
+	showConversation(showAuxiliaryBar?: boolean): void {
+		this.mode.set('conversation');
 		if (showAuxiliaryBar === true) {
 			this.showSidePane();
 		} else if (showAuxiliaryBar === false) {

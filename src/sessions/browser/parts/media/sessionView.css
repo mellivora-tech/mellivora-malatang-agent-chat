@@ -32,9 +32,9 @@
 	align-items: center;
 	justify-content: space-between;
 	max-width: var(--vscode-agents-size-composer-width);
-	min-height: var(--vscode-agents-space-32);
-	margin: 0 auto var(--vscode-agents-space-6);
-	padding: 0 var(--vscode-agents-space-2);
+	min-height: var(--vscode-agents-size-composer-contextHeight);
+	margin: 0 auto var(--vscode-agents-space-composer-contextGap);
+	padding: 0;
 	border-bottom: 0;
 	box-sizing: border-box;
 }
@@ -233,7 +233,10 @@
 
 .conversation-working-row,
 .conversation-thinking-row {
-	max-width: var(--vscode-agents-size-composer-width);
+	display: grid;
+	grid-template-columns: 28px minmax(0, 1fr);
+	gap: var(--vscode-agents-space-10);
+	max-width: var(--vscode-agents-size-conversation-width);
 	margin: 0 auto;
 	color: var(--vscode-agents-color-text-muted);
 	font-size: var(--vscode-agents-fontSize-label1);
@@ -243,11 +246,17 @@
 	margin-top: var(--vscode-agents-space-8);
 }
 
+.conversation-working-label {
+	grid-column: 2;
+}
+
 .conversation-thinking-row {
-	display: flex;
 	align-items: center;
-	gap: var(--vscode-agents-space-6);
 	margin-top: var(--vscode-agents-space-6);
+}
+
+.conversation-thinking-row .codicon {
+	justify-self: center;
 }
 
 .conversation-composer {
@@ -256,11 +265,15 @@
 	box-sizing: border-box;
 }
 
+.conversation-composer [hidden] {
+	display: none !important;
+}
+
 .conversation-input-wrap {
 	display: grid;
-	grid-template-rows: minmax(var(--vscode-agents-space-52), 1fr) var(--vscode-agents-space-42);
+	grid-template-rows: minmax(calc(var(--vscode-agents-size-composer-inputHeight) - var(--vscode-agents-size-composer-toolbarHeight) - (var(--vscode-agents-space-1) * 2)), 1fr) var(--vscode-agents-size-composer-toolbarHeight);
 	max-width: var(--vscode-agents-size-composer-width);
-	min-height: calc(var(--vscode-agents-space-52) + var(--vscode-agents-space-42) + var(--vscode-agents-space-12));
+	min-height: var(--vscode-agents-size-composer-inputHeight);
 	margin: 0 auto;
 	box-sizing: border-box;
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
@@ -274,7 +287,7 @@
 .conversation-input {
 	min-width: 0;
 	width: 100%;
-	min-height: var(--vscode-agents-space-52);
+	min-height: calc(var(--vscode-agents-size-composer-inputHeight) - var(--vscode-agents-size-composer-toolbarHeight) - (var(--vscode-agents-space-1) * 2));
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14) 0;
 	border: 0;
 	outline: 0;
@@ -310,6 +323,7 @@
 .conversation-composer-toolbar {
 	justify-content: space-between;
 	gap: var(--vscode-agents-space-12);
+	height: var(--vscode-agents-size-composer-toolbarHeight);
 	padding: 0 var(--vscode-agents-space-12);
 	color: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 72%, transparent);
 	box-sizing: border-box;
@@ -317,7 +331,7 @@
 
 .conversation-toolbar-left,
 .conversation-toolbar-right {
-	gap: var(--vscode-agents-space-12);
+	gap: var(--vscode-agents-space-4);
 }
 
 .conversation-access,
@@ -339,7 +353,8 @@
 .conversation-agent {
 	gap: var(--vscode-agents-space-5);
 	height: var(--vscode-agents-size-actionMedium);
-	padding: 0;
+	padding: 0 var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control);
 }
 
 .conversation-access {
@@ -358,6 +373,9 @@
 
 .conversation-reconnect-status {
 	gap: var(--vscode-agents-space-5);
+	height: var(--vscode-agents-size-actionMedium);
+	padding: 0 var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control);
 	color: var(--vscode-agents-color-text-muted);
 	font-size: var(--vscode-agents-fontSize-label1);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
@@ -394,6 +412,7 @@
 .conversation-access:hover,
 .conversation-model:hover,
 .conversation-agent:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
 	color: var(--vscode-agents-color-input-foreground);
 }
 

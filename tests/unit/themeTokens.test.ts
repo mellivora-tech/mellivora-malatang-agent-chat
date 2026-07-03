@@ -47,10 +47,14 @@ test('applyThemeTokens writes semantic css variables for a selected theme', () =
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.titlebar.height')), '52px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.width')), '270px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.header')), '172px');
-		assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.gutter')), '14px');
-		assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.listTitleOffset')), '48px');
-		assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.conversation.width')), '950px');
-		assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.composer.width')), '640px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.gutter')), '14px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.listTitleOffset')), '48px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.conversation.width')), '950px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.composer.width')), '640px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.composer.contextHeight')), '28px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.composer.inputHeight')), '106px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.composer.toolbarHeight')), '42px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.space.composer.contextGap')), '6px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.watermark.width')), '390px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.radius.control')), '5px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.radius.stage')), '10px');
