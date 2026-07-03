@@ -10,6 +10,9 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const copies = [
+  ['dist/src/main', 'dist/main'],
+  ['dist/src/preload', 'dist/preload'],
+  ['dist/src/sessions', 'dist/sessions'],
   ['src/sessions/electron-browser/sessions.html', 'dist/sessions/electron-browser/sessions.html'],
   ['src/sessions/browser/media', 'dist/sessions/browser/media'],
   ['src/sessions/browser/parts/media', 'dist/sessions/browser/parts/media'],
