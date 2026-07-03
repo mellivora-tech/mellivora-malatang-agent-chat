@@ -1,1 +1,186 @@
-/* Placeholder stylesheet for Task 4 shell asset wiring. */
+.session-view {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	background: var(--vscode-activeSessionView-background);
+	color: var(--vscode-agentsPanel-foreground);
+	overflow: hidden;
+	opacity: 0.64;
+	transition: opacity 120ms ease-out;
+}
+
+.session-view + .session-view {
+	border-left: 1px solid color-mix(in srgb, var(--vscode-agentsPanel-foreground) 11%, transparent);
+}
+
+.session-view.is-active {
+	opacity: 1;
+}
+
+.session-view:not(.is-active) {
+	background: var(--vscode-inactiveSessionView-background);
+}
+
+.session-view-centered-content {
+	width: min(950px, 100%);
+	margin: 0 auto;
+	padding: 0 18px;
+	box-sizing: border-box;
+	flex: 0 0 auto;
+}
+
+.session-view-content {
+	display: flex;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	overflow: hidden;
+}
+
+.chat-view {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.chat-view-transcript {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	padding: 20px max(18px, calc((100% - 950px) / 2 + 18px)) 18px;
+	box-sizing: border-box;
+}
+
+.chat-view-empty {
+	max-width: 950px;
+	margin: 24px auto;
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 58%, transparent);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.chat-view-message {
+	display: grid;
+	grid-template-columns: 28px minmax(0, 1fr);
+	gap: 10px;
+	max-width: 950px;
+	margin: 0 auto 18px;
+}
+
+.chat-view-message-avatar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 9%, transparent);
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 82%, transparent);
+}
+
+.chat-view-message.user .chat-view-message-avatar {
+	background: color-mix(in srgb, var(--vscode-agentsBadge-background) 22%, transparent);
+	color: var(--vscode-agentsBadge-foreground);
+}
+
+.chat-view-message.tool .chat-view-message-avatar {
+	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 7%, transparent);
+}
+
+.chat-view-message-body {
+	min-width: 0;
+	padding-top: 2px;
+}
+
+.chat-view-message-label {
+	margin-bottom: 4px;
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 68%, transparent);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.chat-view-message-text,
+.chat-view-tool-detail {
+	font-size: var(--vscode-agents-fontSize-body1);
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.chat-view-tool-detail {
+	margin-top: 8px;
+	padding: 8px 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-agentsPanel-foreground) 10%, transparent);
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 5%, transparent);
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 72%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.chat-view-composer {
+	flex: 0 0 auto;
+	padding: 10px max(18px, calc((100% - 950px) / 2 + 18px)) 18px;
+	box-sizing: border-box;
+}
+
+.chat-view-input-wrap {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	max-width: 950px;
+	min-height: 44px;
+	margin: 0 auto;
+	padding: 6px 6px 6px 12px;
+	box-sizing: border-box;
+	border: 1px solid var(--vscode-agentsChatInput-border);
+	border-radius: 7px;
+	background: var(--vscode-agentsChatInput-background);
+	color: var(--vscode-agentsChatInput-foreground);
+	box-shadow: 0 8px 24px color-mix(in srgb, black 24%, transparent);
+}
+
+.chat-view-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	max-height: 150px;
+	padding: 7px 0;
+	border: 0;
+	outline: 0;
+	resize: none;
+	background: transparent;
+	color: var(--vscode-agentsChatInput-foreground);
+	font: inherit;
+	line-height: 1.4;
+}
+
+.chat-view-input::placeholder {
+	color: color-mix(in srgb, var(--vscode-agentsChatInput-foreground) 52%, transparent);
+}
+
+.chat-view-input:disabled {
+	opacity: 0.72;
+}
+
+.chat-view-send-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	flex: 0 0 auto;
+	border: 0;
+	border-radius: 6px;
+	background: var(--vscode-agentsBadge-background);
+	color: var(--vscode-agentsBadge-foreground);
+	cursor: pointer;
+}
+
+.chat-view-send-button:disabled {
+	opacity: 0.42;
+	cursor: default;
+}
