@@ -1,0 +1,25 @@
+{
+  "name": "mellivora-malatang-agent-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "start": "npm run build && electron dist/main/main.js",
+    "test": "npm run test:unit",
+    "test:unit": "npm run build && node --test dist/tests/unit/*.test.js",
+    "test:e2e": "npm run build && playwright test",
+    "verify": "npm run typecheck && npm run test:unit && npm run test:e2e"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.46-21"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "24.x",
+    "electron": "42.5.0",
+    "typescript": "^6.0.0-dev.20260416"
+  }
+}
