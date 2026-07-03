@@ -25,6 +25,12 @@ const AUXILIARY_WIDTH = 340;
 const PANEL_HEIGHT = 300;
 const CONTENT_MIN_WIDTH = 640;
 
+type AgentWindowGlobals = typeof globalThis & {
+	readonly agentWindow?: {
+		readonly platform?: NodeJS.Platform;
+	};
+};
+
 export class Workbench {
 	private readonly root = document.createElement('div');
 	private readonly services = new ServiceCollection();
@@ -79,7 +85,8 @@ export class Workbench {
 		this.root.classList.add(
 			'monaco-workbench',
 			'agent-sessions-workbench',
-			'shell-gradient-background'
+			'shell-gradient-background',
+			`platform-${getPlatform()}`
 		);
 	}
 
@@ -133,4 +140,8 @@ export class Workbench {
 		const height = this.root.clientHeight || window.innerHeight;
 		this.grid.layout(width, height);
 	}
+}
+
+function getPlatform(): NodeJS.Platform {
+	return (globalThis as AgentWindowGlobals).agentWindow?.platform ?? 'linux';
 }

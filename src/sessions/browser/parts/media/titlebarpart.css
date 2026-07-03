@@ -42,6 +42,11 @@
 	justify-content: flex-start;
 }
 
+.agent-sessions-workbench.platform-darwin .titlebar-left {
+	padding-left: 74px;
+	box-sizing: border-box;
+}
+
 .titlebar-right {
 	justify-content: flex-end;
 	gap: 4px;

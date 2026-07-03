@@ -32,6 +32,7 @@ test('agents window shell renders at desktop sizes', async () => {
 			await captureAndAssert(page, screenshot);
 		}
 
+		await assertDarwinTrafficLightInset(page);
 		expect(rendererErrors).toEqual([]);
 	} finally {
 		await app?.close();
@@ -75,4 +76,15 @@ async function captureAndAssert(
 	}
 
 	await page.screenshot({ path: screenshot.path, fullPage: true });
+}
+
+async function assertDarwinTrafficLightInset(page: Page): Promise<void> {
+	const isDarwin = await page.locator('.agent-sessions-workbench.platform-darwin').count();
+	if (!isDarwin) {
+		return;
+	}
+
+	const brandBox = await page.locator('.sessions-titlebar-brand').boundingBox();
+	expect(brandBox).not.toBeNull();
+	expect(brandBox!.x).toBeGreaterThan(72);
 }
