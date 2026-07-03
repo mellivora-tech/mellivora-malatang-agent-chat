@@ -348,3 +348,23 @@ src/
 8. 加 Playwright screenshot 验收，逐轮修正与 VS Code Agents Window 的差异。
 
 实现前需要最终确认：是否接受“架构/技术栈与 VS Code 保持一致，但只实现 mock provider 和视觉所需子集”的边界。
+
+## Implementation Notes
+
+- Verified at `1440x900`: yes, screenshot path `test-results/agents-window-1440x900.png`.
+- Verified at `1280x720`: yes, screenshot path `test-results/agents-window-1280x720.png`.
+- Verification command: `npm run verify`, passed on 2026-07-03.
+- Screenshot inspection result: no blank primary regions or text overlap observed in the verified screenshots.
+
+Known visual gaps:
+
+- Native VS Code titlebar and OS chrome spacing are approximated with Electron `hiddenInset`; exact platform chrome behavior is not recreated.
+- Sidebar and auxiliary row density, hover states, and focus states are close to the Agents Window shape but not pixel-perfect to the full VS Code widgets.
+- Sash handles and drag-resize affordances are not visible yet; the current layout uses fixed initial widths plus a simplified flexible center.
+
+Known architecture gaps:
+
+- `WorkbenchGrid` is a simplified fixed workbench grid, not VS Code's full `SerializableGrid` / splitview / sash implementation.
+- Titlebar, session header, sidebar, and auxiliary actions are mostly visual; command and menu registries exist as scaffolding but are not fully wired.
+- Editor and Panel remain hidden placeholders; terminal, editor, and file diff workflows are not implemented.
+- Provider data is mock-only by requirement; the file tree and changed-file rows are representative mock data.

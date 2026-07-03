@@ -8,6 +8,15 @@
 
 **Tech Stack:** Electron `42.5.0`, TypeScript ESM, native DOM classes, CSS variables/tokens, `@vscode/codicons`, VS Code-style lifecycle/event/observable/service primitives, Playwright screenshot verification.
 
+## Execution Status
+
+- 2026-07-03: Tasks 1-10 completed on branch `codex/agents-window-rebuild`.
+- Final verification command: `npm run verify`.
+- Final screenshots:
+  - `test-results/agents-window-1440x900.png`
+  - `test-results/agents-window-1280x720.png`
+- Primary result: Electron desktop app starts from `dist/main/main.js`, renders `.monaco-workbench.agent-sessions-workbench`, displays mock sessions through the provider service chain, and passes unit plus screenshot e2e checks.
+
 ## Global Constraints
 
 - Provider only mock data; no real model/network/backend provider.
@@ -1350,6 +1359,14 @@ npm start
 
 Compare against VS Code Agents Window reference. Record visible gaps in this plan under Task 8 notes before moving on.
 
+Task 8 notes, 2026-07-03:
+
+- Manual screenshots checked at `test-results/manual-agents-window-1440x900.png` and `test-results/manual-agents-window-1280x720.png`.
+- Sessions Part and Auxiliary Bar use VS Code-like card margins: sessions `0 4px 4px 10px`, auxiliary `0 10px 4px 4px`.
+- Session header uses centered content, compact title/meta rows, chat tabs, full-width transcript, and bottom-aligned composer.
+- Active mock session now includes a changes summary so titlebar, sidebar, header, and Changes view exercise the same data path.
+- Known visual gaps: native titlebar spacing is approximate; sash drag handles are not implemented; row density and hover/focus styling are close but not pixel-perfect to VS Code.
+
 - [ ] **Step 7: Commit**
 
 ```bash
@@ -1449,7 +1466,7 @@ git commit -m "test: add agents window screenshot verification"
 - Produces documented acceptance evidence.
 - Produces a list of known visual gaps instead of hiding them.
 
-- [ ] **Step 1: Run final verification**
+- [x] **Step 1: Run final verification**
 
 Run:
 
@@ -1463,7 +1480,7 @@ Expected:
 - `test-results/agents-window-1440x900.png` exists.
 - `test-results/agents-window-1280x720.png` exists.
 
-- [ ] **Step 2: Inspect screenshots**
+- [x] **Step 2: Inspect screenshots**
 
 Open both screenshots and check:
 
@@ -1476,7 +1493,7 @@ Open both screenshots and check:
 - Auxiliary bar card shape and title tabs.
 - No text overlap at both viewports.
 
-- [ ] **Step 3: Update architecture doc with results**
+- [x] **Step 3: Update architecture doc with results**
 
 Add an `Implementation Notes` section with:
 
@@ -1493,7 +1510,7 @@ Add an `Implementation Notes` section with:
 
 Use concrete gaps only. If there are no gaps, write `None observed in the verified screenshots.`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/rebuild
