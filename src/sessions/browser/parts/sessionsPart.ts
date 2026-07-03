@@ -43,8 +43,8 @@ export class SessionsPart extends Part {
 
 	override layout(width: number, height: number, top: number, left: number): void {
 		super.layout(width, height, top, left);
-		this.width = width;
-		this.height = height;
+		this.width = this.element.clientWidth;
+		this.height = this.element.clientHeight;
 		this.layoutSlots();
 	}
 

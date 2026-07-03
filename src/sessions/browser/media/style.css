@@ -47,6 +47,20 @@ body {
 	overflow: hidden;
 }
 
+.agent-sessions-workbench .part.sessionspart {
+	--part-margin-top: 0px;
+	--part-margin-right: 4px;
+	--part-margin-bottom: 4px;
+	--part-margin-left: 10px;
+}
+
+.agent-sessions-workbench .part.auxiliarybar {
+	--part-margin-top: 0px;
+	--part-margin-right: 10px;
+	--part-margin-bottom: 4px;
+	--part-margin-left: 4px;
+}
+
 .agent-sessions-workbench .part.titlebar {
 	display: flex;
 	align-items: center;

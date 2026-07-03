@@ -109,7 +109,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 					[
 						{ id: 'main-user-1', role: 'user', text: 'Rebuild the agents window shell.' },
 						{ id: 'main-assistant-1', role: 'assistant', text: 'I have the layout in place and I am wiring the mock session domain now.' },
-						{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Waiting on missing Task 5 services.' }
+						{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Workbench services, mock provider, and chat UI are wired.' }
 					]
 				),
 				createChat(
@@ -123,7 +123,12 @@ export class MockSessionsProvider implements ISessionsProvider {
 						{ id: 'review-tool-1', role: 'tool', text: 'git status', detail: 'Working tree limited to task-owned files.' }
 					]
 				)
-			]
+			],
+			changesSummary: {
+				files: 5,
+				additions: 218,
+				deletions: 46
+			}
 		}),
 		createSession({
 			sessionId: 'session-completed',

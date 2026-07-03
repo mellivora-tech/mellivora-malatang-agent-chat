@@ -29,10 +29,30 @@ export abstract class Part extends Disposable implements IGridView {
 	}
 
 	layout(width: number, height: number, top: number, left: number): void {
-		size(this.element, width, height);
-		this.element.style.top = `${Math.max(0, top)}px`;
-		this.element.style.left = `${Math.max(0, left)}px`;
+		const margin = getLayoutMargin(this.element);
+		size(
+			this.element,
+			Math.max(0, width - margin.left - margin.right),
+			Math.max(0, height - margin.top - margin.bottom)
+		);
+		this.element.style.top = `${Math.max(0, top + margin.top)}px`;
+		this.element.style.left = `${Math.max(0, left + margin.left)}px`;
 	}
 
 	protected abstract render(container: HTMLElement): void;
+}
+
+function getLayoutMargin(element: HTMLElement): { top: number; right: number; bottom: number; left: number } {
+	const style = getComputedStyle(element);
+	return {
+		top: readPixelCustomProperty(style, '--part-margin-top'),
+		right: readPixelCustomProperty(style, '--part-margin-right'),
+		bottom: readPixelCustomProperty(style, '--part-margin-bottom'),
+		left: readPixelCustomProperty(style, '--part-margin-left')
+	};
+}
+
+function readPixelCustomProperty(style: CSSStyleDeclaration, name: string): number {
+	const value = Number.parseFloat(style.getPropertyValue(name));
+	return Number.isFinite(value) ? value : 0;
 }
