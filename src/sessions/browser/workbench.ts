@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { WorkbenchGrid } from '../base/browser/grid.js';
-import { toDisposable, type IDisposable } from '../base/common/lifecycle.js';
+import { DisposableStore, toDisposable, type IDisposable } from '../base/common/lifecycle.js';
 import { registerMockSessionsProvider } from '../contrib/mockProvider/browser/mockSessions.contribution.js';
 import { ServiceCollection } from '../platform/instantiation/instantiation.js';
 import { applyThemeTokens } from '../platform/theme/theme.js';
@@ -27,12 +27,27 @@ const CONTENT_MIN_WIDTH = 640;
 
 export class Workbench {
 	private readonly root = document.createElement('div');
-	private readonly titlebarPart = new TitlebarPart();
-	private readonly sidebarPart = new SidebarPart();
-	private readonly sessionsPart = new SessionsPart();
-	private readonly auxiliaryBarPart = new AuxiliaryBarPart();
+	private readonly services = new ServiceCollection();
+	private readonly providersService = new SessionsProvidersService();
+	private readonly managementService = new SessionsManagementService(this.providersService);
+	private readonly sessionsPartService = new SessionsPartService();
+	private readonly sessionsService = new SessionsService(this.managementService, this.sessionsPartService);
+	private readonly titlebarPart = new TitlebarPart({
+		sessionsService: this.sessionsService,
+		sessionsPartService: this.sessionsPartService
+	});
+	private readonly sidebarPart = new SidebarPart({
+		sessionsService: this.sessionsService,
+		sessionsPartService: this.sessionsPartService
+	});
+	private readonly sessionsPart = new SessionsPart(this.sessionsService);
+	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
+		sessionsService: this.sessionsService,
+		sessionsPartService: this.sessionsPartService
+	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();
+	private readonly partSubscriptions = new DisposableStore();
 	private readonly grid = new WorkbenchGrid(
 		{
 			titlebar: this.titlebarPart,
@@ -59,7 +74,6 @@ export class Workbench {
 	);
 
 	private resizeListener: IDisposable | undefined;
-	private services: ServiceCollection | undefined;
 
 	constructor(private readonly container: HTMLElement) {
 		this.root.classList.add(
@@ -70,21 +84,16 @@ export class Workbench {
 	}
 
 	startup(): void {
-		const services = new ServiceCollection();
-		const providers = new SessionsProvidersService();
-		const management = new SessionsManagementService(providers);
-		const sessionsPartService = new SessionsPartService();
-		const sessions = new SessionsService(management, sessionsPartService);
-		services.set(ISessionsProvidersService, providers);
-		services.set(ISessionsManagementService, management);
-		services.set(ISessionsService, sessions);
-		services.set(ISessionsPartService, sessionsPartService);
-		registerMockSessionsProvider(providers);
-		this.services = services;
+		this.services.set(ISessionsProvidersService, this.providersService);
+		this.services.set(ISessionsManagementService, this.managementService);
+		this.services.set(ISessionsService, this.sessionsService);
+		this.services.set(ISessionsPartService, this.sessionsPartService);
+		registerMockSessionsProvider(this.providersService);
 
 		this.container.replaceChildren(this.root);
 		applyThemeTokens(this.root);
 		this.createParts();
+		this.bindPartServices();
 		this.installResizeListener();
 		this.layout();
 	}
@@ -96,6 +105,20 @@ export class Workbench {
 		this.auxiliaryBarPart.create(this.root);
 		this.editorPart.create(this.root);
 		this.panelPart.create(this.root);
+	}
+
+	private bindPartServices(): void {
+		this.partSubscriptions.clear();
+		const updateSessionsPart = () => {
+			this.sessionsPart.updateVisibleSessions(
+				this.sessionsPartService.visibleSessions.get(),
+				this.sessionsPartService.activeSession.get()
+			);
+		};
+
+		this.partSubscriptions.add(this.sessionsPartService.visibleSessions.subscribe(updateSessionsPart));
+		this.partSubscriptions.add(this.sessionsPartService.activeSession.subscribe(updateSessionsPart));
+		updateSessionsPart();
 	}
 
 	private installResizeListener(): void {
