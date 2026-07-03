@@ -13,6 +13,7 @@ import { Part } from '../part.js';
 export interface ITitlebarPartOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
+	readonly onToggleSidebar?: () => void;
 }
 
 export class TitlebarPart extends Part {
@@ -56,8 +57,12 @@ export class TitlebarPart extends Part {
 	}
 
 	private renderLeft(container: HTMLElement): void {
-		const brand = document.createElement('div');
-		brand.className = 'sessions-titlebar-brand';
+		const brand = document.createElement('button');
+		brand.className = 'sessions-titlebar-brand sessions-sidebar-toggle';
+		brand.type = 'button';
+		brand.title = 'Toggle Sidebar';
+		brand.setAttribute('aria-label', 'Toggle Sidebar');
+		brand.addEventListener('click', () => this.options.onToggleSidebar?.());
 		const icon = document.createElement('span');
 		icon.className = 'codicon codicon-layout-sidebar-left';
 		icon.setAttribute('aria-hidden', 'true');
@@ -122,13 +127,13 @@ export class TitlebarPart extends Part {
 		commandBox.title = 'Active session';
 
 		const providerIcon = document.createElement('span');
-		providerIcon.className = `codicon ${isNewSession ? 'codicon-add' : session?.icon ?? 'codicon-copilot'}`;
+		providerIcon.className = `codicon ${isNewSession ? 'codicon-copilot' : session?.icon ?? 'codicon-copilot'}`;
 		providerIcon.setAttribute('aria-hidden', 'true');
 		commandBox.appendChild(providerIcon);
 
 		const title = document.createElement('span');
 		title.className = 'sessions-command-title';
-		title.textContent = isNewSession ? 'New Session' : session?.title.get() ?? 'Agent session';
+		title.textContent = isNewSession ? 'New Session · mellivora-malatang' : session?.title.get() ?? 'Agent session';
 		commandBox.appendChild(title);
 
 		if (isNewSession) {

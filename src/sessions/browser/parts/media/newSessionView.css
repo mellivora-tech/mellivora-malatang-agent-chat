@@ -13,7 +13,7 @@
 .new-session-content {
 	display: flex;
 	flex-direction: column;
-	gap: 18px;
+	gap: 14px;
 	width: min(1110px, calc(100% - 96px));
 	margin: 0 auto 88px;
 }
@@ -29,7 +29,8 @@
 	letter-spacing: 0;
 }
 
-.new-session-workspace-button {
+.new-session-workspace-button,
+.new-session-provider-button {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
@@ -44,7 +45,8 @@
 	cursor: default;
 }
 
-.new-session-workspace-button:hover {
+.new-session-workspace-button:hover,
+.new-session-provider-button:hover {
 	color: var(--vscode-agentsPanel-foreground);
 }
 
@@ -112,12 +114,21 @@
 }
 
 .new-session-model-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: var(--vscode-agents-fontSize-label1);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.new-session-toolbar-divider {
+	width: 1px;
+	height: 18px;
+	background: color-mix(in srgb, var(--vscode-agentsChatInput-foreground) 16%, transparent);
 }
 
 .new-session-send-button {
@@ -138,9 +149,43 @@
 
 .new-session-send-button:focus-visible,
 .new-session-workspace-button:focus-visible,
+.new-session-provider-button:focus-visible,
 .new-session-toolbar-button:focus-visible {
 	outline: 1px solid var(--vscode-agentsBadge-background);
 	outline-offset: 2px;
+}
+
+.new-session-meta-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	min-width: 0;
+	height: 24px;
+	padding: 0 14px;
+	box-sizing: border-box;
+	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 56%, transparent);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.new-session-approvals,
+.new-session-meta-right,
+.new-session-worktree,
+.new-session-branch {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+}
+
+.new-session-meta-right {
+	gap: 18px;
+}
+
+.new-session-worktree {
+	padding-right: 18px;
+	border-right: 1px solid color-mix(in srgb, var(--vscode-agentsPanel-foreground) 13%, transparent);
 }
 
 @media (max-width: 920px) {

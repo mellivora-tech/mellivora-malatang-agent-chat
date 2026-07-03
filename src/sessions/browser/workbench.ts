@@ -40,7 +40,8 @@ export class Workbench {
 	private readonly sessionsService = new SessionsService(this.managementService, this.sessionsPartService);
 	private readonly titlebarPart = new TitlebarPart({
 		sessionsService: this.sessionsService,
-		sessionsPartService: this.sessionsPartService
+		sessionsPartService: this.sessionsPartService,
+		onToggleSidebar: () => this.toggleSidebar()
 	});
 	private readonly sidebarPart = new SidebarPart({
 		sessionsService: this.sessionsService,
@@ -80,6 +81,7 @@ export class Workbench {
 	);
 
 	private resizeListener: IDisposable | undefined;
+	private sidebarVisible = true;
 
 	constructor(private readonly container: HTMLElement) {
 		this.root.classList.add(
@@ -149,6 +151,13 @@ export class Workbench {
 		const width = this.root.clientWidth || window.innerWidth;
 		const height = this.root.clientHeight || window.innerHeight;
 		this.grid.layout(width, height);
+	}
+
+	private toggleSidebar(): void {
+		this.sidebarVisible = !this.sidebarVisible;
+		this.grid.setPartVisible('sidebar', this.sidebarVisible);
+		this.root.classList.toggle('sidebar-hidden', !this.sidebarVisible);
+		this.layout();
 	}
 }
 

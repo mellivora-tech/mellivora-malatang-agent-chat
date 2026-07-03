@@ -32,6 +32,8 @@ test('agents window shell renders at desktop sizes', async () => {
 			await captureAndAssert(page, screenshot);
 		}
 
+		await assertSidebarToggle(page);
+
 		await page.locator('.sessions-list-row').first().click();
 		await expect(page.locator('.session-view')).toBeVisible();
 		await expect(page.locator('.part.auxiliarybar')).toBeVisible();
@@ -61,11 +63,16 @@ async function captureAndAssert(
 		await expect(page.locator(selector)).toBeVisible();
 	}
 
-	await expect(page.locator('.sessions-command-title')).toHaveText('New Session');
+	await expect(page.locator('.sessions-command-title')).toContainText('New Session');
+	await expect(page.locator('.sessions-command-title')).toContainText('mellivora-malatang');
 	await expect(page.locator('.sessions-sidebar-header-title')).toHaveText('Sessions');
 	await expect(page.locator('.part.auxiliarybar')).toBeHidden();
-	await expect(page.locator('.new-session-heading')).toContainText('Start by picking a workspace');
+	await expect(page.locator('.new-session-heading')).toContainText('New session in mellivora-malatang with Copilot');
+	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', "What's your next milestone?");
 	await expect(page.locator('.new-session-input')).toBeVisible();
+	await expect(page.locator('.new-session-approvals')).toContainText('Default Approvals');
+	await expect(page.locator('.new-session-worktree')).toContainText('Worktree');
+	await expect(page.locator('.new-session-branch')).toContainText('main');
 
 	const boxes = await page.locator('.part.sessionspart, .part.sidebar').evaluateAll(nodes =>
 		nodes.map(node => {
@@ -86,6 +93,16 @@ async function captureAndAssert(
 	}
 
 	await page.screenshot({ path: screenshot.path, fullPage: true });
+}
+
+async function assertSidebarToggle(page: Page): Promise<void> {
+	await page.locator('.sessions-sidebar-toggle').click();
+	await expect(page.locator('.part.sidebar')).toBeHidden();
+	const sessionsBox = await page.locator('.part.sessionspart').boundingBox();
+	expect(sessionsBox).not.toBeNull();
+	expect(sessionsBox!.x).toBeLessThan(24);
+	await page.locator('.sessions-sidebar-toggle').click();
+	await expect(page.locator('.part.sidebar')).toBeVisible();
 }
 
 async function assertDarwinTrafficLightInset(page: Page): Promise<void> {

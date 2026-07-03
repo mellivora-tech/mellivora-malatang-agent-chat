@@ -58,9 +58,21 @@
 	gap: 8px;
 	min-width: 0;
 	max-width: 240px;
+	height: 26px;
+	padding: 0 4px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
 	color: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 82%, transparent);
+	font: inherit;
 	font-size: var(--vscode-agents-fontSize-label1);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	cursor: default;
+}
+
+.sessions-titlebar-brand:hover {
+	background: color-mix(in srgb, var(--vscode-agentsPanel-foreground) 10%, transparent);
+	color: var(--vscode-agentsPanel-foreground);
 }
 
 .sessions-titlebar-brand span:last-child {
@@ -95,6 +107,7 @@
 }
 
 .sessions-command-center:focus-visible,
+.sessions-titlebar-brand:focus-visible,
 .sessions-titlebar-action:focus-visible {
 	outline: 1px solid var(--vscode-agentsBadge-background);
 	outline-offset: 2px;
