@@ -1,0 +1,88 @@
+html,
+body {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	overflow: hidden;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-size: var(--vscode-agents-fontSize-body1);
+	background: var(--vscode-agents-background);
+	color: var(--vscode-agentsPanel-foreground);
+}
+
+.monaco-workbench.agent-sessions-workbench {
+	position: relative;
+	width: 100vw;
+	height: 100vh;
+	overflow: hidden;
+	background: var(--vscode-agents-background);
+}
+
+.agent-sessions-workbench.shell-gradient-background::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(ellipse 128% 102% at 100% 100%,
+			color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 13%, var(--vscode-agents-background)) 0%,
+			color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 10%, var(--vscode-agents-background)) 17%,
+			color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 7%, var(--vscode-agents-background)) 31%,
+			var(--vscode-agents-background) 60%);
+}
+
+.agent-sessions-workbench .part {
+	position: absolute;
+	box-sizing: border-box;
+	z-index: 1;
+}
+
+.agent-sessions-workbench .part.sessionspart,
+.agent-sessions-workbench .part.auxiliarybar,
+.agent-sessions-workbench .part.panel,
+.agent-sessions-workbench .part.editor {
+	background: var(--vscode-agentsPanel-background);
+	border: 1px solid var(--vscode-agentsPanel-border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.agent-sessions-workbench .part.titlebar {
+	display: flex;
+	align-items: center;
+	padding: 0 12px;
+	border-bottom: 1px solid var(--vscode-agentsPanel-border);
+}
+
+.agent-sessions-workbench .part.sidebar {
+	padding: 12px;
+	border-right: 1px solid var(--vscode-agentsPanel-border);
+}
+
+.agent-sessions-workbench .part-placeholder {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 100%;
+	padding: 12px 14px;
+	box-sizing: border-box;
+	color: inherit;
+}
+
+.agent-sessions-workbench .part-placeholder-titlebar {
+	padding: 0;
+}
+
+.agent-sessions-workbench .part-placeholder-label {
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	letter-spacing: 0;
+	text-transform: uppercase;
+}
+
+.agent-sessions-workbench .part.sessionspart .part-placeholder,
+.agent-sessions-workbench .part.auxiliarybar .part-placeholder,
+.agent-sessions-workbench .part.editor .part-placeholder,
+.agent-sessions-workbench .part.panel .part-placeholder {
+	padding: 16px;
+}
