@@ -4,23 +4,30 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { LayoutPriority } from '../../base/browser/grid.js';
+import { SessionsList } from '../../contrib/sessions/browser/sessionsList.js';
+import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
+import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import { Part } from '../part.js';
+
+export interface ISidebarPartOptions {
+	readonly sessionsService?: ISessionsService;
+	readonly sessionsPartService?: ISessionsPartService;
+}
 
 export class SidebarPart extends Part {
 	readonly minimumWidth = 220;
 	readonly minimumHeight = 0;
 	readonly priority = LayoutPriority.Low;
 
-	constructor() {
+	constructor(private readonly options: ISidebarPartOptions = {}) {
 		super('workbench.parts.sidebar', 'sidebar');
 	}
 
 	protected render(container: HTMLElement): void {
-		container.innerHTML = `
-			<div class="part-placeholder">
-				<span class="codicon codicon-layout-sidebar-left" aria-hidden="true"></span>
-				<span class="part-placeholder-label">Sidebar</span>
-			</div>
-		`;
+		container.textContent = '';
+		this._register(new SessionsList(container, {
+			...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+			...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {})
+		}));
 	}
 }
