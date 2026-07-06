@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Event, Emitter } from '../common/event.js';
+import type { Event } from '../common/event.js';
+import { Emitter } from '../common/event.js';
 
 export function $(className: string, tagName: keyof HTMLElementTagNameMap = 'div'): HTMLElement {
 	const element = document.createElement(tagName);
@@ -55,6 +56,6 @@ export function trackFocus(node: HTMLElement): { onDidFocus: Event<FocusEvent>; 
 			node.removeEventListener('blur', blurListener, true);
 			onDidFocus.dispose();
 			onDidBlur.dispose();
-		}
+		},
 	};
 }

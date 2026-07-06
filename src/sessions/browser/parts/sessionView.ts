@@ -19,11 +19,11 @@ export class SessionView extends Disposable {
 		super();
 
 		this.element = document.createElement('div');
-			this.element.className = 'session-view';
-			this.element.tabIndex = -1;
+		this.element.className = 'session-view';
+		this.element.tabIndex = -1;
 
-			this.content = append(this.element, document.createElement('div'));
-			this.content.className = 'session-view-content';
+		this.content = append(this.element, document.createElement('div'));
+		this.content.className = 'session-view-content';
 
 		this.conversationView = this._register(new ConversationView(messageSender));
 		this.content.appendChild(this.conversationView.element);

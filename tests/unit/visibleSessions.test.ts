@@ -21,7 +21,7 @@ function createSession(sessionId: string): ISession {
 		isArchived: observableValue(false),
 		isRead: observableValue(true),
 		messages: observableValue<readonly ISessionMessage[]>([]),
-		interactivity: observableValue(SessionInteractivity.Full)
+		interactivity: observableValue(SessionInteractivity.Full),
 	};
 }
 
@@ -31,7 +31,10 @@ test('first session becomes active', () => {
 	const visibleSessions = new VisibleSessions([first, second]);
 
 	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-1');
-	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-1']);
+	assert.deepEqual(
+		visibleSessions.visibleSessions.get().map(session => session?.sessionId),
+		['session-1'],
+	);
 });
 
 test('opening another session replaces the visible session', () => {
@@ -42,7 +45,10 @@ test('opening another session replaces the visible session', () => {
 	visibleSessions.openSession(second);
 
 	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-2');
-	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-2']);
+	assert.deepEqual(
+		visibleSessions.visibleSessions.get().map(session => session?.sessionId),
+		['session-2'],
+	);
 });
 
 test('opening only a session replaces existing visible sessions', () => {
@@ -55,7 +61,10 @@ test('opening only a session replaces existing visible sessions', () => {
 	visibleSessions.openOnly(third);
 
 	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-3');
-	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-3']);
+	assert.deepEqual(
+		visibleSessions.visibleSessions.get().map(session => session?.sessionId),
+		['session-3'],
+	);
 });
 
 test('closing active session selects a remaining fallback', () => {
@@ -69,5 +78,8 @@ test('closing active session selects a remaining fallback', () => {
 	visibleSessions.closeSession('session-3');
 
 	assert.equal(visibleSessions.activeSession.get()?.sessionId, 'session-1');
-	assert.deepEqual(visibleSessions.visibleSessions.get().map(session => session?.sessionId), ['session-1']);
+	assert.deepEqual(
+		visibleSessions.visibleSessions.get().map(session => session?.sessionId),
+		['session-1'],
+	);
 });

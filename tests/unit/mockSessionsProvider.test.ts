@@ -59,20 +59,12 @@ test('mock provider appends follow-up turns to session messages', async () => {
 	await provider.whenIdle();
 
 	assert.equal(session.status.get(), SessionStatus.NeedsInput);
-	assert.deepEqual(texts(session.messages.get()), [
-		'hello',
-		'Mock response for: hello',
-		'follow up',
-		'Mock response for: follow up'
-	]);
+	assert.deepEqual(texts(session.messages.get()), ['hello', 'Mock response for: hello', 'follow up', 'Mock response for: follow up']);
 });
 
 test('sessions started in the same instant get unique ids', async () => {
 	const provider = new MockSessionsProvider({ responseDelayMs: 1 });
-	const [first, second] = await Promise.all([
-		provider.startSession('重构侧边栏'),
-		provider.startSession('修复布局')
-	]);
+	const [first, second] = await Promise.all([provider.startSession('重构侧边栏'), provider.startSession('修复布局')]);
 
 	assert.notEqual(first.sessionId, second.sessionId);
 	await provider.whenIdle();

@@ -52,20 +52,24 @@ export class TitlebarPart extends Part {
 	}
 
 	private renderLeft(container: HTMLElement): void {
-		container.appendChild(this.createTitlebarButton({
-			label: 'Toggle Sidebar',
-			icon: 'codicon-layout-sidebar-left',
-			className: 'sessions-sidebar-toggle',
-			onClick: () => this.options.onToggleSidebar?.()
-		}));
+		container.appendChild(
+			this.createTitlebarButton({
+				label: 'Toggle Sidebar',
+				icon: 'codicon-layout-sidebar-left',
+				className: 'sessions-sidebar-toggle',
+				onClick: () => this.options.onToggleSidebar?.(),
+			}),
+		);
 		container.appendChild(this.createTitlebarButton({ label: 'Back', icon: 'codicon-arrow-left' }));
 		container.appendChild(this.createTitlebarButton({ label: 'Forward', icon: 'codicon-arrow-right' }));
-		container.appendChild(this.createTitlebarButton({
-			label: 'New Task',
-			icon: 'codicon-new-session',
-			className: 'sessions-titlebar-new-task',
-			onClick: () => this.options.sessionsPartService?.showNewSession()
-		}));
+		container.appendChild(
+			this.createTitlebarButton({
+				label: 'New Task',
+				icon: 'codicon-new-session',
+				className: 'sessions-titlebar-new-task',
+				onClick: () => this.options.sessionsPartService?.showNewSession(),
+			}),
+		);
 	}
 
 	private renderRight(container: HTMLElement): void {
@@ -73,16 +77,18 @@ export class TitlebarPart extends Part {
 			label: 'Toggle Side Pane',
 			icon: 'codicon-layout-sidebar-right',
 			className: 'sessions-titlebar-side-pane-toggle',
-			onClick: () => this.options.sessionsPartService?.toggleSidePane()
+			onClick: () => this.options.sessionsPartService?.toggleSidePane(),
 		});
 		container.appendChild(this.sidePaneToggleButton);
 		this.updateSidePaneToggleState();
 
-		container.appendChild(this.createTitlebarButton({
-			label: 'Help',
-			icon: 'codicon-question',
-			className: 'sessions-titlebar-help'
-		}));
+		container.appendChild(
+			this.createTitlebarButton({
+				label: 'Help',
+				icon: 'codicon-question',
+				className: 'sessions-titlebar-help',
+			}),
+		);
 	}
 
 	private updateSidePaneToggleState(): void {
@@ -91,12 +97,7 @@ export class TitlebarPart extends Part {
 		this.sidePaneToggleButton?.setAttribute('aria-pressed', String(visible));
 	}
 
-	private createTitlebarButton(options: {
-		readonly label: string;
-		readonly icon: string;
-		readonly className?: string;
-		readonly onClick?: () => void;
-	}): HTMLButtonElement {
+	private createTitlebarButton(options: { readonly label: string; readonly icon: string; readonly className?: string; readonly onClick?: () => void }): HTMLButtonElement {
 		const button = document.createElement('button');
 		button.className = `sessions-titlebar-nav-action${options.className ? ` ${options.className}` : ''}`;
 		button.type = 'button';

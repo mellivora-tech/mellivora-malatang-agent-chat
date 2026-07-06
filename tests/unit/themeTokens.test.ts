@@ -3,12 +3,7 @@ import assert from 'node:assert/strict';
 
 import '../../src/sessions/common/theme.js';
 import '../../src/sessions/common/sizes.js';
-import {
-	applyThemeTokens,
-	getTheme,
-	getTokenCssVariableName,
-	resolveThemeTokenValue
-} from '../../src/sessions/platform/theme/theme.js';
+import { applyThemeTokens, getTheme, getTokenCssVariableName, resolveThemeTokenValue } from '../../src/sessions/platform/theme/theme.js';
 
 class StyleStub {
 	readonly values = new Map<string, string>();

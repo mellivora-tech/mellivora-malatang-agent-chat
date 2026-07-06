@@ -15,36 +15,36 @@
 
 本次对齐的主参考路径来自 VS Code 仓库：
 
-| 主题 | 源码路径 |
-|---|---|
-| Agents Window 总览 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/README.md` |
-| 布局规格 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/LAYOUT.md` |
-| per-session 布局状态 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/LAYOUT_CONTROLLER.md` |
-| sessions list 行为 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/SESSIONS_LIST.md` |
-| desktop 入口聚合 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/sessions.desktop.main.ts` |
-| common 入口聚合 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/sessions.common.main.ts` |
-| Electron renderer 启动 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/electron-browser/sessions.ts` |
-| Electron workbench main | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/electron-browser/sessions.main.ts` |
-| Workbench shell | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/workbench.ts` |
-| Sessions Part | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/parts/sessionsPart.ts` |
-| Session View | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/parts/sessionView.ts` |
-| Session 数据模型 | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/services/sessions/common/session.ts` |
-| Provider contract | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/services/sessions/common/sessionsProvider.ts` |
-| 颜色 token | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/common/theme.ts` |
-| 字体 token | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/common/sizes.ts` |
-| Agents Window CSS | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/media/style.css` |
+| 主题                    | 源码路径                                                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Agents Window 总览      | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/README.md`                                    |
+| 布局规格                | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/LAYOUT.md`                                    |
+| per-session 布局状态    | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/LAYOUT_CONTROLLER.md`                         |
+| sessions list 行为      | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/SESSIONS_LIST.md`                             |
+| desktop 入口聚合        | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/sessions.desktop.main.ts`                     |
+| common 入口聚合         | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/sessions.common.main.ts`                      |
+| Electron renderer 启动  | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/electron-browser/sessions.ts`                 |
+| Electron workbench main | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/electron-browser/sessions.main.ts`            |
+| Workbench shell         | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/workbench.ts`                         |
+| Sessions Part           | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/parts/sessionsPart.ts`                |
+| Session View            | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/parts/sessionView.ts`                 |
+| Session 数据模型        | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/services/sessions/common/session.ts`          |
+| Provider contract       | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/services/sessions/common/sessionsProvider.ts` |
+| 颜色 token              | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/common/theme.ts`                              |
+| 字体 token              | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/common/sizes.ts`                              |
+| Agents Window CSS       | `/Users/sgx/workspace/code/learning-projects/mellivora-malatang/src/vs/sessions/browser/media/style.css`                      |
 
 ## VS Code 分层架构
 
 VS Code 主体是分层架构：
 
-| 层 | 职责 | 对本项目的影响 |
-|---|---|---|
-| `vs/base` | DOM、事件、生命周期、observable、grid/splitview 等基础能力 | 新项目需要保留 `Emitter`、`DisposableStore`、observable、grid/sash 这类基础模型 |
-| `vs/platform` | DI、commands、menus、storage、theme、context key 等平台服务 | 新项目需要保留 service collection、menu/action registry、theme token、storage key 思路 |
-| `vs/editor` | Monaco/editor 相关实现 | 本项目首版不复刻编辑器，只保留 editor part 的占位和 modal/card 布局语义 |
-| `vs/workbench` | 标准 VS Code workbench parts、services、contributions | 新项目借鉴 parts/contribution 架构，但只实现 Agents Window 需要的子集 |
-| `vs/sessions` | Agents Window 顶层层，和 `vs/workbench` 平级 | 新项目目录应直接按 `sessions` 语义组织，而不是 `components/` SPA 结构 |
+| 层             | 职责                                                        | 对本项目的影响                                                                         |
+| -------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `vs/base`      | DOM、事件、生命周期、observable、grid/splitview 等基础能力  | 新项目需要保留 `Emitter`、`DisposableStore`、observable、grid/sash 这类基础模型        |
+| `vs/platform`  | DI、commands、menus、storage、theme、context key 等平台服务 | 新项目需要保留 service collection、menu/action registry、theme token、storage key 思路 |
+| `vs/editor`    | Monaco/editor 相关实现                                      | 本项目首版不复刻编辑器，只保留 editor part 的占位和 modal/card 布局语义                |
+| `vs/workbench` | 标准 VS Code workbench parts、services、contributions       | 新项目借鉴 parts/contribution 架构，但只实现 Agents Window 需要的子集                  |
+| `vs/sessions`  | Agents Window 顶层层，和 `vs/workbench` 平级                | 新项目目录应直接按 `sessions` 语义组织，而不是 `components/` SPA 结构                  |
 
 关键约束：`vs/sessions` 可以 import `vs/workbench` 和更底层模块，但 `vs/workbench` 不能反向 import `vs/sessions`。这说明 Agents Window 不是普通 chat feature，而是一个独立 workbench experience。
 
@@ -89,23 +89,23 @@ root: vertical
 
 默认可见性：
 
-| Part | 默认状态 | 职责 |
-|---|---|---|
-| Titlebar | visible | session picker、窗口/布局 actions、account |
-| Sidebar | visible | sessions list |
-| Sessions Part | visible | 一个或多个 session views 的内部 grid |
-| Editor | hidden | 显式 editor workflow，占位或 modal |
-| Auxiliary Bar | visible | Changes、Files 等 session details |
-| Panel | hidden | Terminal、debug output |
+| Part          | 默认状态 | 职责                                       |
+| ------------- | -------- | ------------------------------------------ |
+| Titlebar      | visible  | session picker、窗口/布局 actions、account |
+| Sidebar       | visible  | sessions list                              |
+| Sessions Part | visible  | 一个或多个 session views 的内部 grid       |
+| Editor        | hidden   | 显式 editor workflow，占位或 modal         |
+| Auxiliary Bar | visible  | Changes、Files 等 session details          |
+| Panel         | hidden   | Terminal、debug output                     |
 
 布局优先级：
 
-| Part | Priority | 行为 |
-|---|---|---|
-| Sidebar | Low | 默认 300px，snap close，不能吸收 resize delta |
-| Sessions Part | High | 唯一 flexible view，吸收横向 resize delta |
-| Editor | Normal | 默认隐藏，显示后保持用户宽度 |
-| Auxiliary Bar | Low | 默认约 340px，保持用户宽度 |
+| Part          | Priority | 行为                                          |
+| ------------- | -------- | --------------------------------------------- |
+| Sidebar       | Low      | 默认 300px，snap close，不能吸收 resize delta |
+| Sessions Part | High     | 唯一 flexible view，吸收横向 resize delta     |
+| Editor        | Normal   | 默认隐藏，显示后保持用户宽度                  |
+| Auxiliary Bar | Low      | 默认约 340px，保持用户宽度                    |
 
 必须保留的视觉事实：
 
@@ -119,15 +119,15 @@ root: vertical
 
 真实 parts 不是 React components，而是带生命周期的 class：
 
-| Part | 继承/角色 | 新项目映射 |
-|---|---|---|
-| `TitlebarPart` | extends `Part` | `browser/parts/titlebarPart.ts` |
-| `SidebarPart` | extends `AbstractPaneCompositePart` | `browser/parts/sidebarPart.ts`，首版可用简化 pane composite |
-| `SessionsPart` | extends `Part` | `browser/parts/sessionsPart.ts`，内部拥有 session view grid |
-| `SessionView` | implements `ISerializableView` | `browser/parts/sessionView.ts` |
-| `AuxiliaryBarPart` | extends `AbstractPaneCompositePart` | `browser/parts/auxiliaryBarPart.ts` |
-| `EditorPart` | workbench editor part override | 首版 hidden/card placeholder |
-| `PanelPart` | pane composite part | 首版 hidden/card placeholder |
+| Part               | 继承/角色                           | 新项目映射                                                  |
+| ------------------ | ----------------------------------- | ----------------------------------------------------------- |
+| `TitlebarPart`     | extends `Part`                      | `browser/parts/titlebarPart.ts`                             |
+| `SidebarPart`      | extends `AbstractPaneCompositePart` | `browser/parts/sidebarPart.ts`，首版可用简化 pane composite |
+| `SessionsPart`     | extends `Part`                      | `browser/parts/sessionsPart.ts`，内部拥有 session view grid |
+| `SessionView`      | implements `ISerializableView`      | `browser/parts/sessionView.ts`                              |
+| `AuxiliaryBarPart` | extends `AbstractPaneCompositePart` | `browser/parts/auxiliaryBarPart.ts`                         |
+| `EditorPart`       | workbench editor part override      | 首版 hidden/card placeholder                                |
+| `PanelPart`        | pane composite part                 | 首版 hidden/card placeholder                                |
 
 `SessionsPart` 的关键职责：
 
@@ -162,13 +162,13 @@ ISessionsProvider
 
 各层职责：
 
-| 层 | 真实职责 | 新项目约束 |
-|---|---|---|
-| `ISessionsProvider` | provider contract，拥有 session list、workspace、create/send/archive/rename 等能力 | 只实现 `MockSessionsProvider`，但接口不要直接变成 UI mock JSON |
-| `ISessionsManagementService` | 聚合所有 providers，处理 session CRUD 和 provider 事件 | 保留 service 边界，首版实现 mock 聚合 |
-| `ISessionsService` | 视图态：active session、visible sessions、open/close/pin/focus/restore | 保留 observable view-state，不让 view 直接 mutate provider |
-| `SessionsPartService` | part facade：update visible sessions、focus、maximize | 保留 passive renderer 模式 |
-| `SessionsPart` | 纯渲染/reconcile | 不读取 provider，不拥有数据源 |
+| 层                           | 真实职责                                                                           | 新项目约束                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `ISessionsProvider`          | provider contract，拥有 session list、workspace、create/send/archive/rename 等能力 | 只实现 `MockSessionsProvider`，但接口不要直接变成 UI mock JSON |
+| `ISessionsManagementService` | 聚合所有 providers，处理 session CRUD 和 provider 事件                             | 保留 service 边界，首版实现 mock 聚合                          |
+| `ISessionsService`           | 视图态：active session、visible sessions、open/close/pin/focus/restore             | 保留 observable view-state，不让 view 直接 mutate provider     |
+| `SessionsPartService`        | part facade：update visible sessions、focus、maximize                              | 保留 passive renderer 模式                                     |
+| `SessionsPart`               | 纯渲染/reconcile                                                                   | 不读取 provider，不拥有数据源                                  |
 
 数据模型要从源码简化，但保留语义：
 
@@ -199,19 +199,19 @@ Sidebar 里的 sessions list 不是普通列表。真实语义包括：
 
 新项目必须创建 VS Code 风格 token 层：
 
-| Token 类别 | 来源 |
-|---|---|
-| shell background | `agents.background` |
-| panel card background | `agentsPanel.background` |
-| panel foreground | `agentsPanel.foreground` |
-| panel border | `agentsPanel.border` |
-| gradient tint | `agentsGradient.tintColor` |
-| chat input | `agentsChatInput.*` |
-| new session button | `agentsNewSessionButton.*` |
-| badges | `agentsBadge.*`、`agentsUnreadBadge.*` |
-| session view active/inactive | `activeSessionView.*`、`inactiveSessionView.*` |
-| font sizes | `agents.fontSize.heading1/2/3/body1/body2/label1/label2/label3` |
-| font weights | `agents.fontWeight.regular/semiBold` |
+| Token 类别                   | 来源                                                            |
+| ---------------------------- | --------------------------------------------------------------- |
+| shell background             | `agents.background`                                             |
+| panel card background        | `agentsPanel.background`                                        |
+| panel foreground             | `agentsPanel.foreground`                                        |
+| panel border                 | `agentsPanel.border`                                            |
+| gradient tint                | `agentsGradient.tintColor`                                      |
+| chat input                   | `agentsChatInput.*`                                             |
+| new session button           | `agentsNewSessionButton.*`                                      |
+| badges                       | `agentsBadge.*`、`agentsUnreadBadge.*`                          |
+| session view active/inactive | `activeSessionView.*`、`inactiveSessionView.*`                  |
+| font sizes                   | `agents.fontSize.heading1/2/3/body1/body2/label1/label2/label3` |
+| font weights                 | `agents.fontWeight.regular/semiBold`                            |
 
 首版不要使用 Lucide 图标；图标应使用 VS Code Codicons。
 
@@ -221,20 +221,20 @@ Sidebar 里的 sessions list 不是普通列表。真实语义包括：
 
 新的技术栈：
 
-| 分类 | 选择 | 说明 |
-|---|---|---|
-| Runtime | Electron desktop | 对齐 VS Code 桌面交付形态 |
-| Language | TypeScript ESM | 对齐 VS Code 源码 |
-| UI | 原生 DOM class + CSS | 不使用 React/Vue/Svelte |
-| Component model | `Part` / `View` class lifecycle | 对齐 workbench parts |
-| State | `Emitter`、`DisposableStore`、observable value | 对齐 VS Code 事件/生命周期模型 |
-| DI | `ServiceCollection` + service identifiers + singleton registry | 对齐 VS Code platform/instantiation 思路 |
-| Actions | command/action/menu registry | 对齐 titlebar、sidebar、header、auxiliary actions |
-| Theme | CSS variables + registered token table | 对齐 `theme.ts` / `sizes.ts` |
-| Icons | `@vscode/codicons` | 不使用 Lucide |
-| Layout | grid/splitview/sash model | 不用纯 CSS grid 伪装整体 workbench |
-| Tests | Playwright screenshot/e2e + TypeScript unit tests | 对齐 UI 验收需求 |
-| Build | npm scripts + TypeScript + Electron bundling | 不使用 React/Vite app scaffold |
+| 分类            | 选择                                                           | 说明                                              |
+| --------------- | -------------------------------------------------------------- | ------------------------------------------------- |
+| Runtime         | Electron desktop                                               | 对齐 VS Code 桌面交付形态                         |
+| Language        | TypeScript ESM                                                 | 对齐 VS Code 源码                                 |
+| UI              | 原生 DOM class + CSS                                           | 不使用 React/Vue/Svelte                           |
+| Component model | `Part` / `View` class lifecycle                                | 对齐 workbench parts                              |
+| State           | `Emitter`、`DisposableStore`、observable value                 | 对齐 VS Code 事件/生命周期模型                    |
+| DI              | `ServiceCollection` + service identifiers + singleton registry | 对齐 VS Code platform/instantiation 思路          |
+| Actions         | command/action/menu registry                                   | 对齐 titlebar、sidebar、header、auxiliary actions |
+| Theme           | CSS variables + registered token table                         | 对齐 `theme.ts` / `sizes.ts`                      |
+| Icons           | `@vscode/codicons`                                             | 不使用 Lucide                                     |
+| Layout          | grid/splitview/sash model                                      | 不用纯 CSS grid 伪装整体 workbench                |
+| Tests           | Playwright screenshot/e2e + TypeScript unit tests              | 对齐 UI 验收需求                                  |
+| Build           | npm scripts + TypeScript + Electron bundling                   | 不使用 React/Vite app scaffold                    |
 
 版本基准从当前 VS Code 仓库 `package.json` 读取：
 

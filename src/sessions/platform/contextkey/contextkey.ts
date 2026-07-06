@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Emitter, Event } from '../../base/common/event.js';
-import { Disposable, IDisposable, toDisposable } from '../../base/common/lifecycle.js';
+import type { Event } from '../../base/common/event.js';
+import { Emitter } from '../../base/common/event.js';
+import { Disposable } from '../../base/common/lifecycle.js';
 import { createDecorator } from '../instantiation/instantiation.js';
 
 export const IContextKeyService = createDecorator<IContextKeyService>('contextKeyService');
@@ -30,9 +31,8 @@ class ContextKey<T> implements IContextKey<T> {
 	constructor(
 		private readonly service: ContextKeyService,
 		private readonly key: string,
-		private readonly defaultValue: T | undefined
-	) {
-	}
+		private readonly defaultValue: T | undefined,
+	) {}
 
 	set(value: T): void {
 		this.service.setValue(this.key, value);
@@ -51,9 +51,8 @@ export class RawContextKey<T> {
 	constructor(
 		readonly key: string,
 		readonly defaultValue: T | undefined,
-		readonly description?: string
-	) {
-	}
+		readonly description?: string,
+	) {}
 
 	bindTo(target: IContextKeyService): IContextKey<T> {
 		return target.createKey(this.key, this.defaultValue);

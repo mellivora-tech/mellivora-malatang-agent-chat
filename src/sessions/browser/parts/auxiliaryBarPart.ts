@@ -28,22 +28,22 @@ const auxiliaryTabs: readonly {
 		id: 'review',
 		label: 'Review',
 		icon: 'codicon-diff',
-		title: 'Review'
+		title: 'Review',
 	},
 	{
 		id: 'terminal',
 		label: 'Terminal',
 		icon: 'codicon-terminal',
 		title: 'Terminal',
-		body: 'No terminal session started'
+		body: 'No terminal session started',
 	},
 	{
 		id: 'browser',
 		label: 'Browser',
 		icon: 'codicon-globe',
 		title: 'Browser',
-		body: 'No browser preview open'
-	}
+		body: 'No browser preview open',
+	},
 ];
 
 export class AuxiliaryBarPart extends Part {
@@ -168,10 +168,12 @@ export class AuxiliaryBarPart extends Part {
 		view.appendChild(body);
 
 		if (activeTab.id === 'review') {
-			this.viewDisposables.add(new ChangesView(body, {
-				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
-				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {})
-			}));
+			this.viewDisposables.add(
+				new ChangesView(body, {
+					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
+				}),
+			);
 		} else {
 			body.textContent = activeTab.body ?? '';
 		}

@@ -9,7 +9,7 @@ import { _electron as electron, type ElectronApplication, type Locator, type Pag
 
 const screenshots = [
 	{ width: 1440, height: 900, path: 'test-results/agents-window-1440x900.png' },
-	{ width: 1280, height: 720, path: 'test-results/agents-window-1280x720.png' }
+	{ width: 1280, height: 720, path: 'test-results/agents-window-1280x720.png' },
 ] as const;
 
 test('agents window shell renders at desktop sizes', async () => {
@@ -59,7 +59,7 @@ test('starting a conversation creates a running session shell', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -94,7 +94,7 @@ test('enter starts a session from the new session landing', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -128,7 +128,7 @@ test('conversation supports stop and follow-up turns', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -144,17 +144,14 @@ test('conversation supports stop and follow-up turns', async () => {
 		await page.locator('.new-session-input').fill('hello');
 		await page.locator('.new-session-send-button').click();
 
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last())
-			.toHaveText('Mock response for: hello');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: hello');
 		await expect(page.locator('.conversation-send-button')).toBeVisible();
 		await expect(page.locator('.conversation-stop-button')).toBeHidden();
 
 		await page.locator('.conversation-input').fill('follow up');
 		await page.locator('.conversation-input').press('Enter');
-		await expect(page.locator('.conversation-message.user .conversation-message-bubble').last())
-			.toHaveText('follow up');
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last())
-			.toHaveText('Mock response for: follow up');
+		await expect(page.locator('.conversation-message.user .conversation-message-bubble').last()).toHaveText('follow up');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: follow up');
 
 		expect(rendererErrors).toEqual([]);
 	} finally {
@@ -171,7 +168,7 @@ test('stop button ends the running state', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -209,7 +206,7 @@ test('starting multiple conversations keeps a single active conversation page', 
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -350,20 +347,11 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 	}
 });
 
-async function captureAndAssert(
-	page: Page,
-	screenshot: { readonly width: number; readonly height: number; readonly path: string }
-): Promise<void> {
+async function captureAndAssert(page: Page, screenshot: { readonly width: number; readonly height: number; readonly path: string }): Promise<void> {
 	await page.setViewportSize({ width: screenshot.width, height: screenshot.height });
 	await page.waitForSelector('.monaco-workbench.agent-sessions-workbench');
 
-	for (const selector of [
-		'.monaco-workbench.agent-sessions-workbench',
-		'.part.titlebar',
-		'.part.sidebar',
-		'.part.sessionspart',
-		'.sessions-new-session-view'
-	]) {
+	for (const selector of ['.monaco-workbench.agent-sessions-workbench', '.part.titlebar', '.part.sidebar', '.part.sessionspart', '.sessions-new-session-view']) {
 		await expect(page.locator(selector)).toBeVisible();
 	}
 
@@ -389,9 +377,9 @@ async function captureAndAssert(
 			return {
 				width: rect.width,
 				height: rect.height,
-				text: node.textContent?.trim().length ?? 0
+				text: node.textContent?.trim().length ?? 0,
 			};
-		})
+		}),
 	);
 
 	expect(boxes).toHaveLength(2);
@@ -406,50 +394,53 @@ async function captureAndAssert(
 }
 
 async function assertShellLayout(page: Page, width: number, height: number): Promise<void> {
-	const metrics = await page.locator('.monaco-workbench.agent-sessions-workbench').evaluate((root, viewport) => {
-		const workbench = root as HTMLElement;
-		const sidebar = workbench.querySelector<HTMLElement>('.part.sidebar');
-		const stage = workbench.querySelector<HTMLElement>('.part.sessionspart');
-		const titlebar = workbench.querySelector<HTMLElement>('.part.titlebar');
-		if (!sidebar || !stage || !titlebar) {
-			throw new Error('Shell parts were not found');
-		}
+	const metrics = await page.locator('.monaco-workbench.agent-sessions-workbench').evaluate(
+		(root, viewport) => {
+			const workbench = root as HTMLElement;
+			const sidebar = workbench.querySelector<HTMLElement>('.part.sidebar');
+			const stage = workbench.querySelector<HTMLElement>('.part.sessionspart');
+			const titlebar = workbench.querySelector<HTMLElement>('.part.titlebar');
+			if (!sidebar || !stage || !titlebar) {
+				throw new Error('Shell parts were not found');
+			}
 
-		const style = getComputedStyle(workbench);
-		const sidebarRect = sidebar.getBoundingClientRect();
-		const stageRect = stage.getBoundingClientRect();
-		const titlebarRect = titlebar.getBoundingClientRect();
+			const style = getComputedStyle(workbench);
+			const sidebarRect = sidebar.getBoundingClientRect();
+			const stageRect = stage.getBoundingClientRect();
+			const titlebarRect = titlebar.getBoundingClientRect();
 
-		return {
-			viewport,
-			sidebarX: Math.round(sidebarRect.x),
-			sidebarY: Math.round(sidebarRect.y),
-			sidebarWidth: Math.round(sidebarRect.width),
-			sidebarHeight: Math.round(sidebarRect.height),
-			stageX: Math.round(stageRect.x),
-			stageY: Math.round(stageRect.y),
-			stageWidth: Math.round(stageRect.width),
-			stageHeight: Math.round(stageRect.height),
-			titlebarX: Math.round(titlebarRect.x),
-			titlebarY: Math.round(titlebarRect.y),
-			titlebarHeight: Math.round(titlebarRect.height),
-			titlebarZIndex: Number(getComputedStyle(titlebar).zIndex),
-			sidebarWidthToken: style.getPropertyValue('--vscode-agents-size-sidebar-width').trim(),
-			stageMarginToken: style.getPropertyValue('--vscode-agents-size-stage-margin').trim(),
-			stageRadius: getComputedStyle(stage).borderTopLeftRadius,
-			stageBackground: getComputedStyle(stage).backgroundColor,
-			stageBackgroundToken: normalizeColor(style.getPropertyValue('--vscode-agents-color-stage-background').trim())
-		};
+			return {
+				viewport,
+				sidebarX: Math.round(sidebarRect.x),
+				sidebarY: Math.round(sidebarRect.y),
+				sidebarWidth: Math.round(sidebarRect.width),
+				sidebarHeight: Math.round(sidebarRect.height),
+				stageX: Math.round(stageRect.x),
+				stageY: Math.round(stageRect.y),
+				stageWidth: Math.round(stageRect.width),
+				stageHeight: Math.round(stageRect.height),
+				titlebarX: Math.round(titlebarRect.x),
+				titlebarY: Math.round(titlebarRect.y),
+				titlebarHeight: Math.round(titlebarRect.height),
+				titlebarZIndex: Number(getComputedStyle(titlebar).zIndex),
+				sidebarWidthToken: style.getPropertyValue('--vscode-agents-size-sidebar-width').trim(),
+				stageMarginToken: style.getPropertyValue('--vscode-agents-size-stage-margin').trim(),
+				stageRadius: getComputedStyle(stage).borderTopLeftRadius,
+				stageBackground: getComputedStyle(stage).backgroundColor,
+				stageBackgroundToken: normalizeColor(style.getPropertyValue('--vscode-agents-color-stage-background').trim()),
+			};
 
-		function normalizeColor(value: string): string {
-			const probe = document.createElement('span');
-			probe.style.color = value;
-			document.body.appendChild(probe);
-			const color = getComputedStyle(probe).color;
-			probe.remove();
-			return color;
-		}
-	}, { width, height });
+			function normalizeColor(value: string): string {
+				const probe = document.createElement('span');
+				probe.style.color = value;
+				document.body.appendChild(probe);
+				const color = getComputedStyle(probe).color;
+				probe.remove();
+				return color;
+			}
+		},
+		{ width, height },
+	);
 
 	expect(metrics.sidebarWidthToken).toBe('270px');
 	expect(metrics.stageMarginToken).toBe('4px');
@@ -480,18 +471,18 @@ async function assertThemeTokens(page: Page): Promise<void> {
 			sidebarBackground: styles.getPropertyValue('--vscode-agents-color-sidebar-background').trim(),
 			stageBackground: styles.getPropertyValue('--vscode-agents-color-stage-background').trim(),
 			textPrimary: styles.getPropertyValue('--vscode-agents-color-text-primary').trim(),
-				focusBorder: styles.getPropertyValue('--vscode-agents-color-focusBorder').trim(),
-				titlebarHeight: styles.getPropertyValue('--vscode-agents-size-titlebar-height').trim(),
-				sidebarWidth: styles.getPropertyValue('--vscode-agents-size-sidebar-width').trim(),
-				sidebarGutter: styles.getPropertyValue('--vscode-agents-size-sidebar-gutter').trim(),
-				conversationWidth: styles.getPropertyValue('--vscode-agents-size-conversation-width').trim(),
-				composerWidth: styles.getPropertyValue('--vscode-agents-size-composer-width').trim(),
-				composerContextHeight: styles.getPropertyValue('--vscode-agents-size-composer-contextHeight').trim(),
-				composerInputHeight: styles.getPropertyValue('--vscode-agents-size-composer-inputHeight').trim(),
-				composerToolbarHeight: styles.getPropertyValue('--vscode-agents-size-composer-toolbarHeight').trim(),
-				composerContextGap: styles.getPropertyValue('--vscode-agents-space-composer-contextGap').trim(),
-				controlRadius: styles.getPropertyValue('--vscode-agents-radius-control').trim(),
-				legacyPanelBackground: styles.getPropertyValue('--vscode-agentsPanel-background').trim()
+			focusBorder: styles.getPropertyValue('--vscode-agents-color-focusBorder').trim(),
+			titlebarHeight: styles.getPropertyValue('--vscode-agents-size-titlebar-height').trim(),
+			sidebarWidth: styles.getPropertyValue('--vscode-agents-size-sidebar-width').trim(),
+			sidebarGutter: styles.getPropertyValue('--vscode-agents-size-sidebar-gutter').trim(),
+			conversationWidth: styles.getPropertyValue('--vscode-agents-size-conversation-width').trim(),
+			composerWidth: styles.getPropertyValue('--vscode-agents-size-composer-width').trim(),
+			composerContextHeight: styles.getPropertyValue('--vscode-agents-size-composer-contextHeight').trim(),
+			composerInputHeight: styles.getPropertyValue('--vscode-agents-size-composer-inputHeight').trim(),
+			composerToolbarHeight: styles.getPropertyValue('--vscode-agents-size-composer-toolbarHeight').trim(),
+			composerContextGap: styles.getPropertyValue('--vscode-agents-space-composer-contextGap').trim(),
+			controlRadius: styles.getPropertyValue('--vscode-agents-radius-control').trim(),
+			legacyPanelBackground: styles.getPropertyValue('--vscode-agentsPanel-background').trim(),
 		};
 	});
 
@@ -502,17 +493,17 @@ async function assertThemeTokens(page: Page): Promise<void> {
 		stageBackground: '#111111',
 		textPrimary: '#cccccc',
 		focusBorder: '#0078d4',
-			titlebarHeight: '52px',
-			sidebarWidth: '270px',
-			sidebarGutter: '14px',
-			conversationWidth: '950px',
-			composerWidth: '640px',
-			composerContextHeight: '28px',
-			composerInputHeight: '106px',
-			composerToolbarHeight: '42px',
-			composerContextGap: '6px',
-			controlRadius: '5px',
-			legacyPanelBackground: '#252526'
+		titlebarHeight: '52px',
+		sidebarWidth: '270px',
+		sidebarGutter: '14px',
+		conversationWidth: '950px',
+		composerWidth: '640px',
+		composerContextHeight: '28px',
+		composerInputHeight: '106px',
+		composerToolbarHeight: '42px',
+		composerContextGap: '6px',
+		controlRadius: '5px',
+		legacyPanelBackground: '#252526',
 	});
 }
 
@@ -578,7 +569,7 @@ async function assertSidebarHeaderToolbar(page: Page): Promise<void> {
 			textLeft: newRect && firstText ? Math.round(firstText.getBoundingClientRect().left - newRect.left) : 0,
 			keybindingRight: newRect && firstKeybinding ? Math.round(newRect.right - firstKeybinding.getBoundingClientRect().right) : 0,
 			firstIconBorderRadius: firstIconStyle?.borderRadius ?? '',
-			firstIconBorderWidth: firstIconStyle?.borderTopWidth ?? ''
+			firstIconBorderWidth: firstIconStyle?.borderTopWidth ?? '',
 		};
 	});
 
@@ -647,24 +638,27 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 	await expect(secondProject.locator('.sessions-list-row-title')).toHaveText('Ship settings sidebar cleanup');
 	await expect(secondProject.locator('.sessions-project-task-time')).toHaveText('3d');
 
-	const sidebarMetrics = await firstProject.locator('.sessions-list-row').first().evaluate(row => {
-		const title = row.querySelector('.sessions-list-row-title');
-		const time = row.querySelector('.sessions-project-task-time');
-		const status = row.querySelector('.sessions-list-status');
-		const sidebarContent = document.querySelector('.sessions-sidebar-content');
-		const sidebar = row.closest('.sessions-sidebar');
-		const rect = row.getBoundingClientRect();
-		const sidebarRect = sidebar?.getBoundingClientRect();
-		const titleRect = title?.getBoundingClientRect();
-		return {
-			rowHeight: Math.round(rect.height),
-			titleLeftToSidebar: sidebarRect && titleRect ? Math.round(titleRect.left - sidebarRect.left) : 0,
-			titleFontSize: title ? getComputedStyle(title).fontSize : '',
-			timeFontSize: time ? getComputedStyle(time).fontSize : '',
-			statusDisplay: status instanceof HTMLElement ? getComputedStyle(status).display : '',
-			sidebarScrollbarWidth: sidebarContent instanceof HTMLElement ? sidebarContent.offsetWidth - sidebarContent.clientWidth : -1
-		};
-	});
+	const sidebarMetrics = await firstProject
+		.locator('.sessions-list-row')
+		.first()
+		.evaluate(row => {
+			const title = row.querySelector('.sessions-list-row-title');
+			const time = row.querySelector('.sessions-project-task-time');
+			const status = row.querySelector('.sessions-list-status');
+			const sidebarContent = document.querySelector('.sessions-sidebar-content');
+			const sidebar = row.closest('.sessions-sidebar');
+			const rect = row.getBoundingClientRect();
+			const sidebarRect = sidebar?.getBoundingClientRect();
+			const titleRect = title?.getBoundingClientRect();
+			return {
+				rowHeight: Math.round(rect.height),
+				titleLeftToSidebar: sidebarRect && titleRect ? Math.round(titleRect.left - sidebarRect.left) : 0,
+				titleFontSize: title ? getComputedStyle(title).fontSize : '',
+				timeFontSize: time ? getComputedStyle(time).fontSize : '',
+				statusDisplay: status instanceof HTMLElement ? getComputedStyle(status).display : '',
+				sidebarScrollbarWidth: sidebarContent instanceof HTMLElement ? sidebarContent.offsetWidth - sidebarContent.clientWidth : -1,
+			};
+		});
 
 	expect(sidebarMetrics.rowHeight).toBeGreaterThanOrEqual(30);
 	expect(sidebarMetrics.rowHeight).toBeLessThanOrEqual(34);
@@ -698,7 +692,7 @@ async function assertProjectListSpacingAndIconInset(projects: Locator): Promise<
 			projectListGap: getComputedStyle(list).gap,
 			projectGroupGap: Math.round(secondRect.top - firstRect.bottom),
 			projectIconLeft: Math.round(iconRect.left - sidebarRect.left),
-			projectTitleLeft: Math.round(titleRect.left - sidebarRect.left)
+			projectTitleLeft: Math.round(titleRect.left - sidebarRect.left),
 		};
 	});
 
@@ -726,7 +720,6 @@ async function assertCollapsibleSidebarSection(section: Locator, title: string):
 async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<void> {
 	const taskRow = firstProject.locator('.sessions-project-task-row').first();
 	const action = taskRow.locator('.sessions-project-task-action');
-	const pin = taskRow.locator('.sessions-project-task-pin');
 	const time = taskRow.locator('.sessions-project-task-time');
 
 	await expect(taskRow).toBeVisible();
@@ -742,7 +735,7 @@ async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<v
 		return {
 			actionOpacity: action ? getComputedStyle(action).opacity : '',
 			pinOpacity: pin ? getComputedStyle(pin).opacity : '',
-			timeOpacity: time ? getComputedStyle(time).opacity : ''
+			timeOpacity: time ? getComputedStyle(time).opacity : '',
 		};
 	});
 
@@ -762,7 +755,7 @@ async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<v
 			backgroundColor: getComputedStyle(row).backgroundColor,
 			actionOpacity: action ? getComputedStyle(action).opacity : '',
 			pinOpacity: pin ? getComputedStyle(pin).opacity : '',
-			timeOpacity: time ? getComputedStyle(time).opacity : ''
+			timeOpacity: time ? getComputedStyle(time).opacity : '',
 		};
 	});
 
@@ -777,7 +770,7 @@ async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<v
 	await expect.poll(async () => action.locator('.sessions-project-task-tooltip').evaluate(tooltip => getComputedStyle(tooltip).opacity)).toBe('1');
 	const tooltipMetrics = await action.locator('.sessions-project-task-tooltip').evaluate(tooltip => ({
 		opacity: getComputedStyle(tooltip).opacity,
-		visibility: getComputedStyle(tooltip).visibility
+		visibility: getComputedStyle(tooltip).visibility,
 	}));
 	expect(tooltipMetrics.opacity).toBe('1');
 	expect(tooltipMetrics.visibility).toBe('visible');
@@ -827,12 +820,12 @@ async function assertSidebarListTitleAlignment(page: Page): Promise<void> {
 
 		return {
 			titleOffsetToken,
-				pinnedTitleLeft: left('[data-session-group="pinned"] .sessions-project-task-title'),
-				obsidianNameLeft: left('[data-project-id="obsidian"] .sessions-project-name'),
-				obsidianEmptyLeft: left('[data-project-id="obsidian"] .sessions-project-empty'),
-				zcodeNameLeft: left('[data-project-id="zcodeproject"] .sessions-project-name'),
-				zcodeTaskTitleLeft: left('[data-project-id="zcodeproject"] .sessions-project-task-title')
-			};
+			pinnedTitleLeft: left('[data-session-group="pinned"] .sessions-project-task-title'),
+			obsidianNameLeft: left('[data-project-id="obsidian"] .sessions-project-name'),
+			obsidianEmptyLeft: left('[data-project-id="obsidian"] .sessions-project-empty'),
+			zcodeNameLeft: left('[data-project-id="zcodeproject"] .sessions-project-name'),
+			zcodeTaskTitleLeft: left('[data-project-id="zcodeproject"] .sessions-project-task-title'),
+		};
 	});
 
 	expect(metrics.titleOffsetToken).toBe('48px');
@@ -910,7 +903,7 @@ async function assertSettingsDialogThemeTokens(page: Page): Promise<void> {
 			navBorderColor: navStyle.borderRightColor,
 			navBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-divider').trim()),
 			contentBorderColor: contentStyle.borderColor,
-			contentBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-panel-border').trim())
+			contentBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-panel-border').trim()),
 		};
 	});
 
@@ -963,7 +956,7 @@ async function assertTitlebarControls(page: Page): Promise<void> {
 			.map(node => {
 				const rect = node.getBoundingClientRect();
 				return Math.round(rect.y + rect.height / 2);
-			})
+			}),
 	);
 	expect(new Set(centers)).toEqual(new Set([18]));
 }
@@ -1020,7 +1013,7 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 			composerWidthToken: rootStyle?.getPropertyValue('--vscode-agents-size-composer-width').trim() ?? '',
 			contextHeightToken: rootStyle?.getPropertyValue('--vscode-agents-size-composer-contextHeight').trim() ?? '',
 			inputHeightToken: rootStyle?.getPropertyValue('--vscode-agents-size-composer-inputHeight').trim() ?? '',
-			contextGapToken: rootStyle?.getPropertyValue('--vscode-agents-space-composer-contextGap').trim() ?? ''
+			contextGapToken: rootStyle?.getPropertyValue('--vscode-agents-space-composer-contextGap').trim() ?? '',
 		};
 	});
 	expect(headerPosition.state).toBe('running');
@@ -1067,7 +1060,7 @@ async function assertConversationToolbarInteraction(composer: Locator): Promise<
 			'.conversation-model',
 			'.conversation-agent',
 			'.conversation-stop-button',
-			'.conversation-send-button'
+			'.conversation-send-button',
 		] as const;
 		const read = (selector: string) => {
 			const node = element.querySelector<HTMLElement>(selector);
@@ -1083,7 +1076,7 @@ async function assertConversationToolbarInteraction(composer: Locator): Promise<
 				width: Math.round(rect.width),
 				height: Math.round(rect.height),
 				backgroundColor: style.backgroundColor,
-				borderRadius: style.borderRadius
+				borderRadius: style.borderRadius,
 			};
 		};
 
@@ -1091,7 +1084,7 @@ async function assertConversationToolbarInteraction(composer: Locator): Promise<
 			toolbarHeight: Math.round(element.querySelector<HTMLElement>('.conversation-composer-toolbar')?.getBoundingClientRect().height ?? 0),
 			controls: Object.fromEntries(controls.map(selector => [selector, read(selector)])),
 			leftGap: getComputedStyle(element.querySelector<HTMLElement>('.conversation-toolbar-left')!).gap,
-			rightGap: getComputedStyle(element.querySelector<HTMLElement>('.conversation-toolbar-right')!).gap
+			rightGap: getComputedStyle(element.querySelector<HTMLElement>('.conversation-toolbar-right')!).gap,
 		};
 	});
 
@@ -1144,7 +1137,7 @@ async function assertRunningConversationMessageLayout(page: Page): Promise<void>
 			inputRight: Math.round(inputRect.right),
 			workingLabelLeft: Math.round(workingLabelRect.left),
 			thinkingLabelLeft: Math.round(thinkingLabelRect.left),
-			thinkingSpinnerLeft: Math.round(thinkingSpinnerRect.left)
+			thinkingSpinnerLeft: Math.round(thinkingSpinnerRect.left),
 		};
 	});
 
@@ -1186,7 +1179,7 @@ async function assertHistoricalConversationMessageLayout(page: Page, expectedSta
 				bodyLeft: bodyRect ? Math.round(bodyRect.left) : null,
 				bubbleRight: bubbleRect ? Math.round(bubbleRect.right) : null,
 				textLeft: textRect ? Math.round(textRect.left) : null,
-				detailLeft: detailRect ? Math.round(detailRect.left) : null
+				detailLeft: detailRect ? Math.round(detailRect.left) : null,
 			};
 		};
 
@@ -1206,7 +1199,7 @@ async function assertHistoricalConversationMessageLayout(page: Page, expectedSta
 			workingLabelLeft: workingLabel ? Math.round(workingLabel.getBoundingClientRect().left) : null,
 			thinkingSpinnerLeft: thinkingSpinner ? Math.round(thinkingSpinner.getBoundingClientRect().left) : null,
 			thinkingSpinnerCenter: thinkingSpinner ? Math.round(thinkingSpinner.getBoundingClientRect().left + thinkingSpinner.getBoundingClientRect().width / 2) : null,
-			thinkingLabelLeft: thinkingLabel ? Math.round(thinkingLabel.getBoundingClientRect().left) : null
+			thinkingLabelLeft: thinkingLabel ? Math.round(thinkingLabel.getBoundingClientRect().left) : null,
 		};
 	});
 

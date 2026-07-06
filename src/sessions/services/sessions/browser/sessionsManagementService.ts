@@ -88,7 +88,7 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 			this.onDidChangeSessionsEmitter.fire({
 				added: event.added.flatMap(provider => provider.getSessions()),
 				removed: event.removed.flatMap(provider => provider.getSessions()),
-				changed: []
+				changed: [],
 			});
 		}
 	}

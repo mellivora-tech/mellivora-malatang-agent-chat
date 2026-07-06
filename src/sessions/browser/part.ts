@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { size } from '../base/browser/dom.js';
-import { IGridView, LayoutPriority } from '../base/browser/grid.js';
+import type { IGridView, LayoutPriority } from '../base/browser/grid.js';
 import { Disposable } from '../base/common/lifecycle.js';
 
 export abstract class Part extends Disposable implements IGridView {
@@ -15,7 +15,7 @@ export abstract class Part extends Disposable implements IGridView {
 
 	constructor(
 		readonly id: string,
-		className: string
+		className: string,
 	) {
 		super();
 		this.element = document.createElement('div');
@@ -30,11 +30,7 @@ export abstract class Part extends Disposable implements IGridView {
 
 	layout(width: number, height: number, top: number, left: number): void {
 		const margin = getLayoutMargin(this.element);
-		size(
-			this.element,
-			Math.max(0, width - margin.left - margin.right),
-			Math.max(0, height - margin.top - margin.bottom)
-		);
+		size(this.element, Math.max(0, width - margin.left - margin.right), Math.max(0, height - margin.top - margin.bottom));
 		this.element.style.top = `${Math.max(0, top + margin.top)}px`;
 		this.element.style.left = `${Math.max(0, left + margin.left)}px`;
 	}
@@ -48,7 +44,7 @@ function getLayoutMargin(element: HTMLElement): { top: number; right: number; bo
 		top: readPixelCustomProperty(style, '--part-margin-top'),
 		right: readPixelCustomProperty(style, '--part-margin-right'),
 		bottom: readPixelCustomProperty(style, '--part-margin-bottom'),
-		left: readPixelCustomProperty(style, '--part-margin-left')
+		left: readPixelCustomProperty(style, '--part-margin-left'),
 	};
 }
 

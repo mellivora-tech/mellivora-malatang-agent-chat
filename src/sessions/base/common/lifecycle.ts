@@ -10,8 +10,7 @@ export interface IDisposable {
 class FunctionDisposable implements IDisposable {
 	private _isDisposed = false;
 
-	constructor(private readonly fn: () => void) {
-	}
+	constructor(private readonly fn: () => void) {}
 
 	dispose(): void {
 		if (this._isDisposed) {

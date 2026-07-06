@@ -5,7 +5,7 @@
 
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
-import type { IActiveSession, ISession } from '../common/session.js';
+import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService } from '../common/sessionsManagement.js';
 import { VisibleSessions } from './visibleSessions.js';
 import type { ISessionsPartService } from './sessionsPartService.js';
@@ -32,7 +32,7 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	constructor(
 		private readonly managementService: ISessionsManagementService,
-		private readonly sessionsPartService: ISessionsPartService
+		private readonly sessionsPartService: ISessionsPartService,
 	) {
 		super();
 
@@ -40,10 +40,12 @@ export class SessionsService extends Disposable implements ISessionsService {
 		this.visibleSessions = this.visibleSessionsModel.visibleSessions;
 		this.activeSession = this.visibleSessionsModel.activeSession;
 
-		this._register(this.managementService.onDidChangeSessions(() => {
-			this.visibleSessionsModel.setSessions(this.managementService.getSessions());
-			this.syncPart();
-		}));
+		this._register(
+			this.managementService.onDidChangeSessions(() => {
+				this.visibleSessionsModel.setSessions(this.managementService.getSessions());
+				this.syncPart();
+			}),
+		);
 		this._register(this.visibleSessions.subscribe(() => this.syncPart()));
 		this._register(this.activeSession.subscribe(() => this.syncPart()));
 		this.syncPart();

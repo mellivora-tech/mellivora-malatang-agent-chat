@@ -42,16 +42,16 @@ export class Workbench {
 	private readonly titlebarPart = new TitlebarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
-		onToggleSidebar: () => this.toggleSidebar()
+		onToggleSidebar: () => this.toggleSidebar(),
 	});
 	private readonly sidebarPart = new SidebarPart({
 		sessionsService: this.sessionsService,
-		sessionsPartService: this.sessionsPartService
+		sessionsPartService: this.sessionsPartService,
 	});
 	private readonly sessionsPart = new SessionsPart(this.sessionsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
 		sessionsService: this.sessionsService,
-		sessionsPartService: this.sessionsPartService
+		sessionsPartService: this.sessionsPartService,
 	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();
@@ -63,34 +63,29 @@ export class Workbench {
 			sessions: this.sessionsPart,
 			editor: this.editorPart,
 			auxiliaryBar: this.auxiliaryBarPart,
-			panel: this.panelPart
+			panel: this.panelPart,
 		},
 		{
 			sidebar: true,
 			sessions: true,
 			editor: false,
 			auxiliaryBar: true,
-			panel: false
+			panel: false,
 		},
 		{
 			titlebarHeight: TITLEBAR_HEIGHT,
 			sidebarWidth: SIDEBAR_WIDTH,
 			auxiliaryBarWidth: AUXILIARY_WIDTH,
 			editorWidth: CONTENT_MIN_WIDTH,
-			panelHeight: PANEL_HEIGHT
-		}
+			panelHeight: PANEL_HEIGHT,
+		},
 	);
 
 	private resizeListener: IDisposable | undefined;
 	private sidebarVisible = true;
 
 	constructor(private readonly container: HTMLElement) {
-		this.root.classList.add(
-			'monaco-workbench',
-			'agent-sessions-workbench',
-			'shell-gradient-background',
-			`platform-${getPlatform()}`
-		);
+		this.root.classList.add('monaco-workbench', 'agent-sessions-workbench', 'shell-gradient-background', `platform-${getPlatform()}`);
 	}
 
 	startup(): void {
@@ -99,10 +94,7 @@ export class Workbench {
 		this.services.set(ISessionsService, this.sessionsService);
 		this.services.set(ISessionsPartService, this.sessionsPartService);
 		const mockResponseDelayMs = (globalThis as AgentWindowGlobals).agentWindow?.mockResponseDelayMs;
-		registerMockSessionsProvider(
-			this.providersService,
-			mockResponseDelayMs === undefined ? {} : { responseDelayMs: mockResponseDelayMs }
-		);
+		registerMockSessionsProvider(this.providersService, mockResponseDelayMs === undefined ? {} : { responseDelayMs: mockResponseDelayMs });
 
 		this.container.replaceChildren(this.root);
 		applyThemeTokens(this.root);
@@ -124,10 +116,7 @@ export class Workbench {
 	private bindPartServices(): void {
 		this.partSubscriptions.clear();
 		const updateSessionsPart = () => {
-			this.sessionsPart.updateVisibleSessions(
-				this.sessionsPartService.visibleSessions.get(),
-				this.sessionsPartService.activeSession.get()
-			);
+			this.sessionsPart.updateVisibleSessions(this.sessionsPartService.visibleSessions.get(), this.sessionsPartService.activeSession.get());
 		};
 		const updateMode = () => {
 			const mode = this.sessionsPartService.mode.get();
@@ -137,10 +126,7 @@ export class Workbench {
 			updateAuxiliaryVisibility();
 		};
 		const updateAuxiliaryVisibility = () => {
-			this.grid.setPartVisible(
-				'auxiliaryBar',
-				this.sessionsPartService.mode.get() === 'conversation' && this.sessionsPartService.sidePaneVisible.get()
-			);
+			this.grid.setPartVisible('auxiliaryBar', this.sessionsPartService.mode.get() === 'conversation' && this.sessionsPartService.sidePaneVisible.get());
 			this.layout();
 		};
 

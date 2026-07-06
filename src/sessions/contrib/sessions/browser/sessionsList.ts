@@ -75,7 +75,7 @@ export class SessionsList extends Disposable {
 			timeLabel: '2h',
 			openSessionId: 'session-in-progress',
 			isPinned: false,
-			isArchived: false
+			isArchived: false,
 		},
 		{
 			id: 'project-zcode-settings-cleanup',
@@ -86,13 +86,13 @@ export class SessionsList extends Disposable {
 			timeLabel: '3d',
 			openSessionId: 'session-completed',
 			isPinned: false,
-			isArchived: false
-		}
+			isArchived: false,
+		},
 	];
 
 	constructor(
 		private readonly container: HTMLElement,
-		private readonly options: ISessionsListOptions = {}
+		private readonly options: ISessionsListOptions = {},
 	) {
 		super();
 		this.bind();
@@ -146,10 +146,12 @@ export class SessionsList extends Disposable {
 
 		const actions = document.createElement('div');
 		actions.className = 'sessions-sidebar-header-actions';
-		const toolbar = this.rowSubscriptions.add(new ToolBar(actions, {
-			ariaLabel: 'Sessions actions',
-			extraClassName: 'sessions-sidebar-toolbar'
-		}));
+		const toolbar = this.rowSubscriptions.add(
+			new ToolBar(actions, {
+				ariaLabel: 'Sessions actions',
+				extraClassName: 'sessions-sidebar-toolbar',
+			}),
+		);
 		toolbar.setActions(this.createHeaderActions());
 		header.appendChild(actions);
 
@@ -165,7 +167,7 @@ export class SessionsList extends Disposable {
 				class: 'sessions-sidebar-menu-action',
 				keybinding: '⌘ N',
 				tooltip: 'New task',
-				run: () => this.options.sessionsPartService?.showNewSession()
+				run: () => this.options.sessionsPartService?.showNewSession(),
 			},
 			{
 				id: 'sessions.sidebar.search',
@@ -173,15 +175,15 @@ export class SessionsList extends Disposable {
 				icon: 'codicon-search',
 				class: 'sessions-sidebar-menu-action',
 				keybinding: '⌘ K',
-				run: () => {}
+				run: () => {},
 			},
 			{
 				id: 'sessions.sidebar.skills',
 				label: 'Skills',
 				icon: 'codicon-wand',
 				class: 'sessions-sidebar-menu-action',
-				run: () => {}
-			}
+				run: () => {},
+			},
 		];
 	}
 
@@ -218,12 +220,10 @@ export class SessionsList extends Disposable {
 			isPinned: task.isPinned,
 			onClick: openSession(task.openSessionId),
 			onPin: () => this.togglePinnedTask(task.id),
-			onArchive: () => this.archiveTask(task.id)
+			onArchive: () => this.archiveTask(task.id),
 		});
 
-		const pinned = activeTasks
-			.filter(task => task.isPinned)
-			.map(task => toTaskRow(task));
+		const pinned = activeTasks.filter(task => task.isPinned).map(task => toTaskRow(task));
 
 		const startedProjectRows = new Map<string, ISessionListRow[]>();
 		for (const session of sessions) {
@@ -245,8 +245,8 @@ export class SessionsList extends Disposable {
 					updatedAt: session.updatedAt.get(),
 					meta: { icon: 'codicon-folder', timeLabel: 'now' },
 					isActive: session.sessionId === activeSessionId,
-					onClick: openSession(session.sessionId)
-				}
+					onClick: openSession(session.sessionId),
+				},
 			]);
 		}
 
@@ -255,7 +255,7 @@ export class SessionsList extends Disposable {
 			name: workspaceLabel,
 			count: rows.length,
 			expanded: true,
-			rows
+			rows,
 		}));
 
 		const projects: readonly ISidebarProjectGroup[] = [
@@ -265,19 +265,15 @@ export class SessionsList extends Disposable {
 				name: 'Obsidian',
 				count: activeTasks.filter(task => task.projectId === 'obsidian' && !task.isPinned).length,
 				expanded: true,
-				rows: activeTasks
-					.filter(task => task.projectId === 'obsidian' && !task.isPinned)
-					.map(task => toTaskRow(task))
+				rows: activeTasks.filter(task => task.projectId === 'obsidian' && !task.isPinned).map(task => toTaskRow(task)),
 			},
 			{
 				id: 'zcodeproject',
 				name: 'ZCodeProject',
 				count: activeTasks.filter(task => task.projectId === 'zcodeproject' && !task.isPinned).length,
 				expanded: true,
-				rows: activeTasks
-					.filter(task => task.projectId === 'zcodeproject' && !task.isPinned)
-					.map(task => toTaskRow(task))
-			}
+				rows: activeTasks.filter(task => task.projectId === 'zcodeproject' && !task.isPinned).map(task => toTaskRow(task)),
+			},
 		];
 
 		return { pinned, projects };
@@ -417,7 +413,7 @@ export class SessionsList extends Disposable {
 			{ id: 'hooks', icon: 'codicon-zap', label: 'Hooks' },
 			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', count: '4' },
 			{ id: 'plugins', icon: 'codicon-plug', label: 'Plugins' },
-			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', count: '12' }
+			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', count: '12' },
 		];
 
 		const section = document.createElement('section');
@@ -470,17 +466,33 @@ export class SessionsList extends Disposable {
 			: sessions.filter(session => session.workspace.get()?.label === 'mellivora-malatang-agent-chat');
 		const doneSessions = sessions.filter(session => session.isArchived.get() || session.status.get() === SessionStatus.Completed);
 
-		this.renderSection(container, 'Sessions', openSessions.map(session => this.toSessionRow(session, activeId)));
-		this.renderSection(container, 'Pinned', pinnedSessions.map(session => this.toSessionRow(session, activeId)));
-		this.renderSection(container, 'agent-chat', workspaceSessions.map(session => this.toSessionRow(session, activeId, activeWorkspace)));
-		this.renderSection(container, 'Done', doneSessions.map(session => this.toSessionRow(session, activeId)));
+		this.renderSection(
+			container,
+			'Sessions',
+			openSessions.map(session => this.toSessionRow(session, activeId)),
+		);
+		this.renderSection(
+			container,
+			'Pinned',
+			pinnedSessions.map(session => this.toSessionRow(session, activeId)),
+		);
+		this.renderSection(
+			container,
+			'agent-chat',
+			workspaceSessions.map(session => this.toSessionRow(session, activeId, activeWorkspace)),
+		);
+		this.renderSection(
+			container,
+			'Done',
+			doneSessions.map(session => this.toSessionRow(session, activeId)),
+		);
 	}
 
 	private renderFallback(container: HTMLElement): void {
 		const now = new Date();
 		const workspace: ISessionWorkspace = {
 			label: 'mellivora-malatang-agent-chat',
-			branchName: 'codex/agents-window-rebuild'
+			branchName: 'codex/agents-window-rebuild',
 		};
 
 		const rows: readonly ISessionListRow[] = [
@@ -493,13 +505,17 @@ export class SessionsList extends Disposable {
 				updatedAt: now,
 				description: 'Mock provider will appear here',
 				changesSummary: { files: 4, additions: 96, deletions: 18 },
-				isActive: true
-			}
+				isActive: true,
+			},
 		];
 
 		this.renderSection(container, 'Sessions', rows);
 		this.renderSection(container, 'Pinned', rows);
-		this.renderSection(container, 'agent-chat', rows.map(row => omitWorkspace(row)));
+		this.renderSection(
+			container,
+			'agent-chat',
+			rows.map(row => omitWorkspace(row)),
+		);
 		this.renderSection(container, 'Done', [
 			{
 				id: 'fallback-done',
@@ -508,8 +524,8 @@ export class SessionsList extends Disposable {
 				title: 'Ship settings sidebar cleanup',
 				updatedAt: now,
 				description: 'Completed',
-				changesSummary: { files: 8, additions: 142, deletions: 37 }
-			}
+				changesSummary: { files: 8, additions: 142, deletions: 37 },
+			},
 		]);
 	}
 
@@ -777,7 +793,7 @@ export class SessionsList extends Disposable {
 		for (const action of [
 			{ icon: 'codicon-open-preview', label: 'Open' },
 			{ icon: 'codicon-screen-full', label: 'Fullscreen' },
-			{ icon: 'codicon-close', label: 'Close', close: true }
+			{ icon: 'codicon-close', label: 'Close', close: true },
 		]) {
 			const button = document.createElement('button');
 			button.className = action.close ? 'sessions-settings-close' : 'sessions-settings-window-action';
@@ -819,7 +835,7 @@ export class SessionsList extends Disposable {
 			{ id: 'hooks', icon: 'codicon-zap', label: 'Hooks' },
 			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', count: '4', active: true },
 			{ id: 'plugins', icon: 'codicon-plug', label: 'Plugins' },
-			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', count: '12' }
+			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', count: '12' },
 		];
 
 		for (const row of rows) {
@@ -897,7 +913,7 @@ export class SessionsList extends Disposable {
 		for (const group of [
 			{ id: 'workspace', title: 'Workspace', count: '2', rows: ['component-explorer', 'vscode-automation-mcp'] },
 			{ id: 'user', title: 'User', count: '1', rows: ['Docs by LangChain'] },
-			{ id: 'builtin', title: 'Built-In', count: '1', rows: ['GitHub'] }
+			{ id: 'builtin', title: 'Built-In', count: '1', rows: ['GitHub'] },
 		]) {
 			const section = document.createElement('section');
 			section.className = 'sessions-settings-group';
@@ -939,7 +955,7 @@ export class SessionsList extends Disposable {
 			isUnread: !session.isRead.get(),
 			onClick: () => {
 				this.options.sessionsService?.openSession(session.sessionId);
-			}
+			},
 		};
 	}
 
@@ -950,22 +966,22 @@ export class SessionsList extends Disposable {
 				continue;
 			}
 			seenSessions.add(session.sessionId);
-				for (const observable of [
-					session.workspace,
-					session.title,
-					session.updatedAt,
-					session.status,
-					session.description,
-					session.changesSummary,
-					session.isArchived,
-					session.isRead,
-					session.messages,
-					session.interactivity
-				]) {
-					this.rowSubscriptions.add(observable.subscribe(() => this.render()));
-				}
+			for (const observable of [
+				session.workspace,
+				session.title,
+				session.updatedAt,
+				session.status,
+				session.description,
+				session.changesSummary,
+				session.isArchived,
+				session.isRead,
+				session.messages,
+				session.interactivity,
+			]) {
+				this.rowSubscriptions.add(observable.subscribe(() => this.render()));
 			}
 		}
+	}
 
 	private getSessions(): readonly SessionLike[] {
 		const serviceSessions = this.options.sessionsService?.getSessions();
@@ -1050,7 +1066,7 @@ function omitWorkspace(row: ISessionListRow): ISessionListRow {
 		...(row.meta ? { meta: row.meta } : {}),
 		...(row.isActive ? { isActive: true } : {}),
 		...(row.isUnread ? { isUnread: true } : {}),
-		...(row.onClick ? { onClick: row.onClick } : {})
+		...(row.onClick ? { onClick: row.onClick } : {}),
 	};
 }
 

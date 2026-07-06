@@ -27,7 +27,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		isArchived: observableValue(false),
 		isRead: observableValue(true),
 		messages: observableValue<readonly ISessionMessage[]>([]),
-		interactivity: observableValue(SessionInteractivity.Full)
+		interactivity: observableValue(SessionInteractivity.Full),
 	};
 }
 
@@ -40,7 +40,7 @@ class TestProvider implements ISessionsProvider {
 
 	constructor(
 		readonly id: string,
-		private readonly sessions: readonly ISession[]
+		private readonly sessions: readonly ISession[],
 	) {
 		this.onDidChangeSessions = this.emitter.event;
 		this.label = id;
@@ -89,7 +89,10 @@ test('registered provider sessions are aggregated', () => {
 	providers.registerProvider(first);
 	providers.registerProvider(second);
 
-	assert.deepEqual(management.getSessions().map(session => session.sessionId), ['session-a', 'session-b']);
+	assert.deepEqual(
+		management.getSessions().map(session => session.sessionId),
+		['session-a', 'session-b'],
+	);
 });
 
 test('sendMessage routes to the provider that owns the session', async () => {
@@ -165,8 +168,14 @@ test('sessions service starts a session and marks it active', async () => {
 	assert.equal(typeof sessionsPartService.showConversation, 'function');
 	assert.equal(session.title.get(), 'hello');
 	assert.equal(sessionsService.activeSession.get()?.sessionId, session.sessionId);
-	assert.deepEqual(sessionsService.visibleSessions.get().map(candidate => candidate?.sessionId), [session.sessionId]);
+	assert.deepEqual(
+		sessionsService.visibleSessions.get().map(candidate => candidate?.sessionId),
+		[session.sessionId],
+	);
 	assert.equal(sessionsPartService.mode.get(), 'conversation');
-	assert.equal(provider.getSessions().some(candidate => candidate.sessionId === session.sessionId), true);
+	assert.equal(
+		provider.getSessions().some(candidate => candidate.sessionId === session.sessionId),
+		true,
+	);
 	await provider.whenIdle();
 });

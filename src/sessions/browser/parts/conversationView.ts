@@ -180,7 +180,7 @@ export class ConversationView extends Disposable {
 		const messages = this.session?.messages.get() ?? [];
 		if (messages.length === 0) {
 			const empty = append(this.transcript, document.createElement('div'));
-				empty.className = 'conversation-empty';
+			empty.className = 'conversation-empty';
 			empty.textContent = this.session ? 'No messages yet' : 'No session selected';
 		} else {
 			for (const message of messages) {
@@ -236,20 +236,13 @@ export class ConversationView extends Disposable {
 		this.sendButton.hidden = isRunning;
 		this.stopButton.hidden = !isRunning;
 		this.reconnectStatus.hidden = !isRunning;
-		this.input.placeholder = isRunning
-			? 'Keep typing to queue follow-up changes'
-			: interactivity === SessionInteractivity.ReadOnly ? 'Session is read-only' : 'Ask Codex';
+		this.input.placeholder = isRunning ? 'Keep typing to queue follow-up changes' : interactivity === SessionInteractivity.ReadOnly ? 'Session is read-only' : 'Ask Codex';
 	}
 
 	private async send(): Promise<void> {
 		const query = this.input.value.trim();
 		const session = this.session;
-		if (
-			!query
-			|| !session
-			|| this.isSending
-			|| session.interactivity.get() !== SessionInteractivity.Full
-		) {
+		if (!query || !session || this.isSending || session.interactivity.get() !== SessionInteractivity.Full) {
 			return;
 		}
 

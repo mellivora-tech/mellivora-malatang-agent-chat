@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter } from './event.js';
-import { DisposableStore, IDisposable, toDisposable } from './lifecycle.js';
+import type { IDisposable } from './lifecycle.js';
+import { DisposableStore, toDisposable } from './lifecycle.js';
 
 export interface IObservable<T> {
 	get(): T;
@@ -49,7 +50,7 @@ class DerivedObservable<T> implements IObservable<T>, IDisposable {
 
 	constructor(
 		private readonly read: () => T,
-		private readonly dependencies: readonly IObservable<unknown>[]
+		private readonly dependencies: readonly IObservable<unknown>[],
 	) {
 		this.currentValue = this.read();
 	}
@@ -85,15 +86,17 @@ class DerivedObservable<T> implements IObservable<T>, IDisposable {
 
 	private bindDependencies(): void {
 		for (const dependency of this.dependencies) {
-			this.subscriptions.add(dependency.subscribe(() => {
-				const nextValue = this.read();
-				if (Object.is(this.currentValue, nextValue)) {
-					return;
-				}
+			this.subscriptions.add(
+				dependency.subscribe(() => {
+					const nextValue = this.read();
+					if (Object.is(this.currentValue, nextValue)) {
+						return;
+					}
 
-				this.currentValue = nextValue;
-				this.emitter.fire(nextValue);
-			}));
+					this.currentValue = nextValue;
+					this.emitter.fire(nextValue);
+				}),
+			);
 		}
 	}
 }

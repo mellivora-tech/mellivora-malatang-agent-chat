@@ -19,7 +19,7 @@ function createHost(platform: NodeJS.Platform, windowCount: number) {
 		},
 		quit: () => {
 			quitCalls += 1;
-		}
+		},
 	};
 	return { host, quitCalls: () => quitCalls, createCalls: () => createCalls };
 }

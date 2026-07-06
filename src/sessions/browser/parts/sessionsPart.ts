@@ -27,9 +27,11 @@ export class SessionsPart extends Part {
 
 	constructor(private readonly sessionsService?: ISessionsService) {
 		super('workbench.parts.sessions', 'sessionspart');
-		this.newSessionView = this._register(new NewSessionView({
-			onStartSession: query => this.sessionsService?.startSession(query) ?? Promise.resolve()
-		}));
+		this.newSessionView = this._register(
+			new NewSessionView({
+				onStartSession: query => this.sessionsService?.startSession(query) ?? Promise.resolve(),
+			}),
+		);
 		this.sessionView = this._register(new SessionView(this.sessionsService));
 	}
 

@@ -31,7 +31,7 @@ function createFakeView(minimumWidth: number, minimumHeight: number, priority: L
 		priority,
 		layout: (width, height, top, left) => {
 			calls.push({ width, height, top, left });
-		}
+		},
 	};
 	return { view, calls, element };
 }
@@ -50,10 +50,10 @@ function createGrid() {
 			sessions: sessions.view,
 			editor: editor.view,
 			auxiliaryBar: auxiliaryBar.view,
-			panel: panel.view
+			panel: panel.view,
 		},
 		{ sidebar: true, sessions: true, editor: false, auxiliaryBar: true, panel: false },
-		{ titlebarHeight: 52, sidebarWidth: 270, auxiliaryBarWidth: 340, editorWidth: 360, panelHeight: 300 }
+		{ titlebarHeight: 52, sidebarWidth: 270, auxiliaryBarWidth: 340, editorWidth: 360, panelHeight: 300 },
 	);
 	return { grid, titlebar, sidebar, sessions, editor, auxiliaryBar, panel };
 }

@@ -39,8 +39,7 @@ export class ServiceCollection {
 }
 
 export class InstantiationService {
-	constructor(private readonly services: ServiceCollection) {
-	}
+	constructor(private readonly services: ServiceCollection) {}
 
 	get<T>(id: ServiceIdentifier<T>): T {
 		return this.services.get(id);

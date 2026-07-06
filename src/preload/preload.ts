@@ -9,5 +9,5 @@ const mockResponseDelayMs = Number.parseInt(process.env['AGENT_CHAT_MOCK_DELAY_M
 
 contextBridge.exposeInMainWorld('agentWindow', {
 	platform: process.platform,
-	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {})
+	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });

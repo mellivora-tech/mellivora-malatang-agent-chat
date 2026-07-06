@@ -5,7 +5,7 @@
 
 import { registerColor, registerTheme } from '../platform/theme/theme.js';
 
-const semanticColorTokenIds = [
+export const semanticColorTokenIds = [
 	'agents.color.background',
 	'agents.color.gradient.tint',
 	'agents.color.sidebar.background',
@@ -46,10 +46,10 @@ const semanticColorTokenIds = [
 	'agents.color.scrollbar.thumb',
 	'agents.color.scrollbar.thumbHover',
 	'agents.color.divider',
-	'agents.color.modal.background'
+	'agents.color.modal.background',
 ] as const;
 
-type SemanticColorTokenId = typeof semanticColorTokenIds[number];
+type SemanticColorTokenId = (typeof semanticColorTokenIds)[number];
 type SemanticColorMap = Record<SemanticColorTokenId, string>;
 
 type LegacyColorTokenId =
@@ -78,7 +78,7 @@ const legacyAliases: Record<LegacyColorTokenId, SemanticColorTokenId> = {
 	'agentsBadge.background': 'agents.color.badge.background',
 	'agentsBadge.foreground': 'agents.color.badge.foreground',
 	'activeSessionView.background': 'agents.color.activeSession.background',
-	'inactiveSessionView.background': 'agents.color.inactiveSession.background'
+	'inactiveSessionView.background': 'agents.color.inactiveSession.background',
 };
 
 const darkColors: SemanticColorMap = {
@@ -122,7 +122,7 @@ const darkColors: SemanticColorMap = {
 	'agents.color.scrollbar.thumb': 'rgba(204, 204, 204, 0.28)',
 	'agents.color.scrollbar.thumbHover': 'rgba(204, 204, 204, 0.42)',
 	'agents.color.divider': 'rgba(204, 204, 204, 0.1)',
-	'agents.color.modal.background': '#202020'
+	'agents.color.modal.background': '#202020',
 };
 
 const lightColors: SemanticColorMap = {
@@ -166,7 +166,7 @@ const lightColors: SemanticColorMap = {
 	'agents.color.scrollbar.thumb': 'rgba(31, 35, 40, 0.28)',
 	'agents.color.scrollbar.thumbHover': 'rgba(31, 35, 40, 0.42)',
 	'agents.color.divider': 'rgba(31, 35, 40, 0.1)',
-	'agents.color.modal.background': '#ffffff'
+	'agents.color.modal.background': '#ffffff',
 };
 
 const highContrastColors: SemanticColorMap = {
@@ -210,7 +210,7 @@ const highContrastColors: SemanticColorMap = {
 	'agents.color.scrollbar.thumb': '#6fc3df',
 	'agents.color.scrollbar.thumbHover': '#f38518',
 	'agents.color.divider': '#6fc3df',
-	'agents.color.modal.background': '#000000'
+	'agents.color.modal.background': '#000000',
 };
 
 const darkThemeValues = withLegacyAliases(darkColors);
@@ -265,6 +265,6 @@ function withLegacyAliases(colors: SemanticColorMap): Readonly<Record<SemanticCo
 		'agentsBadge.background': colors[legacyAliases['agentsBadge.background']],
 		'agentsBadge.foreground': colors[legacyAliases['agentsBadge.foreground']],
 		'activeSessionView.background': colors[legacyAliases['activeSessionView.background']],
-		'inactiveSessionView.background': colors[legacyAliases['inactiveSessionView.background']]
+		'inactiveSessionView.background': colors[legacyAliases['inactiveSessionView.background']],
 	};
 }

@@ -18,7 +18,7 @@ export class ChangesView extends Disposable {
 
 	constructor(
 		private readonly container: HTMLElement,
-		private readonly options: IChangesViewOptions = {}
+		private readonly options: IChangesViewOptions = {},
 	) {
 		super();
 		this.bind();
@@ -75,7 +75,7 @@ export class ChangesView extends Disposable {
 		for (const item of [
 			{ label: 'Files', value: `${summary.files}`, className: 'files' },
 			{ label: 'Additions', value: `+${summary.additions}`, className: 'additions' },
-			{ label: 'Deletions', value: `-${summary.deletions}`, className: 'deletions' }
+			{ label: 'Deletions', value: `-${summary.deletions}`, className: 'deletions' },
 		]) {
 			const stat = document.createElement('div');
 			stat.className = `changes-summary-stat ${item.className}`;
@@ -102,7 +102,7 @@ export class ChangesView extends Disposable {
 			`src/sessions/browser/parts/titlebarPart.ts`,
 			`src/sessions/browser/parts/sidebarPart.ts`,
 			`src/sessions/browser/parts/auxiliaryBarPart.ts`,
-			`${workspace}/package.json`
+			`${workspace}/package.json`,
 		].slice(0, Math.max(1, Math.min(summary.files, 4)));
 
 		for (const [index, file] of files.entries()) {

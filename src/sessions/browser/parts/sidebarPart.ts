@@ -25,9 +25,11 @@ export class SidebarPart extends Part {
 
 	protected render(container: HTMLElement): void {
 		container.textContent = '';
-		this._register(new SessionsList(container, {
-			...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
-			...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {})
-		}));
+		this._register(
+			new SessionsList(container, {
+				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
+			}),
+		);
 	}
 }

@@ -10,13 +10,13 @@ export const enum SessionStatus {
 	InProgress = 1,
 	NeedsInput = 2,
 	Completed = 3,
-	Error = 4
+	Error = 4,
 }
 
 export const enum SessionInteractivity {
 	Full = 'full',
 	ReadOnly = 'read-only',
-	Hidden = 'hidden'
+	Hidden = 'hidden',
 }
 
 export interface ISessionWorkspace {

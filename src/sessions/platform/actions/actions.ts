@@ -15,8 +15,7 @@ export class MenuId {
 	static readonly ConversationContextTitle = new MenuId('ConversationContextTitle');
 	static readonly AuxiliaryBarTitle = new MenuId('AuxiliaryBarTitle');
 
-	constructor(readonly id: string) {
-	}
+	constructor(readonly id: string) {}
 }
 
 const menuActions = new Map<string, IAction[]>();

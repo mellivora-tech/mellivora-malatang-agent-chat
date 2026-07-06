@@ -133,7 +133,8 @@
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: auto;
-	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2 + var(--vscode-agents-space-18))) var(--vscode-agents-space-18);
+	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2 + var(--vscode-agents-space-18)))
+		var(--vscode-agents-space-18);
 	box-sizing: border-box;
 }
 
@@ -227,7 +228,7 @@
 	border-radius: 6px;
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 5%, transparent);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 72%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
@@ -271,7 +272,9 @@
 
 .conversation-input-wrap {
 	display: grid;
-	grid-template-rows: minmax(calc(var(--vscode-agents-size-composer-inputHeight) - var(--vscode-agents-size-composer-toolbarHeight) - (var(--vscode-agents-space-1) * 2)), 1fr) var(--vscode-agents-size-composer-toolbarHeight);
+	grid-template-rows: minmax(calc(var(--vscode-agents-size-composer-inputHeight) - var(--vscode-agents-size-composer-toolbarHeight) - (var(--vscode-agents-space-1) * 2)), 1fr) var(
+			--vscode-agents-size-composer-toolbarHeight
+		);
 	max-width: var(--vscode-agents-size-composer-width);
 	min-height: var(--vscode-agents-size-composer-inputHeight);
 	margin: 0 auto;

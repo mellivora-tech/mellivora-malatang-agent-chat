@@ -48,11 +48,14 @@ export function setDefaultTheme(id: ThemeId): void {
 }
 
 export function getTheme(id: string | undefined = defaultThemeId): IThemeDefinition {
-	return themes.get(id) ?? themes.get(defaultThemeId) ?? {
-		id: 'dark',
-		label: 'Dark',
-		values: {}
-	};
+	return (
+		themes.get(id) ??
+		themes.get(defaultThemeId) ?? {
+			id: 'dark',
+			label: 'Dark',
+			values: {},
+		}
+	);
 }
 
 export function resolveThemeTokenValue(id: string, themeId: string | undefined = defaultThemeId): string | undefined {

@@ -68,7 +68,7 @@ function createSession(options: {
 		isArchived: observableValue(options.isArchived ?? false),
 		isRead: observableValue(options.isRead ?? true),
 		messages: observableValue(options.messages),
-		interactivity: observableValue(options.interactivity)
+		interactivity: observableValue(options.interactivity),
 	};
 }
 
@@ -90,19 +90,19 @@ export class MockSessionsProvider implements ISessionsProvider {
 			workspace: {
 				label: 'mellivora-malatang-agent-chat',
 				description: '~/workspace/code/learning-projects',
-				branchName: 'codex/agents-window-rebuild'
+				branchName: 'codex/agents-window-rebuild',
 			},
 			messages: [
 				{ id: 'main-user-1', role: 'user', text: 'Rebuild the agents window shell.' },
 				{ id: 'main-assistant-1', role: 'assistant', text: 'I have the layout in place and I am wiring the mock session domain now.' },
-				{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Workbench services, mock provider, and conversation UI are wired.' }
+				{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Workbench services, mock provider, and conversation UI are wired.' },
 			],
 			interactivity: SessionInteractivity.Full,
 			changesSummary: {
 				files: 5,
 				additions: 218,
-				deletions: 46
-			}
+				deletions: 46,
+			},
 		}),
 		createSession({
 			sessionId: 'session-completed',
@@ -114,19 +114,19 @@ export class MockSessionsProvider implements ISessionsProvider {
 			workspace: {
 				label: 'desktop-settings',
 				description: '~/workspace/code/internal',
-				branchName: 'codex/settings-cleanup'
+				branchName: 'codex/settings-cleanup',
 			},
 			messages: [
 				{ id: 'completed-user-1', role: 'user', text: 'Wrap up the settings cleanup.' },
 				{ id: 'completed-assistant-1', role: 'assistant', text: 'Done. The final state is stable and the diff is ready.' },
-				{ id: 'completed-tool-1', role: 'tool', text: 'npm test', detail: 'All tests passed.' }
+				{ id: 'completed-tool-1', role: 'tool', text: 'npm test', detail: 'All tests passed.' },
 			],
 			interactivity: SessionInteractivity.ReadOnly,
 			changesSummary: {
 				files: 8,
 				additions: 142,
-				deletions: 37
-			}
+				deletions: 37,
+			},
 		}),
 		createSession({
 			sessionId: 'session-needs-input',
@@ -138,14 +138,14 @@ export class MockSessionsProvider implements ISessionsProvider {
 			workspace: {
 				label: 'new-monorepo',
 				description: '~/workspace/sandboxes',
-				branchName: 'codex/workspace-picker'
+				branchName: 'codex/workspace-picker',
 			},
 			messages: [
 				{ id: 'input-user-1', role: 'user', text: 'Continue once the repo target is clear.' },
 				{ id: 'input-assistant-1', role: 'assistant', text: 'I can keep going as soon as you choose which workspace to attach.' },
-				{ id: 'input-tool-1', role: 'tool', text: 'workspace scan', detail: 'Found three matching folders.' }
+				{ id: 'input-tool-1', role: 'tool', text: 'workspace scan', detail: 'Found three matching folders.' },
 			],
-			interactivity: SessionInteractivity.Full
+			interactivity: SessionInteractivity.Full,
 		}),
 		createSession({
 			sessionId: 'session-archived',
@@ -157,16 +157,16 @@ export class MockSessionsProvider implements ISessionsProvider {
 			workspace: {
 				label: 'release-train',
 				description: '~/workspace/code/releases',
-				branchName: 'release/july'
+				branchName: 'release/july',
 			},
 			messages: [
 				{ id: 'archived-user-1', role: 'user', text: 'Preserve the rollout notes.' },
 				{ id: 'archived-assistant-1', role: 'assistant', text: 'Archived with the merge summary and follow-up links.' },
-				{ id: 'archived-tool-1', role: 'tool', text: 'git merge', detail: 'Merged into main.' }
+				{ id: 'archived-tool-1', role: 'tool', text: 'git merge', detail: 'Merged into main.' },
 			],
 			interactivity: SessionInteractivity.ReadOnly,
-			isArchived: true
-		})
+			isArchived: true,
+		}),
 	];
 
 	private readonly responseDelayMs: number;
@@ -185,7 +185,11 @@ export class MockSessionsProvider implements ISessionsProvider {
 
 	async startSession(query: string): Promise<ISession> {
 		const timestamp = new Date();
-		const idBase = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
+		const idBase =
+			query
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/^-|-$/g, '') || 'untitled';
 		this.sequence += 1;
 		const session = createSession({
 			sessionId: `session-started-${idBase}-${this.sequence}`,
@@ -197,16 +201,16 @@ export class MockSessionsProvider implements ISessionsProvider {
 			workspace: {
 				label: 'mellivora-malatang',
 				description: '~/workspace/code/learning-projects',
-				branchName: 'codex/agents-window-rebuild'
+				branchName: 'codex/agents-window-rebuild',
 			},
 			messages: [{ id: `started-user-${this.sequence}`, role: 'user', text: query }],
 			interactivity: SessionInteractivity.Full,
 			changesSummary: {
 				files: 5,
 				additions: 3431,
-				deletions: 815
+				deletions: 815,
 			},
-			isRead: false
+			isRead: false,
 		});
 
 		this.sessions.unshift(session);
@@ -218,10 +222,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 	async sendMessage(sessionId: string, query: string): Promise<ISession> {
 		const session = this.getMutableSession(sessionId);
 		this.sequence += 1;
-		session.messages.set([
-			...session.messages.get(),
-			{ id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query }
-		]);
+		session.messages.set([...session.messages.get(), { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query }]);
 		session.status.set(SessionStatus.InProgress);
 		session.updatedAt.set(new Date());
 		session.isRead.set(false);
@@ -266,10 +267,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 		const timer = setTimeout(() => {
 			this.pendingReplies.delete(session.sessionId);
 			this.sequence += 1;
-			session.messages.set([
-				...session.messages.get(),
-				{ id: `${session.sessionId}-assistant-${this.sequence}`, role: 'assistant', text: `Mock response for: ${query}` }
-			]);
+			session.messages.set([...session.messages.get(), { id: `${session.sessionId}-assistant-${this.sequence}`, role: 'assistant', text: `Mock response for: ${query}` }]);
 			session.status.set(SessionStatus.NeedsInput);
 			session.updatedAt.set(new Date());
 			session.isRead.set(false);
@@ -291,10 +289,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 	}
 }
 
-export function registerMockSessionsProvider(
-	providersService: ISessionsProvidersService,
-	options: IMockSessionsProviderOptions = {}
-): MockSessionsProvider {
+export function registerMockSessionsProvider(providersService: ISessionsProvidersService, options: IMockSessionsProviderOptions = {}): MockSessionsProvider {
 	const provider = new MockSessionsProvider(options);
 	providersService.registerProvider(provider);
 	return provider;

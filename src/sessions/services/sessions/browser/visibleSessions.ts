@@ -14,21 +14,51 @@ class ActiveSession implements IActiveSession {
 		this.isCreated = derived(() => this.session.status.get() !== SessionStatus.Untitled, [this.session.status]);
 	}
 
-	get sessionId() { return this.session.sessionId; }
-	get providerId() { return this.session.providerId; }
-	get sessionType() { return this.session.sessionType; }
-	get icon() { return this.session.icon; }
-	get createdAt() { return this.session.createdAt; }
-	get workspace() { return this.session.workspace; }
-	get title() { return this.session.title; }
-	get updatedAt() { return this.session.updatedAt; }
-	get status() { return this.session.status; }
-	get description() { return this.session.description; }
-	get changesSummary() { return this.session.changesSummary; }
-	get isArchived() { return this.session.isArchived; }
-	get isRead() { return this.session.isRead; }
-	get messages() { return this.session.messages; }
-	get interactivity() { return this.session.interactivity; }
+	get sessionId() {
+		return this.session.sessionId;
+	}
+	get providerId() {
+		return this.session.providerId;
+	}
+	get sessionType() {
+		return this.session.sessionType;
+	}
+	get icon() {
+		return this.session.icon;
+	}
+	get createdAt() {
+		return this.session.createdAt;
+	}
+	get workspace() {
+		return this.session.workspace;
+	}
+	get title() {
+		return this.session.title;
+	}
+	get updatedAt() {
+		return this.session.updatedAt;
+	}
+	get status() {
+		return this.session.status;
+	}
+	get description() {
+		return this.session.description;
+	}
+	get changesSummary() {
+		return this.session.changesSummary;
+	}
+	get isArchived() {
+		return this.session.isArchived;
+	}
+	get isRead() {
+		return this.session.isRead;
+	}
+	get messages() {
+		return this.session.messages;
+	}
+	get interactivity() {
+		return this.session.interactivity;
+	}
 }
 
 export class VisibleSessions {
@@ -51,7 +81,8 @@ export class VisibleSessions {
 			}
 		}
 
-		const nextVisible = this.visibleSessions.get()
+		const nextVisible = this.visibleSessions
+			.get()
 			.filter((session): session is IActiveSession => session !== undefined && availableIds.has(session.sessionId))
 			.map(session => this.toActiveSession(this.getRequiredSession(session.sessionId)));
 
@@ -102,9 +133,7 @@ export class VisibleSessions {
 		}
 
 		const active = this.activeSession.get();
-		const nextActive = active?.sessionId === sessionId
-			? nextVisible[Math.max(0, closingIndex - 1)]
-			: active;
+		const nextActive = active?.sessionId === sessionId ? nextVisible[Math.max(0, closingIndex - 1)] : active;
 
 		this.visibleSessions.set(nextVisible.length > 0 ? nextVisible : [undefined]);
 		this.activeSession.set(nextActive);

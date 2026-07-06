@@ -6,7 +6,7 @@
 export const enum LayoutPriority {
 	Low = 0,
 	Normal = 1,
-	High = 2
+	High = 2,
 }
 
 export interface IGridView {
@@ -55,7 +55,7 @@ const defaultDimensions: IWorkbenchGridDimensions = {
 	sidebarWidth: 270,
 	auxiliaryBarWidth: 340,
 	editorWidth: 360,
-	panelHeight: 300
+	panelHeight: 300,
 };
 
 export class WorkbenchGrid {
@@ -65,7 +65,7 @@ export class WorkbenchGrid {
 	constructor(
 		private readonly parts: IWorkbenchGridParts,
 		initialVisibility: IWorkbenchGridVisibility,
-		dimensions: Partial<IWorkbenchGridDimensions> = {}
+		dimensions: Partial<IWorkbenchGridDimensions> = {},
 	) {
 		this.visibility = initialVisibility;
 		this.dimensions = { ...defaultDimensions, ...dimensions };
@@ -85,14 +85,10 @@ export class WorkbenchGrid {
 
 		this.parts.titlebar.layout(safeWidth, this.dimensions.titlebarHeight, 0, 0);
 
-		const sidebarWidth = this.visibility.sidebar
-			? Math.min(safeWidth, Math.max(this.parts.sidebar.minimumWidth, this.dimensions.sidebarWidth))
-			: 0;
+		const sidebarWidth = this.visibility.sidebar ? Math.min(safeWidth, Math.max(this.parts.sidebar.minimumWidth, this.dimensions.sidebarWidth)) : 0;
 		const rightWidth = Math.max(0, safeWidth - sidebarWidth);
 
-		const panelHeight = this.visibility.panel
-			? Math.min(safeHeight, Math.max(this.parts.panel.minimumHeight, this.dimensions.panelHeight))
-			: 0;
+		const panelHeight = this.visibility.panel ? Math.min(safeHeight, Math.max(this.parts.panel.minimumHeight, this.dimensions.panelHeight)) : 0;
 		const contentHeight = Math.max(0, safeHeight - panelHeight);
 
 		layoutOrHide(this.parts.sidebar, this.visibility.sidebar, sidebarWidth, safeHeight, 0, 0);
@@ -118,7 +114,7 @@ export class WorkbenchGrid {
 			entries.push({
 				name: 'sessions',
 				view: this.parts.sessions,
-				preferredWidth: this.parts.sessions.minimumWidth
+				preferredWidth: this.parts.sessions.minimumWidth,
 			});
 		}
 
@@ -126,7 +122,7 @@ export class WorkbenchGrid {
 			entries.push({
 				name: 'editor',
 				view: this.parts.editor,
-				preferredWidth: Math.max(this.parts.editor.minimumWidth, this.dimensions.editorWidth)
+				preferredWidth: Math.max(this.parts.editor.minimumWidth, this.dimensions.editorWidth),
 			});
 		}
 
@@ -134,7 +130,7 @@ export class WorkbenchGrid {
 			entries.push({
 				name: 'auxiliaryBar',
 				view: this.parts.auxiliaryBar,
-				preferredWidth: Math.max(this.parts.auxiliaryBar.minimumWidth, this.dimensions.auxiliaryBarWidth)
+				preferredWidth: Math.max(this.parts.auxiliaryBar.minimumWidth, this.dimensions.auxiliaryBarWidth),
 			});
 		}
 
@@ -142,13 +138,7 @@ export class WorkbenchGrid {
 	}
 }
 
-function layoutTopRow(
-	entries: readonly IHorizontalEntry[],
-	widths: readonly number[],
-	height: number,
-	top: number,
-	left: number
-): void {
+function layoutTopRow(entries: readonly IHorizontalEntry[], widths: readonly number[], height: number, top: number, left: number): void {
 	let offset = left;
 
 	for (let index = 0; index < entries.length; index++) {
@@ -186,9 +176,7 @@ function computeHorizontalWidths(entries: readonly IHorizontalEntry[], available
 	const delta = availableWidth - totalWidth;
 
 	if (delta > 0) {
-		const highPriorityEntries = entries
-			.map((entry, index) => ({ entry, index }))
-			.filter(candidate => candidate.entry.view.priority === LayoutPriority.High);
+		const highPriorityEntries = entries.map((entry, index) => ({ entry, index })).filter(candidate => candidate.entry.view.priority === LayoutPriority.High);
 
 		if (highPriorityEntries.length > 0) {
 			const target = highPriorityEntries[0];
@@ -232,7 +220,7 @@ function dropLowestPriorityEntry(entries: readonly IHorizontalEntry[], available
 	let keptCursor = 0;
 
 	for (let index = 0; index < entries.length; index++) {
-		widths.push(index === dropIndex ? 0 : keptWidths[keptCursor++] ?? 0);
+		widths.push(index === dropIndex ? 0 : (keptWidths[keptCursor++] ?? 0));
 	}
 
 	return widths;

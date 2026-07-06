@@ -107,6 +107,7 @@ tests/e2e/agents-window.spec.ts
 ### Task 1: Electron TypeScript Skeleton
 
 **Files:**
+
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `.gitignore`
@@ -120,6 +121,7 @@ tests/e2e/agents-window.spec.ts
 - Create: `src/sessions/sessions.desktop.main.ts`
 
 **Interfaces:**
+
 - Produces `npm run typecheck`, `npm run build`, and `npm start`.
 - Produces renderer root HTML at `dist/sessions/electron-browser/sessions.html`.
 - Produces a window with `BrowserWindow` loading the copied HTML.
@@ -130,29 +132,29 @@ tests/e2e/agents-window.spec.ts
 
 ```json
 {
-  "name": "mellivora-malatang-agent-chat",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "main": "dist/main/main.js",
-  "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
-    "start": "npm run build && electron dist/main/main.js",
-    "test": "npm run test:unit",
-    "test:unit": "npm run build && node --test dist/tests/unit/*.test.js",
-    "test:e2e": "npm run build && playwright test",
-    "verify": "npm run typecheck && npm run test:unit && npm run test:e2e"
-  },
-  "dependencies": {
-    "@vscode/codicons": "^0.0.46-21"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@types/node": "24.x",
-    "electron": "42.5.0",
-    "typescript": "^6.0.0-dev.20260416"
-  }
+	"name": "mellivora-malatang-agent-chat",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "dist/main/main.js",
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+		"start": "npm run build && electron dist/main/main.js",
+		"test": "npm run test:unit",
+		"test:unit": "npm run build && node --test dist/tests/unit/*.test.js",
+		"test:e2e": "npm run build && playwright test",
+		"verify": "npm run typecheck && npm run test:unit && npm run test:e2e"
+	},
+	"dependencies": {
+		"@vscode/codicons": "^0.0.46-21"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.61.1",
+		"@types/node": "24.x",
+		"electron": "42.5.0",
+		"typescript": "^6.0.0-dev.20260416"
+	}
 }
 ```
 
@@ -162,21 +164,21 @@ If `npm install` cannot resolve `typescript@^6.0.0-dev.20260416`, use the closes
 
 ```json
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM"],
-    "strict": true,
-    "noImplicitOverride": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "rootDir": ".",
-    "outDir": "dist",
-    "sourceMap": true,
-    "types": ["node"]
-  },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "playwright.config.ts"]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ES2022", "DOM"],
+		"strict": true,
+		"noImplicitOverride": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"rootDir": ".",
+		"outDir": "dist",
+		"sourceMap": true,
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts", "tests/**/*.ts", "playwright.config.ts"]
 }
 ```
 
@@ -192,16 +194,16 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const copies = [
-  ['src/sessions/electron-browser/sessions.html', 'dist/sessions/electron-browser/sessions.html'],
-  ['src/sessions/browser/media', 'dist/sessions/browser/media'],
-  ['src/sessions/browser/parts/media', 'dist/sessions/browser/parts/media'],
-  ['node_modules/@vscode/codicons/dist/codicon.css', 'dist/assets/codicons/codicon.css'],
-  ['node_modules/@vscode/codicons/dist/codicon.ttf', 'dist/assets/codicons/codicon.ttf']
+	['src/sessions/electron-browser/sessions.html', 'dist/sessions/electron-browser/sessions.html'],
+	['src/sessions/browser/media', 'dist/sessions/browser/media'],
+	['src/sessions/browser/parts/media', 'dist/sessions/browser/parts/media'],
+	['node_modules/@vscode/codicons/dist/codicon.css', 'dist/assets/codicons/codicon.css'],
+	['node_modules/@vscode/codicons/dist/codicon.ttf', 'dist/assets/codicons/codicon.ttf'],
 ];
 
 for (const [from, to] of copies) {
-  await mkdir(join(root, dirname(to)), { recursive: true });
-  await cp(join(root, from), join(root, to), { recursive: true });
+	await mkdir(join(root, dirname(to)), { recursive: true });
+	await cp(join(root, from), join(root, to), { recursive: true });
 }
 ```
 
@@ -217,29 +219,29 @@ import { fileURLToPath } from 'node:url';
 const distRoot = join(fileURLToPath(new URL('../..', import.meta.url)));
 
 async function createWindow(): Promise<void> {
-  const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 960,
-    minHeight: 640,
-    title: 'Agent Chat',
-    backgroundColor: '#1e1e1e',
-    titleBarStyle: 'hiddenInset',
-    webPreferences: {
-      preload: join(distRoot, 'preload/preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
+	const win = new BrowserWindow({
+		width: 1440,
+		height: 900,
+		minWidth: 960,
+		minHeight: 640,
+		title: 'Agent Chat',
+		backgroundColor: '#1e1e1e',
+		titleBarStyle: 'hiddenInset',
+		webPreferences: {
+			preload: join(distRoot, 'preload/preload.js'),
+			contextIsolation: true,
+			nodeIntegration: false,
+		},
+	});
 
-  await win.loadFile(join(distRoot, 'sessions/electron-browser/sessions.html'));
+	await win.loadFile(join(distRoot, 'sessions/electron-browser/sessions.html'));
 }
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+	if (process.platform !== 'darwin') {
+		app.quit();
+	}
 });
 ```
 
@@ -249,7 +251,7 @@ app.on('window-all-closed', () => {
 import { contextBridge } from 'electron';
 
 contextBridge.exposeInMainWorld('agentWindow', {
-  platform: process.platform
+	platform: process.platform,
 });
 ```
 
@@ -260,23 +262,20 @@ contextBridge.exposeInMainWorld('agentWindow', {
 ```html
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;"
-    />
-    <link rel="stylesheet" href="../../assets/codicons/codicon.css" />
-    <link rel="stylesheet" href="../browser/media/style.css" />
-    <link rel="stylesheet" href="../browser/parts/media/titlebarpart.css" />
-    <link rel="stylesheet" href="../browser/parts/media/sidebarPart.css" />
-    <link rel="stylesheet" href="../browser/parts/media/sessionsPart.css" />
-    <link rel="stylesheet" href="../browser/parts/media/sessionView.css" />
-    <link rel="stylesheet" href="../browser/parts/media/chatCompositeBar.css" />
-    <link rel="stylesheet" href="../browser/parts/media/auxiliaryBarPart.css" />
-  </head>
-  <body aria-label="Agent Chat"></body>
-  <script type="module" src="./sessions.js"></script>
+	<head>
+		<meta charset="utf-8" />
+		<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;" />
+		<link rel="stylesheet" href="../../assets/codicons/codicon.css" />
+		<link rel="stylesheet" href="../browser/media/style.css" />
+		<link rel="stylesheet" href="../browser/parts/media/titlebarpart.css" />
+		<link rel="stylesheet" href="../browser/parts/media/sidebarPart.css" />
+		<link rel="stylesheet" href="../browser/parts/media/sessionsPart.css" />
+		<link rel="stylesheet" href="../browser/parts/media/sessionView.css" />
+		<link rel="stylesheet" href="../browser/parts/media/chatCompositeBar.css" />
+		<link rel="stylesheet" href="../browser/parts/media/auxiliaryBarPart.css" />
+	</head>
+	<body aria-label="Agent Chat"></body>
+	<script type="module" src="./sessions.js"></script>
 </html>
 ```
 
@@ -294,10 +293,10 @@ await main();
 import { Workbench } from '../browser/workbench.js';
 
 export class SessionsMain {
-  async open(): Promise<void> {
-    const workbench = new Workbench(document.body);
-    workbench.startup();
-  }
+	async open(): Promise<void> {
+		const workbench = new Workbench(document.body);
+		workbench.startup();
+	}
 }
 ```
 
@@ -320,7 +319,7 @@ import './sessions.common.main.js';
 import { SessionsMain } from './electron-browser/sessions.main.js';
 
 export async function main(): Promise<void> {
-  await new SessionsMain().open();
+	await new SessionsMain().open();
 }
 ```
 
@@ -351,6 +350,7 @@ git commit -m "chore: scaffold electron sessions shell"
 ### Task 2: VS Code-Style Base Primitives
 
 **Files:**
+
 - Create: `src/sessions/base/common/lifecycle.ts`
 - Create: `src/sessions/base/common/event.ts`
 - Create: `src/sessions/base/common/observable.ts`
@@ -359,6 +359,7 @@ git commit -m "chore: scaffold electron sessions shell"
 - Create: `src/sessions/base/browser/grid.ts`
 
 **Interfaces:**
+
 - Produces `IDisposable`, `Disposable`, `DisposableStore`, `MutableDisposable`.
 - Produces `Emitter<T>` and `Event<T>`.
 - Produces `ObservableValue<T>` used by sessions services.
@@ -370,25 +371,25 @@ Use these exports:
 
 ```ts
 export interface IDisposable {
-  dispose(): void;
+	dispose(): void;
 }
 
 export class DisposableStore implements IDisposable {
-  add<T extends IDisposable>(disposable: T): T;
-  clear(): void;
-  dispose(): void;
+	add<T extends IDisposable>(disposable: T): T;
+	clear(): void;
+	dispose(): void;
 }
 
 export class Disposable implements IDisposable {
-  protected _register<T extends IDisposable>(disposable: T): T;
-  dispose(): void;
+	protected _register<T extends IDisposable>(disposable: T): T;
+	dispose(): void;
 }
 
 export class MutableDisposable<T extends IDisposable> implements IDisposable {
-  get value(): T | undefined;
-  set value(value: T | undefined);
-  clear(): void;
-  dispose(): void;
+	get value(): T | undefined;
+	set value(value: T | undefined);
+	clear(): void;
+	dispose(): void;
 }
 
 export function toDisposable(fn: () => void): IDisposable;
@@ -402,9 +403,9 @@ Use these exports:
 export type Event<T> = (listener: (event: T) => void) => IDisposable;
 
 export class Emitter<T> implements IDisposable {
-  readonly event: Event<T>;
-  fire(event: T): void;
-  dispose(): void;
+	readonly event: Event<T>;
+	fire(event: T): void;
+	dispose(): void;
 }
 ```
 
@@ -416,15 +417,15 @@ Use these exports:
 
 ```ts
 export interface IObservable<T> {
-  get(): T;
-  subscribe(listener: (value: T) => void): IDisposable;
+	get(): T;
+	subscribe(listener: (value: T) => void): IDisposable;
 }
 
 export class ObservableValue<T> implements IObservable<T> {
-  constructor(value: T);
-  get(): T;
-  set(value: T): void;
-  subscribe(listener: (value: T) => void): IDisposable;
+	constructor(value: T);
+	get(): T;
+	set(value: T): void;
+	subscribe(listener: (value: T) => void): IDisposable;
 }
 
 export function observableValue<T>(value: T): ObservableValue<T>;
@@ -451,17 +452,17 @@ Use these exports:
 
 ```ts
 export const enum LayoutPriority {
-  Low = 0,
-  Normal = 1,
-  High = 2
+	Low = 0,
+	Normal = 1,
+	High = 2,
 }
 
 export interface IGridView {
-  readonly element: HTMLElement;
-  readonly minimumWidth: number;
-  readonly minimumHeight: number;
-  readonly priority: LayoutPriority;
-  layout(width: number, height: number, top: number, left: number): void;
+	readonly element: HTMLElement;
+	readonly minimumWidth: number;
+	readonly minimumHeight: number;
+	readonly priority: LayoutPriority;
+	layout(width: number, height: number, top: number, left: number): void;
 }
 ```
 
@@ -489,6 +490,7 @@ git commit -m "feat: add vscode-style base primitives"
 ### Task 3: Platform Services, Actions, Theme, Context Keys
 
 **Files:**
+
 - Create: `src/sessions/platform/instantiation/instantiation.ts`
 - Create: `src/sessions/platform/actions/actions.ts`
 - Create: `src/sessions/platform/theme/theme.ts`
@@ -499,6 +501,7 @@ git commit -m "feat: add vscode-style base primitives"
 - Create: `src/sessions/common/contextkeys.ts`
 
 **Interfaces:**
+
 - Produces service registry and singleton lookup.
 - Produces action/menu registry used by titlebar/sidebar/header.
 - Produces CSS token application.
@@ -513,14 +516,14 @@ export type ServiceIdentifier<T> = symbol & { readonly __service?: T };
 export function createDecorator<T>(id: string): ServiceIdentifier<T>;
 
 export class ServiceCollection {
-  set<T>(id: ServiceIdentifier<T>, instance: T): void;
-  get<T>(id: ServiceIdentifier<T>): T;
-  has<T>(id: ServiceIdentifier<T>): boolean;
+	set<T>(id: ServiceIdentifier<T>, instance: T): void;
+	get<T>(id: ServiceIdentifier<T>): T;
+	has<T>(id: ServiceIdentifier<T>): boolean;
 }
 
 export class InstantiationService {
-  constructor(services: ServiceCollection);
-  get<T>(id: ServiceIdentifier<T>): T;
+	constructor(services: ServiceCollection);
+	get<T>(id: ServiceIdentifier<T>): T;
 }
 ```
 
@@ -532,21 +535,21 @@ Use these exports:
 
 ```ts
 export interface IAction {
-  readonly id: string;
-  readonly label: string;
-  readonly icon?: string;
-  readonly enabled?: boolean;
-  run(): void | Promise<void>;
+	readonly id: string;
+	readonly label: string;
+	readonly icon?: string;
+	readonly enabled?: boolean;
+	run(): void | Promise<void>;
 }
 
 export class MenuId {
-  static readonly TitleBarLeft = new MenuId('TitleBarLeft');
-  static readonly CommandCenter = new MenuId('CommandCenter');
-  static readonly TitleBarRight = new MenuId('TitleBarRight');
-  static readonly SidebarTitle = new MenuId('SidebarTitle');
-  static readonly SessionHeaderTitle = new MenuId('SessionHeaderTitle');
-  static readonly AuxiliaryBarTitle = new MenuId('AuxiliaryBarTitle');
-  constructor(readonly id: string) {}
+	static readonly TitleBarLeft = new MenuId('TitleBarLeft');
+	static readonly CommandCenter = new MenuId('CommandCenter');
+	static readonly TitleBarRight = new MenuId('TitleBarRight');
+	static readonly SidebarTitle = new MenuId('SidebarTitle');
+	static readonly SessionHeaderTitle = new MenuId('SessionHeaderTitle');
+	static readonly AuxiliaryBarTitle = new MenuId('AuxiliaryBarTitle');
+	constructor(readonly id: string) {}
 }
 
 export function registerAction(menu: MenuId, action: IAction): void;
@@ -559,13 +562,13 @@ Use these exports:
 
 ```ts
 export interface IColorToken {
-  readonly id: string;
-  readonly value: string;
+	readonly id: string;
+	readonly value: string;
 }
 
 export interface ISizeToken {
-  readonly id: string;
-  readonly value: string;
+	readonly id: string;
+	readonly value: string;
 }
 
 export function registerColor(id: string, value: string): IColorToken;
@@ -633,6 +636,7 @@ git commit -m "feat: add platform registries and agent tokens"
 ### Task 4: Workbench Shell and Fixed Agents Layout
 
 **Files:**
+
 - Create: `src/sessions/browser/part.ts`
 - Create: `src/sessions/browser/workbench.ts`
 - Create: `src/sessions/browser/media/style.css`
@@ -645,6 +649,7 @@ git commit -m "feat: add platform registries and agent tokens"
   - `src/sessions/browser/parts/panelPart.ts`
 
 **Interfaces:**
+
 - Produces `.monaco-workbench.agent-sessions-workbench.shell-gradient-background`.
 - Produces fixed Agents layout with real part instances.
 - Produces visible titlebar/sidebar/sessions/auxiliary and hidden editor/panel.
@@ -673,14 +678,14 @@ export abstract class Part extends Disposable implements IGridView {
 
 Each placeholder part must extend `Part`, render a label, and expose priorities:
 
-| File | class | id | priority |
-|---|---|---|---|
-| `titlebarPart.ts` | `TitlebarPart` | `workbench.parts.titlebar` | `Low` |
-| `sidebarPart.ts` | `SidebarPart` | `workbench.parts.sidebar` | `Low` |
-| `sessionsPart.ts` | `SessionsPart` | `workbench.parts.sessions` | `High` |
-| `auxiliaryBarPart.ts` | `AuxiliaryBarPart` | `workbench.parts.auxiliarybar` | `Low` |
-| `editorPart.ts` | `EditorPart` | `workbench.parts.editor` | `Normal` |
-| `panelPart.ts` | `PanelPart` | `workbench.parts.panel` | `Normal` |
+| File                  | class              | id                             | priority |
+| --------------------- | ------------------ | ------------------------------ | -------- |
+| `titlebarPart.ts`     | `TitlebarPart`     | `workbench.parts.titlebar`     | `Low`    |
+| `sidebarPart.ts`      | `SidebarPart`      | `workbench.parts.sidebar`      | `Low`    |
+| `sessionsPart.ts`     | `SessionsPart`     | `workbench.parts.sessions`     | `High`   |
+| `auxiliaryBarPart.ts` | `AuxiliaryBarPart` | `workbench.parts.auxiliarybar` | `Low`    |
+| `editorPart.ts`       | `EditorPart`       | `workbench.parts.editor`       | `Normal` |
+| `panelPart.ts`        | `PanelPart`        | `workbench.parts.panel`        | `Normal` |
 
 - [ ] **Step 3: Implement workbench startup**
 
@@ -722,51 +727,52 @@ Initial visibility:
 ```css
 html,
 body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: var(--vscode-agents-fontSize-body1);
-  background: var(--vscode-agents-background);
-  color: var(--vscode-agentsPanel-foreground);
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	overflow: hidden;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-size: var(--vscode-agents-fontSize-body1);
+	background: var(--vscode-agents-background);
+	color: var(--vscode-agentsPanel-foreground);
 }
 
 .monaco-workbench.agent-sessions-workbench {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: var(--vscode-agents-background);
+	position: relative;
+	width: 100vw;
+	height: 100vh;
+	overflow: hidden;
+	background: var(--vscode-agents-background);
 }
 
 .agent-sessions-workbench.shell-gradient-background::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 128% 102% at 100% 100%,
-      color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 13%, var(--vscode-agents-background)) 0%,
-      color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 10%, var(--vscode-agents-background)) 17%,
-      color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 7%, var(--vscode-agents-background)) 31%,
-      var(--vscode-agents-background) 60%);
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(
+		ellipse 128% 102% at 100% 100%,
+		color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 13%, var(--vscode-agents-background)) 0%,
+		color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 10%, var(--vscode-agents-background)) 17%,
+		color-mix(in srgb, var(--vscode-agentsGradient-tintColor) 7%, var(--vscode-agents-background)) 31%,
+		var(--vscode-agents-background) 60%
+	);
 }
 
 .agent-sessions-workbench .part {
-  position: absolute;
-  box-sizing: border-box;
-  z-index: 1;
+	position: absolute;
+	box-sizing: border-box;
+	z-index: 1;
 }
 
 .agent-sessions-workbench .part.sessionspart,
 .agent-sessions-workbench .part.auxiliarybar,
 .agent-sessions-workbench .part.panel,
 .agent-sessions-workbench .part.editor {
-  background: var(--vscode-agentsPanel-background);
-  border: 1px solid var(--vscode-agentsPanel-border);
-  border-radius: 8px;
-  overflow: hidden;
+	background: var(--vscode-agentsPanel-background);
+	border: 1px solid var(--vscode-agentsPanel-border);
+	border-radius: 8px;
+	overflow: hidden;
 }
 ```
 
@@ -775,7 +781,7 @@ body {
 Add a temporary manual check in devtools or Playwright later:
 
 ```js
-document.querySelector('.monaco-workbench.agent-sessions-workbench .part.sessionspart')
+document.querySelector('.monaco-workbench.agent-sessions-workbench .part.sessionspart');
 ```
 
 Expected: returns an element.
@@ -801,6 +807,7 @@ git commit -m "feat: add agents workbench layout"
 ### Task 5: Session Domain and Mock Provider Chain
 
 **Files:**
+
 - Create: `src/sessions/services/sessions/common/session.ts`
 - Create: `src/sessions/services/sessions/common/sessionsProvider.ts`
 - Create: `src/sessions/services/sessions/common/sessionsManagement.ts`
@@ -815,6 +822,7 @@ git commit -m "feat: add agents workbench layout"
 - Create: `tests/unit/sessionsManagementService.test.ts`
 
 **Interfaces:**
+
 - Produces `ISessionsProvider` compatible enough for mock.
 - Produces session aggregation and active/visible sessions observable state.
 - Produces one active mock session by default.
@@ -825,69 +833,69 @@ git commit -m "feat: add agents workbench layout"
 
 ```ts
 export const enum SessionStatus {
-  Untitled = 0,
-  InProgress = 1,
-  NeedsInput = 2,
-  Completed = 3,
-  Error = 4
+	Untitled = 0,
+	InProgress = 1,
+	NeedsInput = 2,
+	Completed = 3,
+	Error = 4,
 }
 
 export const enum ChatInteractivity {
-  Full = 'full',
-  ReadOnly = 'read-only',
-  Hidden = 'hidden'
+	Full = 'full',
+	ReadOnly = 'read-only',
+	Hidden = 'hidden',
 }
 
 export interface ISessionWorkspace {
-  readonly label: string;
-  readonly description?: string;
-  readonly branchName?: string;
+	readonly label: string;
+	readonly description?: string;
+	readonly branchName?: string;
 }
 
 export interface ISessionChangesSummary {
-  readonly files: number;
-  readonly additions: number;
-  readonly deletions: number;
+	readonly files: number;
+	readonly additions: number;
+	readonly deletions: number;
 }
 
 export interface IChat {
-  readonly id: string;
-  readonly title: IObservable<string>;
-  readonly messages: IObservable<readonly IChatMessage[]>;
-  readonly status: IObservable<SessionStatus>;
-  readonly interactivity: IObservable<ChatInteractivity>;
+	readonly id: string;
+	readonly title: IObservable<string>;
+	readonly messages: IObservable<readonly IChatMessage[]>;
+	readonly status: IObservable<SessionStatus>;
+	readonly interactivity: IObservable<ChatInteractivity>;
 }
 
 export interface IChatMessage {
-  readonly id: string;
-  readonly role: 'user' | 'assistant' | 'tool';
-  readonly text: string;
-  readonly detail?: string;
+	readonly id: string;
+	readonly role: 'user' | 'assistant' | 'tool';
+	readonly text: string;
+	readonly detail?: string;
 }
 
 export interface ISession {
-  readonly sessionId: string;
-  readonly providerId: string;
-  readonly sessionType: string;
-  readonly icon: string;
-  readonly createdAt: Date;
-  readonly workspace: IObservable<ISessionWorkspace | undefined>;
-  readonly title: IObservable<string>;
-  readonly updatedAt: IObservable<Date>;
-  readonly status: IObservable<SessionStatus>;
-  readonly description: IObservable<string | undefined>;
-  readonly changesSummary: IObservable<ISessionChangesSummary | undefined>;
-  readonly isArchived: IObservable<boolean>;
-  readonly isRead: IObservable<boolean>;
-  readonly chats: IObservable<readonly IChat[]>;
-  readonly activeChat: IObservable<IChat>;
+	readonly sessionId: string;
+	readonly providerId: string;
+	readonly sessionType: string;
+	readonly icon: string;
+	readonly createdAt: Date;
+	readonly workspace: IObservable<ISessionWorkspace | undefined>;
+	readonly title: IObservable<string>;
+	readonly updatedAt: IObservable<Date>;
+	readonly status: IObservable<SessionStatus>;
+	readonly description: IObservable<string | undefined>;
+	readonly changesSummary: IObservable<ISessionChangesSummary | undefined>;
+	readonly isArchived: IObservable<boolean>;
+	readonly isRead: IObservable<boolean>;
+	readonly chats: IObservable<readonly IChat[]>;
+	readonly activeChat: IObservable<IChat>;
 }
 
 export interface IActiveSession extends ISession {
-  readonly isCreated: IObservable<boolean>;
-  readonly sticky: IObservable<boolean>;
-  readonly openChats: IObservable<readonly IChat[]>;
-  readonly shouldShowChatTabs: IObservable<boolean>;
+	readonly isCreated: IObservable<boolean>;
+	readonly sticky: IObservable<boolean>;
+	readonly openChats: IObservable<readonly IChat[]>;
+	readonly shouldShowChatTabs: IObservable<boolean>;
 }
 ```
 
@@ -897,19 +905,19 @@ export interface IActiveSession extends ISession {
 
 ```ts
 export interface ISessionChangeEvent {
-  readonly added: readonly ISession[];
-  readonly removed: readonly ISession[];
-  readonly changed: readonly ISession[];
+	readonly added: readonly ISession[];
+	readonly removed: readonly ISession[];
+	readonly changed: readonly ISession[];
 }
 
 export interface ISessionsProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly icon: string;
-  readonly order: number;
-  getSessions(): readonly ISession[];
-  readonly onDidChangeSessions: Event<ISessionChangeEvent>;
-  sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
+	readonly id: string;
+	readonly label: string;
+	readonly icon: string;
+	readonly order: number;
+	getSessions(): readonly ISession[];
+	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
+	sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
 }
 ```
 
@@ -917,10 +925,10 @@ export interface ISessionsProvider {
 
 ```ts
 export interface ISessionsManagementService {
-  getSessions(): readonly ISession[];
-  getSession(sessionId: string): ISession | undefined;
-  readonly onDidChangeSessions: Event<ISessionChangeEvent>;
-  sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
+	getSessions(): readonly ISession[];
+	getSession(sessionId: string): ISession | undefined;
+	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
+	sendRequest(sessionId: string, chatId: string, query: string): Promise<ISession>;
 }
 ```
 
@@ -1023,6 +1031,7 @@ git commit -m "feat: add mock sessions provider chain"
 ### Task 6: Sessions Part and Session View
 
 **Files:**
+
 - Modify: `src/sessions/browser/parts/sessionsPart.ts`
 - Create: `src/sessions/browser/parts/sessionView.ts`
 - Create: `src/sessions/browser/parts/sessionHeader.ts`
@@ -1033,6 +1042,7 @@ git commit -m "feat: add mock sessions provider chain"
 - Create: `src/sessions/browser/parts/media/chatCompositeBar.css`
 
 **Interfaces:**
+
 - `SessionsPart.updateVisibleSessions(visible, active)` renders session slots.
 - `SessionView.openSession(session)` swaps between new-session and chat view.
 - Header/tabs/chat are separate widgets, matching VS Code structure.
@@ -1043,9 +1053,9 @@ Use this public API:
 
 ```ts
 export class SessionsPart extends Part {
-  readonly priority = LayoutPriority.High;
-  updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void;
-  focusSession(sessionId: string | undefined): void;
+	readonly priority = LayoutPriority.High;
+	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void;
+	focusSession(sessionId: string | undefined): void;
 }
 ```
 
@@ -1064,11 +1074,11 @@ DOM structure:
 
 ```html
 <div class="session-view">
-  <div class="session-view-centered-content">
-    <div class="chat-composite-bar session-header-bar"></div>
-    <div class="chat-composite-bar session-chat-tabs-bar"></div>
-  </div>
-  <div class="session-view-content"></div>
+	<div class="session-view-centered-content">
+		<div class="chat-composite-bar session-header-bar"></div>
+		<div class="chat-composite-bar session-chat-tabs-bar"></div>
+	</div>
+	<div class="session-view-content"></div>
 </div>
 ```
 
@@ -1076,11 +1086,11 @@ Public API:
 
 ```ts
 export class SessionView extends Disposable {
-  readonly element: HTMLElement;
-  openSession(session: IActiveSession | undefined): void;
-  setActive(active: boolean): void;
-  focus(): void;
-  layout(width: number, height: number): void;
+	readonly element: HTMLElement;
+	openSession(session: IActiveSession | undefined): void;
+	setActive(active: boolean): void;
+	focus(): void;
+	layout(width: number, height: number): void;
 }
 ```
 
@@ -1168,6 +1178,7 @@ git commit -m "feat: render sessions part and chat view"
 ### Task 7: Titlebar, Sidebar Sessions List, Auxiliary Bar
 
 **Files:**
+
 - Modify: `src/sessions/browser/parts/titlebarPart.ts`
 - Modify: `src/sessions/browser/parts/sidebarPart.ts`
 - Modify: `src/sessions/browser/parts/auxiliaryBarPart.ts`
@@ -1179,6 +1190,7 @@ git commit -m "feat: render sessions part and chat view"
 - Create: `src/sessions/browser/parts/media/auxiliaryBarPart.css`
 
 **Interfaces:**
+
 - Titlebar renders left/center/right areas.
 - Sidebar renders VS Code-style sessions list.
 - Auxiliary renders Files/Changes tabs.
@@ -1189,12 +1201,12 @@ DOM structure:
 
 ```html
 <div class="part titlebar">
-  <div class="titlebar-container sessions-titlebar-container has-center">
-    <div class="titlebar-drag-region"></div>
-    <div class="titlebar-left"></div>
-    <div class="titlebar-center"></div>
-    <div class="titlebar-right"></div>
-  </div>
+	<div class="titlebar-container sessions-titlebar-container has-center">
+		<div class="titlebar-drag-region"></div>
+		<div class="titlebar-left"></div>
+		<div class="titlebar-center"></div>
+		<div class="titlebar-right"></div>
+	</div>
 </div>
 ```
 
@@ -1286,6 +1298,7 @@ git commit -m "feat: add agents titlebar sidebar and auxiliary bar"
 ### Task 8: Visual Fidelity Pass
 
 **Files:**
+
 - Modify: `src/sessions/browser/media/style.css`
 - Modify: `src/sessions/browser/parts/media/titlebarpart.css`
 - Modify: `src/sessions/browser/parts/media/sidebarPart.css`
@@ -1296,6 +1309,7 @@ git commit -m "feat: add agents titlebar sidebar and auxiliary bar"
 - Modify as needed: part TS files where DOM class names are missing
 
 **Interfaces:**
+
 - Produces visual match to VS Code Agents Window shell at desktop sizes.
 
 - [ ] **Step 1: Match global shell**
@@ -1379,11 +1393,13 @@ git commit -m "style: align agents window visual structure"
 ### Task 9: Playwright Screenshot Verification
 
 **Files:**
+
 - Create: `playwright.config.ts`
 - Create: `tests/e2e/agents-window.spec.ts`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Produces screenshots for `1440x900` and `1280x720`.
 - Fails if primary UI regions are missing or blank.
 
@@ -1395,11 +1411,11 @@ git commit -m "style: align agents window visual structure"
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/e2e',
-  timeout: 60_000,
-  use: {
-    trace: 'retain-on-failure'
-  }
+	testDir: './tests/e2e',
+	timeout: 60_000,
+	use: {
+		trace: 'retain-on-failure',
+	},
 });
 ```
 
@@ -1424,10 +1440,10 @@ The test must evaluate:
 
 ```ts
 const boxes = await page.locator('.part.sessionspart, .part.sidebar, .part.auxiliarybar').evaluateAll(nodes =>
-  nodes.map(node => {
-    const rect = node.getBoundingClientRect();
-    return { width: rect.width, height: rect.height, text: node.textContent?.trim().length ?? 0 };
-  })
+	nodes.map(node => {
+		const rect = node.getBoundingClientRect();
+		return { width: rect.width, height: rect.height, text: node.textContent?.trim().length ?? 0 };
+	}),
 );
 ```
 
@@ -1459,10 +1475,12 @@ git commit -m "test: add agents window screenshot verification"
 ### Task 10: Acceptance Review and Drift Checklist
 
 **Files:**
+
 - Modify: `docs/rebuild/2026-07-03-vscode-agents-window-architecture.md`
 - Modify: `docs/rebuild/2026-07-03-agents-window-rebuild-implementation-plan.md`
 
 **Interfaces:**
+
 - Produces documented acceptance evidence.
 - Produces a list of known visual gaps instead of hiding them.
 

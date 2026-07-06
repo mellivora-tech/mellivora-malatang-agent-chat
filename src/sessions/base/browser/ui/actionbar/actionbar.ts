@@ -24,7 +24,7 @@ export interface IActionViewItemProvider {
 
 export const enum ActionsOrientation {
 	HORIZONTAL,
-	VERTICAL
+	VERTICAL,
 }
 
 export interface IActionBarOptions {
@@ -56,7 +56,10 @@ export class ActionBar extends Disposable implements IActionRunner {
 	readonly onDidRun: Event<IRunEvent> = this.onDidRunEmitter.event;
 	readonly onWillRun: Event<IRunEvent> = this.onWillRunEmitter.event;
 
-	constructor(container: HTMLElement, private readonly options: IActionBarOptions = {}) {
+	constructor(
+		container: HTMLElement,
+		private readonly options: IActionBarOptions = {},
+	) {
 		super();
 
 		this.context = options.context ?? null;
@@ -122,7 +125,7 @@ export class ActionViewItem extends Disposable implements IActionViewItem {
 	constructor(
 		context: unknown,
 		readonly action: IAction,
-		private readonly actionRunner: IActionRunner
+		private readonly actionRunner: IActionRunner,
 	) {
 		super();
 		this.context = context;

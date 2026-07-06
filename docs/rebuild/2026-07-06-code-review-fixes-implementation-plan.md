@@ -64,11 +64,13 @@ Modify: tests/e2e/agents-window.spec.ts
 Fixes findings: stuck-InProgress root cause, hardcoded `2026-07-03T09:00Z` timestamps, colliding session IDs. Adds `stopSession` + `whenIdle` at the provider level.
 
 **Files:**
+
 - Modify: `src/sessions/contrib/mockProvider/browser/mockSessionsProvider.ts`
 - Modify: `tests/unit/mockSessionsProvider.test.ts`
 - Modify: `tests/unit/sessionsManagementService.test.ts` (only the last test, which uses the real mock provider)
 
 **Interfaces:**
+
 - Consumes: existing `ISessionsProvider`, `SessionStatus`, `SessionInteractivity`, `observableValue`.
 - Produces (later tasks rely on these exact signatures):
   - `new MockSessionsProvider(options?: IMockSessionsProviderOptions)` where `IMockSessionsProviderOptions = { readonly responseDelayMs?: number }` (default `3000`).
@@ -143,20 +145,12 @@ test('mock provider appends follow-up turns to session messages', async () => {
 	await provider.whenIdle();
 
 	assert.equal(session.status.get(), SessionStatus.NeedsInput);
-	assert.deepEqual(texts(session.messages.get()), [
-		'hello',
-		'Mock response for: hello',
-		'follow up',
-		'Mock response for: follow up'
-	]);
+	assert.deepEqual(texts(session.messages.get()), ['hello', 'Mock response for: hello', 'follow up', 'Mock response for: follow up']);
 });
 
 test('sessions started in the same instant get unique ids', async () => {
 	const provider = new MockSessionsProvider({ responseDelayMs: 1 });
-	const [first, second] = await Promise.all([
-		provider.startSession('重构侧边栏'),
-		provider.startSession('修复布局')
-	]);
+	const [first, second] = await Promise.all([provider.startSession('重构侧边栏'), provider.startSession('修复布局')]);
 
 	assert.notEqual(first.sessionId, second.sessionId);
 	await provider.whenIdle();
@@ -245,12 +239,12 @@ with a new required option and usage — add `timestamp: Date;` to the options o
 
 3c. Give each of the four seed sessions an explicit relative timestamp (add one `timestamp:` line to each `createSession({...})` call in the `sessions` array):
 
-| seed sessionId | add |
-|---|---|
-| `session-in-progress` | `timestamp: minutesAgo(2),` |
-| `session-completed` | `timestamp: minutesAgo(120),` |
-| `session-needs-input` | `timestamp: minutesAgo(45),` |
-| `session-archived` | `timestamp: minutesAgo(3 * 24 * 60),` |
+| seed sessionId        | add                                   |
+| --------------------- | ------------------------------------- |
+| `session-in-progress` | `timestamp: minutesAgo(2),`           |
+| `session-completed`   | `timestamp: minutesAgo(120),`         |
+| `session-needs-input` | `timestamp: minutesAgo(45),`          |
+| `session-archived`    | `timestamp: minutesAgo(3 * 24 * 60),` |
 
 3d. Add constructor and state fields to `MockSessionsProvider` (after the `sessions` array field):
 
@@ -378,10 +372,7 @@ with a new required option and usage — add `timestamp: Date;` to the options o
 3f. Update the registration helper at the bottom of the file:
 
 ```ts
-export function registerMockSessionsProvider(
-	providersService: ISessionsProvidersService,
-	options: IMockSessionsProviderOptions = {}
-): MockSessionsProvider {
+export function registerMockSessionsProvider(providersService: ISessionsProvidersService, options: IMockSessionsProviderOptions = {}): MockSessionsProvider {
 	const provider = new MockSessionsProvider(options);
 	providersService.registerProvider(provider);
 	return provider;
@@ -405,19 +396,19 @@ Expected: PASS (all 7 tests).
 In `tests/unit/sessionsManagementService.test.ts`, in the test `'sessions service starts a session and marks it active'`, change:
 
 ```ts
-	const provider = registerMockSessionsProvider(providersService);
+const provider = registerMockSessionsProvider(providersService);
 ```
 
 to:
 
 ```ts
-	const provider = registerMockSessionsProvider(providersService, { responseDelayMs: 1 });
+const provider = registerMockSessionsProvider(providersService, { responseDelayMs: 1 });
 ```
 
 and add as the last line of the test body:
 
 ```ts
-	await provider.whenIdle();
+await provider.whenIdle();
 ```
 
 - [ ] **Step 6: Run the whole unit suite**
@@ -439,6 +430,7 @@ git commit -m "fix: give mock sessions a real lifecycle with unique ids and time
 Fixes the "no stop API exists" half of the inert-Stop-button finding.
 
 **Files:**
+
 - Modify: `src/sessions/services/sessions/common/sessionsProvider.ts`
 - Modify: `src/sessions/services/sessions/common/sessionsManagement.ts`
 - Modify: `src/sessions/services/sessions/browser/sessionsManagementService.ts`
@@ -446,6 +438,7 @@ Fixes the "no stop API exists" half of the inert-Stop-button finding.
 - Test: `tests/unit/sessionsManagementService.test.ts`
 
 **Interfaces:**
+
 - Consumes: `MockSessionsProvider.stopSession` from Task 1.
 - Produces: `stopSession(sessionId: string): Promise<ISession>` on `ISessionsProvider`, `ISessionsManagementService`, and `ISessionsService`. Task 3/4's `ConversationView` calls `ISessionsService.stopSession`.
 
@@ -549,10 +542,12 @@ git commit -m "feat: plumb stopSession through provider, management, and session
 Test hook required by Tasks 4-6 e2e: `AGENT_CHAT_MOCK_DELAY_MS=120000` freezes the running state; small values accelerate replies. No user-visible behavior change when unset.
 
 **Files:**
+
 - Modify: `src/preload/preload.ts`
 - Modify: `src/sessions/browser/workbench.ts`
 
 **Interfaces:**
+
 - Consumes: `registerMockSessionsProvider(providersService, options)` from Task 1.
 - Produces: `window.agentWindow.mockResponseDelayMs?: number` global, honored at workbench startup. E2e tests set it via `electron.launch({ env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '...' } })`.
 
@@ -565,7 +560,7 @@ const mockResponseDelayMs = Number.parseInt(process.env['AGENT_CHAT_MOCK_DELAY_M
 
 contextBridge.exposeInMainWorld('agentWindow', {
 	platform: process.platform,
-	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {})
+	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });
 ```
 
@@ -587,11 +582,8 @@ type AgentWindowGlobals = typeof globalThis & {
 2b. In `startup()`, replace `registerMockSessionsProvider(this.providersService);` with:
 
 ```ts
-		const mockResponseDelayMs = (globalThis as AgentWindowGlobals).agentWindow?.mockResponseDelayMs;
-		registerMockSessionsProvider(
-			this.providersService,
-			mockResponseDelayMs === undefined ? {} : { responseDelayMs: mockResponseDelayMs }
-		);
+const mockResponseDelayMs = (globalThis as AgentWindowGlobals).agentWindow?.mockResponseDelayMs;
+registerMockSessionsProvider(this.providersService, mockResponseDelayMs === undefined ? {} : { responseDelayMs: mockResponseDelayMs });
 ```
 
 - [ ] **Step 3: Typecheck and commit**
@@ -611,11 +603,13 @@ git commit -m "feat: allow overriding mock reply delay via AGENT_CHAT_MOCK_DELAY
 Fixes: send guard permanently blocking follow-ups, message loss + unhandled rejection on failed send, inert Stop button.
 
 **Files:**
+
 - Modify: `src/sessions/browser/parts/conversationView.ts`
 - Modify: `src/sessions/browser/parts/media/sessionView.css`
 - Test: `tests/e2e/agents-window.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `ISessionsService.stopSession` (Task 2), env delay hook (Task 3).
 - Produces: `ISessionMessageSender` gains `stopSession(sessionId: string): Promise<unknown>` (structurally satisfied by `SessionsService`); a `.conversation-send-error` element inside `.conversation-composer`.
 
@@ -628,10 +622,10 @@ Run: `grep -n "electron.launch" tests/e2e/agents-window.spec.ts`
 For each test that afterwards fills `.new-session-input` and clicks/submits (at minimum: `'starting a conversation creates a running session shell'`, `'starting multiple conversations keeps a single active conversation page'`, and any test asserting `.sessions-project-task-spinner` or `.conversation-composer.running` after starting a session), change the launch call to:
 
 ```ts
-		app = await electron.launch({
-			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
-		});
+app = await electron.launch({
+	args: ['dist/main/main.js'],
+	env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+});
 ```
 
 Tests that only read seed sessions (screenshot shell test, historical-messages test) need no change.
@@ -650,7 +644,7 @@ test('conversation supports stop and follow-up turns', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -666,17 +660,14 @@ test('conversation supports stop and follow-up turns', async () => {
 		await page.locator('.new-session-input').fill('hello');
 		await page.locator('.new-session-send-button').click();
 
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last())
-			.toHaveText('Mock response for: hello');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: hello');
 		await expect(page.locator('.conversation-send-button')).toBeVisible();
 		await expect(page.locator('.conversation-stop-button')).toBeHidden();
 
 		await page.locator('.conversation-input').fill('follow up');
 		await page.locator('.conversation-input').press('Enter');
-		await expect(page.locator('.conversation-message.user .conversation-message-bubble').last())
-			.toHaveText('follow up');
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last())
-			.toHaveText('Mock response for: follow up');
+		await expect(page.locator('.conversation-message.user .conversation-message-bubble').last()).toHaveText('follow up');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: follow up');
 
 		expect(rendererErrors).toEqual([]);
 	} finally {
@@ -693,7 +684,7 @@ test('stop button ends the running state', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -755,24 +746,24 @@ and a `private readonly sendError: HTMLElement;` declaration next to `private re
 4c. In the constructor, after the `inputWrap` block (after the send button is created) and before `this._registerEventListeners();`, create the error element as the last child of the composer:
 
 ```ts
-		this.sendError = append(this.composer, document.createElement('div'));
-		this.sendError.className = 'conversation-send-error';
-		this.sendError.setAttribute('role', 'alert');
-		this.sendError.hidden = true;
+this.sendError = append(this.composer, document.createElement('div'));
+this.sendError.className = 'conversation-send-error';
+this.sendError.setAttribute('role', 'alert');
+this.sendError.hidden = true;
 ```
 
 4d. In `_registerEventListeners()`, add:
 
 ```ts
-		this.stopButton.addEventListener('click', () => {
-			void this.stop();
-		});
+this.stopButton.addEventListener('click', () => {
+	void this.stop();
+});
 ```
 
 4e. In `openSession()`, after `this.header.openSession(session);` add:
 
 ```ts
-		this.setSendError(undefined);
+this.setSendError(undefined);
 ```
 
 4f. Replace `send()` entirely and add `stop()`/`setSendError()`:
@@ -835,7 +826,7 @@ Key changes vs. the old `send()`: the `session.status.get() === SessionStatus.In
 4g. In `updateComposerState()`, change the send-button disabled line to:
 
 ```ts
-		this.sendButton.disabled = !canType || !hasText;
+this.sendButton.disabled = !canType || !hasText;
 ```
 
 (the button is hidden while running; the `isRunning ||` term otherwise blocks the Enter path's visual state after the fix).
@@ -872,10 +863,12 @@ git commit -m "fix: allow follow-up sends, preserve drafts on failure, wire stop
 ### Task 5: Enter starts a session on the new-session landing
 
 **Files:**
+
 - Modify: `src/sessions/browser/parts/newSessionView.ts`
 - Test: `tests/e2e/agents-window.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: Enter (without Shift, not composing) submits the new-session composer, mirroring `ConversationView`'s keydown handling.
 
@@ -889,7 +882,7 @@ test('enter starts a session from the new session landing', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		await page.setViewportSize({ width: 1600, height: 997 });
@@ -916,14 +909,14 @@ Expected: FAIL — Enter inserts a newline; the workbench stays in `mode-new-ses
 In `src/sessions/browser/parts/newSessionView.ts`, immediately after the existing `composer.addEventListener('submit', ...)` block, add:
 
 ```ts
-		input.addEventListener('keydown', event => {
-			if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
-				return;
-			}
+input.addEventListener('keydown', event => {
+	if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+		return;
+	}
 
-			event.preventDefault();
-			composer.requestSubmit();
-		});
+	event.preventDefault();
+	composer.requestSubmit();
+});
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -945,11 +938,13 @@ git commit -m "fix: submit new session composer on enter"
 Fixes: auxiliary bar showing static placeholder text instead of session change data; removes the orphaned `FilesView`.
 
 **Files:**
+
 - Modify: `src/sessions/browser/parts/auxiliaryBarPart.ts`
 - Delete: `src/sessions/contrib/files/browser/filesView.ts`
 - Test: `tests/e2e/agents-window.spec.ts` (the `assertRightSidePaneInteraction` / `assertSidePaneTab` helpers)
 
 **Interfaces:**
+
 - Consumes: existing `ChangesView(container: HTMLElement, options: { sessionsService?; sessionsPartService? })` from `src/sessions/contrib/changes/browser/changesView.ts`; `.changes-view` CSS already exists in `auxiliaryBarPart.css`.
 - Produces: `.auxiliary-view[data-tab-id="review"]` contains a live `.changes-view` bound to the active session.
 
@@ -966,9 +961,9 @@ async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyT
 and around the existing `.auxiliary-view-body` text expectation:
 
 ```ts
-	if (bodyText !== undefined) {
-		await expect(page.locator('.auxiliary-view-body')).toHaveText(bodyText);
-	}
+if (bodyText !== undefined) {
+	await expect(page.locator('.auxiliary-view-body')).toHaveText(bodyText);
+}
 ```
 
 (keep every other assertion in the helper unchanged).
@@ -976,19 +971,19 @@ and around the existing `.auxiliary-view-body` text expectation:
 1b. In `assertRightSidePaneInteraction`, replace:
 
 ```ts
-	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
-	await assertSidePaneTab(page, 'review', 'Review', 'Review changes');
+await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
+await assertSidePaneTab(page, 'review', 'Review', 'Review changes');
 ```
 
 with:
 
 ```ts
-	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
-	await assertSidePaneTab(page, 'review', 'Review');
-	const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
-	await expect(changesView).toBeVisible();
-	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
-	await expect(changesView.locator('.changes-summary-stat.files .changes-summary-value')).toHaveText('5');
+await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
+await assertSidePaneTab(page, 'review', 'Review');
+const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
+await expect(changesView).toBeVisible();
+await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
+await expect(changesView.locator('.changes-summary-stat.files .changes-summary-value')).toHaveText('5');
 ```
 
 (the caller starts the session with the query `hello`, and `startSession` seeds `changesSummary.files = 5`).
@@ -1020,33 +1015,35 @@ import { ChangesView } from '../../contrib/changes/browser/changesView.js';
 3d. At the top of `renderContent()`, before `container.textContent = '';`, add:
 
 ```ts
-		this.viewDisposables.clear();
+this.viewDisposables.clear();
 ```
 
 3e. In `renderTabbedPane`, replace the body-creation block:
 
 ```ts
-		const body = document.createElement('div');
-		body.className = 'auxiliary-view-body';
-		body.textContent = activeTab.body;
-		view.appendChild(body);
+const body = document.createElement('div');
+body.className = 'auxiliary-view-body';
+body.textContent = activeTab.body;
+view.appendChild(body);
 ```
 
 with:
 
 ```ts
-		const body = document.createElement('div');
-		body.className = 'auxiliary-view-body';
-		view.appendChild(body);
+const body = document.createElement('div');
+body.className = 'auxiliary-view-body';
+view.appendChild(body);
 
-		if (activeTab.id === 'review') {
-			this.viewDisposables.add(new ChangesView(body, {
-				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
-				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {})
-			}));
-		} else {
-			body.textContent = activeTab.body ?? '';
-		}
+if (activeTab.id === 'review') {
+	this.viewDisposables.add(
+		new ChangesView(body, {
+			...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+			...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
+		}),
+	);
+} else {
+	body.textContent = activeTab.body ?? '';
+}
 ```
 
 (the conditional spreads keep `exactOptionalPropertyTypes` happy).
@@ -1081,10 +1078,12 @@ git commit -m "fix: render live changes view in review tab and drop orphaned fil
 Fixes: `layout()` hardcoding editor/panel to hidden while `isPartVisible` reports otherwise; sessions part being crushed below its 640px minimum instead of the auxiliary bar shrinking/hiding.
 
 **Files:**
+
 - Modify: `src/sessions/base/browser/grid.ts`
 - Create: `tests/unit/workbenchGrid.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: same public API (`WorkbenchGrid`, `setPartVisible`, `isPartVisible`, `layout`, `LayoutPriority`, `IGridView`); behavior contract: (a) `layout()` obeys `this.visibility` for every part; (b) top-row widths honor `minimumWidth`, extra space goes to the `LayoutPriority.High` view, and when minimums cannot fit, the lowest-priority view is dropped (display `none`) rather than crushing the High view; (c) a visible panel is laid out below the content row, spanning the width right of the sidebar.
 
@@ -1126,7 +1125,7 @@ function createFakeView(minimumWidth: number, minimumHeight: number, priority: L
 		priority,
 		layout: (width, height, top, left) => {
 			calls.push({ width, height, top, left });
-		}
+		},
 	};
 	return { view, calls, element };
 }
@@ -1145,10 +1144,10 @@ function createGrid() {
 			sessions: sessions.view,
 			editor: editor.view,
 			auxiliaryBar: auxiliaryBar.view,
-			panel: panel.view
+			panel: panel.view,
 		},
 		{ sidebar: true, sessions: true, editor: false, auxiliaryBar: true, panel: false },
-		{ titlebarHeight: 52, sidebarWidth: 270, auxiliaryBarWidth: 340, editorWidth: 360, panelHeight: 300 }
+		{ titlebarHeight: 52, sidebarWidth: 270, auxiliaryBarWidth: 340, editorWidth: 360, panelHeight: 300 },
 	);
 	return { grid, titlebar, sidebar, sessions, editor, auxiliaryBar, panel };
 }
@@ -1256,13 +1255,7 @@ In `src/sessions/base/browser/grid.ts`, keep everything through `isPartVisible` 
 3b. Replace the free function `layoutHorizontalViews` with `layoutTopRow` (zero-width entries are hidden, not laid out):
 
 ```ts
-function layoutTopRow(
-	entries: readonly IHorizontalEntry[],
-	widths: readonly number[],
-	height: number,
-	top: number,
-	left: number
-): void {
+function layoutTopRow(entries: readonly IHorizontalEntry[], widths: readonly number[], height: number, top: number, left: number): void {
 	let offset = left;
 
 	for (let index = 0; index < entries.length; index++) {
@@ -1321,7 +1314,7 @@ function dropLowestPriorityEntry(entries: readonly IHorizontalEntry[], available
 	let keptCursor = 0;
 
 	for (let index = 0; index < entries.length; index++) {
-		widths.push(index === dropIndex ? 0 : keptWidths[keptCursor++] ?? 0);
+		widths.push(index === dropIndex ? 0 : (keptWidths[keptCursor++] ?? 0));
 	}
 
 	return widths;
@@ -1347,11 +1340,13 @@ git commit -m "fix: make grid honor part visibility and minimum-width contracts"
 ### Task 8: macOS activate recreates the window
 
 **Files:**
+
 - Create: `src/main/appLifecycle.ts`
 - Modify: `src/main/main.ts`
 - Create: `tests/unit/appLifecycle.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `IAppLifecycleHost { platform; getWindowCount(); createWindow(); quit() }`, `handleWindowAllClosed(host)`, `handleActivate(host)` — pure functions, no Electron imports, unit-testable under `node:test`.
 
@@ -1381,7 +1376,7 @@ function createHost(platform: NodeJS.Platform, windowCount: number) {
 		},
 		quit: () => {
 			quitCalls += 1;
-		}
+		},
 	};
 	return { host, quitCalls: () => quitCalls, createCalls: () => createCalls };
 }
@@ -1461,7 +1456,7 @@ const lifecycleHost = {
 	platform: process.platform,
 	getWindowCount: () => BrowserWindow.getAllWindows().length,
 	createWindow,
-	quit: () => app.quit()
+	quit: () => app.quit(),
 };
 
 app.whenReady().then(createWindow);

@@ -34,7 +34,7 @@
 
 .new-session-watermark::before,
 .new-session-watermark::after {
-	content: "";
+	content: '';
 	position: absolute;
 	box-sizing: border-box;
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-watermark);

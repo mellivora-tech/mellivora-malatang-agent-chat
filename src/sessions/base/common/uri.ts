@@ -30,13 +30,7 @@ export class URI implements UriComponents {
 	}
 
 	static from(components: UriComponents): URI {
-		return new URI(
-			components.scheme,
-			components.authority,
-			components.path,
-			components.query,
-			components.fragment
-		);
+		return new URI(components.scheme, components.authority, components.path, components.query, components.fragment);
 	}
 
 	static parse(value: string): URI {
@@ -50,7 +44,7 @@ export class URI implements UriComponents {
 			decodeURIComponent(match[4] ?? empty),
 			decodeURIComponent(match[5] ?? empty),
 			decodeURIComponent(match[7] ?? empty),
-			decodeURIComponent(match[9] ?? empty)
+			decodeURIComponent(match[9] ?? empty),
 		);
 	}
 
@@ -74,13 +68,7 @@ export class URI implements UriComponents {
 	readonly query: string;
 	readonly fragment: string;
 
-	constructor(
-		scheme: string,
-		authority: string = empty,
-		uriPath: string = empty,
-		query: string = empty,
-		fragment: string = empty
-	) {
+	constructor(scheme: string, authority: string = empty, uriPath: string = empty, query: string = empty, fragment: string = empty) {
 		this.scheme = scheme;
 		this.authority = authority;
 		this.path = normalizeUriPath(scheme, authority, uriPath);
@@ -105,10 +93,10 @@ export class URI implements UriComponents {
 	with(change: UriChange): URI {
 		return new URI(
 			change.scheme ?? this.scheme,
-			change.authority === undefined ? this.authority : change.authority ?? empty,
-			change.path === undefined ? this.path : change.path ?? empty,
-			change.query === undefined ? this.query : change.query ?? empty,
-			change.fragment === undefined ? this.fragment : change.fragment ?? empty
+			change.authority === undefined ? this.authority : (change.authority ?? empty),
+			change.path === undefined ? this.path : (change.path ?? empty),
+			change.query === undefined ? this.query : (change.query ?? empty),
+			change.fragment === undefined ? this.fragment : (change.fragment ?? empty),
 		);
 	}
 
@@ -118,7 +106,7 @@ export class URI implements UriComponents {
 			authority: this.authority,
 			path: this.path,
 			query: this.query,
-			fragment: this.fragment
+			fragment: this.fragment,
 		};
 	}
 

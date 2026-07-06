@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Emitter, Event } from '../../base/common/event.js';
-import { IDisposable } from '../../base/common/lifecycle.js';
+import type { Event } from '../../base/common/event.js';
+import { Emitter } from '../../base/common/event.js';
+import type { IDisposable } from '../../base/common/lifecycle.js';
 import { createDecorator } from '../instantiation/instantiation.js';
 
 export const IStorageService = createDecorator<IStorageService>('storageService');
@@ -12,12 +13,12 @@ export const IStorageService = createDecorator<IStorageService>('storageService'
 export const enum StorageScope {
 	APPLICATION = 'application',
 	PROFILE = 'profile',
-	WORKSPACE = 'workspace'
+	WORKSPACE = 'workspace',
 }
 
 export const enum StorageTarget {
 	USER = 'user',
-	MACHINE = 'machine'
+	MACHINE = 'machine',
 }
 
 export interface IStorageChangeEvent {
@@ -105,9 +106,7 @@ export class InMemoryStorageService implements IStorageService, IDisposable {
 	}
 
 	keys(scope: StorageScope, target: StorageTarget): string[] {
-		return [...this.getStore(scope).entries()]
-			.filter(([, value]) => value.target === target)
-			.map(([key]) => key);
+		return [...this.getStore(scope).entries()].filter(([, value]) => value.target === target).map(([key]) => key);
 	}
 
 	dispose(): void {
