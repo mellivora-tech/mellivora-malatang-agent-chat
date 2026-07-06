@@ -89,16 +89,26 @@ export class WorkbenchGrid {
 			? Math.min(safeWidth, Math.max(this.parts.sidebar.minimumWidth, this.dimensions.sidebarWidth))
 			: 0;
 		const rightWidth = Math.max(0, safeWidth - sidebarWidth);
-		const auxiliaryWidth = this.visibility.auxiliaryBar
-			? Math.min(rightWidth, Math.max(this.parts.auxiliaryBar.minimumWidth, this.dimensions.auxiliaryBarWidth))
+
+		const panelHeight = this.visibility.panel
+			? Math.min(safeHeight, Math.max(this.parts.panel.minimumHeight, this.dimensions.panelHeight))
 			: 0;
-		const sessionsWidth = Math.max(0, rightWidth - auxiliaryWidth);
+		const contentHeight = Math.max(0, safeHeight - panelHeight);
 
 		layoutOrHide(this.parts.sidebar, this.visibility.sidebar, sidebarWidth, safeHeight, 0, 0);
-		layoutOrHide(this.parts.sessions, this.visibility.sessions, sessionsWidth, safeHeight, 0, sidebarWidth);
-		layoutOrHide(this.parts.auxiliaryBar, this.visibility.auxiliaryBar, auxiliaryWidth, safeHeight, 0, sidebarWidth + sessionsWidth);
-		layoutOrHide(this.parts.editor, false, 0, 0, 0, 0);
-		layoutOrHide(this.parts.panel, false, 0, 0, 0, 0);
+
+		const entries = this.collectTopRowEntries();
+		const included = new Set(entries.map(entry => entry.name));
+		for (const name of ['sessions', 'editor', 'auxiliaryBar'] as const) {
+			if (!included.has(name)) {
+				this.parts[name].element.style.display = 'none';
+			}
+		}
+
+		const widths = computeHorizontalWidths(entries, rightWidth);
+		layoutTopRow(entries, widths, contentHeight, 0, sidebarWidth);
+
+		layoutOrHide(this.parts.panel, this.visibility.panel, rightWidth, panelHeight, contentHeight, sidebarWidth);
 	}
 
 	private collectTopRowEntries(): readonly IHorizontalEntry[] {
@@ -132,20 +142,24 @@ export class WorkbenchGrid {
 	}
 }
 
-function layoutHorizontalViews(
+function layoutTopRow(
 	entries: readonly IHorizontalEntry[],
-	availableWidth: number,
+	widths: readonly number[],
 	height: number,
 	top: number,
 	left: number
 ): void {
-	const widths = computeHorizontalWidths(entries, availableWidth);
 	let offset = left;
 
 	for (let index = 0; index < entries.length; index++) {
 		const entry = entries[index];
 		const width = widths[index];
 		if (!entry || width === undefined) {
+			continue;
+		}
+
+		if (width === 0) {
+			entry.view.element.style.display = 'none';
 			continue;
 		}
 
@@ -187,9 +201,41 @@ function computeHorizontalWidths(entries: readonly IHorizontalEntry[], available
 		}
 	} else if (delta < 0) {
 		shrinkWidths(entries, widths, -delta);
+		const shrunkTotal = widths.reduce((sum, value) => sum + value, 0);
+		if (shrunkTotal > availableWidth) {
+			if (entries.length > 1) {
+				return dropLowestPriorityEntry(entries, availableWidth);
+			}
+
+			widths[0] = Math.min(widths[0] ?? 0, availableWidth);
+		}
 	}
 
 	return widths.map(value => Math.max(0, value));
+}
+
+function dropLowestPriorityEntry(entries: readonly IHorizontalEntry[], availableWidth: number): number[] {
+	let dropIndex = 0;
+	let dropPriority = Number.POSITIVE_INFINITY;
+
+	for (let index = 0; index < entries.length; index++) {
+		const entry = entries[index];
+		if (entry && entry.view.priority <= dropPriority) {
+			dropPriority = entry.view.priority;
+			dropIndex = index;
+		}
+	}
+
+	const kept = entries.filter((_, index) => index !== dropIndex);
+	const keptWidths = computeHorizontalWidths(kept, availableWidth);
+	const widths: number[] = [];
+	let keptCursor = 0;
+
+	for (let index = 0; index < entries.length; index++) {
+		widths.push(index === dropIndex ? 0 : keptWidths[keptCursor++] ?? 0);
+	}
+
+	return widths;
 }
 
 function shrinkWidths(entries: readonly IHorizontalEntry[], widths: number[], overflow: number): void {
@@ -209,20 +255,6 @@ function shrinkWidths(entries: readonly IHorizontalEntry[], widths: number[], ov
 			const reduction = Math.min(reducible, remaining);
 			widths[index] = currentWidth - reduction;
 			remaining -= reduction;
-		}
-	}
-
-	if (remaining > 0) {
-		const widthPerEntry = Math.floor(remaining / entries.length);
-		const remainder = remaining % entries.length;
-
-		for (let index = widths.length - 1; index >= 0; index--) {
-			const currentWidth = widths[index];
-			if (currentWidth === undefined) {
-				continue;
-			}
-
-			widths[index] = Math.max(0, currentWidth - widthPerEntry - (index >= widths.length - remainder ? 1 : 0));
 		}
 	}
 }
