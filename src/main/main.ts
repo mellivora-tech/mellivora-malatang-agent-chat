@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
 import { registerProjectsIpc } from './projectsIpc.js';
 import { ensureProjectsRoot, resolveDataRoot } from './projectsStorage.js';
+import { registerSessionsIpc } from './sessionsIpc.js';
 import { getInitialWindowBackgroundColor } from './windowTheme.js';
 
 const distRoot = join(fileURLToPath(new URL('..', import.meta.url)));
@@ -52,6 +53,7 @@ const dataRoot = resolveDataRoot(process.env, homedir());
 app.whenReady().then(async () => {
 	await ensureProjectsRoot(dataRoot);
 	registerProjectsIpc(dataRoot);
+	registerSessionsIpc(dataRoot);
 	await createWindow();
 });
 app.on('window-all-closed', () => handleWindowAllClosed(lifecycleHost));
