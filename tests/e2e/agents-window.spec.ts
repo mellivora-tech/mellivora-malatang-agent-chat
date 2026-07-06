@@ -3,9 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { _electron as electron, type ElectronApplication, type Locator, type Page } from 'playwright';
+
+async function createDataDir(): Promise<string> {
+	return mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+}
 
 const screenshots = [
 	{ width: 1440, height: 900, path: 'test-results/agents-window-1440x900.png' },
@@ -19,7 +25,10 @@ test('agents window shell renders at desktop sizes', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'] });
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
 			if (message.type() === 'error') {
@@ -59,7 +68,7 @@ test('starting a conversation creates a running session shell', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -85,6 +94,91 @@ test('starting a conversation creates a running session shell', async () => {
 	}
 });
 
+test('project picker threads the seeded project into a new session', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	const projectDir = join(dataDir, 'projects', 'aaaa1111');
+	await mkdir(projectDir, { recursive: true });
+	await writeFile(
+		join(projectDir, 'project.json'),
+		JSON.stringify({ id: 'aaaa1111', name: 'Seeded Project', path: '/tmp/seeded-project', createdAt: '2026-07-06T00:00:00.000Z' }),
+		'utf8',
+	);
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-new-session-view');
+
+		await expect(page.locator('.new-session-composer-context')).toContainText('Seeded Project');
+
+		await page.locator('.new-session-composer-context').click();
+		await expect(page.locator('.new-session-project-menu')).toBeVisible();
+		const seededItem = page.locator('.new-session-project-item').filter({ hasText: 'Seeded Project' });
+		await expect(seededItem).toBeVisible();
+		await expect(seededItem.locator('.codicon-check')).not.toHaveClass(/project-check-hidden/);
+		await expect(page.locator('.new-session-project-add')).toContainText('Add project');
+		await page.keyboard.press('Escape');
+		await expect(page.locator('.new-session-project-menu')).toHaveCount(0);
+
+		await page.locator('.new-session-input').fill('hello');
+		await page.locator('.new-session-send-button').click();
+
+		await expect(page.locator('.conversation-context-workspace').first()).toContainText('Seeded Project');
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('first launch creates the projects root and shows the empty picker state', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.waitForSelector('.sessions-new-session-view');
+		await expect(page.locator('.new-session-composer-context')).toContainText('Select project');
+
+		const stats = await stat(join(dataDir, 'projects'));
+		expect(stats.isDirectory()).toBe(true);
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
 test('enter starts a session from the new session landing', async () => {
 	await mkdir('test-results', { recursive: true });
 
@@ -94,7 +188,7 @@ test('enter starts a session from the new session landing', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -128,7 +222,7 @@ test('conversation supports stop and follow-up turns', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' },
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500', AGENT_CHAT_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -168,7 +262,7 @@ test('stop button ends the running state', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -206,7 +300,7 @@ test('starting multiple conversations keeps a single active conversation page', 
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -248,7 +342,10 @@ test('historical conversation messages align by role', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'] });
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
 			if (message.type() === 'error') {
@@ -280,7 +377,10 @@ test('completed conversation shows read-only idle message state', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'] });
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
 			if (message.type() === 'error') {
@@ -322,7 +422,10 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 	const rendererErrors: string[] = [];
 
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'] });
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
 			if (message.type() === 'error') {
@@ -364,7 +467,7 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await expect(page.locator('.new-session-watermark')).toBeVisible();
 	await expect(page.locator('.new-session-watermark')).toHaveText('');
 	await expect(page.locator('.new-session-heading')).toHaveText('Morning, how can I help?');
-	await expect(page.locator('.new-session-composer-context')).toContainText('Obsidian');
+	await expect(page.locator('.new-session-composer-context')).toContainText('Select project');
 	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask ZCode anything/);
 	await expect(page.locator('.new-session-input')).toBeVisible();
 	await expect(page.locator('.new-session-access')).toContainText('Full access');
