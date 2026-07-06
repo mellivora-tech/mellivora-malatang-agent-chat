@@ -14,6 +14,7 @@ export interface ISessionChangeEvent {
 
 export interface IStartSessionOptions {
 	readonly workspace?: ISessionWorkspace;
+	readonly projectId?: string;
 }
 
 export interface ISessionsProvider {
