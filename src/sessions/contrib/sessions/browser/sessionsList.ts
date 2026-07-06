@@ -978,6 +978,7 @@ export class SessionsList extends Disposable {
 				session.changesSummary,
 				session.isArchived,
 				session.isRead,
+				session.isPinned,
 				session.messages,
 				session.interactivity,
 			]) {

@@ -59,6 +59,7 @@ function createSnapshot(sessionId: string, overrides: Partial<ISessionSnapshot> 
 		status: 2,
 		isArchived: false,
 		isRead: true,
+		isPinned: false,
 		messages: [{ id: 'm1', role: 'user', text: 'hello' }],
 		...overrides,
 	};
@@ -93,6 +94,32 @@ test('initialize hydrates sessions from the bridge snapshots', async () => {
 	assert.equal(sessions[1]!.interactivity.get(), SessionInteractivity.ReadOnly);
 	assert.equal(events.length, 1);
 	assert.deepEqual(events[0], { added: sessions, removed: [], changed: [] });
+});
+
+test('initialize hydrates projectId and isPinned onto sessions', async () => {
+	const bridge = createFakeBridge([createSnapshot('s1', { projectId: '3f2a8c1d', isPinned: true })]);
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+
+	await provider.initialize();
+
+	const session = provider.getSessions()[0]!;
+	assert.equal(session.projectId, '3f2a8c1d');
+	assert.equal(session.isPinned.get(), true);
+});
+
+test('startSession sets projectId on the created session', async () => {
+	const bridge = createFakeBridge();
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await provider.initialize();
+
+	const withProject = await provider.startSession('hello', { projectId: '3f2a8c1d' });
+	const withoutProject = await provider.startSession('again');
+
+	assert.equal(withProject.projectId, '3f2a8c1d');
+	assert.equal(withoutProject.projectId, undefined);
+	assert.equal(withProject.isPinned.get(), false);
+
+	await provider.whenIdle();
 });
 
 test('initialize coerces a persisted in-progress status to needs-input', async () => {

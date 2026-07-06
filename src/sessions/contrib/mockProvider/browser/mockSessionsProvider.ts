@@ -59,6 +59,7 @@ function createSession(options: {
 		sessionType: 'mock-agent',
 		icon: options.icon,
 		createdAt: options.timestamp,
+		projectId: undefined,
 		workspace: observableValue<ISessionWorkspace | undefined>(options.workspace),
 		title: observableValue(options.title),
 		updatedAt: observableValue(options.timestamp),
@@ -67,6 +68,7 @@ function createSession(options: {
 		changesSummary: observableValue(options.changesSummary),
 		isArchived: observableValue(options.isArchived ?? false),
 		isRead: observableValue(options.isRead ?? true),
+		isPinned: observableValue(false),
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
 	};

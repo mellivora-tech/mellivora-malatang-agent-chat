@@ -33,12 +33,14 @@ interface IMutableSession extends ISession {
 	readonly changesSummary: ObservableValue<ISessionChangesSummary | undefined>;
 	readonly isArchived: ObservableValue<boolean>;
 	readonly isRead: ObservableValue<boolean>;
+	readonly isPinned: ObservableValue<boolean>;
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 }
 
 function createSession(options: {
 	sessionId: string;
+	projectId?: string;
 	createdAt: Date;
 	updatedAt: Date;
 	icon: string;
@@ -51,6 +53,7 @@ function createSession(options: {
 	changesSummary?: ISessionChangesSummary;
 	isArchived?: boolean;
 	isRead?: boolean;
+	isPinned?: boolean;
 }): IMutableSession {
 	return {
 		sessionId: options.sessionId,
@@ -58,6 +61,7 @@ function createSession(options: {
 		sessionType: 'agent-chat',
 		icon: options.icon,
 		createdAt: options.createdAt,
+		projectId: options.projectId,
 		workspace: observableValue<ISessionWorkspace | undefined>(options.workspace),
 		title: observableValue(options.title),
 		updatedAt: observableValue(options.updatedAt),
@@ -66,6 +70,7 @@ function createSession(options: {
 		changesSummary: observableValue(options.changesSummary),
 		isArchived: observableValue(options.isArchived ?? false),
 		isRead: observableValue(options.isRead ?? true),
+		isPinned: observableValue(options.isPinned ?? false),
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
 	};
@@ -152,6 +157,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 		const session = createSession({
 			sessionId,
+			...(options?.projectId ? { projectId: options.projectId } : {}),
 			createdAt: now,
 			updatedAt: now,
 			icon: 'codicon-new-session',
@@ -228,6 +234,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 			interactivity: coerceInteractivity(snapshot.interactivity),
 			isArchived: snapshot.isArchived,
 			isRead: snapshot.isRead,
+			isPinned: snapshot.isPinned,
+			...(snapshot.projectId !== undefined ? { projectId: snapshot.projectId } : {}),
 			...(snapshot.description !== undefined ? { description: snapshot.description } : {}),
 			...(snapshot.workspace !== undefined ? { workspace: snapshot.workspace } : {}),
 			...(snapshot.changesSummary !== undefined ? { changesSummary: snapshot.changesSummary } : {}),

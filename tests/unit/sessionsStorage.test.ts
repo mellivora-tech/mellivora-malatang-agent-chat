@@ -115,6 +115,23 @@ test('appendSessionEntry and loadSession round-trip messages and folded state', 
 	}
 });
 
+test('loadSession defaults isPinned to false for legacy files and folds pin toggles', async () => {
+	const root = await createTempRoot();
+	const ref = { sessionId: 'aaaa-1111' };
+	try {
+		await createSessionFile(root, createHeader('aaaa-1111'));
+		assert.equal((await loadSession(root, ref))?.isPinned, false);
+
+		await appendSessionEntry(root, ref, { type: 'state', timestamp: '2026-07-07T00:01:00.000Z', isPinned: true });
+		assert.equal((await loadSession(root, ref))?.isPinned, true);
+
+		await appendSessionEntry(root, ref, { type: 'state', timestamp: '2026-07-07T00:02:00.000Z', isPinned: false });
+		assert.equal((await loadSession(root, ref))?.isPinned, false);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('loadSession keeps message detail when present', async () => {
 	const root = await createTempRoot();
 	const ref = { sessionId: 'aaaa-1111' };

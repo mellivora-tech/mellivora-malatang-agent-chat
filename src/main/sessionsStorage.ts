@@ -84,6 +84,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let summary: ISessionStateEntry['changesSummary'];
 	let isArchived = false;
 	let isRead = true;
+	let isPinned = false;
 
 	for (const line of lines.slice(1)) {
 		const entry = parseEntry(line);
@@ -118,6 +119,9 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		if (entry.isRead !== undefined) {
 			isRead = entry.isRead;
 		}
+		if (entry.isPinned !== undefined) {
+			isPinned = entry.isPinned;
+		}
 	}
 
 	return {
@@ -131,6 +135,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		status,
 		isArchived,
 		isRead,
+		isPinned,
 		messages,
 		// The directory decides project membership; the header copy is only
 		// for debuggability and may be stale.

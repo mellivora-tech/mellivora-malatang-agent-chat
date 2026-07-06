@@ -18,6 +18,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		sessionType: providerId,
 		icon: 'codicon-copilot',
 		createdAt: new Date('2026-07-03T00:00:00.000Z'),
+		projectId: undefined,
 		workspace: observableValue(undefined),
 		title: observableValue(sessionId),
 		updatedAt: observableValue(new Date('2026-07-03T00:00:00.000Z')),
@@ -26,6 +27,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		changesSummary: observableValue(undefined),
 		isArchived: observableValue(false),
 		isRead: observableValue(true),
+		isPinned: observableValue(false),
 		messages: observableValue<readonly ISessionMessage[]>([]),
 		interactivity: observableValue(SessionInteractivity.Full),
 	};
