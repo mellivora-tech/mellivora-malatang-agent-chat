@@ -8,7 +8,7 @@ import { Disposable, type IDisposable } from '../../../base/common/lifecycle.js'
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
 import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService as ISessionsManagementServiceContract } from '../common/sessionsManagement.js';
-import type { ISessionChangeEvent, ISessionsProvider } from '../common/sessionsProvider.js';
+import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../common/sessionsProvider.js';
 import type { ISessionsProvidersChangeEvent, ISessionsProvidersService } from './sessionsProvidersService.js';
 
 export const ISessionsManagementService = createDecorator<ISessionsManagementServiceContract>('sessionsManagementService');
@@ -37,13 +37,13 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return this.getSessions().find(session => session.sessionId === sessionId);
 	}
 
-	async startSession(query: string): Promise<ISession> {
+	async startSession(query: string, options?: IStartSessionOptions): Promise<ISession> {
 		const provider = this.providersService.getProviders()[0];
 		if (!provider) {
 			throw new Error('No sessions provider is registered');
 		}
 
-		return provider.startSession(query);
+		return provider.startSession(query, options);
 	}
 
 	async sendMessage(sessionId: string, query: string): Promise<ISession> {

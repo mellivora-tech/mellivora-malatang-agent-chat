@@ -5,13 +5,13 @@
 
 import type { Event } from '../../../base/common/event.js';
 import type { ISession } from './session.js';
-import type { ISessionChangeEvent } from './sessionsProvider.js';
+import type { ISessionChangeEvent, IStartSessionOptions } from './sessionsProvider.js';
 
 export interface ISessionsManagementService {
 	getSessions(): readonly ISession[];
 	getSession(sessionId: string): ISession | undefined;
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
-	startSession(query: string): Promise<ISession>;
+	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
 }

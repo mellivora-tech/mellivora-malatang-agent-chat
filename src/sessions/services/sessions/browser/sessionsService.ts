@@ -7,6 +7,7 @@ import { Disposable } from '../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
 import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService } from '../common/sessionsManagement.js';
+import type { IStartSessionOptions } from '../common/sessionsProvider.js';
 import { VisibleSessions } from './visibleSessions.js';
 import type { ISessionsPartService } from './sessionsPartService.js';
 
@@ -16,7 +17,7 @@ export interface ISessionsService {
 	readonly visibleSessions: VisibleSessions['visibleSessions'];
 	readonly activeSession: VisibleSessions['activeSession'];
 	getSessions(): readonly ISession[];
-	startSession(query: string): Promise<ISession>;
+	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
 	openSession(sessionId: string): void;
 	setActive(sessionId: string): void;
 	closeSession(sessionId: string): void;
@@ -55,8 +56,8 @@ export class SessionsService extends Disposable implements ISessionsService {
 		return this.managementService.getSessions();
 	}
 
-	async startSession(query: string): Promise<ISession> {
-		const session = await this.managementService.startSession(query);
+	async startSession(query: string, options?: IStartSessionOptions): Promise<ISession> {
+		const session = await this.managementService.startSession(query, options);
 		this.visibleSessionsModel.setSessions(this.managementService.getSessions());
 		this.visibleSessionsModel.openOnly(session);
 		this.sessionsPartService.showConversation(false);

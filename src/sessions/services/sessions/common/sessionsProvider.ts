@@ -4,12 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Event } from '../../../base/common/event.js';
-import type { ISession } from './session.js';
+import type { ISession, ISessionWorkspace } from './session.js';
 
 export interface ISessionChangeEvent {
 	readonly added: readonly ISession[];
 	readonly removed: readonly ISession[];
 	readonly changed: readonly ISession[];
+}
+
+export interface IStartSessionOptions {
+	readonly workspace?: ISessionWorkspace;
 }
 
 export interface ISessionsProvider {
@@ -19,7 +23,7 @@ export interface ISessionsProvider {
 	readonly order: number;
 	getSessions(): readonly ISession[];
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
-	startSession(query: string): Promise<ISession>;
+	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
 }

@@ -7,7 +7,7 @@ import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
 import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
-import type { ISessionChangeEvent, ISessionsProvider } from '../../../services/sessions/common/sessionsProvider.js';
+import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
 export interface IMockSessionsProviderOptions {
@@ -183,7 +183,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 		return this.sessions;
 	}
 
-	async startSession(query: string): Promise<ISession> {
+	async startSession(query: string, options?: IStartSessionOptions): Promise<ISession> {
 		const timestamp = new Date();
 		const idBase =
 			query
@@ -198,7 +198,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 			status: SessionStatus.InProgress,
 			title: query,
 			description: 'Agent is working on the first prompt.',
-			workspace: {
+			workspace: options?.workspace ?? {
 				label: 'mellivora-malatang',
 				description: '~/workspace/code/learning-projects',
 				branchName: 'codex/agents-window-rebuild',

@@ -9,7 +9,7 @@ import { SessionsPartService } from '../../src/sessions/services/sessions/browse
 import { SessionsProvidersService } from '../../src/sessions/services/sessions/browser/sessionsProvidersService.js';
 import { SessionsService } from '../../src/sessions/services/sessions/browser/sessionsService.js';
 import { registerMockSessionsProvider } from '../../src/sessions/contrib/mockProvider/browser/mockSessions.contribution.js';
-import type { ISessionChangeEvent, ISessionsProvider } from '../../src/sessions/services/sessions/common/sessionsProvider.js';
+import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../src/sessions/services/sessions/common/sessionsProvider.js';
 
 function createSession(sessionId: string, providerId: string): ISession {
 	return {
@@ -37,6 +37,7 @@ class TestProvider implements ISessionsProvider {
 	private readonly emitter = new Emitter<ISessionChangeEvent>();
 	private readonly requests: string[] = [];
 	private readonly starts: string[] = [];
+	readonly startOptions: (IStartSessionOptions | undefined)[] = [];
 
 	constructor(
 		readonly id: string,
@@ -54,10 +55,11 @@ class TestProvider implements ISessionsProvider {
 		return this.sessions;
 	}
 
-	async startSession(query: string): Promise<ISession> {
+	async startSession(query: string, options?: IStartSessionOptions): Promise<ISession> {
 		const session = createSession(`started-${query}`, this.id);
 		this.starts.push(query);
 		this.requests.push(`start:${query}`);
+		this.startOptions.push(options);
 		return session;
 	}
 
@@ -139,6 +141,19 @@ test('startSession delegates to the first registered provider', async () => {
 	assert.equal(session.sessionId, 'started-hello');
 	assert.deepEqual(first.startedQueries, ['hello']);
 	assert.deepEqual(second.startedQueries, []);
+});
+
+test('startSession forwards options to the provider', async () => {
+	const providers = new SessionsProvidersService();
+	const management = new SessionsManagementService(providers);
+	const provider = new TestProvider('provider-a', [createSession('session-a', 'provider-a')]);
+
+	providers.registerProvider(provider);
+
+	const workspace = { label: 'Seeded Project', description: '/tmp/seeded' };
+	await management.startSession('hello', { workspace });
+
+	assert.deepEqual(provider.startOptions, [{ workspace }]);
 });
 
 test('startSession throws when no provider is registered', async () => {

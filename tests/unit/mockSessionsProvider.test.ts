@@ -33,6 +33,19 @@ test('mock provider creates a running session from first prompt', async () => {
 	disposable.dispose();
 });
 
+test('startSession uses the workspace passed in options', async () => {
+	const provider = new MockSessionsProvider({ responseDelayMs: 1 });
+	const session = await provider.startSession('hello', {
+		workspace: { label: 'Seeded Project', description: '/tmp/seeded' },
+	});
+
+	assert.equal(session.workspace.get()?.label, 'Seeded Project');
+	assert.equal(session.workspace.get()?.description, '/tmp/seeded');
+	assert.equal(session.workspace.get()?.branchName, undefined);
+
+	await provider.whenIdle();
+});
+
 test('started session receives a mock reply and settles to needs-input', async () => {
 	const provider = new MockSessionsProvider({ responseDelayMs: 1 });
 	const session = await provider.startSession('hello');
