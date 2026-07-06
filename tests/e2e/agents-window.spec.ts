@@ -57,7 +57,10 @@ test('starting a conversation creates a running session shell', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'] });
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
 			if (message.type() === 'error') {
@@ -82,6 +85,87 @@ test('starting a conversation creates a running session shell', async () => {
 	}
 });
 
+test('conversation supports stop and follow-up turns', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' }
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-new-session-view');
+
+		await page.locator('.new-session-input').fill('hello');
+		await page.locator('.new-session-send-button').click();
+
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last())
+			.toHaveText('Mock response for: hello');
+		await expect(page.locator('.conversation-send-button')).toBeVisible();
+		await expect(page.locator('.conversation-stop-button')).toBeHidden();
+
+		await page.locator('.conversation-input').fill('follow up');
+		await page.locator('.conversation-input').press('Enter');
+		await expect(page.locator('.conversation-message.user .conversation-message-bubble').last())
+			.toHaveText('follow up');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last())
+			.toHaveText('Mock response for: follow up');
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('stop button ends the running state', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-new-session-view');
+
+		await page.locator('.new-session-input').fill('hello');
+		await page.locator('.new-session-send-button').click();
+
+		await expect(page.locator('.conversation-stop-button')).toBeVisible();
+		await page.locator('.conversation-stop-button').click();
+
+		await expect(page.locator('.conversation-send-button')).toBeVisible();
+		await expect(page.locator('.conversation-stop-button')).toBeHidden();
+		await expect(page.locator('.conversation-thinking-row')).toHaveCount(0);
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
 test('starting multiple conversations keeps a single active conversation page', async () => {
 	await mkdir('test-results', { recursive: true });
 
@@ -89,7 +173,10 @@ test('starting multiple conversations keeps a single active conversation page', 
 	const rendererErrors: string[] = [];
 
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'] });
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
 			if (message.type() === 'error') {

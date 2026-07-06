@@ -11,6 +11,7 @@ import { ConversationContext } from './conversationContext.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string): Promise<unknown>;
+	stopSession(sessionId: string): Promise<unknown>;
 }
 
 export class ConversationView extends Disposable {
@@ -22,10 +23,12 @@ export class ConversationView extends Disposable {
 	private readonly sendButton: HTMLButtonElement;
 	private readonly stopButton: HTMLButtonElement;
 	private readonly reconnectStatus: HTMLElement;
+	private readonly sendError: HTMLElement;
 	private readonly header = this._register(new ConversationContext());
 	private readonly sessionDisposables = this._register(new DisposableStore());
 	private session: IActiveSession | undefined;
 	private isSending = false;
+	private isStopping = false;
 
 	constructor(private readonly messageSender?: ISessionMessageSender) {
 		super();
@@ -107,6 +110,11 @@ export class ConversationView extends Disposable {
 		this.sendButton.setAttribute('aria-label', 'Send');
 		appendCodicon(this.sendButton, 'codicon-arrow-up');
 
+		this.sendError = append(this.composer, document.createElement('div'));
+		this.sendError.className = 'conversation-send-error';
+		this.sendError.setAttribute('role', 'alert');
+		this.sendError.hidden = true;
+
 		this._registerEventListeners();
 		this.render();
 	}
@@ -120,6 +128,7 @@ export class ConversationView extends Disposable {
 		this.session = session;
 		this.sessionDisposables.clear();
 		this.header.openSession(session);
+		this.setSendError(undefined);
 
 		if (session) {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
@@ -143,6 +152,10 @@ export class ConversationView extends Disposable {
 		this.composer.addEventListener('submit', event => {
 			event.preventDefault();
 			void this.send();
+		});
+
+		this.stopButton.addEventListener('click', () => {
+			void this.stop();
 		});
 
 		this.input.addEventListener('keydown', event => {
@@ -219,7 +232,7 @@ export class ConversationView extends Disposable {
 		this.composer.classList.toggle('idle', !isRunning);
 		this.composer.dataset.state = isRunning ? 'running' : 'idle';
 		this.input.disabled = !canType;
-		this.sendButton.disabled = isRunning || !canType || !hasText;
+		this.sendButton.disabled = !canType || !hasText;
 		this.sendButton.hidden = isRunning;
 		this.stopButton.hidden = !isRunning;
 		this.reconnectStatus.hidden = !isRunning;
@@ -235,22 +248,48 @@ export class ConversationView extends Disposable {
 			!query
 			|| !session
 			|| this.isSending
-			|| session.status.get() === SessionStatus.InProgress
 			|| session.interactivity.get() !== SessionInteractivity.Full
 		) {
 			return;
 		}
 
-		this.input.value = '';
 		this.isSending = true;
+		this.setSendError(undefined);
 		this.updateComposerState();
 
 		try {
 			await this.messageSender?.sendMessage(session.sessionId, query);
+			this.input.value = '';
+		} catch {
+			this.setSendError('Message failed to send. Your draft was kept — try again.');
 		} finally {
 			this.isSending = false;
 			this.updateComposerState();
 		}
+	}
+
+	private async stop(): Promise<void> {
+		const session = this.session;
+		if (!session || this.isStopping) {
+			return;
+		}
+
+		this.isStopping = true;
+		this.stopButton.disabled = true;
+
+		try {
+			await this.messageSender?.stopSession(session.sessionId);
+		} catch {
+			this.setSendError('Could not stop the session.');
+		} finally {
+			this.isStopping = false;
+			this.stopButton.disabled = false;
+		}
+	}
+
+	private setSendError(message: string | undefined): void {
+		this.sendError.textContent = message ?? '';
+		this.sendError.hidden = !message;
 	}
 }
 
