@@ -14,6 +14,8 @@ import { PanelPart } from './parts/panelPart.js';
 import { SessionsPart } from './parts/sessionsPart.js';
 import { SidebarPart } from './parts/sidebarPart.js';
 import { TitlebarPart } from './parts/titlebarPart.js';
+import { IProjectsService, ProjectsService } from '../services/projects/browser/projectsService.js';
+import type { IProjectsBridge } from '../services/projects/common/projects.js';
 import { ISessionsManagementService, SessionsManagementService } from '../services/sessions/browser/sessionsManagementService.js';
 import { ISessionsPartService, SessionsPartService } from '../services/sessions/browser/sessionsPartService.js';
 import { ISessionsProvidersService, SessionsProvidersService } from '../services/sessions/browser/sessionsProvidersService.js';
@@ -29,12 +31,14 @@ type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
 		readonly platform?: NodeJS.Platform;
 		readonly mockResponseDelayMs?: number;
+		readonly projects?: IProjectsBridge;
 	};
 };
 
 export class Workbench {
 	private readonly root = document.createElement('div');
 	private readonly services = new ServiceCollection();
+	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects);
 	private readonly providersService = new SessionsProvidersService();
 	private readonly managementService = new SessionsManagementService(this.providersService);
 	private readonly sessionsPartService = new SessionsPartService();
@@ -89,7 +93,9 @@ export class Workbench {
 	}
 
 	startup(): void {
+		this.services.set(IProjectsService, this.projectsService);
 		this.services.set(ISessionsProvidersService, this.providersService);
+		void this.projectsService.initialize();
 		this.services.set(ISessionsManagementService, this.managementService);
 		this.services.set(ISessionsService, this.sessionsService);
 		this.services.set(ISessionsPartService, this.sessionsPartService);
