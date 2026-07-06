@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { LayoutPriority } from '../../base/browser/grid.js';
+import { DisposableStore } from '../../base/common/lifecycle.js';
+import { ChangesView } from '../../contrib/changes/browser/changesView.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import { Part } from '../part.js';
@@ -20,14 +22,13 @@ const auxiliaryTabs: readonly {
 	readonly label: string;
 	readonly icon: string;
 	readonly title: string;
-	readonly body: string;
+	readonly body?: string;
 }[] = [
 	{
 		id: 'review',
 		label: 'Review',
 		icon: 'codicon-diff',
-		title: 'Review',
-		body: 'Review changes'
+		title: 'Review'
 	},
 	{
 		id: 'terminal',
@@ -52,6 +53,7 @@ export class AuxiliaryBarPart extends Part {
 
 	private container: HTMLElement | undefined;
 	private activeTab: AuxiliaryTabId | undefined;
+	private readonly viewDisposables = this._register(new DisposableStore());
 
 	constructor(private readonly options: IAuxiliaryBarPartOptions = {}) {
 		super('workbench.parts.auxiliarybar', 'auxiliarybar');
@@ -68,6 +70,7 @@ export class AuxiliaryBarPart extends Part {
 			return;
 		}
 
+		this.viewDisposables.clear();
 		container.textContent = '';
 
 		const root = document.createElement('div');
@@ -162,8 +165,16 @@ export class AuxiliaryBarPart extends Part {
 
 		const body = document.createElement('div');
 		body.className = 'auxiliary-view-body';
-		body.textContent = activeTab.body;
 		view.appendChild(body);
+
+		if (activeTab.id === 'review') {
+			this.viewDisposables.add(new ChangesView(body, {
+				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {})
+			}));
+		} else {
+			body.textContent = activeTab.body ?? '';
+		}
 	}
 
 	private openTab(tabId: AuxiliaryTabId): void {

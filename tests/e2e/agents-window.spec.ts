@@ -1243,7 +1243,11 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(page.locator('.auxiliary-tabs')).toHaveCount(0);
 
 	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
-	await assertSidePaneTab(page, 'review', 'Review', 'Review changes');
+	await assertSidePaneTab(page, 'review', 'Review');
+	const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
+	await expect(changesView).toBeVisible();
+	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
+	await expect(changesView.locator('.changes-summary-stat.files .changes-summary-value')).toHaveText('5');
 
 	await page.locator('.auxiliary-tab[data-tab-id="terminal"]').click();
 	await assertSidePaneTab(page, 'terminal', 'Terminal', 'No terminal session started');
@@ -1256,7 +1260,7 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(toggle).not.toHaveClass(/active/);
 }
 
-async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyText: string): Promise<void> {
+async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyText?: string): Promise<void> {
 	const root = page.locator('.auxiliary-bar');
 	await expect(root).toBeVisible();
 	await expect(root).not.toHaveClass(/auxiliary-empty/);
@@ -1269,5 +1273,7 @@ async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyT
 	await expect(activeTab).toHaveClass(/active/);
 	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"]`)).toBeVisible();
 	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-title`)).toHaveText(title);
-	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-body`)).toContainText(bodyText);
+	if (bodyText !== undefined) {
+		await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-body`)).toContainText(bodyText);
+	}
 }
