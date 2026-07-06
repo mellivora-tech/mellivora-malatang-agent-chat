@@ -4,9 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { app, BrowserWindow } from 'electron';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
+import { registerProjectsIpc } from './projectsIpc.js';
+import { ensureProjectsRoot, resolveDataRoot } from './projectsStorage.js';
 import { getInitialWindowBackgroundColor } from './windowTheme.js';
 
 const distRoot = join(fileURLToPath(new URL('..', import.meta.url)));
@@ -44,6 +47,12 @@ const lifecycleHost = {
 	quit: () => app.quit(),
 };
 
-app.whenReady().then(createWindow);
+const dataRoot = resolveDataRoot(process.env, homedir());
+
+app.whenReady().then(async () => {
+	await ensureProjectsRoot(dataRoot);
+	registerProjectsIpc(dataRoot);
+	await createWindow();
+});
 app.on('window-all-closed', () => handleWindowAllClosed(lifecycleHost));
 app.on('activate', () => handleActivate(lifecycleHost));

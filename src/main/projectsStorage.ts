@@ -15,6 +15,10 @@ export function resolveDataRoot(env: NodeJS.ProcessEnv, homedir: string): string
 	return override ? override : join(homedir, '.agent-chat');
 }
 
+export async function ensureProjectsRoot(root: string): Promise<void> {
+	await mkdir(getProjectsDir(root), { recursive: true });
+}
+
 export async function listProjects(root: string): Promise<readonly IProject[]> {
 	let entries;
 	try {

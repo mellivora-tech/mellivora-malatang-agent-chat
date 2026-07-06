@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
-import { createProject, ensureProject, getProject, listProjects, resolveDataRoot } from '../../src/main/projectsStorage.js';
+import { createProject, ensureProject, ensureProjectsRoot, getProject, listProjects, resolveDataRoot } from '../../src/main/projectsStorage.js';
 
 async function createTempRoot(): Promise<string> {
 	return mkdtemp(join(tmpdir(), 'agent-chat-projects-'));
@@ -134,6 +134,18 @@ test('listProjects orders projects by createdAt', async () => {
 			listed.map(project => project.id),
 			['aaaa1111', 'bbbb2222'],
 		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('ensureProjectsRoot creates the projects directory', async () => {
+	const root = await createTempRoot();
+	try {
+		const dataRoot = join(root, 'nested', 'data');
+		await ensureProjectsRoot(dataRoot);
+		const stats = await stat(join(dataRoot, 'projects'));
+		assert.ok(stats.isDirectory());
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
