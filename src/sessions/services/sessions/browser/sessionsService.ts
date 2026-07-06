@@ -23,6 +23,8 @@ export interface ISessionsService {
 	closeSession(sessionId: string): void;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
+	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
+	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 }
 
 export class SessionsService extends Disposable implements ISessionsService {
@@ -90,6 +92,14 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		return this.managementService.stopSession(sessionId);
+	}
+
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		return this.managementService.setSessionPinned(sessionId, isPinned);
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		return this.managementService.setSessionArchived(sessionId, isArchived);
 	}
 
 	private getRequiredSession(sessionId: string): ISession {

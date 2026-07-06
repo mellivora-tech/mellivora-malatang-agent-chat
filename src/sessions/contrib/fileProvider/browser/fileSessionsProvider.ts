@@ -213,6 +213,22 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		await this.persistStatePatch(sessionId, { isPinned });
+		session.isPinned.set(isPinned);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		await this.persistStatePatch(sessionId, { isArchived });
+		session.isArchived.set(isArchived);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
 	async whenIdle(): Promise<void> {
 		while (this.pendingReplies.size > 0) {
 			await Promise.all([...this.pendingReplies.values()].map(pending => pending.promise));
@@ -253,6 +269,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 	private getRef(sessionId: string): ISessionRef {
 		return this.refs.get(sessionId) ?? { sessionId };
+	}
+
+	// Pin/archive intentionally do not bump updatedAt so rows keep their
+	// position; the fold recomputes updatedAt from entry timestamps on the
+	// next load, which is acceptable drift.
+	private persistStatePatch(sessionId: string, patch: { isPinned?: boolean; isArchived?: boolean }): Promise<void> {
+		return this.enqueueWrite(() => this.bridge.append(this.getRef(sessionId), { type: 'state', timestamp: new Date().toISOString(), ...patch }));
 	}
 
 	private enqueueWrite(write: () => Promise<void>): Promise<void> {

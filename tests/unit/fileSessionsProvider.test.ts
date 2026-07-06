@@ -25,23 +25,61 @@ interface IFakeBridge extends ISessionsBridge {
 function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBridge {
 	const creates: ISessionHeader[] = [];
 	const appends: IAppendCall[] = [];
+	// A tiny store folding state entries so tests can rehydrate a second
+	// provider over the same bridge and observe persisted lifecycle state.
+	const store = new Map<string, ISessionSnapshot>(snapshots.map(snapshot => [snapshot.sessionId, snapshot]));
 	const bridge: IFakeBridge = {
 		creates,
 		appends,
 		failAppends: false,
 		failCreates: false,
-		list: async () => snapshots,
+		list: async () => [...store.values()],
 		create: async header => {
 			if (bridge.failCreates) {
 				throw new Error('create failed');
 			}
 			creates.push(header);
+			store.set(header.sessionId, {
+				sessionId: header.sessionId,
+				sessionType: header.sessionType,
+				icon: header.icon,
+				createdAt: header.createdAt,
+				updatedAt: header.createdAt,
+				interactivity: header.interactivity,
+				title: '',
+				status: 2,
+				isArchived: false,
+				isRead: true,
+				isPinned: false,
+				messages: [],
+				...(header.projectId !== undefined ? { projectId: header.projectId } : {}),
+				...(header.workspace !== undefined ? { workspace: header.workspace } : {}),
+			});
 		},
 		append: async (ref, entry) => {
 			if (bridge.failAppends) {
 				throw new Error('append failed');
 			}
 			appends.push({ ref, entry });
+			const existing = store.get(ref.sessionId);
+			if (!existing) {
+				return;
+			}
+			if (entry.type === 'message') {
+				store.set(ref.sessionId, {
+					...existing,
+					messages: [...existing.messages, { id: entry.id, role: entry.role, text: entry.text, ...(entry.detail !== undefined ? { detail: entry.detail } : {}) }],
+				});
+			} else {
+				store.set(ref.sessionId, {
+					...existing,
+					...(entry.status !== undefined ? { status: entry.status } : {}),
+					...(entry.title !== undefined ? { title: entry.title } : {}),
+					...(entry.isArchived !== undefined ? { isArchived: entry.isArchived } : {}),
+					...(entry.isRead !== undefined ? { isRead: entry.isRead } : {}),
+					...(entry.isPinned !== undefined ? { isPinned: entry.isPinned } : {}),
+				});
+			}
 		},
 	};
 	return bridge;
@@ -251,6 +289,50 @@ test('stopSession cancels the pending reply and persists needs-input', async () 
 	);
 
 	await provider.whenIdle();
+});
+
+test('setSessionPinned persists a pinned state entry and updates the observable', async () => {
+	const bridge = createFakeBridge([createSnapshot('s1')]);
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await provider.initialize();
+	const events: unknown[] = [];
+	provider.onDidChangeSessions(event => events.push(event));
+
+	const session = await provider.setSessionPinned('s1', true);
+
+	assert.equal(session.isPinned.get(), true);
+	const lastEntry = bridge.appends.at(-1)!.entry as { type: string; isPinned?: boolean };
+	assert.equal(lastEntry.type, 'state');
+	assert.equal(lastEntry.isPinned, true);
+	assert.deepEqual(events, [{ added: [], removed: [], changed: [session] }]);
+});
+
+test('setSessionArchived persists an archived state entry', async () => {
+	const bridge = createFakeBridge([createSnapshot('s1')]);
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await provider.initialize();
+
+	const session = await provider.setSessionArchived('s1', true);
+
+	assert.equal(session.isArchived.get(), true);
+	const lastEntry = bridge.appends.at(-1)!.entry as { type: string; isArchived?: boolean };
+	assert.equal(lastEntry.type, 'state');
+	assert.equal(lastEntry.isArchived, true);
+});
+
+test('pin and archive round-trip through a rehydrated provider', async () => {
+	const bridge = createFakeBridge([createSnapshot('s1'), createSnapshot('s2')]);
+	const first = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await first.initialize();
+	await first.setSessionPinned('s1', true);
+	await first.setSessionArchived('s2', true);
+
+	const second = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await second.initialize();
+
+	const sessions = second.getSessions();
+	assert.equal(sessions.find(session => session.sessionId === 's1')?.isPinned.get(), true);
+	assert.equal(sessions.find(session => session.sessionId === 's2')?.isArchived.get(), true);
 });
 
 test('startSession rejects when the bridge create fails', async () => {

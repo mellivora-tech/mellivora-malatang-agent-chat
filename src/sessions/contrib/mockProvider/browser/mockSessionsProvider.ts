@@ -35,6 +35,7 @@ interface IMutableSession extends ISession {
 	readonly changesSummary: ObservableValue<ISessionChangesSummary | undefined>;
 	readonly isArchived: ObservableValue<boolean>;
 	readonly isRead: ObservableValue<boolean>;
+	readonly isPinned: ObservableValue<boolean>;
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 }
@@ -247,6 +248,20 @@ export class MockSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		}
 
+		return session;
+	}
+
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.isPinned.set(isPinned);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.isArchived.set(isArchived);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		return session;
 	}
 

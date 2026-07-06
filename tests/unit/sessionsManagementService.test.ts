@@ -75,6 +75,16 @@ class TestProvider implements ISessionsProvider {
 		return this.sessions[0]!;
 	}
 
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		this.requests.push(`pin:${sessionId}:${isPinned}`);
+		return this.sessions[0]!;
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		this.requests.push(`archive:${sessionId}:${isArchived}`);
+		return this.sessions[0]!;
+	}
+
 	get sentRequests(): readonly string[] {
 		return this.requests;
 	}
@@ -127,6 +137,22 @@ test('stopSession routes to the provider that owns the session', async () => {
 
 	assert.deepEqual(first.sentRequests, []);
 	assert.deepEqual(second.sentRequests, ['stop:session-b']);
+});
+
+test('setSessionPinned and setSessionArchived route to the owning provider', async () => {
+	const providers = new SessionsProvidersService();
+	const management = new SessionsManagementService(providers);
+	const first = new TestProvider('provider-a', [createSession('session-a', 'provider-a')]);
+	const second = new TestProvider('provider-b', [createSession('session-b', 'provider-b')]);
+
+	providers.registerProvider(first);
+	providers.registerProvider(second);
+
+	await management.setSessionPinned('session-b', true);
+	await management.setSessionArchived('session-b', true);
+
+	assert.deepEqual(first.sentRequests, []);
+	assert.deepEqual(second.sentRequests, ['pin:session-b:true', 'archive:session-b:true']);
 });
 
 test('startSession delegates to the first registered provider', async () => {
