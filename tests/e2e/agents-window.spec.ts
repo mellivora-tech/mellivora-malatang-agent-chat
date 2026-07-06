@@ -372,6 +372,159 @@ test('project sessions land under the project directory', async () => {
 	}
 });
 
+test('pin and archive survive an app relaunch', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	await writeProjectFixture(dataDir, OBSIDIAN_PROJECT);
+	await writeProjectFixture(dataDir, ZCODE_PROJECT);
+	await writeSessionFixture(dataDir, IN_PROGRESS_FIXTURE);
+	await writeSessionFixture(dataDir, COMPLETED_FIXTURE);
+
+	const rendererErrors: string[] = [];
+	const launch = async () => {
+		const app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-sidebar');
+		return { app, page };
+	};
+
+	let app: ElectronApplication | undefined;
+	try {
+		const first = await launch();
+		app = first.app;
+
+		const obsidianRow = first.page.locator('[data-project-id="obsidian"] .sessions-project-task-row').filter({ hasText: '梳理下文档' });
+		await obsidianRow.hover();
+		await obsidianRow.locator('.sessions-project-task-pin').click();
+		await expect(first.page.locator('[data-session-group="pinned"] .sessions-project-task-title')).toHaveText('梳理下文档');
+
+		const zcodeRow = first.page.locator('[data-project-id="zcodeproject"] .sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' });
+		await zcodeRow.hover();
+		await zcodeRow.locator('.sessions-project-task-action').click();
+		await expect(first.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('No tasks yet');
+
+		await first.app.close();
+		app = undefined;
+
+		const second = await launch();
+		app = second.app;
+
+		await expect(second.page.locator('[data-session-group="pinned"] .sessions-project-task-title')).toHaveText('梳理下文档');
+		await expect(second.page.locator('[data-project-id="obsidian"] .sessions-project-empty')).toHaveText('No tasks yet');
+		await expect(second.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('No tasks yet');
+		await expect(second.page.locator('.sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' })).toHaveCount(0);
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('deleting a session removes its transcript', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	await writeProjectFixture(dataDir, OBSIDIAN_PROJECT);
+	await writeSessionFixture(dataDir, IN_PROGRESS_FIXTURE);
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-sidebar');
+
+		const row = page.locator('[data-project-id="obsidian"] .sessions-project-task-row').filter({ hasText: '梳理下文档' });
+		await row.hover();
+		await row.locator('.sessions-project-task-delete').click();
+
+		await expect(page.locator('[data-project-id="obsidian"] .sessions-project-empty')).toHaveText('No tasks yet');
+		await expect
+			.poll(async () => {
+				const files = await readdir(join(dataDir, 'projects', 'obsidian', 'sessions'));
+				return files.filter(file => file.endsWith('.jsonl')).length;
+			})
+			.toBe(0);
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('the active project is restored after relaunch', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	await writeProjectFixture(dataDir, OBSIDIAN_PROJECT);
+	await writeProjectFixture(dataDir, ZCODE_PROJECT);
+
+	const rendererErrors: string[] = [];
+	const launch = async () => {
+		const app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('pageerror', error => rendererErrors.push(error.message));
+		await page.waitForSelector('.sessions-new-session-view');
+		return { app, page };
+	};
+
+	let app: ElectronApplication | undefined;
+	try {
+		const first = await launch();
+		app = first.app;
+
+		await expect(first.page.locator('.new-session-composer-context')).toContainText('Obsidian');
+		await first.page.locator('.new-session-composer-context').click();
+		await first.page.locator('.new-session-project-item').filter({ hasText: 'ZCodeProject' }).click();
+		await expect(first.page.locator('.new-session-composer-context')).toContainText('ZCodeProject');
+
+		await expect
+			.poll(() =>
+				stat(join(dataDir, 'state.json')).then(
+					() => true,
+					() => false,
+				),
+			)
+			.toBe(true);
+		await first.app.close();
+		app = undefined;
+
+		const second = await launch();
+		app = second.app;
+		await expect(second.page.locator('.new-session-composer-context')).toContainText('ZCodeProject');
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
 test('enter starts a session from the new session landing', async () => {
 	await mkdir('test-results', { recursive: true });
 
