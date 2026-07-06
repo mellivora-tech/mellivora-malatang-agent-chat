@@ -16,4 +16,5 @@ export interface ISessionsManagementService {
 	stopSession(sessionId: string): Promise<ISession>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
+	deleteSession(sessionId: string): Promise<void>;
 }

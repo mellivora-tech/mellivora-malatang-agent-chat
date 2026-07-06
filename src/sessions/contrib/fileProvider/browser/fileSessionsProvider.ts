@@ -229,6 +229,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async deleteSession(sessionId: string): Promise<void> {
+		const session = this.getMutableSession(sessionId);
+		this.cancelPendingReply(sessionId);
+		await this.enqueueWrite(() => this.bridge.delete(this.getRef(sessionId)));
+		const index = this.sessions.indexOf(session);
+		if (index !== -1) {
+			this.sessions.splice(index, 1);
+		}
+		this.refs.delete(sessionId);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [session], changed: [] });
+	}
+
 	async whenIdle(): Promise<void> {
 		while (this.pendingReplies.size > 0) {
 			await Promise.all([...this.pendingReplies.values()].map(pending => pending.promise));

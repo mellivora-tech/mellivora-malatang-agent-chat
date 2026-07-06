@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type {
 	ISessionEntry,
@@ -32,6 +32,10 @@ export async function createSessionFile(root: string, header: ISessionHeader): P
 
 export async function appendSessionEntry(root: string, ref: ISessionRef, entry: ISessionEntry): Promise<void> {
 	await appendFile(sessionFilePath(root, ref), `${JSON.stringify(entry)}\n`, 'utf8');
+}
+
+export async function deleteSessionFile(root: string, ref: ISessionRef): Promise<void> {
+	await rm(sessionFilePath(root, ref), { force: true });
 }
 
 export async function loadSession(root: string, ref: ISessionRef): Promise<ISessionSnapshot | undefined> {

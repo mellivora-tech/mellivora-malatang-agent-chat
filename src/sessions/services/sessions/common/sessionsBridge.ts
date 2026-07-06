@@ -94,4 +94,5 @@ export interface ISessionsBridge {
 	list(): Promise<readonly ISessionSnapshot[]>;
 	create(header: ISessionHeader): Promise<void>;
 	append(ref: ISessionRef, entry: ISessionEntry): Promise<void>;
+	delete(ref: ISessionRef): Promise<void>;
 }

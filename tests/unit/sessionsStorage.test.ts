@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { appendSessionEntry, createSessionFile, loadAllSessions, loadSession } from '../../src/main/sessionsStorage.js';
+import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, loadSession } from '../../src/main/sessionsStorage.js';
 import type { ISessionHeader } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
 
 async function createTempRoot(): Promise<string> {
@@ -195,6 +195,24 @@ test('loadSession returns undefined for a missing file, missing header, or misma
 
 		await writeFile(join(dir, 'mismatch.jsonl'), `${JSON.stringify(createHeader('other-id'))}\n`, 'utf8');
 		assert.equal(await loadSession(root, { sessionId: 'mismatch' }), undefined);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('deleteSessionFile removes shared and project transcripts and tolerates missing files', async () => {
+	const root = await createTempRoot();
+	try {
+		await createSessionFile(root, createHeader('aaaa-1111'));
+		await createSessionFile(root, createHeader('bbbb-2222', { projectId: '3f2a8c1d' }));
+
+		await deleteSessionFile(root, { sessionId: 'aaaa-1111' });
+		await deleteSessionFile(root, { sessionId: 'bbbb-2222', projectId: '3f2a8c1d' });
+		await deleteSessionFile(root, { sessionId: 'never-existed' });
+
+		assert.equal(await loadSession(root, { sessionId: 'aaaa-1111' }), undefined);
+		assert.equal(await loadSession(root, { sessionId: 'bbbb-2222', projectId: '3f2a8c1d' }), undefined);
+		assert.deepEqual(await loadAllSessions(root), []);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

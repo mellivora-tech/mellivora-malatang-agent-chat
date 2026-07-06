@@ -62,6 +62,10 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return this.getOwningProvider(sessionId).setSessionArchived(sessionId, isArchived);
 	}
 
+	async deleteSession(sessionId: string): Promise<void> {
+		return this.getOwningProvider(sessionId).deleteSession(sessionId);
+	}
+
 	private getOwningProvider(sessionId: string): ISessionsProvider {
 		const session = this.getSession(sessionId);
 		if (!session) {

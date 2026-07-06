@@ -265,6 +265,16 @@ export class MockSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async deleteSession(sessionId: string): Promise<void> {
+		const session = this.getMutableSession(sessionId);
+		this.cancelPendingReply(sessionId);
+		const index = this.sessions.indexOf(session);
+		if (index !== -1) {
+			this.sessions.splice(index, 1);
+		}
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [session], changed: [] });
+	}
+
 	async whenIdle(): Promise<void> {
 		while (this.pendingReplies.size > 0) {
 			await Promise.all([...this.pendingReplies.values()].map(pending => pending.promise));

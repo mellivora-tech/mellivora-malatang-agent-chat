@@ -19,6 +19,7 @@ const sessions: ISessionsBridge = {
 	list: () => ipcRenderer.invoke('sessions:list'),
 	create: (header: ISessionHeader) => ipcRenderer.invoke('sessions:create', header),
 	append: (ref: ISessionRef, entry: ISessionEntry) => ipcRenderer.invoke('sessions:append', ref, entry),
+	delete: (ref: ISessionRef) => ipcRenderer.invoke('sessions:delete', ref),
 };
 
 contextBridge.exposeInMainWorld('agentWindow', {

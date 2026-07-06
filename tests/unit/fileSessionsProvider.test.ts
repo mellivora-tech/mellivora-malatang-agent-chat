@@ -18,6 +18,7 @@ interface IAppendCall {
 interface IFakeBridge extends ISessionsBridge {
 	readonly creates: ISessionHeader[];
 	readonly appends: IAppendCall[];
+	readonly deletes: ISessionRef[];
 	failAppends: boolean;
 	failCreates: boolean;
 }
@@ -25,14 +26,20 @@ interface IFakeBridge extends ISessionsBridge {
 function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBridge {
 	const creates: ISessionHeader[] = [];
 	const appends: IAppendCall[] = [];
+	const deletes: ISessionRef[] = [];
 	// A tiny store folding state entries so tests can rehydrate a second
 	// provider over the same bridge and observe persisted lifecycle state.
 	const store = new Map<string, ISessionSnapshot>(snapshots.map(snapshot => [snapshot.sessionId, snapshot]));
 	const bridge: IFakeBridge = {
 		creates,
 		appends,
+		deletes,
 		failAppends: false,
 		failCreates: false,
+		delete: async ref => {
+			deletes.push(ref);
+			store.delete(ref.sessionId);
+		},
 		list: async () => [...store.values()],
 		create: async header => {
 			if (bridge.failCreates) {
@@ -333,6 +340,40 @@ test('pin and archive round-trip through a rehydrated provider', async () => {
 	const sessions = second.getSessions();
 	assert.equal(sessions.find(session => session.sessionId === 's1')?.isPinned.get(), true);
 	assert.equal(sessions.find(session => session.sessionId === 's2')?.isArchived.get(), true);
+});
+
+test('deleteSession removes the session, calls bridge.delete, and fires removed', async () => {
+	const bridge = createFakeBridge([createSnapshot('s1'), createSnapshot('s2')]);
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await provider.initialize();
+	const events: { removed: readonly { sessionId: string }[] }[] = [];
+	provider.onDidChangeSessions(event => events.push(event));
+
+	await provider.deleteSession('s1');
+
+	assert.deepEqual(
+		provider.getSessions().map(session => session.sessionId),
+		['s2'],
+	);
+	assert.deepEqual(bridge.deletes, [{ sessionId: 's1' }]);
+	assert.equal(events.length, 1);
+	assert.deepEqual(
+		events[0]!.removed.map(session => session.sessionId),
+		['s1'],
+	);
+});
+
+test('deleteSession cancels a pending reply', async () => {
+	const bridge = createFakeBridge();
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 60_000 });
+	await provider.initialize();
+
+	const session = await provider.startSession('hello');
+	await provider.deleteSession(session.sessionId);
+
+	// whenIdle resolves immediately because the pending reply was cancelled.
+	await provider.whenIdle();
+	assert.equal(provider.getSessions().length, 0);
 });
 
 test('startSession rejects when the bridge create fails', async () => {

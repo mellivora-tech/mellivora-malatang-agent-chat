@@ -85,6 +85,10 @@ class TestProvider implements ISessionsProvider {
 		return this.sessions[0]!;
 	}
 
+	async deleteSession(sessionId: string): Promise<void> {
+		this.requests.push(`delete:${sessionId}`);
+	}
+
 	get sentRequests(): readonly string[] {
 		return this.requests;
 	}
@@ -150,9 +154,10 @@ test('setSessionPinned and setSessionArchived route to the owning provider', asy
 
 	await management.setSessionPinned('session-b', true);
 	await management.setSessionArchived('session-b', true);
+	await management.deleteSession('session-b');
 
 	assert.deepEqual(first.sentRequests, []);
-	assert.deepEqual(second.sentRequests, ['pin:session-b:true', 'archive:session-b:true']);
+	assert.deepEqual(second.sentRequests, ['pin:session-b:true', 'archive:session-b:true', 'delete:session-b']);
 });
 
 test('startSession delegates to the first registered provider', async () => {
