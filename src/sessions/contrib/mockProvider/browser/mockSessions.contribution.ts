@@ -4,3 +4,4 @@
  *--------------------------------------------------------------------------------------------*/
 
 export { MockSessionsProvider, registerMockSessionsProvider } from './mockSessionsProvider.js';
+export type { IMockSessionsProviderOptions } from './mockSessionsProvider.js';

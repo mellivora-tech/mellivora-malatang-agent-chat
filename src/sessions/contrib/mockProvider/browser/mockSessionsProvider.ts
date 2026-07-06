@@ -10,6 +10,22 @@ import { SessionInteractivity, SessionStatus } from '../../../services/sessions/
 import type { ISessionChangeEvent, ISessionsProvider } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
+export interface IMockSessionsProviderOptions {
+	readonly responseDelayMs?: number;
+}
+
+interface IPendingReply {
+	readonly timer: ReturnType<typeof setTimeout>;
+	readonly promise: Promise<void>;
+	readonly resolve: () => void;
+}
+
+const DEFAULT_RESPONSE_DELAY_MS = 3000;
+
+function minutesAgo(minutes: number): Date {
+	return new Date(Date.now() - minutes * 60_000);
+}
+
 interface IMutableSession extends ISession {
 	readonly workspace: ObservableValue<ISessionWorkspace | undefined>;
 	readonly title: ObservableValue<string>;
@@ -25,6 +41,7 @@ interface IMutableSession extends ISession {
 
 function createSession(options: {
 	sessionId: string;
+	timestamp: Date;
 	icon: string;
 	status: SessionStatus;
 	title: string;
@@ -36,17 +53,15 @@ function createSession(options: {
 	isArchived?: boolean;
 	isRead?: boolean;
 }): IMutableSession {
-	const now = new Date('2026-07-03T09:00:00.000Z');
-
 	return {
 		sessionId: options.sessionId,
 		providerId: 'mock-sessions',
 		sessionType: 'mock-agent',
 		icon: options.icon,
-		createdAt: now,
+		createdAt: options.timestamp,
 		workspace: observableValue<ISessionWorkspace | undefined>(options.workspace),
 		title: observableValue(options.title),
-		updatedAt: observableValue(now),
+		updatedAt: observableValue(options.timestamp),
 		status: observableValue(options.status),
 		description: observableValue(options.description),
 		changesSummary: observableValue(options.changesSummary),
@@ -67,6 +82,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 	private readonly sessions: IMutableSession[] = [
 		createSession({
 			sessionId: 'session-in-progress',
+			timestamp: minutesAgo(2),
 			icon: 'codicon-copilot',
 			status: SessionStatus.InProgress,
 			title: 'Refine onboarding flow',
@@ -90,6 +106,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 		}),
 		createSession({
 			sessionId: 'session-completed',
+			timestamp: minutesAgo(120),
 			icon: 'codicon-diff-multiple',
 			status: SessionStatus.Completed,
 			title: 'Ship settings sidebar cleanup',
@@ -113,6 +130,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 		}),
 		createSession({
 			sessionId: 'session-needs-input',
+			timestamp: minutesAgo(45),
 			icon: 'codicon-folder',
 			status: SessionStatus.NeedsInput,
 			title: 'Pick workspace target',
@@ -131,6 +149,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 		}),
 		createSession({
 			sessionId: 'session-archived',
+			timestamp: minutesAgo(3 * 24 * 60),
 			icon: 'codicon-git-branch',
 			status: SessionStatus.Completed,
 			title: 'Archive PR notes',
@@ -150,6 +169,14 @@ export class MockSessionsProvider implements ISessionsProvider {
 		})
 	];
 
+	private readonly responseDelayMs: number;
+	private sequence = 0;
+	private readonly pendingReplies = new Map<string, IPendingReply>();
+
+	constructor(options: IMockSessionsProviderOptions = {}) {
+		this.responseDelayMs = options.responseDelayMs ?? DEFAULT_RESPONSE_DELAY_MS;
+	}
+
 	readonly onDidChangeSessions = this.onDidChangeSessionsEmitter.event;
 
 	getSessions(): readonly ISession[] {
@@ -159,8 +186,10 @@ export class MockSessionsProvider implements ISessionsProvider {
 	async startSession(query: string): Promise<ISession> {
 		const timestamp = new Date();
 		const idBase = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
+		this.sequence += 1;
 		const session = createSession({
-			sessionId: `session-started-${idBase}-${timestamp.getTime()}`,
+			sessionId: `session-started-${idBase}-${this.sequence}`,
+			timestamp,
 			icon: 'codicon-new-session',
 			status: SessionStatus.InProgress,
 			title: query,
@@ -170,7 +199,7 @@ export class MockSessionsProvider implements ISessionsProvider {
 				description: '~/workspace/code/learning-projects',
 				branchName: 'codex/agents-window-rebuild'
 			},
-			messages: [{ id: `started-user-${timestamp.getTime()}`, role: 'user', text: query }],
+			messages: [{ id: `started-user-${this.sequence}`, role: 'user', text: query }],
 			interactivity: SessionInteractivity.Full,
 			changesSummary: {
 				files: 5,
@@ -182,32 +211,91 @@ export class MockSessionsProvider implements ISessionsProvider {
 
 		this.sessions.unshift(session);
 		this.onDidChangeSessionsEmitter.fire({ added: [session], removed: [], changed: [] });
+		this.scheduleAssistantReply(session, query);
 		return session;
 	}
 
 	async sendMessage(sessionId: string, query: string): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		this.sequence += 1;
+		session.messages.set([
+			...session.messages.get(),
+			{ id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query }
+		]);
+		session.status.set(SessionStatus.InProgress);
+		session.updatedAt.set(new Date());
+		session.isRead.set(false);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		this.scheduleAssistantReply(session, query);
+		return session;
+	}
+
+	async stopSession(sessionId: string): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		this.cancelPendingReply(sessionId);
+		if (session.status.get() === SessionStatus.InProgress) {
+			session.status.set(SessionStatus.NeedsInput);
+			session.updatedAt.set(new Date());
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		}
+
+		return session;
+	}
+
+	async whenIdle(): Promise<void> {
+		while (this.pendingReplies.size > 0) {
+			await Promise.all([...this.pendingReplies.values()].map(pending => pending.promise));
+		}
+	}
+
+	private getMutableSession(sessionId: string): IMutableSession {
 		const session = this.sessions.find(candidate => candidate.sessionId === sessionId);
 		if (!session) {
 			throw new Error(`Unknown session: ${sessionId}`);
 		}
 
-		const timestamp = new Date();
-		session.messages.set([
-			...session.messages.get(),
-			{ id: `${sessionId}-user-${timestamp.getTime()}`, role: 'user', text: query },
-			{ id: `${sessionId}-assistant-${timestamp.getTime()}`, role: 'assistant', text: `Mock response for: ${query}` }
-		]);
-		session.status.set(SessionStatus.InProgress);
-		session.updatedAt.set(timestamp);
-		session.isRead.set(false);
-		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-
 		return session;
+	}
+
+	private scheduleAssistantReply(session: IMutableSession, query: string): void {
+		this.cancelPendingReply(session.sessionId);
+		let resolve!: () => void;
+		const promise = new Promise<void>(r => {
+			resolve = r;
+		});
+		const timer = setTimeout(() => {
+			this.pendingReplies.delete(session.sessionId);
+			this.sequence += 1;
+			session.messages.set([
+				...session.messages.get(),
+				{ id: `${session.sessionId}-assistant-${this.sequence}`, role: 'assistant', text: `Mock response for: ${query}` }
+			]);
+			session.status.set(SessionStatus.NeedsInput);
+			session.updatedAt.set(new Date());
+			session.isRead.set(false);
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+			resolve();
+		}, this.responseDelayMs);
+		this.pendingReplies.set(session.sessionId, { timer, promise, resolve });
+	}
+
+	private cancelPendingReply(sessionId: string): void {
+		const pending = this.pendingReplies.get(sessionId);
+		if (!pending) {
+			return;
+		}
+
+		clearTimeout(pending.timer);
+		this.pendingReplies.delete(sessionId);
+		pending.resolve();
 	}
 }
 
-export function registerMockSessionsProvider(providersService: ISessionsProvidersService): MockSessionsProvider {
-	const provider = new MockSessionsProvider();
+export function registerMockSessionsProvider(
+	providersService: ISessionsProvidersService,
+	options: IMockSessionsProviderOptions = {}
+): MockSessionsProvider {
+	const provider = new MockSessionsProvider(options);
 	providersService.registerProvider(provider);
 	return provider;
 }
