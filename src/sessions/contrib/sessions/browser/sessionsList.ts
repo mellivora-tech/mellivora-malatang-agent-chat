@@ -7,12 +7,14 @@ import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
 import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
 import { SessionStatus, type IActiveSession, type ISession, type ISessionChangesSummary, type ISessionWorkspace } from '../../../services/sessions/common/session.js';
+import type { IProjectsService } from '../../../services/projects/browser/projectsService.js';
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 
 export interface ISessionsListOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
+	readonly projectsService?: IProjectsService;
 }
 
 type SessionLike = ISession | IActiveSession;
@@ -34,6 +36,7 @@ interface ISessionListRow {
 	readonly onClick?: () => void;
 	readonly onPin?: () => void;
 	readonly onArchive?: () => void;
+	readonly onDelete?: () => void;
 }
 
 interface ISessionListRowMeta {
@@ -50,45 +53,9 @@ interface ISidebarProjectGroup {
 	readonly rows: readonly ISessionListRow[];
 }
 
-interface ISidebarTask {
-	readonly id: string;
-	readonly projectId: string;
-	readonly icon: string;
-	readonly status: SessionStatus;
-	readonly title: string;
-	readonly timeLabel: string;
-	readonly openSessionId: string;
-	isPinned: boolean;
-	isArchived: boolean;
-}
-
 export class SessionsList extends Disposable {
 	private readonly rowSubscriptions = this._register(new DisposableStore());
 	private readonly collapsedSidebarSections = new Set<SidebarTreeSectionId>();
-	private readonly sidebarTasks: ISidebarTask[] = [
-		{
-			id: 'project-obsidian-docs',
-			projectId: 'obsidian',
-			icon: 'codicon-circle-filled',
-			status: SessionStatus.InProgress,
-			title: '梳理下文档',
-			timeLabel: '2h',
-			openSessionId: 'session-in-progress',
-			isPinned: false,
-			isArchived: false,
-		},
-		{
-			id: 'project-zcode-settings-cleanup',
-			projectId: 'zcodeproject',
-			icon: 'codicon-check',
-			status: SessionStatus.Completed,
-			title: 'Ship settings sidebar cleanup',
-			timeLabel: '3d',
-			openSessionId: 'session-completed',
-			isPinned: false,
-			isArchived: false,
-		},
-	];
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -114,6 +81,11 @@ export class SessionsList extends Disposable {
 
 		if (mode) {
 			this._register(mode.subscribe(() => this.render()));
+		}
+
+		const projects = this.options.projectsService?.projects;
+		if (projects) {
+			this._register(projects.subscribe(() => this.render()));
 		}
 	}
 
@@ -197,87 +169,44 @@ export class SessionsList extends Disposable {
 		readonly pinned: readonly ISessionListRow[];
 		readonly projects: readonly ISidebarProjectGroup[];
 	} {
-		const updatedAt = new Date(0);
 		const activeSessionId = this.getActiveSessionId();
-		const openSession = (preferredSessionId: string): (() => void) => {
-			return () => {
-				const fallback = sessions[0]?.sessionId;
-				const target = sessions.some(session => session.sessionId === preferredSessionId) ? preferredSessionId : fallback;
-				if (target) {
-					this.options.sessionsService?.openSession(target);
-				}
+		const toRow = (session: SessionLike): ISessionListRow => {
+			const workspace = session.workspace.get();
+			const isPinned = session.isPinned.get();
+			return {
+				id: session.sessionId,
+				icon: session.status.get() === SessionStatus.InProgress ? 'codicon-loading' : session.icon,
+				status: session.status.get(),
+				title: session.title.get(),
+				...(workspace ? { workspace } : {}),
+				updatedAt: session.updatedAt.get(),
+				isActive: session.sessionId === activeSessionId,
+				isPinned,
+				onClick: () => this.options.sessionsService?.openSession(session.sessionId),
+				onPin: () => void this.options.sessionsService?.setSessionPinned(session.sessionId, !isPinned),
+				onArchive: () => void this.options.sessionsService?.setSessionArchived(session.sessionId, true),
+				onDelete: () => void this.options.sessionsService?.deleteSession(session.sessionId),
 			};
 		};
 
-		const activeTasks = this.sidebarTasks.filter(task => !task.isArchived);
-		const toTaskRow = (task: ISidebarTask): ISessionListRow => ({
-			id: task.id,
-			icon: task.icon,
-			status: task.status,
-			title: task.title,
-			updatedAt,
-			meta: { icon: 'codicon-folder', timeLabel: task.timeLabel },
-			isPinned: task.isPinned,
-			onClick: openSession(task.openSessionId),
-			onPin: () => this.togglePinnedTask(task.id),
-			onArchive: () => this.archiveTask(task.id),
-		});
+		const live = sessions.filter(session => !session.isArchived.get());
+		const pinned = live.filter(session => session.isPinned.get()).map(toRow);
+		const unpinned = live.filter(session => !session.isPinned.get());
 
-		const pinned = activeTasks.filter(task => task.isPinned).map(task => toTaskRow(task));
-
-		// Phase 3: sessions referenced by the hardcoded sidebar tasks would
-		// otherwise render twice; drop this exclusion when sidebarTasks
-		// become real data.
-		const sidebarTaskSessionIds = new Set(this.sidebarTasks.map(task => task.openSessionId));
-		const startedProjectRows = new Map<string, ISessionListRow[]>();
-		for (const session of sessions) {
-			if (sidebarTaskSessionIds.has(session.sessionId)) {
-				continue;
-			}
-
-			const workspace = session.workspace.get();
-			const workspaceLabel = workspace?.label ?? 'Workspace';
-			const rows = startedProjectRows.get(workspaceLabel) ?? [];
-			startedProjectRows.set(workspaceLabel, [
-				...rows,
-				{
-					id: `started-${session.sessionId}`,
-					icon: session.status.get() === SessionStatus.InProgress ? 'codicon-loading' : session.icon,
-					status: session.status.get(),
-					title: session.title.get(),
-					...(workspace ? { workspace } : {}),
-					updatedAt: session.updatedAt.get(),
-					isActive: session.sessionId === activeSessionId,
-					onClick: openSession(session.sessionId),
-				},
-			]);
+		const projects: ISidebarProjectGroup[] = [];
+		const knownProjectIds = new Set<string>();
+		for (const project of this.options.projectsService?.projects.get() ?? []) {
+			knownProjectIds.add(project.id);
+			const rows = unpinned.filter(session => session.projectId === project.id).map(toRow);
+			projects.push({ id: project.id, name: project.name, count: rows.length, expanded: true, rows });
 		}
 
-		const startedProjects = [...startedProjectRows.entries()].map(([workspaceLabel, rows]) => ({
-			id: `started-${workspaceLabel}`,
-			name: workspaceLabel,
-			count: rows.length,
-			expanded: true,
-			rows,
-		}));
-
-		const projects: readonly ISidebarProjectGroup[] = [
-			...startedProjects,
-			{
-				id: 'obsidian',
-				name: 'Obsidian',
-				count: activeTasks.filter(task => task.projectId === 'obsidian' && !task.isPinned).length,
-				expanded: true,
-				rows: activeTasks.filter(task => task.projectId === 'obsidian' && !task.isPinned).map(task => toTaskRow(task)),
-			},
-			{
-				id: 'zcodeproject',
-				name: 'ZCodeProject',
-				count: activeTasks.filter(task => task.projectId === 'zcodeproject' && !task.isPinned).length,
-				expanded: true,
-				rows: activeTasks.filter(task => task.projectId === 'zcodeproject' && !task.isPinned).map(task => toTaskRow(task)),
-			},
-		];
+		// Sessions without a project (or whose project vanished) share one
+		// fallback group, rendered only when non-empty.
+		const fallbackRows = unpinned.filter(session => session.projectId === undefined || !knownProjectIds.has(session.projectId)).map(toRow);
+		if (fallbackRows.length > 0) {
+			projects.push({ id: 'no-project', name: 'Workspace', count: fallbackRows.length, expanded: true, rows: fallbackRows });
+		}
 
 		return { pinned, projects };
 	}
@@ -407,161 +336,6 @@ export class SessionsList extends Disposable {
 		container.appendChild(section);
 	}
 
-	private renderCustomizations(container: HTMLElement): void {
-		const rows = [
-			{ id: 'overview', icon: 'codicon-home', label: 'Overview' },
-			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', count: '3' },
-			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', count: '44' },
-			{ id: 'instructions', icon: 'codicon-book', label: 'Instructions', count: '23' },
-			{ id: 'hooks', icon: 'codicon-zap', label: 'Hooks' },
-			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', count: '4' },
-			{ id: 'plugins', icon: 'codicon-plug', label: 'Plugins' },
-			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', count: '12' },
-		];
-
-		const section = document.createElement('section');
-		section.className = 'sessions-list-section sessions-customizations-section';
-		section.dataset.sessionGroup = 'customizations';
-
-		const header = document.createElement('div');
-		header.className = 'sessions-list-section-header';
-		header.textContent = 'Customizations';
-		section.appendChild(header);
-
-		const list = document.createElement('div');
-		list.className = 'sessions-customizations-list';
-		section.appendChild(list);
-
-		for (const row of rows) {
-			const button = document.createElement('button');
-			button.className = 'sessions-customization-row';
-			button.type = 'button';
-			button.dataset.customizationId = row.id;
-			const icon = document.createElement('span');
-			icon.className = `codicon ${row.icon}`;
-			icon.setAttribute('aria-hidden', 'true');
-			button.appendChild(icon);
-			const label = document.createElement('span');
-			label.textContent = row.label;
-			button.appendChild(label);
-			if (row.count) {
-				const count = document.createElement('span');
-				count.className = 'sessions-customization-count';
-				count.textContent = row.count;
-				button.appendChild(count);
-			}
-			list.appendChild(button);
-		}
-
-		container.appendChild(section);
-	}
-
-	private renderSessionSections(container: HTMLElement, sessions: readonly SessionLike[]): void {
-		const activeSession = this.getActiveSession();
-		const activeWorkspace = activeSession?.workspace.get()?.label;
-		const activeId = activeSession?.sessionId;
-		const visibleIds = new Set(this.getVisibleSessions().map(session => session.sessionId));
-
-		const openSessions = sessions.filter(session => !session.isArchived.get() && session.status.get() !== SessionStatus.Completed);
-		const pinnedSessions = sessions.filter(session => visibleIds.has(session.sessionId));
-		const workspaceSessions = activeWorkspace
-			? sessions.filter(session => session.workspace.get()?.label === activeWorkspace)
-			: sessions.filter(session => session.workspace.get()?.label === 'mellivora-malatang-agent-chat');
-		const doneSessions = sessions.filter(session => session.isArchived.get() || session.status.get() === SessionStatus.Completed);
-
-		this.renderSection(
-			container,
-			'Sessions',
-			openSessions.map(session => this.toSessionRow(session, activeId)),
-		);
-		this.renderSection(
-			container,
-			'Pinned',
-			pinnedSessions.map(session => this.toSessionRow(session, activeId)),
-		);
-		this.renderSection(
-			container,
-			'agent-chat',
-			workspaceSessions.map(session => this.toSessionRow(session, activeId, activeWorkspace)),
-		);
-		this.renderSection(
-			container,
-			'Done',
-			doneSessions.map(session => this.toSessionRow(session, activeId)),
-		);
-	}
-
-	private renderFallback(container: HTMLElement): void {
-		const now = new Date();
-		const workspace: ISessionWorkspace = {
-			label: 'mellivora-malatang-agent-chat',
-			branchName: 'codex/agents-window-rebuild',
-		};
-
-		const rows: readonly ISessionListRow[] = [
-			{
-				id: 'fallback-active',
-				icon: 'codicon-copilot',
-				status: SessionStatus.InProgress,
-				title: 'Refine onboarding flow',
-				workspace,
-				updatedAt: now,
-				description: 'Mock provider will appear here',
-				changesSummary: { files: 4, additions: 96, deletions: 18 },
-				isActive: true,
-			},
-		];
-
-		this.renderSection(container, 'Sessions', rows);
-		this.renderSection(container, 'Pinned', rows);
-		this.renderSection(
-			container,
-			'agent-chat',
-			rows.map(row => omitWorkspace(row)),
-		);
-		this.renderSection(container, 'Done', [
-			{
-				id: 'fallback-done',
-				icon: 'codicon-check',
-				status: SessionStatus.Completed,
-				title: 'Ship settings sidebar cleanup',
-				updatedAt: now,
-				description: 'Completed',
-				changesSummary: { files: 8, additions: 142, deletions: 37 },
-			},
-		]);
-	}
-
-	private renderSection(container: HTMLElement, title: string, rows: readonly ISessionListRow[], groupId?: string): void {
-		const section = document.createElement('section');
-		section.className = 'sessions-list-section';
-		if (groupId) {
-			section.dataset.sessionGroup = groupId;
-		}
-
-		const header = document.createElement('div');
-		header.className = 'sessions-list-section-header';
-		header.textContent = title;
-		section.appendChild(header);
-
-		const list = document.createElement('div');
-		list.className = 'sessions-list-section-rows';
-		section.appendChild(list);
-
-		if (rows.length === 0) {
-			const empty = document.createElement('div');
-			empty.className = 'sessions-list-empty';
-			empty.textContent = 'No sessions';
-			list.appendChild(empty);
-		} else {
-			for (const row of rows) {
-				list.appendChild(this.renderRow(row));
-			}
-		}
-
-		container.appendChild(section);
-	}
-
 	private renderProjectTaskRow(row: ISessionListRow): HTMLElement {
 		const wrapper = document.createElement('div');
 		wrapper.className = 'sessions-project-task-row';
@@ -647,85 +421,25 @@ export class SessionsList extends Disposable {
 			wrapper.appendChild(archive);
 		}
 
+		if (row.onDelete) {
+			const remove = document.createElement('button');
+			remove.className = 'sessions-project-task-delete';
+			remove.type = 'button';
+			remove.title = 'Delete task';
+			remove.setAttribute('aria-label', `Delete ${row.title}`);
+			remove.addEventListener('click', event => {
+				event.preventDefault();
+				event.stopPropagation();
+				row.onDelete?.();
+			});
+			const removeIcon = document.createElement('span');
+			removeIcon.className = 'codicon codicon-trash';
+			removeIcon.setAttribute('aria-hidden', 'true');
+			remove.appendChild(removeIcon);
+			wrapper.appendChild(remove);
+		}
+
 		return wrapper;
-	}
-
-	private togglePinnedTask(taskId: string): void {
-		const task = this.sidebarTasks.find(task => task.id === taskId);
-		if (!task) {
-			return;
-		}
-
-		task.isPinned = !task.isPinned;
-		this.render();
-	}
-
-	private archiveTask(taskId: string): void {
-		const task = this.sidebarTasks.find(task => task.id === taskId);
-		if (!task) {
-			return;
-		}
-
-		task.isArchived = true;
-		this.render();
-	}
-
-	private renderRow(row: ISessionListRow): HTMLElement {
-		const element = document.createElement('button');
-		element.className = 'sessions-list-row';
-		element.type = 'button';
-		element.dataset.sessionRowId = row.id;
-		if (row.isActive) {
-			element.classList.add('active');
-		}
-		if (row.isUnread) {
-			element.classList.add('unread');
-		}
-		if (row.onClick) {
-			element.addEventListener('click', row.onClick);
-		}
-
-		const status = document.createElement('span');
-		status.className = 'sessions-list-status';
-		status.title = getStatusLabel(row.status);
-		status.setAttribute('aria-hidden', 'true');
-		element.appendChild(status);
-
-		const body = document.createElement('span');
-		body.className = 'sessions-list-row-body';
-
-		const top = document.createElement('span');
-		top.className = 'sessions-list-row-top';
-
-		const title = document.createElement('span');
-		title.className = 'sessions-list-row-title';
-		title.textContent = row.title;
-		top.appendChild(title);
-
-		if (row.workspace) {
-			const workspace = document.createElement('span');
-			workspace.className = 'sessions-list-workspace-badge';
-			workspace.textContent = row.workspace.label;
-			top.appendChild(workspace);
-		}
-
-		if (row.changesSummary) {
-			top.appendChild(createDiff(row.changesSummary));
-		}
-
-		body.appendChild(top);
-
-		const bottom = document.createElement('span');
-		bottom.className = 'sessions-list-row-bottom';
-		if (row.meta) {
-			renderRowMeta(bottom, row.meta);
-		} else {
-			bottom.textContent = `${formatTimestamp(row.updatedAt)} - ${row.description ?? getStatusLabel(row.status)}`;
-		}
-		body.appendChild(bottom);
-
-		element.appendChild(body);
-		return element;
 	}
 
 	private renderFooter(container: HTMLElement): void {
@@ -941,27 +655,6 @@ export class SessionsList extends Disposable {
 		return main;
 	}
 
-	private toSessionRow(session: SessionLike, activeSessionId: string | undefined, redundantWorkspace?: string): ISessionListRow {
-		const workspace = session.workspace.get();
-		const changesSummary = session.changesSummary.get();
-		const description = session.description.get();
-		return {
-			id: session.sessionId,
-			icon: session.icon,
-			status: session.status.get(),
-			title: session.title.get(),
-			...(workspace && workspace.label !== redundantWorkspace ? { workspace } : {}),
-			...(changesSummary ? { changesSummary } : {}),
-			updatedAt: session.updatedAt.get(),
-			...(description ? { description } : {}),
-			isActive: session.sessionId === activeSessionId,
-			isUnread: !session.isRead.get(),
-			onClick: () => {
-				this.options.sessionsService?.openSession(session.sessionId);
-			},
-		};
-	}
-
 	private bindRows(sessions: readonly SessionLike[]): void {
 		const seenSessions = new Set<string>();
 		for (const session of sessions) {
@@ -1008,70 +701,6 @@ export class SessionsList extends Disposable {
 	private getActiveSessionId(): string | undefined {
 		return this.getActiveSession()?.sessionId;
 	}
-}
-
-function createDiff(summary: ISessionChangesSummary): HTMLElement {
-	const diff = document.createElement('span');
-	diff.className = 'sessions-list-diff';
-	diff.title = `${summary.files} changed files`;
-
-	const additions = document.createElement('span');
-	additions.className = 'sessions-diff-additions';
-	additions.textContent = `+${summary.additions}`;
-	diff.appendChild(additions);
-
-	const deletions = document.createElement('span');
-	deletions.className = 'sessions-diff-deletions';
-	deletions.textContent = `-${summary.deletions}`;
-	diff.appendChild(deletions);
-
-	return diff;
-}
-
-function renderRowMeta(container: HTMLElement, meta: ISessionListRowMeta): void {
-	const fragments: HTMLElement[] = [];
-
-	if (meta.icon) {
-		const icon = document.createElement('span');
-		icon.className = `codicon ${meta.icon}`;
-		icon.setAttribute('aria-hidden', 'true');
-		fragments.push(icon);
-	}
-
-	if (meta.changesSummary) {
-		fragments.push(createDiff(meta.changesSummary));
-	}
-
-	const time = document.createElement('span');
-	time.className = 'sessions-list-meta-time';
-	time.textContent = meta.timeLabel;
-	fragments.push(time);
-
-	for (const [index, fragment] of fragments.entries()) {
-		if (index > 0) {
-			const separator = document.createElement('span');
-			separator.className = 'sessions-list-meta-separator';
-			separator.textContent = '·';
-			container.appendChild(separator);
-		}
-		container.appendChild(fragment);
-	}
-}
-
-function omitWorkspace(row: ISessionListRow): ISessionListRow {
-	return {
-		id: row.id,
-		icon: row.icon,
-		status: row.status,
-		title: row.title,
-		...(row.changesSummary ? { changesSummary: row.changesSummary } : {}),
-		updatedAt: row.updatedAt,
-		...(row.description ? { description: row.description } : {}),
-		...(row.meta ? { meta: row.meta } : {}),
-		...(row.isActive ? { isActive: true } : {}),
-		...(row.isUnread ? { isUnread: true } : {}),
-		...(row.onClick ? { onClick: row.onClick } : {}),
-	};
 }
 
 function getStatusLabel(status: SessionStatus): string {

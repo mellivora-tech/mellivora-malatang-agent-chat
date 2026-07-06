@@ -537,6 +537,42 @@
 	visibility: visible;
 }
 
+.sessions-project-task-delete {
+	position: absolute;
+	top: 50%;
+	right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-24));
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--vscode-agents-space-22);
+	height: var(--vscode-agents-space-22);
+	padding: 0;
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	cursor: default;
+	opacity: 0;
+	visibility: hidden;
+	transform: translateY(-50%);
+}
+
+.sessions-project-task-delete:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.sessions-project-task-delete:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-1);
+}
+
+.sessions-project-task-row:hover .sessions-project-task-delete,
+.sessions-project-task-row:focus-within .sessions-project-task-delete {
+	opacity: 1;
+	visibility: visible;
+}
+
 .sessions-project-task-row.has-action:hover .sessions-project-task-time,
 .sessions-project-task-row.has-action:focus-within .sessions-project-task-time {
 	opacity: 0;

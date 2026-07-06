@@ -55,6 +55,7 @@ export class Workbench {
 	private readonly sidebarPart = new SidebarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
+		projectsService: this.projectsService,
 	});
 	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({

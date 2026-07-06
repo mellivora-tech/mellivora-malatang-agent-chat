@@ -46,16 +46,34 @@ async function writeSessionFixture(dataDir: string, fixture: ISessionFixture): P
 	await writeFile(join(dir, `${fixture.sessionId}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
 }
 
-// Phase 3: the hardcoded sidebar tasks in sessionsList.ts open these exact
-// session ids; the fixtures give them real transcripts to open.
+interface IProjectFixture {
+	readonly id: string;
+	readonly name: string;
+	readonly path: string;
+	readonly createdAt: string;
+}
+
+async function writeProjectFixture(dataDir: string, fixture: IProjectFixture): Promise<void> {
+	const dir = join(dataDir, 'projects', fixture.id);
+	await mkdir(dir, { recursive: true });
+	await writeFile(join(dir, 'project.json'), JSON.stringify(fixture), 'utf8');
+}
+
+// createdAt order decides sidebar group order (listProjects sorts ascending).
+const OBSIDIAN_PROJECT: IProjectFixture = { id: 'obsidian', name: 'Obsidian', path: '/tmp/obsidian', createdAt: '2026-01-01T00:00:00.000Z' };
+const ZCODE_PROJECT: IProjectFixture = { id: 'zcodeproject', name: 'ZCodeProject', path: '/tmp/zcodeproject', createdAt: '2026-01-02T00:00:00.000Z' };
+
+const HOUR_MS = 3_600_000;
+
 const IN_PROGRESS_FIXTURE: ISessionFixture = {
 	sessionId: 'session-in-progress',
+	projectId: 'obsidian',
 	title: '梳理下文档',
 	status: 2,
 	interactivity: 'full',
 	workspace: { label: 'Obsidian', description: '~/workspace/code/learning-projects' },
-	createdAt: '2026-07-06T00:00:00.000Z',
-	updatedAt: '2026-07-06T01:00:00.000Z',
+	createdAt: new Date(Date.now() - 5 * HOUR_MS).toISOString(),
+	updatedAt: new Date(Date.now() - 2 * HOUR_MS).toISOString(),
 	messages: [
 		{ id: 'main-user-1', role: 'user', text: 'Rebuild the agents window shell.' },
 		{ id: 'main-assistant-1', role: 'assistant', text: 'I have the layout in place and I am wiring the mock session domain now.' },
@@ -65,12 +83,13 @@ const IN_PROGRESS_FIXTURE: ISessionFixture = {
 
 const COMPLETED_FIXTURE: ISessionFixture = {
 	sessionId: 'session-completed',
+	projectId: 'zcodeproject',
 	title: 'Ship settings sidebar cleanup',
 	status: 3,
 	interactivity: 'read-only',
 	workspace: { label: 'ZCodeProject', description: '~/workspace/code/internal' },
-	createdAt: '2026-07-03T00:00:00.000Z',
-	updatedAt: '2026-07-03T02:00:00.000Z',
+	createdAt: new Date(Date.now() - 6 * HOUR_MS).toISOString(),
+	updatedAt: new Date(Date.now() - 3 * HOUR_MS).toISOString(),
 	messages: [
 		{ id: 'done-user-1', role: 'user', text: 'Clean up the settings sidebar.' },
 		{ id: 'done-assistant-1', role: 'assistant', text: 'The cleanup shipped with the sidebar refactor.' },
@@ -91,6 +110,8 @@ test('agents window shell renders at desktop sizes', async () => {
 
 	try {
 		const dataDir = await createDataDir();
+		await writeProjectFixture(dataDir, OBSIDIAN_PROJECT);
+		await writeProjectFixture(dataDir, ZCODE_PROJECT);
 		await writeSessionFixture(dataDir, IN_PROGRESS_FIXTURE);
 		await writeSessionFixture(dataDir, COMPLETED_FIXTURE);
 		app = await electron.launch({
@@ -643,7 +664,8 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await expect(page.locator('.new-session-watermark')).toBeVisible();
 	await expect(page.locator('.new-session-watermark')).toHaveText('');
 	await expect(page.locator('.new-session-heading')).toHaveText('Morning, how can I help?');
-	await expect(page.locator('.new-session-composer-context')).toContainText('Select project');
+	// The shell test seeds two projects; the first becomes active by default.
+	await expect(page.locator('.new-session-composer-context')).toContainText('Obsidian');
 	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask ZCode anything/);
 	await expect(page.locator('.new-session-input')).toBeVisible();
 	await expect(page.locator('.new-session-access')).toContainText('Full access');
@@ -915,7 +937,7 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 	await expect(secondProject.locator('.sessions-project-empty')).toHaveCount(0);
 	await expect(secondProject.locator('.sessions-project-session-list .sessions-list-row')).toHaveCount(1);
 	await expect(secondProject.locator('.sessions-list-row-title')).toHaveText('Ship settings sidebar cleanup');
-	await expect(secondProject.locator('.sessions-project-task-time')).toHaveText('3d');
+	await expect(secondProject.locator('.sessions-project-task-time')).toHaveText('3h ago');
 
 	const sidebarMetrics = await firstProject
 		.locator('.sessions-list-row')
@@ -999,13 +1021,16 @@ async function assertCollapsibleSidebarSection(section: Locator, title: string):
 async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<void> {
 	const taskRow = firstProject.locator('.sessions-project-task-row').first();
 	const action = taskRow.locator('.sessions-project-task-action');
+	const deleteAction = taskRow.locator('.sessions-project-task-delete');
 	const time = taskRow.locator('.sessions-project-task-time');
 
 	await expect(taskRow).toBeVisible();
-	await expect(time).toHaveText('2h');
+	await expect(time).toHaveText('2h ago');
 	await expect(action).toHaveAttribute('title', 'Archive task');
 	await expect(action).toHaveAttribute('aria-label', 'Archive 梳理下文档');
 	await expect(action.locator('.sessions-project-task-tooltip')).toHaveText('梳理下文档');
+	await expect(deleteAction).toHaveAttribute('title', 'Delete task');
+	await expect(deleteAction).toHaveAttribute('aria-label', 'Delete 梳理下文档');
 
 	const beforeHover = await taskRow.evaluate(row => {
 		const action = row.querySelector<HTMLElement>('.sessions-project-task-action');
@@ -1250,8 +1275,9 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	await expect(activeRow.locator('.sessions-project-task-title')).toHaveText('hello');
 	await expect(activeRow.locator('.sessions-project-task-time')).toHaveText('just now');
 	await expect(activeRow.locator('.sessions-project-task-spinner')).toBeVisible();
-	await expect(activeRow.locator('.sessions-project-task-pin')).toHaveCount(0);
-	await expect(activeRow.locator('.sessions-project-task-action')).toHaveCount(0);
+	await expect(activeRow.locator('.sessions-project-task-pin')).toHaveCount(1);
+	await expect(activeRow.locator('.sessions-project-task-action')).toHaveCount(1);
+	await expect(activeRow.locator('.sessions-project-task-delete')).toHaveCount(1);
 
 	await expect(page.locator('.conversation-context-title')).toHaveText('hello');
 	await expect(page.locator('.conversation-context-workspace').first()).toContainText('No workspace');
