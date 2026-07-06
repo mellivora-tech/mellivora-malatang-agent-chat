@@ -1,25 +1,39 @@
 {
-  "name": "mellivora-malatang-agent-chat",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "main": "dist/main/main.js",
-  "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
-    "start": "npm run build && electron dist/main/main.js",
-    "test": "npm run test:unit",
-    "test:unit": "npm run build && node --test dist/tests/unit/*.test.js",
-    "test:e2e": "npm run build && playwright test",
-    "verify": "npm run typecheck && npm run test:unit && npm run test:e2e"
-  },
-  "dependencies": {
-    "@vscode/codicons": "^0.0.46-21"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@types/node": "24.x",
-    "electron": "42.5.0",
-    "typescript": "^6.0.0-dev.20260416"
-  }
+	"name": "mellivora-malatang-agent-chat",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "dist/main/main.js",
+	"scripts": {
+		"postinstall": "node scripts/copy-public-assets.mjs",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"build": "electron-vite build",
+		"start": "npm run build && electron dist/main/main.js",
+		"dev": "electron-vite dev",
+		"test": "npm run test:unit",
+		"test:unit": "tsc -p tsconfig.json && node --test dist/tests/unit/*.test.js",
+		"test:e2e": "npm run build && playwright test",
+		"lint": "eslint src tests scripts electron.vite.config.ts playwright.config.ts",
+		"lint:fix": "eslint --fix src tests scripts electron.vite.config.ts playwright.config.ts",
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
+		"verify": "npm run typecheck && npm run lint && npm run format:check && npm run test:unit && npm run test:e2e"
+	},
+	"dependencies": {
+		"@vscode/codicons": "^0.0.46-21"
+	},
+	"devDependencies": {
+		"@eslint/js": "^10.0.1",
+		"@playwright/test": "^1.61.1",
+		"@swc/core": "^1.15.43",
+		"@types/node": "24.x",
+		"electron": "42.5.0",
+		"electron-vite": "^6.0.0-beta.1",
+		"eslint": "^10.6.0",
+		"eslint-config-prettier": "^10.1.8",
+		"prettier": "^3.9.4",
+		"typescript": "^6.0.0-dev.20260416",
+		"typescript-eslint": "^8.62.1",
+		"vite": "^8.1.3"
+	}
 }

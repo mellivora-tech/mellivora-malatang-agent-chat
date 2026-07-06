@@ -11,6 +11,8 @@ import { getInitialWindowBackgroundColor } from './windowTheme.js';
 
 const distRoot = join(fileURLToPath(new URL('..', import.meta.url)));
 
+const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
+
 async function createWindow(): Promise<void> {
 	const win = new BrowserWindow({
 		width: 1440,
@@ -21,24 +23,27 @@ async function createWindow(): Promise<void> {
 		backgroundColor: getInitialWindowBackgroundColor(),
 		titleBarStyle: 'hiddenInset',
 		webPreferences: {
-			preload: join(distRoot, 'preload/preload.js'),
+			preload: join(distRoot, 'preload/preload.mjs'),
 			contextIsolation: true,
 			nodeIntegration: false,
-			sandbox: false
-		}
+			sandbox: false,
+		},
 	});
 
-	await win.loadFile(join(distRoot, 'sessions/electron-browser/sessions.html'));
+	if (rendererUrl) {
+		await win.loadURL(rendererUrl);
+	} else {
+		await win.loadFile(join(distRoot, 'sessions/electron-browser/sessions.html'));
+	}
 }
 
 const lifecycleHost = {
 	platform: process.platform,
 	getWindowCount: () => BrowserWindow.getAllWindows().length,
 	createWindow,
-	quit: () => app.quit()
+	quit: () => app.quit(),
 };
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => handleWindowAllClosed(lifecycleHost));
 app.on('activate', () => handleActivate(lifecycleHost));
-
