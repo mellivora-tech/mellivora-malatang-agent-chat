@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -240,6 +240,106 @@ test('first launch creates the projects root and shows the empty picker state', 
 
 		const stats = await stat(join(dataDir, 'projects'));
 		expect(stats.isDirectory()).toBe(true);
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('sessions persist across app relaunch', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	const rendererErrors: string[] = [];
+	const launch = async () => {
+		const app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500', AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+		await page.setViewportSize({ width: 1600, height: 997 });
+		return { app, page };
+	};
+
+	let app: ElectronApplication | undefined;
+	try {
+		const first = await launch();
+		app = first.app;
+		await first.page.waitForSelector('.sessions-new-session-view');
+		await first.page.locator('.new-session-input').fill('persist me');
+		await first.page.locator('.new-session-send-button').click();
+		await expect(first.page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: persist me');
+		await first.app.close();
+		app = undefined;
+
+		const files = await readdir(join(dataDir, 'sessions'));
+		expect(files.filter(file => file.endsWith('.jsonl'))).toHaveLength(1);
+
+		const second = await launch();
+		app = second.app;
+		const page = second.page;
+		await page.waitForSelector('.sessions-new-session-view');
+
+		const row = page.locator('.sessions-project-task-row').filter({ hasText: 'persist me' });
+		await expect(row).toBeVisible();
+		await row.click();
+
+		await expect(page.locator('.conversation-context-title')).toHaveText('persist me');
+		await expect(page.locator('.conversation-message')).toHaveCount(2);
+		await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('persist me');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toHaveText('Mock response for: persist me');
+		await expect(page.locator('.conversation-view')).toHaveAttribute('data-status', 'needs-input');
+		await expect(page.locator('.conversation-thinking-row')).toHaveCount(0);
+		await expect(page.locator('.conversation-input')).toBeEnabled();
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
+test('project sessions land under the project directory', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	const dataDir = await createDataDir();
+	const projectDir = join(dataDir, 'projects', 'bbbb2222');
+	await mkdir(projectDir, { recursive: true });
+	await writeFile(join(projectDir, 'project.json'), JSON.stringify({ id: 'bbbb2222', name: 'Persist Project', path: '/tmp/persist-project', createdAt: '2026-07-07T00:00:00.000Z' }), 'utf8');
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500', AGENT_CHAT_DATA_DIR: dataDir },
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-new-session-view');
+		await expect(page.locator('.new-session-composer-context')).toContainText('Persist Project');
+
+		await page.locator('.new-session-input').fill('project session');
+		await page.locator('.new-session-send-button').click();
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: project session');
+		await expect(page.locator('.conversation-context-workspace').first()).toContainText('Persist Project');
+
+		const files = await readdir(join(projectDir, 'sessions'));
+		expect(files.filter(file => file.endsWith('.jsonl'))).toHaveLength(1);
 
 		expect(rendererErrors).toEqual([]);
 	} finally {
