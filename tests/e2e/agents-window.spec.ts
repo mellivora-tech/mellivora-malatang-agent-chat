@@ -311,7 +311,11 @@ test('project sessions land under the project directory', async () => {
 	const dataDir = await createDataDir();
 	const projectDir = join(dataDir, 'projects', 'bbbb2222');
 	await mkdir(projectDir, { recursive: true });
-	await writeFile(join(projectDir, 'project.json'), JSON.stringify({ id: 'bbbb2222', name: 'Persist Project', path: '/tmp/persist-project', createdAt: '2026-07-07T00:00:00.000Z' }), 'utf8');
+	await writeFile(
+		join(projectDir, 'project.json'),
+		JSON.stringify({ id: 'bbbb2222', name: 'Persist Project', path: '/tmp/persist-project', createdAt: '2026-07-07T00:00:00.000Z' }),
+		'utf8',
+	);
 
 	let app: ElectronApplication | undefined;
 	const rendererErrors: string[] = [];

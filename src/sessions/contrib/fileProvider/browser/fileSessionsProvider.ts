@@ -320,7 +320,11 @@ function generateSessionId(): string {
 	return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function registerFileSessionsProvider(providersService: ISessionsProvidersService, bridge: ISessionsBridge, options: IFileSessionsProviderOptions = {}): FileSessionsProvider {
+export function registerFileSessionsProvider(
+	providersService: ISessionsProvidersService,
+	bridge: ISessionsBridge,
+	options: IFileSessionsProviderOptions = {},
+): FileSessionsProvider {
 	const provider = new FileSessionsProvider(bridge, options);
 	providersService.registerProvider(provider);
 	return provider;

@@ -105,7 +105,11 @@ export class Workbench {
 		// No sessions bridge → no provider. A silent in-memory fallback would
 		// mask a broken preload; the management service reports the absence.
 		if (agentWindow?.sessions) {
-			const provider = registerFileSessionsProvider(this.providersService, agentWindow.sessions, agentWindow.mockResponseDelayMs === undefined ? {} : { responseDelayMs: agentWindow.mockResponseDelayMs });
+			const provider = registerFileSessionsProvider(
+				this.providersService,
+				agentWindow.sessions,
+				agentWindow.mockResponseDelayMs === undefined ? {} : { responseDelayMs: agentWindow.mockResponseDelayMs },
+			);
 			void provider.initialize();
 		}
 

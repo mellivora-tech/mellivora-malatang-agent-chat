@@ -72,6 +72,11 @@ function createSession(options: {
 	};
 }
 
+/**
+ * In-memory provider with seeded demo sessions. No longer registered in the
+ * workbench (FileSessionsProvider persists real sessions); kept for unit
+ * tests that exercise the provider contract without a bridge.
+ */
 export class MockSessionsProvider implements ISessionsProvider {
 	readonly id = 'mock-sessions';
 	readonly label = 'Mock Sessions';
