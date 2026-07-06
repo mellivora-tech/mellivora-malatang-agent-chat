@@ -52,7 +52,7 @@ export class Workbench {
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
 	});
-	private readonly sessionsPart = new SessionsPart(this.sessionsService);
+	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,

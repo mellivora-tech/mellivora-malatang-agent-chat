@@ -4,10 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { append } from '../../base/browser/dom.js';
-import { Disposable } from '../../base/common/lifecycle.js';
+import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
+import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 
 export interface INewSessionViewOptions {
 	readonly onStartSession?: (query: string) => Promise<unknown>;
+	readonly projectsService?: IProjectsService;
 }
 
 export class NewSessionView extends Disposable {
@@ -41,10 +43,12 @@ export class NewSessionView extends Disposable {
 		contextIcon.className = 'codicon codicon-folder';
 		contextIcon.setAttribute('aria-hidden', 'true');
 		const contextLabel = append(context, document.createElement('span'));
-		contextLabel.textContent = 'Obsidian';
+		contextLabel.className = 'new-session-composer-context-label';
+		contextLabel.textContent = 'Select project';
 		const contextChevron = append(context, document.createElement('span'));
 		contextChevron.className = 'codicon codicon-chevron-down';
 		contextChevron.setAttribute('aria-hidden', 'true');
+		this.installProjectPicker(composer, context, contextLabel);
 
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
@@ -138,5 +142,105 @@ export class NewSessionView extends Disposable {
 			event.preventDefault();
 			composer.requestSubmit();
 		});
+	}
+
+	private installProjectPicker(composer: HTMLElement, trigger: HTMLButtonElement, label: HTMLElement): void {
+		const projectsService = this.options.projectsService;
+		if (!projectsService) {
+			return;
+		}
+
+		this._register(
+			projectsService.activeProject.subscribe(project => {
+				label.textContent = project?.name ?? 'Select project';
+				trigger.title = project ? `Project: ${project.path}` : 'Pick project';
+			}),
+		);
+		label.textContent = projectsService.activeProject.get()?.name ?? 'Select project';
+
+		let menu: HTMLElement | undefined;
+
+		const closeMenu = () => {
+			menu?.remove();
+			menu = undefined;
+			document.removeEventListener('mousedown', onOutsideMouseDown, true);
+			document.removeEventListener('keydown', onEscape, true);
+		};
+
+		const onOutsideMouseDown = (event: MouseEvent) => {
+			if (menu && event.target instanceof Node && !menu.contains(event.target) && !trigger.contains(event.target)) {
+				closeMenu();
+			}
+		};
+
+		const onEscape = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				closeMenu();
+			}
+		};
+
+		const openMenu = () => {
+			// Host the menu outside the composer, which clips overflow.
+			const host = composer.parentElement ?? composer;
+			menu = append(host, document.createElement('div'));
+			menu.className = 'new-session-project-menu';
+			menu.setAttribute('role', 'menu');
+			const hostRect = host.getBoundingClientRect();
+			const triggerRect = trigger.getBoundingClientRect();
+			menu.style.top = `${triggerRect.bottom - hostRect.top + 4}px`;
+			menu.style.left = `${triggerRect.left - hostRect.left}px`;
+
+			const activeProjectId = projectsService.activeProject.get()?.id;
+			for (const project of projectsService.projects.get()) {
+				const item = append(menu, document.createElement('button')) as HTMLButtonElement;
+				item.className = 'new-session-project-item';
+				item.type = 'button';
+				item.setAttribute('role', 'menuitem');
+				item.title = project.path;
+				const check = append(item, document.createElement('span'));
+				check.className = `codicon codicon-check${project.id === activeProjectId ? '' : ' project-check-hidden'}`;
+				check.setAttribute('aria-hidden', 'true');
+				const name = append(item, document.createElement('span'));
+				name.className = 'new-session-project-item-label';
+				name.textContent = project.name;
+				item.addEventListener('click', () => {
+					projectsService.setActiveProject(project.id);
+					closeMenu();
+				});
+			}
+
+			if (projectsService.projects.get().length > 0) {
+				const separator = append(menu, document.createElement('div'));
+				separator.className = 'new-session-project-menu-separator';
+			}
+
+			const addItem = append(menu, document.createElement('button')) as HTMLButtonElement;
+			addItem.className = 'new-session-project-item new-session-project-add';
+			addItem.type = 'button';
+			addItem.setAttribute('role', 'menuitem');
+			const addIcon = append(addItem, document.createElement('span'));
+			addIcon.className = 'codicon codicon-add';
+			addIcon.setAttribute('aria-hidden', 'true');
+			const addLabel = append(addItem, document.createElement('span'));
+			addLabel.className = 'new-session-project-item-label';
+			addLabel.textContent = 'Add project…';
+			addItem.addEventListener('click', () => {
+				closeMenu();
+				void projectsService.addProjectViaDialog();
+			});
+
+			document.addEventListener('mousedown', onOutsideMouseDown, true);
+			document.addEventListener('keydown', onEscape, true);
+		};
+
+		trigger.addEventListener('click', () => {
+			if (menu) {
+				closeMenu();
+			} else {
+				openMenu();
+			}
+		});
+
+		this._register(toDisposable(closeMenu));
 	}
 }

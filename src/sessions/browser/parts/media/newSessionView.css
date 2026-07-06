@@ -218,7 +218,59 @@
 	background: var(--vscode-agents-color-text-primary);
 }
 
+.new-session-project-menu {
+	position: absolute;
+	z-index: 3;
+	display: flex;
+	flex-direction: column;
+	min-width: 220px;
+	max-width: 340px;
+	padding: var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+}
+
+.new-session-project-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	text-align: left;
+	cursor: default;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.new-session-project-item:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
+}
+
+.new-session-project-item-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.new-session-project-item .project-check-hidden {
+	visibility: hidden;
+}
+
+.new-session-project-menu-separator {
+	height: var(--vscode-agents-space-1);
+	margin: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
+}
+
 .new-session-send-button:focus-visible,
+.new-session-project-item:focus-visible,
 .new-session-composer-context:focus-visible,
 .new-session-access:focus-visible,
 .new-session-model:focus-visible,

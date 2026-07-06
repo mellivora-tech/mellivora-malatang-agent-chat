@@ -5,6 +5,7 @@
 
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { clearNode } from '../../base/browser/dom.js';
+import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
@@ -25,14 +26,23 @@ export class SessionsPart extends Part {
 	private width = 0;
 	private height = 0;
 
-	constructor(private readonly sessionsService?: ISessionsService) {
+	constructor(
+		private readonly sessionsService?: ISessionsService,
+		private readonly projectsService?: IProjectsService,
+	) {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
 			new NewSessionView({
-				onStartSession: query => this.sessionsService?.startSession(query) ?? Promise.resolve(),
+				onStartSession: query => this.sessionsService?.startSession(query, this.getStartSessionOptions()) ?? Promise.resolve(),
+				...(this.projectsService ? { projectsService: this.projectsService } : {}),
 			}),
 		);
 		this.sessionView = this._register(new SessionView(this.sessionsService));
+	}
+
+	private getStartSessionOptions(): { workspace: { label: string; description: string } } | undefined {
+		const project = this.projectsService?.activeProject.get();
+		return project ? { workspace: { label: project.name, description: project.path } } : undefined;
 	}
 
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void {
