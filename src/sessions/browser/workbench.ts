@@ -28,6 +28,7 @@ const CONTENT_MIN_WIDTH = 640;
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
 		readonly platform?: NodeJS.Platform;
+		readonly mockResponseDelayMs?: number;
 	};
 };
 
@@ -97,7 +98,11 @@ export class Workbench {
 		this.services.set(ISessionsManagementService, this.managementService);
 		this.services.set(ISessionsService, this.sessionsService);
 		this.services.set(ISessionsPartService, this.sessionsPartService);
-		registerMockSessionsProvider(this.providersService);
+		const mockResponseDelayMs = (globalThis as AgentWindowGlobals).agentWindow?.mockResponseDelayMs;
+		registerMockSessionsProvider(
+			this.providersService,
+			mockResponseDelayMs === undefined ? {} : { responseDelayMs: mockResponseDelayMs }
+		);
 
 		this.container.replaceChildren(this.root);
 		applyThemeTokens(this.root);
