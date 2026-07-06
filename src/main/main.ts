@@ -31,7 +31,7 @@ async function createWindow(): Promise<void> {
 	});
 
 	if (rendererUrl) {
-		await win.loadURL(rendererUrl);
+		await win.loadURL(new URL('sessions.html', rendererUrl).toString());
 	} else {
 		await win.loadFile(join(distRoot, 'sessions/electron-browser/sessions.html'));
 	}
