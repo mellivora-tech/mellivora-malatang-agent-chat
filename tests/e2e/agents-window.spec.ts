@@ -13,6 +13,71 @@ async function createDataDir(): Promise<string> {
 	return mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
 }
 
+interface ISessionFixture {
+	readonly sessionId: string;
+	readonly projectId?: string;
+	readonly title: string;
+	readonly status: number;
+	readonly interactivity: 'full' | 'read-only' | 'hidden';
+	readonly workspace?: { label: string; description?: string; branchName?: string };
+	readonly createdAt: string;
+	readonly updatedAt: string;
+	readonly messages: readonly { id: string; role: 'user' | 'assistant' | 'tool'; text: string; detail?: string }[];
+}
+
+async function writeSessionFixture(dataDir: string, fixture: ISessionFixture): Promise<void> {
+	const dir = fixture.projectId ? join(dataDir, 'projects', fixture.projectId, 'sessions') : join(dataDir, 'sessions');
+	await mkdir(dir, { recursive: true });
+	const lines = [
+		JSON.stringify({
+			type: 'session',
+			version: 1,
+			sessionId: fixture.sessionId,
+			sessionType: 'agent-chat',
+			icon: 'codicon-new-session',
+			createdAt: fixture.createdAt,
+			interactivity: fixture.interactivity,
+			...(fixture.projectId ? { projectId: fixture.projectId } : {}),
+			...(fixture.workspace ? { workspace: fixture.workspace } : {}),
+		}),
+		...fixture.messages.map(message => JSON.stringify({ type: 'message', timestamp: fixture.createdAt, ...message })),
+		JSON.stringify({ type: 'state', timestamp: fixture.updatedAt, status: fixture.status, title: fixture.title }),
+	];
+	await writeFile(join(dir, `${fixture.sessionId}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+}
+
+// Phase 3: the hardcoded sidebar tasks in sessionsList.ts open these exact
+// session ids; the fixtures give them real transcripts to open.
+const IN_PROGRESS_FIXTURE: ISessionFixture = {
+	sessionId: 'session-in-progress',
+	title: '梳理下文档',
+	status: 2,
+	interactivity: 'full',
+	workspace: { label: 'Obsidian', description: '~/workspace/code/learning-projects' },
+	createdAt: '2026-07-06T00:00:00.000Z',
+	updatedAt: '2026-07-06T01:00:00.000Z',
+	messages: [
+		{ id: 'main-user-1', role: 'user', text: 'Rebuild the agents window shell.' },
+		{ id: 'main-assistant-1', role: 'assistant', text: 'I have the layout in place and I am wiring the mock session domain now.' },
+		{ id: 'main-tool-1', role: 'tool', text: 'typecheck', detail: 'Workbench services, mock provider, and conversation UI are wired.' },
+	],
+};
+
+const COMPLETED_FIXTURE: ISessionFixture = {
+	sessionId: 'session-completed',
+	title: 'Ship settings sidebar cleanup',
+	status: 3,
+	interactivity: 'read-only',
+	workspace: { label: 'ZCodeProject', description: '~/workspace/code/internal' },
+	createdAt: '2026-07-03T00:00:00.000Z',
+	updatedAt: '2026-07-03T02:00:00.000Z',
+	messages: [
+		{ id: 'done-user-1', role: 'user', text: 'Clean up the settings sidebar.' },
+		{ id: 'done-assistant-1', role: 'assistant', text: 'The cleanup shipped with the sidebar refactor.' },
+		{ id: 'done-tool-1', role: 'tool', text: 'verify', detail: 'All checks passed.' },
+	],
+};
+
 const screenshots = [
 	{ width: 1440, height: 900, path: 'test-results/agents-window-1440x900.png' },
 	{ width: 1280, height: 720, path: 'test-results/agents-window-1280x720.png' },
@@ -25,9 +90,12 @@ test('agents window shell renders at desktop sizes', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
+		const dataDir = await createDataDir();
+		await writeSessionFixture(dataDir, IN_PROGRESS_FIXTURE);
+		await writeSessionFixture(dataDir, COMPLETED_FIXTURE);
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -342,9 +410,11 @@ test('historical conversation messages align by role', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
+		const dataDir = await createDataDir();
+		await writeSessionFixture(dataDir, IN_PROGRESS_FIXTURE);
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -362,7 +432,7 @@ test('historical conversation messages align by role', async () => {
 		await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('Rebuild the agents window shell.');
 		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toContainText('I have the layout in place');
 		await expect(page.locator('.conversation-message.tool .conversation-tool-detail')).toContainText('Workbench services');
-		await assertHistoricalConversationMessageLayout(page, 'in-progress', 'full', true);
+		await assertHistoricalConversationMessageLayout(page, 'needs-input', 'full', false);
 
 		expect(rendererErrors).toEqual([]);
 	} finally {
@@ -377,9 +447,11 @@ test('completed conversation shows read-only idle message state', async () => {
 	const rendererErrors: string[] = [];
 
 	try {
+		const dataDir = await createDataDir();
+		await writeSessionFixture(dataDir, COMPLETED_FIXTURE);
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -1072,14 +1144,14 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	const activeRow = page.locator('.sessions-project-task-row.active').filter({ hasText: 'hello' });
 	await expect(activeRow).toBeVisible();
 	await expect(activeRow.locator('.sessions-project-task-title')).toHaveText('hello');
-	await expect(activeRow.locator('.sessions-project-task-time')).toHaveText('now');
+	await expect(activeRow.locator('.sessions-project-task-time')).toHaveText('just now');
 	await expect(activeRow.locator('.sessions-project-task-spinner')).toBeVisible();
 	await expect(activeRow.locator('.sessions-project-task-pin')).toHaveCount(0);
 	await expect(activeRow.locator('.sessions-project-task-action')).toHaveCount(0);
 
 	await expect(page.locator('.conversation-context-title')).toHaveText('hello');
-	await expect(page.locator('.conversation-context-workspace').first()).toContainText('mellivora-malatang');
-	await expect(page.locator('.conversation-context-branch')).toContainText('codex/agents-window-rebuild');
+	await expect(page.locator('.conversation-context-workspace').first()).toContainText('No workspace');
+	await expect(page.locator('.conversation-context-branch')).toContainText('main');
 	await expect(page.locator('.conversation-context-more')).toBeVisible();
 	await expect(page.locator('.conversation-composer > .conversation-context-bar')).toHaveCount(1);
 	await expect(page.locator('.conversation-transcript > .conversation-context-bar')).toHaveCount(0);

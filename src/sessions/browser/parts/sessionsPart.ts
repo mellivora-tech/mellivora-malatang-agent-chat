@@ -40,9 +40,9 @@ export class SessionsPart extends Part {
 		this.sessionView = this._register(new SessionView(this.sessionsService));
 	}
 
-	private getStartSessionOptions(): { workspace: { label: string; description: string } } | undefined {
+	private getStartSessionOptions(): { workspace: { label: string; description: string }; projectId: string } | undefined {
 		const project = this.projectsService?.activeProject.get();
-		return project ? { workspace: { label: project.name, description: project.path } } : undefined;
+		return project ? { workspace: { label: project.name, description: project.path }, projectId: project.id } : undefined;
 	}
 
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void {

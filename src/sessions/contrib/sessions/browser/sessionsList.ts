@@ -225,9 +225,13 @@ export class SessionsList extends Disposable {
 
 		const pinned = activeTasks.filter(task => task.isPinned).map(task => toTaskRow(task));
 
+		// Phase 3: sessions referenced by the hardcoded sidebar tasks would
+		// otherwise render twice; drop this exclusion when sidebarTasks
+		// become real data.
+		const sidebarTaskSessionIds = new Set(this.sidebarTasks.map(task => task.openSessionId));
 		const startedProjectRows = new Map<string, ISessionListRow[]>();
 		for (const session of sessions) {
-			if (!session.sessionId.startsWith('session-started-')) {
+			if (sidebarTaskSessionIds.has(session.sessionId)) {
 				continue;
 			}
 
@@ -243,7 +247,6 @@ export class SessionsList extends Disposable {
 					title: session.title.get(),
 					...(workspace ? { workspace } : {}),
 					updatedAt: session.updatedAt.get(),
-					meta: { icon: 'codicon-folder', timeLabel: 'now' },
 					isActive: session.sessionId === activeSessionId,
 					onClick: openSession(session.sessionId),
 				},
