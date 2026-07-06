@@ -60,6 +60,20 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return provider.sendMessage(sessionId, query);
 	}
 
+	async stopSession(sessionId: string): Promise<ISession> {
+		const session = this.getSession(sessionId);
+		if (!session) {
+			throw new Error(`Unknown session: ${sessionId}`);
+		}
+
+		const provider = this.providersService.getProvider(session.providerId);
+		if (!provider) {
+			throw new Error(`Unknown provider: ${session.providerId}`);
+		}
+
+		return provider.stopSession(sessionId);
+	}
+
 	private onProvidersChanged(event: ISessionsProvidersChangeEvent): void {
 		for (const provider of event.added) {
 			this.attachProvider(provider);

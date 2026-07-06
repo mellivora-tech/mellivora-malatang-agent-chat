@@ -21,6 +21,7 @@ export interface ISessionsService {
 	setActive(sessionId: string): void;
 	closeSession(sessionId: string): void;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
+	stopSession(sessionId: string): Promise<ISession>;
 }
 
 export class SessionsService extends Disposable implements ISessionsService {
@@ -82,6 +83,10 @@ export class SessionsService extends Disposable implements ISessionsService {
 		this.visibleSessionsModel.setActive(session);
 		this.sessionsPartService.showConversation();
 		return session;
+	}
+
+	async stopSession(sessionId: string): Promise<ISession> {
+		return this.managementService.stopSession(sessionId);
 	}
 
 	private getRequiredSession(sessionId: string): ISession {

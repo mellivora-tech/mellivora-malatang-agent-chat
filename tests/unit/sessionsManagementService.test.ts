@@ -66,6 +66,11 @@ class TestProvider implements ISessionsProvider {
 		return this.sessions[0]!;
 	}
 
+	async stopSession(sessionId: string): Promise<ISession> {
+		this.requests.push(`stop:${sessionId}`);
+		return this.sessions[0]!;
+	}
+
 	get sentRequests(): readonly string[] {
 		return this.requests;
 	}
@@ -100,6 +105,21 @@ test('sendMessage routes to the provider that owns the session', async () => {
 
 	assert.deepEqual(first.sentRequests, []);
 	assert.deepEqual(second.sentRequests, ['session-b:hello']);
+});
+
+test('stopSession routes to the provider that owns the session', async () => {
+	const providers = new SessionsProvidersService();
+	const management = new SessionsManagementService(providers);
+	const first = new TestProvider('provider-a', [createSession('session-a', 'provider-a')]);
+	const second = new TestProvider('provider-b', [createSession('session-b', 'provider-b')]);
+
+	providers.registerProvider(first);
+	providers.registerProvider(second);
+
+	await management.stopSession('session-b');
+
+	assert.deepEqual(first.sentRequests, []);
+	assert.deepEqual(second.sentRequests, ['stop:session-b']);
 });
 
 test('startSession delegates to the first registered provider', async () => {

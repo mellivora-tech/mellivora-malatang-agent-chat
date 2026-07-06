@@ -13,4 +13,5 @@ export interface ISessionsManagementService {
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
 	startSession(query: string): Promise<ISession>;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
+	stopSession(sessionId: string): Promise<ISession>;
 }
