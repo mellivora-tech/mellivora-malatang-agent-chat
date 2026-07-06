@@ -85,6 +85,40 @@ test('starting a conversation creates a running session shell', async () => {
 	}
 });
 
+test('enter starts a session from the new session landing', async () => {
+	await mkdir('test-results', { recursive: true });
+
+	let app: ElectronApplication | undefined;
+	const rendererErrors: string[] = [];
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' }
+		});
+		const page = await app.firstWindow();
+		page.on('console', message => {
+			if (message.type() === 'error') {
+				rendererErrors.push(message.text());
+			}
+		});
+		page.on('pageerror', error => rendererErrors.push(error.message));
+
+		await page.setViewportSize({ width: 1600, height: 997 });
+		await page.waitForSelector('.sessions-new-session-view');
+
+		await page.locator('.new-session-input').fill('hello enter');
+		await page.locator('.new-session-input').press('Enter');
+
+		await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/mode-conversation/);
+		await expect(page.locator('.conversation-context-title')).toHaveText('hello enter');
+
+		expect(rendererErrors).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
 test('conversation supports stop and follow-up turns', async () => {
 	await mkdir('test-results', { recursive: true });
 

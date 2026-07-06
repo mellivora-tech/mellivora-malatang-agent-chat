@@ -129,5 +129,14 @@ export class NewSessionView extends Disposable {
 			input.value = '';
 			void this.options.onStartSession?.(query);
 		});
+
+		input.addEventListener('keydown', event => {
+			if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+				return;
+			}
+
+			event.preventDefault();
+			composer.requestSubmit();
+		});
 	}
 }
