@@ -6,8 +6,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { IAppState, IAppStateBridge } from '../../src/sessions/services/appState/common/appState.js';
 import type { IProject, IProjectInput, IProjectsBridge } from '../../src/sessions/services/projects/common/projects.js';
 import { ProjectsService } from '../../src/sessions/services/projects/browser/projectsService.js';
+
+function createAppStateBridge(initial: IAppState = {}): IAppStateBridge & { writes: IAppState[] } {
+	let state = initial;
+	const writes: IAppState[] = [];
+	return {
+		writes,
+		get: async () => state,
+		set: async next => {
+			state = next;
+			writes.push(next);
+		},
+	};
+}
 
 function createProject(id: string, name: string): IProject {
 	return { id, name, path: `/tmp/${name}`, createdAt: '2026-07-06T00:00:00.000Z' };
@@ -86,6 +100,53 @@ test('addProjectViaDialog refreshes the list and activates the new project', asy
 	assert.deepEqual(added, picked);
 	assert.deepEqual(service.projects.get(), [alpha, picked]);
 	assert.deepEqual(service.activeProject.get(), picked);
+});
+
+test('initialize restores the persisted active project', async () => {
+	const alpha = createProject('aaaa1111', 'alpha');
+	const beta = createProject('bbbb2222', 'beta');
+	const appState = createAppStateBridge({ activeProjectId: 'bbbb2222' });
+	const service = new ProjectsService(createBridge({ projects: [alpha, beta] }), appState);
+
+	await service.initialize();
+
+	assert.deepEqual(service.activeProject.get(), beta);
+	assert.deepEqual(appState.writes, []);
+});
+
+test('initialize falls back to the first project when the persisted id is gone', async () => {
+	const alpha = createProject('aaaa1111', 'alpha');
+	const appState = createAppStateBridge({ activeProjectId: 'missing' });
+	const service = new ProjectsService(createBridge({ projects: [alpha] }), appState);
+
+	await service.initialize();
+
+	assert.deepEqual(service.activeProject.get(), alpha);
+});
+
+test('setActiveProject persists the choice', async () => {
+	const alpha = createProject('aaaa1111', 'alpha');
+	const beta = createProject('bbbb2222', 'beta');
+	const appState = createAppStateBridge();
+	const service = new ProjectsService(createBridge({ projects: [alpha, beta] }), appState);
+	await service.initialize();
+
+	service.setActiveProject('bbbb2222');
+	await new Promise(resolve => setTimeout(resolve, 0));
+
+	assert.deepEqual(appState.writes, [{ activeProjectId: 'bbbb2222' }]);
+});
+
+test('addProjectViaDialog persists the new project as active', async () => {
+	const picked = createProject('cccc3333', 'picked');
+	const appState = createAppStateBridge();
+	const service = new ProjectsService(createBridge({ projects: [], picked }), appState);
+	await service.initialize();
+
+	await service.addProjectViaDialog();
+	await new Promise(resolve => setTimeout(resolve, 0));
+
+	assert.deepEqual(appState.writes.at(-1), { activeProjectId: 'cccc3333' });
 });
 
 test('addProjectViaDialog keeps state when the dialog is cancelled', async () => {

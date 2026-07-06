@@ -33,6 +33,19 @@ test('mock provider creates a running session from first prompt', async () => {
 	disposable.dispose();
 });
 
+test('setSessionPinned and setSessionArchived flip the observables', async () => {
+	const provider = new MockSessionsProvider({ responseDelayMs: 1 });
+	const session = await provider.startSession('hello');
+
+	await provider.setSessionPinned(session.sessionId, true);
+	await provider.setSessionArchived(session.sessionId, true);
+
+	assert.equal(session.isPinned.get(), true);
+	assert.equal(session.isArchived.get(), true);
+
+	await provider.whenIdle();
+});
+
 test('startSession uses the workspace passed in options', async () => {
 	const provider = new MockSessionsProvider({ responseDelayMs: 1 });
 	const session = await provider.startSession('hello', {

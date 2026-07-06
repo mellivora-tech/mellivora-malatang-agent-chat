@@ -14,6 +14,7 @@ import { PanelPart } from './parts/panelPart.js';
 import { SessionsPart } from './parts/sessionsPart.js';
 import { SidebarPart } from './parts/sidebarPart.js';
 import { TitlebarPart } from './parts/titlebarPart.js';
+import type { IAppStateBridge } from '../services/appState/common/appState.js';
 import { IProjectsService, ProjectsService } from '../services/projects/browser/projectsService.js';
 import type { IProjectsBridge } from '../services/projects/common/projects.js';
 import type { ISessionsBridge } from '../services/sessions/common/sessionsBridge.js';
@@ -34,13 +35,14 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly mockResponseDelayMs?: number;
 		readonly projects?: IProjectsBridge;
 		readonly sessions?: ISessionsBridge;
+		readonly appState?: IAppStateBridge;
 	};
 };
 
 export class Workbench {
 	private readonly root = document.createElement('div');
 	private readonly services = new ServiceCollection();
-	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects);
+	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects, (globalThis as AgentWindowGlobals).agentWindow?.appState);
 	private readonly providersService = new SessionsProvidersService();
 	private readonly managementService = new SessionsManagementService(this.providersService);
 	private readonly sessionsPartService = new SessionsPartService();
@@ -53,6 +55,7 @@ export class Workbench {
 	private readonly sidebarPart = new SidebarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
+		projectsService: this.projectsService,
 	});
 	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({

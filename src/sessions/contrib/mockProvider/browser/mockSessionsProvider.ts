@@ -35,6 +35,7 @@ interface IMutableSession extends ISession {
 	readonly changesSummary: ObservableValue<ISessionChangesSummary | undefined>;
 	readonly isArchived: ObservableValue<boolean>;
 	readonly isRead: ObservableValue<boolean>;
+	readonly isPinned: ObservableValue<boolean>;
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 }
@@ -59,6 +60,7 @@ function createSession(options: {
 		sessionType: 'mock-agent',
 		icon: options.icon,
 		createdAt: options.timestamp,
+		projectId: undefined,
 		workspace: observableValue<ISessionWorkspace | undefined>(options.workspace),
 		title: observableValue(options.title),
 		updatedAt: observableValue(options.timestamp),
@@ -67,6 +69,7 @@ function createSession(options: {
 		changesSummary: observableValue(options.changesSummary),
 		isArchived: observableValue(options.isArchived ?? false),
 		isRead: observableValue(options.isRead ?? true),
+		isPinned: observableValue(false),
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
 	};
@@ -246,6 +249,30 @@ export class MockSessionsProvider implements ISessionsProvider {
 		}
 
 		return session;
+	}
+
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.isPinned.set(isPinned);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.isArchived.set(isArchived);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async deleteSession(sessionId: string): Promise<void> {
+		const session = this.getMutableSession(sessionId);
+		this.cancelPendingReply(sessionId);
+		const index = this.sessions.indexOf(session);
+		if (index !== -1) {
+			this.sessions.splice(index, 1);
+		}
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [session], changed: [] });
 	}
 
 	async whenIdle(): Promise<void> {

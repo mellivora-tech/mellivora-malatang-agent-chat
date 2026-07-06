@@ -14,4 +14,7 @@ export interface ISessionsManagementService {
 	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
+	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
+	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
+	deleteSession(sessionId: string): Promise<void>;
 }

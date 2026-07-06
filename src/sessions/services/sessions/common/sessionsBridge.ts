@@ -57,6 +57,7 @@ export interface ISessionStateEntry {
 	readonly changesSummary?: ISessionChangesSummaryData;
 	readonly isArchived?: boolean;
 	readonly isRead?: boolean;
+	readonly isPinned?: boolean;
 }
 
 export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry;
@@ -84,6 +85,7 @@ export interface ISessionSnapshot {
 	readonly changesSummary?: ISessionChangesSummaryData;
 	readonly isArchived: boolean;
 	readonly isRead: boolean;
+	readonly isPinned: boolean;
 	readonly messages: readonly ISessionSnapshotMessage[];
 }
 
@@ -92,4 +94,5 @@ export interface ISessionsBridge {
 	list(): Promise<readonly ISessionSnapshot[]>;
 	create(header: ISessionHeader): Promise<void>;
 	append(ref: ISessionRef, entry: ISessionEntry): Promise<void>;
+	delete(ref: ISessionRef): Promise<void>;
 }

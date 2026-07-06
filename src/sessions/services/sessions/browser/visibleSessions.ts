@@ -29,6 +29,9 @@ class ActiveSession implements IActiveSession {
 	get createdAt() {
 		return this.session.createdAt;
 	}
+	get projectId() {
+		return this.session.projectId;
+	}
 	get workspace() {
 		return this.session.workspace;
 	}
@@ -52,6 +55,9 @@ class ActiveSession implements IActiveSession {
 	}
 	get isRead() {
 		return this.session.isRead;
+	}
+	get isPinned() {
+		return this.session.isPinned;
 	}
 	get messages() {
 		return this.session.messages;

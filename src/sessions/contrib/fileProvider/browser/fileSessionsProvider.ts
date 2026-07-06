@@ -33,12 +33,14 @@ interface IMutableSession extends ISession {
 	readonly changesSummary: ObservableValue<ISessionChangesSummary | undefined>;
 	readonly isArchived: ObservableValue<boolean>;
 	readonly isRead: ObservableValue<boolean>;
+	readonly isPinned: ObservableValue<boolean>;
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 }
 
 function createSession(options: {
 	sessionId: string;
+	projectId?: string;
 	createdAt: Date;
 	updatedAt: Date;
 	icon: string;
@@ -51,6 +53,7 @@ function createSession(options: {
 	changesSummary?: ISessionChangesSummary;
 	isArchived?: boolean;
 	isRead?: boolean;
+	isPinned?: boolean;
 }): IMutableSession {
 	return {
 		sessionId: options.sessionId,
@@ -58,6 +61,7 @@ function createSession(options: {
 		sessionType: 'agent-chat',
 		icon: options.icon,
 		createdAt: options.createdAt,
+		projectId: options.projectId,
 		workspace: observableValue<ISessionWorkspace | undefined>(options.workspace),
 		title: observableValue(options.title),
 		updatedAt: observableValue(options.updatedAt),
@@ -66,6 +70,7 @@ function createSession(options: {
 		changesSummary: observableValue(options.changesSummary),
 		isArchived: observableValue(options.isArchived ?? false),
 		isRead: observableValue(options.isRead ?? true),
+		isPinned: observableValue(options.isPinned ?? false),
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
 	};
@@ -152,6 +157,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 		const session = createSession({
 			sessionId,
+			...(options?.projectId ? { projectId: options.projectId } : {}),
 			createdAt: now,
 			updatedAt: now,
 			icon: 'codicon-new-session',
@@ -207,6 +213,34 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		await this.persistStatePatch(sessionId, { isPinned });
+		session.isPinned.set(isPinned);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		await this.persistStatePatch(sessionId, { isArchived });
+		session.isArchived.set(isArchived);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async deleteSession(sessionId: string): Promise<void> {
+		const session = this.getMutableSession(sessionId);
+		this.cancelPendingReply(sessionId);
+		await this.enqueueWrite(() => this.bridge.delete(this.getRef(sessionId)));
+		const index = this.sessions.indexOf(session);
+		if (index !== -1) {
+			this.sessions.splice(index, 1);
+		}
+		this.refs.delete(sessionId);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [session], changed: [] });
+	}
+
 	async whenIdle(): Promise<void> {
 		while (this.pendingReplies.size > 0) {
 			await Promise.all([...this.pendingReplies.values()].map(pending => pending.promise));
@@ -228,6 +262,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 			interactivity: coerceInteractivity(snapshot.interactivity),
 			isArchived: snapshot.isArchived,
 			isRead: snapshot.isRead,
+			isPinned: snapshot.isPinned,
+			...(snapshot.projectId !== undefined ? { projectId: snapshot.projectId } : {}),
 			...(snapshot.description !== undefined ? { description: snapshot.description } : {}),
 			...(snapshot.workspace !== undefined ? { workspace: snapshot.workspace } : {}),
 			...(snapshot.changesSummary !== undefined ? { changesSummary: snapshot.changesSummary } : {}),
@@ -245,6 +281,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 	private getRef(sessionId: string): ISessionRef {
 		return this.refs.get(sessionId) ?? { sessionId };
+	}
+
+	// Pin/archive intentionally do not bump updatedAt so rows keep their
+	// position; the fold recomputes updatedAt from entry timestamps on the
+	// next load, which is acceptable drift.
+	private persistStatePatch(sessionId: string, patch: { isPinned?: boolean; isArchived?: boolean }): Promise<void> {
+		return this.enqueueWrite(() => this.bridge.append(this.getRef(sessionId), { type: 'state', timestamp: new Date().toISOString(), ...patch }));
 	}
 
 	private enqueueWrite(write: () => Promise<void>): Promise<void> {

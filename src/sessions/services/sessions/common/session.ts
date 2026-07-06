@@ -44,6 +44,7 @@ export interface ISession {
 	readonly sessionType: string;
 	readonly icon: string;
 	readonly createdAt: Date;
+	readonly projectId: string | undefined;
 	readonly workspace: IObservable<ISessionWorkspace | undefined>;
 	readonly title: IObservable<string>;
 	readonly updatedAt: IObservable<Date>;
@@ -52,6 +53,7 @@ export interface ISession {
 	readonly changesSummary: IObservable<ISessionChangesSummary | undefined>;
 	readonly isArchived: IObservable<boolean>;
 	readonly isRead: IObservable<boolean>;
+	readonly isPinned: IObservable<boolean>;
 	readonly messages: IObservable<readonly ISessionMessage[]>;
 	readonly interactivity: IObservable<SessionInteractivity>;
 }

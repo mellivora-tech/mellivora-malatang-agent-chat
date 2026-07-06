@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
+import { registerAppStateIpc } from './appStateIpc.js';
 import { registerProjectsIpc } from './projectsIpc.js';
 import { ensureProjectsRoot, resolveDataRoot } from './projectsStorage.js';
 import { registerSessionsIpc } from './sessionsIpc.js';
@@ -54,6 +55,7 @@ app.whenReady().then(async () => {
 	await ensureProjectsRoot(dataRoot);
 	registerProjectsIpc(dataRoot);
 	registerSessionsIpc(dataRoot);
+	registerAppStateIpc(dataRoot);
 	await createWindow();
 });
 app.on('window-all-closed', () => handleWindowAllClosed(lifecycleHost));

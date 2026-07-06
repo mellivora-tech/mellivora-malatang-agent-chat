@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { contextBridge, ipcRenderer } from 'electron';
+import type { IAppState, IAppStateBridge } from '../sessions/services/appState/common/appState.js';
 import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 
@@ -19,11 +20,18 @@ const sessions: ISessionsBridge = {
 	list: () => ipcRenderer.invoke('sessions:list'),
 	create: (header: ISessionHeader) => ipcRenderer.invoke('sessions:create', header),
 	append: (ref: ISessionRef, entry: ISessionEntry) => ipcRenderer.invoke('sessions:append', ref, entry),
+	delete: (ref: ISessionRef) => ipcRenderer.invoke('sessions:delete', ref),
+};
+
+const appState: IAppStateBridge = {
+	get: () => ipcRenderer.invoke('appState:get'),
+	set: (state: IAppState) => ipcRenderer.invoke('appState:set', state),
 };
 
 contextBridge.exposeInMainWorld('agentWindow', {
 	platform: process.platform,
 	projects,
 	sessions,
+	appState,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });

@@ -5,6 +5,7 @@
 
 import { observableValue, type IObservable } from '../../../base/common/observable.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
+import type { IAppStateBridge } from '../../appState/common/appState.js';
 import type { IProject, IProjectsBridge } from '../common/projects.js';
 
 export const IProjectsService = createDecorator<IProjectsService>('projectsService');
@@ -24,16 +25,26 @@ export class ProjectsService implements IProjectsService {
 	readonly projects: IObservable<readonly IProject[]> = this.projectsValue;
 	readonly activeProject: IObservable<IProject | undefined> = this.activeProjectValue;
 
-	constructor(private readonly bridge: IProjectsBridge | undefined) {}
+	constructor(
+		private readonly bridge: IProjectsBridge | undefined,
+		private readonly appState?: IAppStateBridge,
+	) {}
 
 	async initialize(): Promise<void> {
+		const persisted = await this.appState?.get().catch(() => undefined);
 		await this.refresh();
+
+		const restored = persisted?.activeProjectId ? this.projectsValue.get().find(project => project.id === persisted.activeProjectId) : undefined;
+		if (restored) {
+			this.activeProjectValue.set(restored);
+		}
 	}
 
 	setActiveProject(projectId: string): void {
 		const project = this.projectsValue.get().find(candidate => candidate.id === projectId);
 		if (project) {
 			this.activeProjectValue.set(project);
+			void this.appState?.set({ activeProjectId: project.id }).catch(error => console.error('Failed to persist the active project:', error));
 		}
 	}
 

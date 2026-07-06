@@ -47,20 +47,26 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 	}
 
 	async sendMessage(sessionId: string, query: string): Promise<ISession> {
-		const session = this.getSession(sessionId);
-		if (!session) {
-			throw new Error(`Unknown session: ${sessionId}`);
-		}
-
-		const provider = this.providersService.getProvider(session.providerId);
-		if (!provider) {
-			throw new Error(`Unknown provider: ${session.providerId}`);
-		}
-
-		return provider.sendMessage(sessionId, query);
+		return this.getOwningProvider(sessionId).sendMessage(sessionId, query);
 	}
 
 	async stopSession(sessionId: string): Promise<ISession> {
+		return this.getOwningProvider(sessionId).stopSession(sessionId);
+	}
+
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		return this.getOwningProvider(sessionId).setSessionPinned(sessionId, isPinned);
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		return this.getOwningProvider(sessionId).setSessionArchived(sessionId, isArchived);
+	}
+
+	async deleteSession(sessionId: string): Promise<void> {
+		return this.getOwningProvider(sessionId).deleteSession(sessionId);
+	}
+
+	private getOwningProvider(sessionId: string): ISessionsProvider {
 		const session = this.getSession(sessionId);
 		if (!session) {
 			throw new Error(`Unknown session: ${sessionId}`);
@@ -71,7 +77,7 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 			throw new Error(`Unknown provider: ${session.providerId}`);
 		}
 
-		return provider.stopSession(sessionId);
+		return provider;
 	}
 
 	private onProvidersChanged(event: ISessionsProvidersChangeEvent): void {

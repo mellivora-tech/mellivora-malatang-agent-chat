@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type {
 	ISessionEntry,
@@ -32,6 +32,10 @@ export async function createSessionFile(root: string, header: ISessionHeader): P
 
 export async function appendSessionEntry(root: string, ref: ISessionRef, entry: ISessionEntry): Promise<void> {
 	await appendFile(sessionFilePath(root, ref), `${JSON.stringify(entry)}\n`, 'utf8');
+}
+
+export async function deleteSessionFile(root: string, ref: ISessionRef): Promise<void> {
+	await rm(sessionFilePath(root, ref), { force: true });
 }
 
 export async function loadSession(root: string, ref: ISessionRef): Promise<ISessionSnapshot | undefined> {
@@ -84,6 +88,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let summary: ISessionStateEntry['changesSummary'];
 	let isArchived = false;
 	let isRead = true;
+	let isPinned = false;
 
 	for (const line of lines.slice(1)) {
 		const entry = parseEntry(line);
@@ -118,6 +123,9 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		if (entry.isRead !== undefined) {
 			isRead = entry.isRead;
 		}
+		if (entry.isPinned !== undefined) {
+			isPinned = entry.isPinned;
+		}
 	}
 
 	return {
@@ -131,6 +139,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		status,
 		isArchived,
 		isRead,
+		isPinned,
 		messages,
 		// The directory decides project membership; the header copy is only
 		// for debuggability and may be stale.

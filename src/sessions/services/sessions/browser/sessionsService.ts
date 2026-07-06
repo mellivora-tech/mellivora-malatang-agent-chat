@@ -23,6 +23,9 @@ export interface ISessionsService {
 	closeSession(sessionId: string): void;
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
+	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
+	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
+	deleteSession(sessionId: string): Promise<void>;
 }
 
 export class SessionsService extends Disposable implements ISessionsService {
@@ -90,6 +93,23 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		return this.managementService.stopSession(sessionId);
+	}
+
+	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
+		return this.managementService.setSessionPinned(sessionId, isPinned);
+	}
+
+	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
+		return this.managementService.setSessionArchived(sessionId, isArchived);
+	}
+
+	async deleteSession(sessionId: string): Promise<void> {
+		await this.managementService.deleteSession(sessionId);
+		// Deleting the last session would otherwise strand conversation mode
+		// on an empty view.
+		if (this.activeSession.get() === undefined) {
+			this.sessionsPartService.showNewSession();
+		}
 	}
 
 	private getRequiredSession(sessionId: string): ISession {
