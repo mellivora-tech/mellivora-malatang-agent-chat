@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { WorkbenchGrid } from '../base/browser/grid.js';
+import { auxiliaryBarWidthPx, editorWidthPx, panelHeightPx, sidebarWidthPx, titlebarHeightPx } from '../common/sizes.js';
 import { DisposableStore, toDisposable, type IDisposable } from '../base/common/lifecycle.js';
 import { registerFileSessionsProvider } from '../contrib/fileProvider/browser/fileSessions.contribution.js';
 import { ServiceCollection } from '../platform/instantiation/instantiation.js';
@@ -22,12 +23,6 @@ import { ISessionsManagementService, SessionsManagementService } from '../servic
 import { ISessionsPartService, SessionsPartService } from '../services/sessions/browser/sessionsPartService.js';
 import { ISessionsProvidersService, SessionsProvidersService } from '../services/sessions/browser/sessionsProvidersService.js';
 import { ISessionsService, SessionsService } from '../services/sessions/browser/sessionsService.js';
-
-const TITLEBAR_HEIGHT = 52;
-const SIDEBAR_WIDTH = 270;
-const AUXILIARY_WIDTH = 340;
-const PANEL_HEIGHT = 300;
-const CONTENT_MIN_WIDTH = 640;
 
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
@@ -82,11 +77,11 @@ export class Workbench {
 			panel: false,
 		},
 		{
-			titlebarHeight: TITLEBAR_HEIGHT,
-			sidebarWidth: SIDEBAR_WIDTH,
-			auxiliaryBarWidth: AUXILIARY_WIDTH,
-			editorWidth: CONTENT_MIN_WIDTH,
-			panelHeight: PANEL_HEIGHT,
+			titlebarHeight: titlebarHeightPx,
+			sidebarWidth: sidebarWidthPx,
+			auxiliaryBarWidth: auxiliaryBarWidthPx,
+			editorWidth: editorWidthPx,
+			panelHeight: panelHeightPx,
 		},
 	);
 

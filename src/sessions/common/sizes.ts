@@ -74,8 +74,17 @@ export const agentsSizeActionSmall = registerSize('agents.size.actionSmall', '22
 export const agentsSizeActionMedium = registerSize('agents.size.actionMedium', '28px');
 export const agentsSizeButton = registerSize('agents.size.button', '32px');
 export const agentsSizeControl = registerSize('agents.size.control', '34px');
-export const agentsSizeTitlebarHeight = registerSize('agents.size.titlebar.height', '52px');
-export const agentsSizeSidebarWidth = registerSize('agents.size.sidebar.width', '270px');
+// Layout dimensions shared by the CSS tokens below and the workbench grid
+// math (workbench.ts / grid.ts). Defined once as numbers here so the pixel
+// tokens and the JS layout can never drift apart.
+export const titlebarHeightPx = 52;
+export const sidebarWidthPx = 270;
+export const auxiliaryBarWidthPx = 340;
+export const editorWidthPx = 640;
+export const panelHeightPx = 300;
+
+export const agentsSizeTitlebarHeight = registerSize('agents.size.titlebar.height', `${titlebarHeightPx}px`);
+export const agentsSizeSidebarWidth = registerSize('agents.size.sidebar.width', `${sidebarWidthPx}px`);
 export const agentsSizeSidebarGutter = registerSize('agents.size.sidebar.gutter', '14px');
 export const agentsSizeSidebarHeader = registerSize('agents.size.sidebar.header', '172px');
 export const agentsSizeSidebarMenuRow = registerSize('agents.size.sidebar.menuRow', '30px');

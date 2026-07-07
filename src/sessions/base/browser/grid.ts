@@ -50,14 +50,6 @@ interface IHorizontalEntry {
 	readonly preferredWidth: number;
 }
 
-const defaultDimensions: IWorkbenchGridDimensions = {
-	titlebarHeight: 52,
-	sidebarWidth: 270,
-	auxiliaryBarWidth: 340,
-	editorWidth: 360,
-	panelHeight: 300,
-};
-
 export class WorkbenchGrid {
 	private visibility: IWorkbenchGridVisibility;
 	private readonly dimensions: IWorkbenchGridDimensions;
@@ -65,10 +57,10 @@ export class WorkbenchGrid {
 	constructor(
 		private readonly parts: IWorkbenchGridParts,
 		initialVisibility: IWorkbenchGridVisibility,
-		dimensions: Partial<IWorkbenchGridDimensions> = {},
+		dimensions: IWorkbenchGridDimensions,
 	) {
 		this.visibility = initialVisibility;
-		this.dimensions = { ...defaultDimensions, ...dimensions };
+		this.dimensions = dimensions;
 	}
 
 	setPartVisible(part: keyof IWorkbenchGridVisibility, visible: boolean): void {
