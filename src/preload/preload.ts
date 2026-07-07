@@ -36,7 +36,8 @@ const models: IModelsBridge = {
 	removeProvider: (id: string) => ipcRenderer.invoke('models:removeProvider', id),
 	upsertModel: (providerId: string, input: IModelEntryInput) => ipcRenderer.invoke('models:upsertModel', providerId, input),
 	removeModel: (modelId: string) => ipcRenderer.invoke('models:removeModel', modelId),
-	setDefaultModel: (modelId: string) => ipcRenderer.invoke('models:setDefault', modelId),
+	setModelEnabled: (modelId: string, enabled: boolean) => ipcRenderer.invoke('models:setModelEnabled', modelId, enabled),
+	moveModel: (modelId: string, direction: 'up' | 'down') => ipcRenderer.invoke('models:moveModel', modelId, direction),
 };
 
 const agent: IAgentBridge = {

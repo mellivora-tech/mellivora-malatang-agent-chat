@@ -302,7 +302,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 	}
 
 	private generateReply(session: IMutableSession, query: string): void {
-		const hasModel = this.modelsService?.registry.get().providers.some(provider => provider.models.length > 0) ?? false;
+		const hasModel = this.modelsService?.registry.get().providers.some(provider => provider.models.some(model => model.enabled)) ?? false;
 		if (this.agent && hasModel) {
 			void this.runAgentReply(session);
 			return;
@@ -318,7 +318,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		}
 
 		const sessionId = session.sessionId;
-		const modelId = this.modelsService?.registry.get().defaultModelId;
+		// No explicit selection yet — the runtime resolves the first enabled model.
+		const modelId = undefined;
 		this.sequence += 1;
 		const assistantId = `${sessionId}-assistant-${this.sequence}`;
 		const transcript = toTranscript(session.messages.get());

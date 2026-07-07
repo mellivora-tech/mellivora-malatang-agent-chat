@@ -41,7 +41,7 @@ test('applyThemeTokens writes semantic css variables for a selected theme', () =
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.color.avatar.background')), '#9b7b72');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.titlebar.height')), '52px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.width')), '270px');
-	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.header')), '172px');
+	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.header')), '148px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.gutter')), '14px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.sidebar.listTitleOffset')), '48px');
 	assert.equal(target.style.values.get(getTokenCssVariableName('agents.size.conversation.width')), '950px');

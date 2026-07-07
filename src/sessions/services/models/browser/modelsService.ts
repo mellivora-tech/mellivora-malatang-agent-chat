@@ -15,7 +15,8 @@ export interface IModelsService {
 	removeProvider(id: string): Promise<void>;
 	upsertModel(providerId: string, input: IModelEntryInput): Promise<void>;
 	removeModel(modelId: string): Promise<void>;
-	setDefaultModel(modelId: string): Promise<void>;
+	setModelEnabled(modelId: string, enabled: boolean): Promise<void>;
+	moveModel(modelId: string, direction: 'up' | 'down'): Promise<void>;
 }
 
 /**
@@ -68,11 +69,19 @@ export class ModelsService implements IModelsService {
 		this.registryValue.set(await this.bridge.removeModel(modelId));
 	}
 
-	async setDefaultModel(modelId: string): Promise<void> {
+	async setModelEnabled(modelId: string, enabled: boolean): Promise<void> {
 		if (!this.bridge) {
 			return;
 		}
 
-		this.registryValue.set(await this.bridge.setDefaultModel(modelId));
+		this.registryValue.set(await this.bridge.setModelEnabled(modelId, enabled));
+	}
+
+	async moveModel(modelId: string, direction: 'up' | 'down'): Promise<void> {
+		if (!this.bridge) {
+			return;
+		}
+
+		this.registryValue.set(await this.bridge.moveModel(modelId, direction));
 	}
 }

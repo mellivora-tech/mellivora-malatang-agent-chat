@@ -825,20 +825,20 @@ test('model settings manage providers and their models', async () => {
 		await page.locator('[data-settings-nav-id="models"]').click();
 		await expect(page.locator('.sessions-models-empty')).toBeVisible();
 
-		// Add a provider (endpoint + key entered once).
+		// Add a custom provider from the catalog picker — name + URL + key, no type dropdown.
 		await page.locator('.sessions-models-add-provider').first().click();
+		await expect(page.locator('.sessions-models-preset-grid')).toBeVisible();
+		await page.locator('.sessions-models-preset-card', { hasText: 'Custom provider' }).click();
 		await page.locator('.sessions-models-field-name').fill('Z.ai');
-		await page.locator('.sessions-models-field-provider').selectOption('openai-compatible');
 		await page.locator('.sessions-models-field-baseurl').fill('https://api.z.ai/v1');
 		await page.locator('.sessions-models-field-apikey').fill('sk-test-1');
 		await page.locator('.sessions-models-provider-save').click();
 
 		await expect(page.locator('.sessions-models-provider')).toHaveCount(1);
 		await expect(page.locator('.sessions-models-provider-name')).toHaveText('Z.ai');
-		await expect(page.locator('.sessions-models-enabled-badge')).toHaveText('Enabled');
 		await expect(page.locator('.sessions-models-detail-meta')).toContainText('key set');
 
-		// Add two models under the provider; the first becomes the default.
+		// Add two models; each is enabled by default.
 		await page.locator('.sessions-models-add-model').click();
 		await page.locator('.sessions-models-field-model').fill('glm-4.6');
 		await page.locator('.sessions-models-field-modellabel').fill('GLM-4.6');
@@ -848,38 +848,40 @@ test('model settings manage providers and their models', async () => {
 		const models = page.locator('.sessions-models-model-row');
 		await expect(models).toHaveCount(1);
 		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-4.6');
-		await expect(models.first().locator('.sessions-models-default-badge')).toBeVisible();
 		await expect(models.first().locator('.sessions-models-model-badge')).toHaveText('1M');
+		await expect(models.first().locator('.sessions-settings-toggle')).toHaveClass(/\bon\b/);
 
 		await page.locator('.sessions-models-add-model').click();
-		await page.locator('.sessions-models-field-model').fill('glm-4.6-turbo');
+		await page.locator('.sessions-models-field-model').fill('glm-turbo');
 		await page.locator('.sessions-models-field-modellabel').fill('GLM-Turbo');
 		await page.locator('.sessions-models-field-context').fill('200000');
 		await page.locator('.sessions-models-model-save').click();
 		await expect(models).toHaveCount(2);
 		await expect(models.filter({ hasText: 'GLM-Turbo' }).locator('.sessions-models-model-badge')).toHaveText('200K');
 
-		// Make the second model the default (row actions reveal on hover).
+		// Disable GLM-4.6 via its enabled toggle.
+		await models.filter({ hasText: 'GLM-4.6' }).locator('.sessions-settings-toggle').click();
+		await expect(models.filter({ hasText: 'GLM-4.6' }).locator('.sessions-settings-toggle')).not.toHaveClass(/\bon\b/);
+
+		// Reorder: move GLM-Turbo to the top (row actions reveal on hover).
 		const turboRow = models.filter({ hasText: 'GLM-Turbo' });
 		await turboRow.hover();
-		await turboRow.locator('.sessions-models-set-default').click();
-		await expect(turboRow.locator('.sessions-models-default-badge')).toBeVisible();
+		await turboRow.locator('.sessions-models-move-up').click();
+		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-Turbo');
 
-		// Edit the first model's display name.
+		// Edit GLM-4.6 inline, then delete it.
 		const glmRow = models.filter({ hasText: 'GLM-4.6' });
 		await glmRow.hover();
 		await glmRow.locator('.sessions-models-edit-model').click();
-		await page.locator('.sessions-models-field-modellabel').fill('GLM-4.6 Air');
+		await page.locator('.sessions-models-field-modellabel').fill('GLM Air');
 		await page.locator('.sessions-models-model-save').click();
-		await expect(models.filter({ hasText: 'GLM-4.6 Air' })).toHaveCount(1);
+		await expect(models.filter({ hasText: 'GLM Air' })).toHaveCount(1);
 
-		// Delete it; the default stays on GLM-Turbo.
-		const airRow = models.filter({ hasText: 'GLM-4.6 Air' });
+		const airRow = models.filter({ hasText: 'GLM Air' });
 		await airRow.hover();
 		await airRow.locator('.sessions-models-delete-model').click();
 		await expect(models).toHaveCount(1);
 		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-Turbo');
-		await expect(models.first().locator('.sessions-models-default-badge')).toBeVisible();
 	} finally {
 		await app?.close();
 	}
@@ -926,12 +928,12 @@ test('a configured model streams a real reply into the conversation', async () =
 		const page = await app.firstWindow();
 		await page.waitForSelector('.sessions-sidebar');
 
-		// Configure a provider pointing at the mock server, then a model under it.
+		// Configure a custom provider pointing at the mock server, then a model under it.
 		await page.locator('.sessions-sidebar-settings-button').click();
 		await page.locator('[data-settings-nav-id="models"]').click();
 		await page.locator('.sessions-models-add-provider').first().click();
+		await page.locator('.sessions-models-preset-card', { hasText: 'Custom provider' }).click();
 		await page.locator('.sessions-models-field-name').fill('Test');
-		await page.locator('.sessions-models-field-provider').selectOption('openai-compatible');
 		await page.locator('.sessions-models-field-baseurl').fill(mockServer.baseURL);
 		await page.locator('.sessions-models-field-apikey').fill('x');
 		await page.locator('.sessions-models-provider-save').click();

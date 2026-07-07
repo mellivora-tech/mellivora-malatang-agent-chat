@@ -17,16 +17,16 @@ import type {
 } from '../sessions/services/models/common/models.js';
 
 /**
- * The config as persisted on disk. Unlike the renderer's view a provider holds
- * the raw `apiKey`. It is stored in plaintext at the data root for now; a future
- * revision can wrap the key with Electron `safeStorage` without touching the IPC
- * surface.
+ * On-disk config. A provider holds the raw `apiKey` (plaintext for now; a future
+ * revision can wrap it with Electron `safeStorage` without touching IPC). There
+ * is no default model — order is priority, and each model carries `enabled`.
  */
 interface IStoredModel {
 	readonly id: string;
 	readonly model: string;
 	readonly label: string;
 	readonly contextLength?: number;
+	readonly enabled: boolean;
 	readonly params?: IModelParams;
 }
 
@@ -35,14 +35,13 @@ interface IStoredProvider {
 	readonly name: string;
 	readonly type: ModelProvider;
 	readonly baseURL: string;
-	readonly enabled: boolean;
+	readonly presetId?: string;
 	readonly apiKey?: string;
 	readonly models: readonly IStoredModel[];
 }
 
 interface IStoredRegistry {
 	readonly providers: readonly IStoredProvider[];
-	readonly defaultModelId?: string;
 }
 
 /** The resolved, flattened config a single model turns into for the agent runtime. */
@@ -83,9 +82,7 @@ async function readRegistry(root: string): Promise<IStoredRegistry> {
 
 	const candidate = parsed as Record<string, unknown>;
 	const providers = Array.isArray(candidate['providers']) ? candidate['providers'].map(parseProvider).filter((entry): entry is IStoredProvider => entry !== undefined) : [];
-	const defaultModelId = typeof candidate['defaultModelId'] === 'string' && hasModel(providers, candidate['defaultModelId']) ? candidate['defaultModelId'] : undefined;
-
-	return { providers, ...(defaultModelId ? { defaultModelId } : {}) };
+	return { providers };
 }
 
 async function writeRegistry(root: string, registry: IStoredRegistry): Promise<void> {
@@ -108,6 +105,7 @@ function parseProvider(value: unknown): IStoredProvider | undefined {
 	}
 
 	const apiKey = candidate['apiKey'];
+	const presetId = candidate['presetId'];
 	const models = Array.isArray(candidate['models']) ? candidate['models'].map(parseModel).filter((entry): entry is IStoredModel => entry !== undefined) : [];
 
 	return {
@@ -115,8 +113,8 @@ function parseProvider(value: unknown): IStoredProvider | undefined {
 		name: asString(candidate['name']),
 		type,
 		baseURL: asString(candidate['baseURL']),
-		enabled: candidate['enabled'] !== false,
 		models,
+		...(typeof presetId === 'string' && presetId.length > 0 ? { presetId } : {}),
 		...(typeof apiKey === 'string' && apiKey.length > 0 ? { apiKey } : {}),
 	};
 }
@@ -140,6 +138,7 @@ function parseModel(value: unknown): IStoredModel | undefined {
 		id,
 		model,
 		label: typeof candidate['label'] === 'string' && candidate['label'].length > 0 ? candidate['label'] : model,
+		enabled: candidate['enabled'] !== false,
 		...(typeof contextLength === 'number' && contextLength > 0 ? { contextLength } : {}),
 		...(params ? { params } : {}),
 	};
@@ -175,40 +174,6 @@ function requireString(value: unknown, field: string): string {
 	return value.trim();
 }
 
-function hasModel(providers: readonly IStoredProvider[], modelId: string): boolean {
-	return providers.some(provider => provider.models.some(model => model.id === modelId));
-}
-
-/** The id of the first model across all providers, or undefined when none exist. */
-function firstModelId(providers: readonly IStoredProvider[]): string | undefined {
-	for (const provider of providers) {
-		const first = provider.models[0];
-		if (first) {
-			return first.id;
-		}
-	}
-
-	return undefined;
-}
-
-function normalizeProvider(input: IProviderInput, existing: IStoredProvider | undefined): IStoredProvider {
-	if (!isProvider(input.type)) {
-		throw new Error(`Unknown provider type: ${String(input.type)}`);
-	}
-
-	const apiKey = typeof input.apiKey === 'string' && input.apiKey.length > 0 ? input.apiKey : existing?.apiKey;
-
-	return {
-		id: existing?.id ?? randomUUID(),
-		name: requireString(input.name, 'name'),
-		type: input.type,
-		baseURL: requireString(input.baseURL, 'baseURL'),
-		enabled: input.enabled ?? existing?.enabled ?? true,
-		models: existing?.models ?? [],
-		...(apiKey ? { apiKey } : {}),
-	};
-}
-
 function normalizeModel(input: IModelEntryInput, existing: IStoredModel | undefined): IStoredModel {
 	const model = requireString(input.model, 'model');
 	const params = parseParams(input.params);
@@ -218,8 +183,25 @@ function normalizeModel(input: IModelEntryInput, existing: IStoredModel | undefi
 		id: existing?.id ?? randomUUID(),
 		model,
 		label,
+		enabled: input.enabled ?? existing?.enabled ?? true,
 		...(typeof input.contextLength === 'number' && input.contextLength > 0 ? { contextLength: input.contextLength } : {}),
 		...(params ? { params } : {}),
+	};
+}
+
+function normalizeProviderOnCreate(input: IProviderInput): IStoredProvider {
+	if (!isProvider(input.type)) {
+		throw new Error(`Unknown provider type: ${String(input.type)}`);
+	}
+
+	return {
+		id: randomUUID(),
+		name: requireString(input.name, 'name'),
+		type: input.type,
+		baseURL: requireString(input.baseURL, 'baseURL'),
+		models: (input.models ?? []).map(model => normalizeModel(model, undefined)),
+		...(input.presetId ? { presetId: input.presetId } : {}),
+		...(input.apiKey && input.apiKey.length > 0 ? { apiKey: input.apiKey } : {}),
 	};
 }
 
@@ -228,6 +210,7 @@ function toModelView(model: IStoredModel): IModelEntryView {
 		id: model.id,
 		model: model.model,
 		label: model.label,
+		enabled: model.enabled,
 		...(model.contextLength ? { contextLength: model.contextLength } : {}),
 		...(model.params ? { params: model.params } : {}),
 	};
@@ -239,23 +222,30 @@ function toProviderView(provider: IStoredProvider): IProviderView {
 		name: provider.name,
 		type: provider.type,
 		baseURL: provider.baseURL,
-		enabled: provider.enabled,
 		hasApiKey: typeof provider.apiKey === 'string' && provider.apiKey.length > 0,
 		models: provider.models.map(toModelView),
+		...(provider.presetId ? { presetId: provider.presetId } : {}),
 	};
 }
 
 function toRegistryView(registry: IStoredRegistry): IModelRegistryView {
-	return {
-		providers: registry.providers.map(toProviderView),
-		...(registry.defaultModelId ? { defaultModelId: registry.defaultModelId } : {}),
-	};
+	return { providers: registry.providers.map(toProviderView) };
 }
 
-/** Re-derive a valid default: keep the current one if it still exists, else the first model. */
-function withValidDefault(providers: readonly IStoredProvider[], preferred: string | undefined): IStoredRegistry {
-	const defaultModelId = preferred && hasModel(providers, preferred) ? preferred : firstModelId(providers);
-	return { providers, ...(defaultModelId ? { defaultModelId } : {}) };
+function mapProviders(registry: IStoredRegistry, id: string, update: (provider: IStoredProvider) => IStoredProvider): IStoredRegistry {
+	return { providers: registry.providers.map(provider => (provider.id === id ? update(provider) : provider)) };
+}
+
+/** The provider that owns `modelId`, or undefined. */
+function findModel(registry: IStoredRegistry, modelId: string): { provider: IStoredProvider; model: IStoredModel } | undefined {
+	for (const provider of registry.providers) {
+		const model = provider.models.find(candidate => candidate.id === modelId);
+		if (model) {
+			return { provider, model };
+		}
+	}
+
+	return undefined;
 }
 
 export async function listModels(root: string): Promise<IModelRegistryView> {
@@ -265,17 +255,34 @@ export async function listModels(root: string): Promise<IModelRegistryView> {
 export async function upsertProvider(root: string, input: IProviderInput): Promise<IModelRegistryView> {
 	const registry = await readRegistry(root);
 	const existing = input.id ? registry.providers.find(provider => provider.id === input.id) : undefined;
-	const normalized = normalizeProvider(input, existing);
-	const providers = existing ? registry.providers.map(provider => (provider.id === normalized.id ? normalized : provider)) : [...registry.providers, normalized];
-	const next = withValidDefault(providers, registry.defaultModelId);
+
+	let next: IStoredRegistry;
+	if (existing) {
+		if (!isProvider(input.type)) {
+			throw new Error(`Unknown provider type: ${String(input.type)}`);
+		}
+		const apiKey = input.apiKey && input.apiKey.length > 0 ? input.apiKey : existing.apiKey;
+		const updated: IStoredProvider = {
+			id: existing.id,
+			name: requireString(input.name, 'name'),
+			type: input.type,
+			baseURL: requireString(input.baseURL, 'baseURL'),
+			models: existing.models,
+			...(input.presetId ? { presetId: input.presetId } : existing.presetId ? { presetId: existing.presetId } : {}),
+			...(apiKey ? { apiKey } : {}),
+		};
+		next = { providers: registry.providers.map(provider => (provider.id === existing.id ? updated : provider)) };
+	} else {
+		next = { providers: [...registry.providers, normalizeProviderOnCreate(input)] };
+	}
+
 	await writeRegistry(root, next);
 	return toRegistryView(next);
 }
 
 export async function removeProvider(root: string, id: string): Promise<IModelRegistryView> {
 	const registry = await readRegistry(root);
-	const providers = registry.providers.filter(provider => provider.id !== id);
-	const next = withValidDefault(providers, registry.defaultModelId);
+	const next: IStoredRegistry = { providers: registry.providers.filter(provider => provider.id !== id) };
 	await writeRegistry(root, next);
 	return toRegistryView(next);
 }
@@ -290,52 +297,80 @@ export async function upsertModel(root: string, providerId: string, input: IMode
 	const existing = input.id ? provider.models.find(model => model.id === input.id) : undefined;
 	const normalized = normalizeModel(input, existing);
 	const models = existing ? provider.models.map(model => (model.id === normalized.id ? normalized : model)) : [...provider.models, normalized];
-	const providers = registry.providers.map(candidate => (candidate.id === providerId ? { ...candidate, models } : candidate));
-	// First model added anywhere becomes the default.
-	const next = withValidDefault(providers, registry.defaultModelId ?? normalized.id);
+	const next = mapProviders(registry, providerId, candidate => ({ ...candidate, models }));
 	await writeRegistry(root, next);
 	return toRegistryView(next);
 }
 
 export async function removeModel(root: string, modelId: string): Promise<IModelRegistryView> {
 	const registry = await readRegistry(root);
-	const providers = registry.providers.map(provider => ({ ...provider, models: provider.models.filter(model => model.id !== modelId) }));
-	const next = withValidDefault(providers, registry.defaultModelId);
+	const next: IStoredRegistry = { providers: registry.providers.map(provider => ({ ...provider, models: provider.models.filter(model => model.id !== modelId) })) };
 	await writeRegistry(root, next);
 	return toRegistryView(next);
 }
 
-export async function setDefaultModel(root: string, modelId: string): Promise<IModelRegistryView> {
+export async function setModelEnabled(root: string, modelId: string, enabled: boolean): Promise<IModelRegistryView> {
 	const registry = await readRegistry(root);
-	if (!hasModel(registry.providers, modelId)) {
+	const next: IStoredRegistry = {
+		providers: registry.providers.map(provider => ({
+			...provider,
+			models: provider.models.map(model => (model.id === modelId ? { ...model, enabled } : model)),
+		})),
+	};
+	await writeRegistry(root, next);
+	return toRegistryView(next);
+}
+
+export async function moveModel(root: string, modelId: string, direction: 'up' | 'down'): Promise<IModelRegistryView> {
+	const registry = await readRegistry(root);
+	const found = findModel(registry, modelId);
+	if (!found) {
 		return toRegistryView(registry);
 	}
 
-	const next: IStoredRegistry = { providers: registry.providers, defaultModelId: modelId };
+	const models = [...found.provider.models];
+	const index = models.findIndex(model => model.id === modelId);
+	const target = direction === 'up' ? index - 1 : index + 1;
+	if (target < 0 || target >= models.length) {
+		return toRegistryView(registry);
+	}
+
+	const a = models[index];
+	const b = models[target];
+	if (a && b) {
+		models[index] = b;
+		models[target] = a;
+	}
+	const next = mapProviders(registry, found.provider.id, provider => ({ ...provider, models }));
 	await writeRegistry(root, next);
 	return toRegistryView(next);
 }
 
-/** Main-side only: the full config incl. the API key for a model, for the agent runtime. */
-export async function resolveModelConfig(root: string, modelId: string): Promise<IStoredModelConfig | undefined> {
+/** Main-side only: the full config incl. the API key. Falls back to the first enabled model. */
+export async function resolveModelConfig(root: string, modelId: string | undefined): Promise<IStoredModelConfig | undefined> {
 	const registry = await readRegistry(root);
-	const targetId = hasModel(registry.providers, modelId) ? modelId : registry.defaultModelId;
-	if (!targetId) {
+	const explicit = modelId ? findModel(registry, modelId) : undefined;
+	const target = explicit ?? firstEnabled(registry);
+	if (!target) {
 		return undefined;
 	}
 
+	return {
+		id: target.model.id,
+		label: target.model.label,
+		provider: target.provider.type,
+		baseURL: target.provider.baseURL,
+		model: target.model.model,
+		...(target.model.params ? { params: target.model.params } : {}),
+		...(target.provider.apiKey ? { apiKey: target.provider.apiKey } : {}),
+	};
+}
+
+function firstEnabled(registry: IStoredRegistry): { provider: IStoredProvider; model: IStoredModel } | undefined {
 	for (const provider of registry.providers) {
-		const model = provider.models.find(candidate => candidate.id === targetId);
+		const model = provider.models.find(candidate => candidate.enabled);
 		if (model) {
-			return {
-				id: model.id,
-				label: model.label,
-				provider: provider.type,
-				baseURL: provider.baseURL,
-				model: model.model,
-				...(model.params ? { params: model.params } : {}),
-				...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
-			};
+			return { provider, model };
 		}
 	}
 
