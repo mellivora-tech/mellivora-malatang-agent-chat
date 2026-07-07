@@ -83,6 +83,8 @@ export interface IModelClientConfig {
 		readonly temperature?: number;
 		readonly maxTokens?: number;
 		readonly thinking?: boolean;
+		/** Reasoning effort; mapped per wire format, omitted = provider default. */
+		readonly effort?: string;
 	};
 }
 

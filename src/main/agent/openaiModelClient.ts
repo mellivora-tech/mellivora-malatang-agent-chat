@@ -77,6 +77,7 @@ export function buildOpenAIRequestBody(config: IModelClientConfig, request: IMod
 		...(request.tools.length > 0 ? { tools: toOpenAITools(request.tools) } : {}),
 		...(config.params?.temperature !== undefined ? { temperature: config.params.temperature } : {}),
 		...(config.params?.maxTokens !== undefined ? { max_tokens: config.params.maxTokens } : {}),
+		...(config.params?.effort ? { reasoning_effort: config.params.effort } : {}),
 	};
 }
 

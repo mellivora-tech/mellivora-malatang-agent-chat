@@ -6,29 +6,46 @@
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
-import type { IModelEntryInput, IModelEntryView, IProviderInput, IProviderView } from '../../services/models/common/models.js';
-import { CUSTOM_PRESET_ID, deriveProviderType, findPreset, PROVIDER_PRESETS, type IProviderPreset } from '../../services/models/common/providerPresets.js';
+import type { IModelEntryInput, IModelEntryView, IProviderInput, IProviderView, IRemoteModel } from '../../services/models/common/models.js';
+import { PROVIDER_PRESETS, type IProviderPreset } from '../../services/models/common/providerPresets.js';
 import { settingsToggle } from './settingsControls.js';
 
-interface IProviderFormState {
-	readonly editing: IProviderView | undefined;
+/**
+ * One row in the fixed provider catalog: a built-in preset merged with its
+ * stored configuration (if any). Legacy providers without a matching preset
+ * are appended so they stay reachable (and removable).
+ */
+interface ICatalogRow {
+	readonly key: string;
+	readonly name: string;
 	readonly preset: IProviderPreset | undefined;
+	readonly provider: IProviderView | undefined;
+}
+
+interface IModelCandidatesState {
+	readonly providerId: string;
+	readonly status: 'loading' | 'ready' | 'error';
+	readonly models: readonly IRemoteModel[];
 }
 
 /**
- * Provider-centric model manager. A provider is one endpoint (name + base URL +
- * key); the wire format is derived, never chosen. Adding a provider starts from
- * the built-in preset catalog (or Custom). Models carry an `enabled` flag and an
- * order (priority) — there is no default model.
+ * Provider-centric model manager over a fixed catalog. The left column always
+ * lists every built-in provider — there is no "add provider"; unconfigured ones
+ * are dimmed and selecting one opens its setup form (prefilled base URL + API
+ * key). Saving seeds the preset's model list. Models carry an `enabled` flag
+ * and an order (priority) — there is no default model.
  */
 export class ModelSettingsView extends Disposable {
 	readonly element: HTMLElement;
 
-	private selectedProviderId: string | undefined;
-	private mode: 'detail' | 'preset-picker' | 'provider-form' = 'detail';
-	private providerForm: IProviderFormState | undefined;
+	private selectedKey: string | undefined;
+	private mode: 'detail' | 'form' = 'detail';
 	private expandedModel: { readonly providerId: string; readonly editing: IModelEntryView | undefined } | undefined;
 	private formError: string | undefined;
+	/** Typed-but-unsaved provider form values, kept across an error re-render. */
+	private providerDraft: { readonly key: string; readonly baseURL: string; readonly apiKey: string } | undefined;
+	/** Models reported by the provider's endpoint, offered as candidates when adding a model. */
+	private modelCandidates: IModelCandidatesState | undefined;
 
 	constructor(private readonly service: IModelsService) {
 		super();
@@ -40,20 +57,34 @@ export class ModelSettingsView extends Disposable {
 
 	private render(): void {
 		clearNode(this.element);
-		const providers = this.service.registry.get().providers;
+		const rows = this.buildCatalog(this.service.registry.get().providers);
 
-		if (this.selectedProviderId && !providers.some(provider => provider.id === this.selectedProviderId)) {
-			this.selectedProviderId = undefined;
-		}
-		if (!this.selectedProviderId && this.mode === 'detail') {
-			this.selectedProviderId = providers[0]?.id;
+		if (!this.selectedKey || !rows.some(row => row.key === this.selectedKey)) {
+			this.selectedKey = (rows.find(row => row.provider) ?? rows[0])?.key;
+			this.mode = 'detail';
 		}
 
-		this.renderProviderColumn(providers);
-		this.renderDetailColumn(providers);
+		this.renderProviderColumn(rows);
+		this.renderDetailColumn(rows);
 	}
 
-	private renderProviderColumn(providers: readonly IProviderView[]): void {
+	private buildCatalog(providers: readonly IProviderView[]): ICatalogRow[] {
+		const rows: ICatalogRow[] = PROVIDER_PRESETS.map(preset => ({
+			key: preset.id,
+			name: preset.name,
+			preset,
+			provider: providers.find(provider => provider.presetId === preset.id),
+		}));
+		for (const provider of providers) {
+			if (!PROVIDER_PRESETS.some(preset => preset.id === provider.presetId)) {
+				rows.push({ key: provider.id, name: provider.name, preset: undefined, provider });
+			}
+		}
+
+		return rows;
+	}
+
+	private renderProviderColumn(rows: readonly ICatalogRow[]): void {
 		const column = append(this.element, document.createElement('div'));
 		column.className = 'sessions-models-providers';
 
@@ -61,101 +92,52 @@ export class ModelSettingsView extends Disposable {
 		title.className = 'sessions-models-column-title';
 		title.textContent = 'Providers';
 
-		for (const provider of providers) {
+		for (const entry of rows) {
 			const row = append(column, document.createElement('button')) as HTMLButtonElement;
 			row.className = 'sessions-models-provider';
 			row.type = 'button';
-			row.dataset.providerId = provider.id;
-			if (provider.id === this.selectedProviderId && this.mode === 'detail') {
+			row.dataset.providerId = entry.key;
+			if (entry.key === this.selectedKey) {
 				row.classList.add('active');
+			}
+			if (!entry.provider) {
+				row.classList.add('unconfigured');
 			}
 			const name = append(row, document.createElement('span'));
 			name.className = 'sessions-models-provider-row-name';
-			name.textContent = provider.name;
+			name.textContent = entry.name;
 			const dot = append(row, document.createElement('span'));
-			dot.className = provider.hasApiKey ? 'sessions-models-provider-dot on' : 'sessions-models-provider-dot';
+			dot.className = entry.provider?.hasApiKey ? 'sessions-models-provider-dot on' : 'sessions-models-provider-dot';
 			dot.setAttribute('aria-hidden', 'true');
 			row.addEventListener('click', () => {
-				this.selectedProviderId = provider.id;
+				this.selectedKey = entry.key;
 				this.mode = 'detail';
-				this.providerForm = undefined;
 				this.expandedModel = undefined;
+				this.formError = undefined;
+				this.providerDraft = undefined;
 				this.render();
 			});
 		}
-
-		const add = append(column, document.createElement('button')) as HTMLButtonElement;
-		add.className = 'sessions-models-add-provider';
-		add.type = 'button';
-		add.innerHTML = '<span class="codicon codicon-add" aria-hidden="true"></span><span>Add provider</span>';
-		add.addEventListener('click', () => this.openPresetPicker());
 	}
 
-	private renderDetailColumn(providers: readonly IProviderView[]): void {
+	private renderDetailColumn(rows: readonly ICatalogRow[]): void {
 		const detail = append(this.element, document.createElement('div'));
 		detail.className = 'sessions-models-detail';
 
-		if (this.mode === 'preset-picker') {
-			this.renderPresetPicker(detail);
-			return;
-		}
-		if (this.mode === 'provider-form') {
-			detail.appendChild(this.renderProviderForm());
+		const row = rows.find(candidate => candidate.key === this.selectedKey);
+		if (!row) {
 			return;
 		}
 
-		const provider = providers.find(candidate => candidate.id === this.selectedProviderId);
-		if (!provider) {
-			const empty = append(detail, document.createElement('div'));
-			empty.className = 'sessions-models-empty';
-			const icon = append(empty, document.createElement('span'));
-			icon.className = 'codicon codicon-server-environment sessions-models-empty-icon';
-			icon.setAttribute('aria-hidden', 'true');
-			const text = append(empty, document.createElement('p'));
-			text.textContent = 'Add a provider to configure models for chatting.';
+		if (row.provider && this.mode === 'detail') {
+			this.renderProviderDetail(detail, row.provider, row.preset !== undefined);
 			return;
 		}
 
-		this.renderProviderDetail(detail, provider);
+		detail.appendChild(this.renderProviderForm(row));
 	}
 
-	private renderPresetPicker(detail: HTMLElement): void {
-		const title = append(detail, document.createElement('h2'));
-		title.className = 'sessions-models-provider-name';
-		title.textContent = 'Add a provider';
-		const subtitle = append(detail, document.createElement('div'));
-		subtitle.className = 'sessions-models-detail-meta';
-		subtitle.textContent = 'Pick a built-in provider, or configure a custom endpoint.';
-
-		const grid = append(detail, document.createElement('div'));
-		grid.className = 'sessions-models-preset-grid';
-		for (const preset of PROVIDER_PRESETS) {
-			grid.appendChild(this.renderPresetCard(preset.name, preset.description ?? preset.baseURL, () => this.openProviderForm(undefined, preset)));
-		}
-		grid.appendChild(this.renderPresetCard('Custom provider', 'Any OpenAI- or Anthropic-compatible endpoint', () => this.openProviderForm(undefined, undefined)));
-
-		const cancel = append(detail, document.createElement('button')) as HTMLButtonElement;
-		cancel.className = 'sessions-models-cancel';
-		cancel.type = 'button';
-		cancel.textContent = 'Cancel';
-		cancel.addEventListener('click', () => this.closeForms());
-	}
-
-	private renderPresetCard(name: string, description: string, onPick: () => void): HTMLElement {
-		const card = document.createElement('button');
-		card.className = 'sessions-models-preset-card';
-		card.type = 'button';
-		const title = append(card, document.createElement('div'));
-		title.className = 'sessions-models-preset-name';
-		title.textContent = name;
-		const desc = append(card, document.createElement('div'));
-		desc.className = 'sessions-models-preset-desc';
-		desc.textContent = description;
-		card.addEventListener('click', onPick);
-		return card;
-	}
-
-	private renderProviderDetail(detail: HTMLElement, provider: IProviderView): void {
+	private renderProviderDetail(detail: HTMLElement, provider: IProviderView, isPreset: boolean): void {
 		const header = append(detail, document.createElement('div'));
 		header.className = 'sessions-models-detail-header';
 		const name = append(header, document.createElement('h2'));
@@ -168,11 +150,18 @@ export class ModelSettingsView extends Disposable {
 		edit.className = 'sessions-models-edit-provider';
 		edit.type = 'button';
 		edit.textContent = 'Edit';
-		edit.addEventListener('click', () => this.openProviderForm(provider, findPreset(provider.presetId)));
+		edit.addEventListener('click', () => {
+			this.mode = 'form';
+			this.expandedModel = undefined;
+			this.formError = undefined;
+			this.render();
+		});
+		// Preset providers cannot be removed from the catalog — clearing resets
+		// them to the unconfigured state; legacy rows disappear entirely.
 		const remove = append(actions, document.createElement('button')) as HTMLButtonElement;
 		remove.className = 'sessions-models-delete-provider';
 		remove.type = 'button';
-		remove.textContent = 'Remove';
+		remove.textContent = isPreset ? 'Clear' : 'Remove';
 		remove.addEventListener('click', () => void this.service.removeProvider(provider.id));
 
 		const meta = append(detail, document.createElement('div'));
@@ -266,13 +255,16 @@ export class ModelSettingsView extends Disposable {
 		const form = document.createElement('form');
 		form.className = 'sessions-models-form sessions-models-model-form';
 
-		const modelInput = this.field(form, 'Model', 'sessions-models-field-model', editing?.model ?? '', 'glm-4.6');
-		const labelInput = this.field(form, 'Display name (optional)', 'sessions-models-field-modellabel', editing?.label ?? '', 'GLM-4.6');
+		const modelInput = this.field(form, 'Model', 'sessions-models-field-model', editing?.model ?? '', 'glm-5.2');
+		const labelInput = this.field(form, 'Display name (optional)', 'sessions-models-field-modellabel', editing?.label ?? '', 'GLM-5.2');
 		const contextInput = this.field(form, 'Context length (optional)', 'sessions-models-field-context', editing?.contextLength ? String(editing.contextLength) : '', '200000');
 		contextInput.inputMode = 'numeric';
+		if (!editing) {
+			this.appendModelCandidates(form, providerId, modelInput, contextInput);
+		}
 
 		this.appendFormError(form);
-		this.appendFormActions(form, editing ? 'Save' : 'Add', 'sessions-models-model-save', 'sessions-models-model-cancel');
+		this.appendFormActions(form, editing ? 'Save' : 'Add', 'sessions-models-model-save', 'sessions-models-model-cancel', () => this.closeModelForm());
 
 		form.addEventListener('submit', event => {
 			event.preventDefault();
@@ -289,21 +281,26 @@ export class ModelSettingsView extends Disposable {
 		return form;
 	}
 
-	private renderProviderForm(): HTMLElement {
-		const editing = this.providerForm?.editing;
-		const preset = this.providerForm?.preset;
+	private renderProviderForm(row: ICatalogRow): HTMLElement {
+		const editing = row.provider;
+		const draft = this.providerDraft?.key === row.key ? this.providerDraft : undefined;
 		const form = document.createElement('form');
 		form.className = 'sessions-models-form sessions-models-provider-form';
 
 		const title = append(form, document.createElement('div'));
 		title.className = 'sessions-models-form-title';
-		title.textContent = editing ? 'Edit provider' : preset ? `Add ${preset.name}` : 'Add custom provider';
+		title.textContent = editing ? `Edit ${row.name}` : `Set up ${row.name}`;
 		const subtitle = append(form, document.createElement('div'));
 		subtitle.className = 'sessions-models-detail-meta';
-		subtitle.textContent = editing ? 'Update the endpoint or rotate the key.' : 'Configure the API endpoint and key.';
+		subtitle.textContent = editing ? 'Update the endpoint or rotate the key.' : 'Enter an API key to start using this provider.';
 
-		const nameInput = this.field(form, 'Name', 'sessions-models-field-name', editing?.name ?? preset?.name ?? '', 'DeepSeek');
-		const baseUrlInput = this.field(form, 'Base URL', 'sessions-models-field-baseurl', editing?.baseURL ?? preset?.baseURL ?? '', 'https://api.example.com/v1');
+		const baseUrlInput = this.field(
+			form,
+			'Base URL',
+			'sessions-models-field-baseurl',
+			draft?.baseURL ?? editing?.baseURL ?? row.preset?.baseURL ?? '',
+			'https://api.example.com/v1',
+		);
 
 		const keyRow = append(form, document.createElement('label'));
 		keyRow.className = 'sessions-models-field';
@@ -312,26 +309,26 @@ export class ModelSettingsView extends Disposable {
 		apiKeyInput.className = 'sessions-models-field-apikey';
 		apiKeyInput.type = 'password';
 		apiKeyInput.placeholder = editing?.hasApiKey ? '•••••••• (leave blank to keep)' : 'Enter API key';
+		apiKeyInput.value = draft?.apiKey ?? '';
 
 		this.appendFormError(form);
-		this.appendFormActions(form, editing ? 'Save' : 'Add provider', 'sessions-models-provider-save', 'sessions-models-provider-cancel');
+		// Setup has nothing to cancel back to — the row simply stays unconfigured.
+		const save = this.appendFormActions(form, 'Save', 'sessions-models-provider-save', 'sessions-models-provider-cancel', editing ? () => this.closeProviderForm() : undefined);
 
 		form.addEventListener('submit', event => {
 			event.preventDefault();
-			const baseURL = baseUrlInput.value.trim();
-			const type = preset ? preset.type : deriveProviderType(baseURL);
 			const input: IProviderInput = {
 				...(editing ? { id: editing.id } : {}),
-				name: nameInput.value.trim(),
-				type,
-				baseURL,
-				...(preset ? { presetId: preset.id } : {}),
+				name: row.name,
+				type: editing?.type ?? row.preset?.type ?? 'openai-compatible',
+				baseURL: baseUrlInput.value.trim(),
+				...(row.preset ? { presetId: row.preset.id } : {}),
 				...(apiKeyInput.value.length > 0 ? { apiKey: apiKeyInput.value } : {}),
-				...(!editing && preset
-					? { models: preset.models.map(model => ({ model: model.model, label: model.label, ...(model.contextLength ? { contextLength: model.contextLength } : {}) })) }
+				...(!editing && row.preset
+					? { models: row.preset.models.map(model => ({ model: model.model, label: model.label, ...(model.contextLength ? { contextLength: model.contextLength } : {}) })) }
 					: {}),
 			};
-			void this.submitProvider(input, editing === undefined);
+			void this.submitProvider(row, input, save);
 		});
 
 		return form;
@@ -347,18 +344,22 @@ export class ModelSettingsView extends Disposable {
 		error.textContent = this.formError;
 	}
 
-	private appendFormActions(form: HTMLElement, saveLabel: string, saveClass: string, cancelClass: string): void {
+	private appendFormActions(form: HTMLElement, saveLabel: string, saveClass: string, cancelClass: string, onCancel: (() => void) | undefined): HTMLButtonElement {
 		const actions = append(form, document.createElement('div'));
 		actions.className = 'sessions-models-form-actions';
 		const save = append(actions, document.createElement('button')) as HTMLButtonElement;
 		save.className = saveClass;
 		save.type = 'submit';
 		save.textContent = saveLabel;
-		const cancel = append(actions, document.createElement('button')) as HTMLButtonElement;
-		cancel.className = cancelClass;
-		cancel.type = 'button';
-		cancel.textContent = 'Cancel';
-		cancel.addEventListener('click', () => this.closeForms());
+		if (onCancel) {
+			const cancel = append(actions, document.createElement('button')) as HTMLButtonElement;
+			cancel.className = cancelClass;
+			cancel.type = 'button';
+			cancel.textContent = 'Cancel';
+			cancel.addEventListener('click', onCancel);
+		}
+
+		return save;
 	}
 
 	private field(form: HTMLElement, label: string, className: string, value: string, placeholder?: string): HTMLInputElement {
@@ -376,29 +377,89 @@ export class ModelSettingsView extends Disposable {
 		return input;
 	}
 
-	private openPresetPicker(): void {
-		this.mode = 'preset-picker';
-		this.providerForm = undefined;
-		this.expandedModel = undefined;
+	private openModelForm(providerId: string, model: IModelEntryView | undefined): void {
+		this.expandedModel = { providerId, editing: model };
 		this.formError = undefined;
-		this.render();
-	}
-
-	private openProviderForm(provider: IProviderView | undefined, preset: IProviderPreset | undefined): void {
-		this.mode = 'provider-form';
-		this.providerForm = { editing: provider, preset: preset?.id === CUSTOM_PRESET_ID ? undefined : preset };
-		this.expandedModel = undefined;
-		this.formError = undefined;
-		if (provider) {
-			this.selectedProviderId = provider.id;
+		if (!model) {
+			this.loadModelCandidates(providerId);
 		}
 		this.render();
 	}
 
-	private openModelForm(providerId: string, model: IModelEntryView | undefined): void {
-		this.expandedModel = { providerId, editing: model };
-		this.formError = undefined;
-		this.render();
+	private loadModelCandidates(providerId: string): void {
+		if (this.modelCandidates?.providerId === providerId && this.modelCandidates.status !== 'error') {
+			return;
+		}
+		this.modelCandidates = { providerId, status: 'loading', models: [] };
+		void this.service.listRemoteModels({ providerId }).then(
+			models => this.setModelCandidates(providerId, { providerId, status: 'ready', models }),
+			() => this.setModelCandidates(providerId, { providerId, status: 'error', models: [] }),
+		);
+	}
+
+	private setModelCandidates(providerId: string, state: IModelCandidatesState): void {
+		if (this.modelCandidates?.providerId !== providerId) {
+			return;
+		}
+		this.modelCandidates = state;
+		// Only re-render while the add-model form (the candidates' consumer) is open.
+		if (this.expandedModel && this.expandedModel.providerId === providerId && !this.expandedModel.editing) {
+			this.render();
+		}
+	}
+
+	/** Suggestions from the provider's live model list; manual entry always works. */
+	private appendModelCandidates(form: HTMLElement, providerId: string, modelInput: HTMLInputElement, contextInput: HTMLInputElement): void {
+		const candidates = this.modelCandidates?.providerId === providerId ? this.modelCandidates : undefined;
+		if (!candidates) {
+			return;
+		}
+
+		// The suggestions belong visually right under the Model field.
+		const modelRow = modelInput.parentElement ?? form;
+
+		if (candidates.status === 'loading') {
+			const note = document.createElement('div');
+			note.className = 'sessions-models-candidates-note';
+			note.textContent = 'Fetching available models…';
+			modelRow.insertAdjacentElement('afterend', note);
+			return;
+		}
+		if (candidates.status === 'error') {
+			const note = document.createElement('div');
+			note.className = 'sessions-models-candidates-note';
+			note.textContent = 'Could not fetch the provider’s model list — enter a model manually.';
+			modelRow.insertAdjacentElement('afterend', note);
+			return;
+		}
+
+		const existing = new Set(
+			this.service.registry
+				.get()
+				.providers.find(provider => provider.id === providerId)
+				?.models.map(model => model.model),
+		);
+		const available = candidates.models.filter(model => !existing.has(model.id));
+		if (available.length === 0) {
+			return;
+		}
+
+		const list = document.createElement('div');
+		list.className = 'sessions-models-candidates';
+		modelRow.insertAdjacentElement('afterend', list);
+		for (const candidate of available) {
+			const chip = append(list, document.createElement('button')) as HTMLButtonElement;
+			chip.className = 'sessions-models-candidate';
+			chip.type = 'button';
+			chip.textContent = candidate.id;
+			chip.addEventListener('click', () => {
+				modelInput.value = candidate.id;
+				if (candidate.contextLength) {
+					contextInput.value = String(candidate.contextLength);
+				}
+				modelInput.focus();
+			});
+		}
 	}
 
 	private toggleModelForm(providerId: string, model: IModelEntryView): void {
@@ -411,22 +472,49 @@ export class ModelSettingsView extends Disposable {
 		this.render();
 	}
 
-	private closeForms(): void {
-		this.mode = 'detail';
-		this.providerForm = undefined;
+	private closeModelForm(): void {
 		this.expandedModel = undefined;
 		this.formError = undefined;
 		this.render();
 	}
 
-	private async submitProvider(input: IProviderInput, isAdd: boolean): Promise<void> {
-		if (!input.name || !input.baseURL) {
-			this.formError = 'Name and base URL are required.';
+	private closeProviderForm(): void {
+		this.mode = 'detail';
+		this.formError = undefined;
+		this.providerDraft = undefined;
+		this.render();
+	}
+
+	private async submitProvider(row: ICatalogRow, input: IProviderInput, save: HTMLButtonElement): Promise<void> {
+		// Keep the typed values so an error re-render doesn't wipe the form.
+		this.providerDraft = { key: row.key, baseURL: input.baseURL, apiKey: input.apiKey ?? '' };
+
+		if (!input.baseURL) {
+			this.formError = 'Base URL is required.';
+			this.render();
+			return;
+		}
+		if (input.id === undefined && !input.apiKey) {
+			this.formError = 'API key is required.';
 			this.render();
 			return;
 		}
 
+		save.disabled = true;
+		save.textContent = 'Testing connection…';
+
+		// A known chat model gives the verification probe something real to call.
+		const probeModel = row.provider?.models[0]?.model ?? row.preset?.models[0]?.model;
+
 		try {
+			// Reachability + one-token chat probe; nothing is persisted when it fails.
+			await this.service.verifyProvider({
+				type: input.type,
+				baseURL: input.baseURL,
+				...(input.apiKey ? { apiKey: input.apiKey } : {}),
+				...(input.id ? { providerId: input.id } : {}),
+				...(probeModel ? { probeModel } : {}),
+			});
 			await this.service.upsertProvider(input);
 		} catch (error) {
 			this.formError = error instanceof Error ? error.message : String(error);
@@ -434,11 +522,12 @@ export class ModelSettingsView extends Disposable {
 			return;
 		}
 
-		if (isAdd) {
-			const providers = this.service.registry.get().providers;
-			this.selectedProviderId = providers[providers.length - 1]?.id;
-		}
-		this.closeForms();
+		this.mode = 'detail';
+		this.formError = undefined;
+		this.providerDraft = undefined;
+		// The key or base URL may have changed — refetch candidates next time.
+		this.modelCandidates = undefined;
+		this.render();
 	}
 
 	private async submitModel(providerId: string, input: IModelEntryInput): Promise<void> {

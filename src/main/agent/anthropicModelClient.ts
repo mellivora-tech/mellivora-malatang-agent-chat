@@ -65,6 +65,7 @@ export function buildAnthropicRequestBody(config: IModelClientConfig, request: I
 		stream: true,
 		...(request.tools.length > 0 ? { tools: toAnthropicTools(request.tools) } : {}),
 		...(config.params?.thinking ? { thinking: { type: 'adaptive' } } : {}),
+		...(config.params?.effort ? { output_config: { effort: config.params.effort } } : {}),
 	};
 }
 

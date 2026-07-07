@@ -5,9 +5,11 @@
 
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
+import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IActiveSession, ISessionMessage } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import { ConversationContext } from './conversationContext.js';
+import { installEffortPicker, installModelPicker } from './modelPicker.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string): Promise<unknown>;
@@ -24,13 +26,17 @@ export class ConversationView extends Disposable {
 	private readonly stopButton: HTMLButtonElement;
 	private readonly reconnectStatus: HTMLElement;
 	private readonly sendError: HTMLElement;
+	private readonly contextRing: HTMLElement;
 	private readonly header = this._register(new ConversationContext());
 	private readonly sessionDisposables = this._register(new DisposableStore());
 	private session: IActiveSession | undefined;
 	private isSending = false;
 	private isStopping = false;
 
-	constructor(private readonly messageSender?: ISessionMessageSender) {
+	constructor(
+		private readonly messageSender?: ISessionMessageSender,
+		private readonly modelsService?: IModelsService,
+	) {
 		super();
 
 		this.element = document.createElement('div');
@@ -78,23 +84,31 @@ export class ConversationView extends Disposable {
 		const rightControls = append(toolbar, document.createElement('div'));
 		rightControls.className = 'conversation-toolbar-right';
 
+		// A standalone read-only indicator — deliberately not part of the
+		// model button, which is an interactive picker.
+		this.contextRing = append(rightControls, createContextRing());
+
 		const model = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		model.className = 'conversation-model';
 		model.type = 'button';
 		model.title = 'Pick model';
-		appendCodicon(model, 'codicon-circle-large-outline');
 		const modelLabel = append(model, document.createElement('span'));
-		modelLabel.textContent = 'GLM-5.2';
+		modelLabel.textContent = 'No model';
 		appendCodicon(model, 'codicon-chevron-down');
+		const effort = append(rightControls, document.createElement('button')) as HTMLButtonElement;
+		effort.className = 'conversation-effort';
+		effort.type = 'button';
+		effort.hidden = true;
+		const effortLabel = append(effort, document.createElement('span'));
+		appendCodicon(effort, 'codicon-chevron-down');
 
-		const agent = append(rightControls, document.createElement('button')) as HTMLButtonElement;
-		agent.className = 'conversation-agent';
-		agent.type = 'button';
-		agent.title = 'Pick agent';
-		appendCodicon(agent, 'codicon-github-alt');
-		const agentLabel = append(agent, document.createElement('span'));
-		agentLabel.textContent = 'Max';
-		appendCodicon(agent, 'codicon-chevron-down');
+		if (this.modelsService) {
+			// Host the menus on the view root — the composer clips overflow.
+			this._register(installModelPicker({ host: this.element, trigger: model, label: modelLabel, modelsService: this.modelsService }));
+			this._register(installEffortPicker({ host: this.element, trigger: effort, label: effortLabel, modelsService: this.modelsService }));
+			// A model switch changes the context window the ring measures against.
+			this._register(this.modelsService.selectedModel.subscribe(() => this.updateContextRing()));
+		}
 
 		this.stopButton = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		this.stopButton.className = 'conversation-stop-button';
@@ -194,6 +208,31 @@ export class ConversationView extends Disposable {
 		}
 
 		this.updateComposerState();
+		this.updateContextRing();
+	}
+
+	/**
+	 * The ring next to the model picker shows how much of the selected model's
+	 * context window this conversation roughly occupies (~4 chars per token).
+	 * Exact numbers live in the tooltip.
+	 */
+	private updateContextRing(): void {
+		const fill = this.contextRing.querySelector<SVGCircleElement>('.ring-fill');
+		if (!fill) {
+			return;
+		}
+
+		const messages = this.session?.messages.get() ?? [];
+		const chars = messages.reduce((sum, message) => sum + message.text.length, 0);
+		const tokens = Math.ceil(chars / 4);
+		const contextLength = this.modelsService?.selectedModel.get()?.contextLength;
+		const ratio = contextLength ? Math.min(1, tokens / contextLength) : 0;
+
+		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
+		this.contextRing.dataset.level = ratio >= 0.95 ? 'danger' : ratio >= 0.8 ? 'warn' : 'ok';
+		this.contextRing.title = contextLength
+			? `Context: ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens used (${Math.round(ratio * 100)}%)`
+			: `Context: ~${formatTokens(tokens)} tokens used (window size unknown)`;
 	}
 
 	private createWorkingRow(): HTMLElement {
@@ -291,6 +330,33 @@ function appendCodicon(parent: HTMLElement, codicon: string): HTMLElement {
 	icon.className = `codicon ${codicon}`;
 	icon.setAttribute('aria-hidden', 'true');
 	return icon;
+}
+
+const RING_RADIUS = 6;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function createContextRing(): HTMLElement {
+	const ring = document.createElement('span');
+	ring.className = 'conversation-context-ring';
+	ring.dataset.level = 'ok';
+	ring.innerHTML =
+		'<svg viewBox="0 0 16 16" aria-hidden="true">' +
+		`<circle class="ring-track" cx="8" cy="8" r="${RING_RADIUS}"></circle>` +
+		`<circle class="ring-fill" cx="8" cy="8" r="${RING_RADIUS}" transform="rotate(-90 8 8)" stroke-dasharray="${RING_CIRCUMFERENCE}" stroke-dashoffset="${RING_CIRCUMFERENCE}"></circle>` +
+		'</svg>';
+	return ring;
+}
+
+function formatTokens(tokens: number): string {
+	if (tokens >= 1_000_000) {
+		const millions = tokens / 1_000_000;
+		return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
+	}
+	if (tokens >= 1000) {
+		return `${Math.round(tokens / 1000)}K`;
+	}
+
+	return String(tokens);
 }
 
 function createMessageRow(message: ISessionMessage): HTMLElement {

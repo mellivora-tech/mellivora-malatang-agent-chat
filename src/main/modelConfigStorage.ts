@@ -6,14 +6,16 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type {
-	IModelEntryInput,
-	IModelEntryView,
-	IModelParams,
-	IModelRegistryView,
-	IProviderInput,
-	IProviderView,
-	ModelProvider,
+import {
+	MODEL_EFFORTS,
+	type IModelEntryInput,
+	type IModelEntryView,
+	type IModelParams,
+	type IModelRegistryView,
+	type IProviderInput,
+	type IProviderView,
+	type ModelEffort,
+	type ModelProvider,
 } from '../sessions/services/models/common/models.js';
 
 /**
@@ -154,8 +156,13 @@ function parseParams(value: unknown): IModelParams | undefined {
 		...(typeof candidate['temperature'] === 'number' ? { temperature: candidate['temperature'] } : {}),
 		...(typeof candidate['maxTokens'] === 'number' ? { maxTokens: candidate['maxTokens'] } : {}),
 		...(typeof candidate['thinking'] === 'boolean' ? { thinking: candidate['thinking'] } : {}),
+		...(isEffort(candidate['effort']) ? { effort: candidate['effort'] } : {}),
 	};
 	return Object.keys(params).length > 0 ? params : undefined;
+}
+
+function isEffort(value: unknown): value is ModelEffort {
+	return typeof value === 'string' && MODEL_EFFORTS.includes(value as ModelEffort);
 }
 
 function isProvider(value: unknown): value is ModelProvider {
@@ -252,6 +259,17 @@ export async function listModels(root: string): Promise<IModelRegistryView> {
 	return toRegistryView(await readRegistry(root));
 }
 
+/** The connection details (including the raw key) of a stored provider. Main-process only. */
+export async function findProviderConnection(root: string, providerId: string): Promise<{ type: ModelProvider; baseURL: string; apiKey?: string } | undefined> {
+	const registry = await readRegistry(root);
+	const provider = registry.providers.find(candidate => candidate.id === providerId);
+	if (!provider) {
+		return undefined;
+	}
+
+	return { type: provider.type, baseURL: provider.baseURL, ...(provider.apiKey ? { apiKey: provider.apiKey } : {}) };
+}
+
 export async function upsertProvider(root: string, input: IProviderInput): Promise<IModelRegistryView> {
 	const registry = await readRegistry(root);
 	const existing = input.id ? registry.providers.find(provider => provider.id === input.id) : undefined;
@@ -315,6 +333,26 @@ export async function setModelEnabled(root: string, modelId: string, enabled: bo
 		providers: registry.providers.map(provider => ({
 			...provider,
 			models: provider.models.map(model => (model.id === modelId ? { ...model, enabled } : model)),
+		})),
+	};
+	await writeRegistry(root, next);
+	return toRegistryView(next);
+}
+
+export async function setModelEffort(root: string, modelId: string, effort: ModelEffort | undefined): Promise<IModelRegistryView> {
+	const registry = await readRegistry(root);
+	const next: IStoredRegistry = {
+		providers: registry.providers.map(provider => ({
+			...provider,
+			models: provider.models.map(model => {
+				if (model.id !== modelId) {
+					return model;
+				}
+				const { effort: _dropped, ...keptParams } = model.params ?? {};
+				const merged: IModelParams = { ...keptParams, ...(effort && isEffort(effort) ? { effort } : {}) };
+				const { params: _oldParams, ...base } = model;
+				return Object.keys(merged).length > 0 ? { ...base, params: merged } : base;
+			}),
 		})),
 	};
 	await writeRegistry(root, next);

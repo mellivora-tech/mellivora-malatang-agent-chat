@@ -122,6 +122,7 @@
 }
 
 .conversation-view {
+	position: relative; /* anchors the model-picker dropdown */
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
@@ -315,7 +316,7 @@
 .conversation-toolbar-right,
 .conversation-access,
 .conversation-model,
-.conversation-agent,
+.conversation-effort,
 .conversation-reconnect-status {
 	display: flex;
 	align-items: center;
@@ -338,7 +339,7 @@
 
 .conversation-access,
 .conversation-model,
-.conversation-agent,
+.conversation-effort,
 .conversation-stop-button,
 .conversation-send-button {
 	border: 0;
@@ -352,7 +353,7 @@
 
 .conversation-access,
 .conversation-model,
-.conversation-agent {
+.conversation-effort {
 	gap: var(--vscode-agents-space-5);
 	height: var(--vscode-agents-size-actionMedium);
 	padding: 0 var(--vscode-agents-space-6);
@@ -363,9 +364,47 @@
 	color: var(--vscode-agents-color-warning);
 }
 
+/* Standalone context-usage indicator (separate from the model picker):
+   the ring fill = share of the selected model's context window this
+   conversation occupies; exact numbers live in the tooltip. Read-only. */
+.conversation-context-ring {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	margin: 0 var(--vscode-agents-space-2);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-context-ring svg {
+	width: var(--vscode-agents-space-16, 16px);
+	height: var(--vscode-agents-space-16, 16px);
+	flex: 0 0 auto;
+}
+
+.conversation-context-ring .ring-track {
+	fill: none;
+	stroke: color-mix(in srgb, currentColor 30%, transparent);
+	stroke-width: 2.5;
+}
+
+.conversation-context-ring .ring-fill {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2.5;
+	stroke-linecap: round;
+}
+
+.conversation-context-ring[data-level='warn'] .ring-fill {
+	stroke: var(--vscode-agents-color-warning);
+}
+
+.conversation-context-ring[data-level='danger'] .ring-fill {
+	stroke: var(--vscode-agents-color-danger);
+}
+
 .conversation-access span:not(.codicon),
 .conversation-model span:not(.codicon),
-.conversation-agent span:not(.codicon),
+.conversation-effort span:not(.codicon),
 .conversation-reconnect-status span:not(.codicon) {
 	min-width: 0;
 	overflow: hidden;
@@ -413,7 +452,7 @@
 
 .conversation-access:hover,
 .conversation-model:hover,
-.conversation-agent:hover {
+.conversation-effort:hover {
 	background: var(--vscode-agents-color-control-hoverBackground);
 	color: var(--vscode-agents-color-input-foreground);
 }
@@ -429,7 +468,7 @@
 
 .conversation-access:focus-visible,
 .conversation-model:focus-visible,
-.conversation-agent:focus-visible,
+.conversation-effort:focus-visible,
 .conversation-stop-button:focus-visible,
 .conversation-send-button:focus-visible {
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);

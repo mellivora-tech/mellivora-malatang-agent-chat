@@ -9,7 +9,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { listModels, moveModel, removeModel, removeProvider, resolveModelConfig, setModelEnabled, upsertModel, upsertProvider } from '../../src/main/modelConfigStorage.js';
+import {
+	listModels,
+	moveModel,
+	removeModel,
+	removeProvider,
+	resolveModelConfig,
+	setModelEffort,
+	setModelEnabled,
+	upsertModel,
+	upsertProvider,
+} from '../../src/main/modelConfigStorage.js';
 import type { IModelRegistryView, IProviderView } from '../../src/sessions/services/models/common/models.js';
 
 async function createRoot(): Promise<string> {
@@ -106,6 +116,23 @@ test('removing a model or provider updates the registry', async () => {
 
 	const afterProviderRemove = await removeProvider(root, providerId);
 	assert.equal(afterProviderRemove.providers.length, 0);
+});
+
+test('effort persists on the model params, clears back to provider default, and rides into the run config', async () => {
+	const root = await createRoot();
+	const providerId = onlyProvider(await upsertProvider(root, { name: 'P', type: 'openai-compatible', baseURL: 'https://x/v1', apiKey: 'k' })).id;
+	const model = onlyProvider(await upsertModel(root, providerId, { model: 'gpt-5.5' })).models[0];
+	assert.ok(model);
+
+	const afterSet = await setModelEffort(root, model.id, 'high');
+	assert.equal(onlyProvider(afterSet).models[0]?.params?.effort, 'high');
+	assert.equal((await resolveModelConfig(root, model.id))?.params?.effort, 'high');
+	const raw = JSON.parse(await readFile(join(root, 'models.json'), 'utf8')) as { providers: { models: { params?: { effort?: string } }[] }[] };
+	assert.equal(raw.providers[0]?.models[0]?.params?.effort, 'high');
+
+	const afterClear = await setModelEffort(root, model.id, undefined);
+	assert.equal(onlyProvider(afterClear).models[0]?.params, undefined);
+	assert.equal((await resolveModelConfig(root, model.id))?.params?.effort, undefined);
 });
 
 test('a corrupt registry file degrades to an empty provider list', async () => {

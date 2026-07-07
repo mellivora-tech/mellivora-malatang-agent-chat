@@ -6,7 +6,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IAgentBridge, IAgentEventPayload, IAgentMessage } from '../sessions/services/agent/common/agent.js';
 import type { IAppState, IAppStateBridge } from '../sessions/services/appState/common/appState.js';
-import type { IModelEntryInput, IModelsBridge, IProviderInput } from '../sessions/services/models/common/models.js';
+import type {
+	IModelEntryInput,
+	IModelsBridge,
+	IProviderInput,
+	IProviderVerificationRequest,
+	IRemoteModelsRequest,
+	ModelEffort,
+} from '../sessions/services/models/common/models.js';
 import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 
@@ -37,7 +44,10 @@ const models: IModelsBridge = {
 	upsertModel: (providerId: string, input: IModelEntryInput) => ipcRenderer.invoke('models:upsertModel', providerId, input),
 	removeModel: (modelId: string) => ipcRenderer.invoke('models:removeModel', modelId),
 	setModelEnabled: (modelId: string, enabled: boolean) => ipcRenderer.invoke('models:setModelEnabled', modelId, enabled),
+	setModelEffort: (modelId: string, effort: ModelEffort | undefined) => ipcRenderer.invoke('models:setModelEffort', modelId, effort),
 	moveModel: (modelId: string, direction: 'up' | 'down') => ipcRenderer.invoke('models:moveModel', modelId, direction),
+	listRemoteModels: (request: IRemoteModelsRequest) => ipcRenderer.invoke('models:listRemoteModels', request),
+	verifyProvider: (request: IProviderVerificationRequest) => ipcRenderer.invoke('models:verifyProvider', request),
 };
 
 const agent: IAgentBridge = {

@@ -1143,7 +1143,15 @@
 	background: var(--vscode-agents-color-success, #3fb950);
 }
 
-.sessions-models-add-provider,
+/* Built-in provider that has no configuration yet. */
+.sessions-models-provider.unconfigured .sessions-models-provider-row-name {
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.sessions-models-provider.unconfigured .sessions-models-provider-dot {
+	opacity: 0.4;
+}
+
 .sessions-models-add-model {
 	display: inline-flex;
 	align-items: center;
@@ -1160,7 +1168,6 @@
 	cursor: default;
 }
 
-.sessions-models-add-provider:hover,
 .sessions-models-add-model:hover {
 	background: var(--vscode-agents-color-control-hoverBackground);
 }
@@ -1285,40 +1292,6 @@
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-/* Provider preset catalog picker */
-.sessions-models-preset-grid {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: var(--vscode-agents-space-10);
-}
-
-.sessions-models-preset-card {
-	display: flex;
-	flex-direction: column;
-	gap: var(--vscode-agents-space-4);
-	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-14);
-	border-radius: var(--vscode-agents-radius-card);
-	background: color-mix(in srgb, var(--vscode-agents-color-background) 45%, transparent);
-	color: var(--vscode-agents-color-text-primary);
-	font: inherit;
-	text-align: left;
-	cursor: default;
-}
-
-.sessions-models-preset-card:hover {
-	background: var(--vscode-agents-color-control-hoverBackground);
-}
-
-.sessions-models-preset-name {
-	font-size: var(--vscode-agents-fontSize-body1);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
-}
-
-.sessions-models-preset-desc {
-	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-fontSize-label1);
-}
-
 /* Model reorder icon buttons */
 .sessions-models-move-up,
 .sessions-models-move-down {
@@ -1352,24 +1325,6 @@
 	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-label3);
 	font-weight: var(--vscode-agents-fontWeight-regular);
-}
-
-/* Empty detail (no provider yet) */
-.sessions-models-empty {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: var(--vscode-agents-space-12);
-	min-height: 100%;
-	margin: 0;
-	text-align: center;
-	color: var(--vscode-agents-color-text-muted);
-}
-
-.sessions-models-empty-icon {
-	font-size: var(--vscode-agents-space-32);
-	color: var(--vscode-agents-color-text-muted);
 }
 
 /* Small text action buttons (edit/remove/set-default/delete) */
@@ -1458,6 +1413,37 @@
 	color: var(--vscode-agents-color-text-primary);
 	font: inherit;
 	box-sizing: border-box;
+}
+
+/* Model candidates fetched from the provider's list-models endpoint */
+.sessions-models-candidates-note {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-models-candidates {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--vscode-agents-space-6);
+	max-height: 132px;
+	overflow-y: auto;
+}
+
+.sessions-models-candidate {
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-round);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-secondary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	cursor: default;
+}
+
+.sessions-models-candidate:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+	color: var(--vscode-agents-color-text-primary);
 }
 
 .sessions-models-field-baseurl,

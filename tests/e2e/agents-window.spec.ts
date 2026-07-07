@@ -810,6 +810,7 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 });
 
 test('model settings manage providers and their models', async () => {
+	const mockServer = await startMockModelServer('unused');
 	let app: ElectronApplication | undefined;
 
 	try {
@@ -823,86 +824,137 @@ test('model settings manage providers and their models', async () => {
 		await page.locator('.sessions-sidebar-settings-button').click();
 		await expect(page.locator('.sessions-settings-dialog')).toBeVisible();
 		await page.locator('[data-settings-nav-id="models"]').click();
-		await expect(page.locator('.sessions-models-empty')).toBeVisible();
 
-		// Add a custom provider from the catalog picker — name + URL + key, no type dropdown.
-		await page.locator('.sessions-models-add-provider').first().click();
-		await expect(page.locator('.sessions-models-preset-grid')).toBeVisible();
-		await page.locator('.sessions-models-preset-card', { hasText: 'Custom provider' }).click();
-		await page.locator('.sessions-models-field-name').fill('Z.ai');
-		await page.locator('.sessions-models-field-baseurl').fill('https://api.z.ai/v1');
+		// The catalog is fixed: every built-in provider is listed, none configured yet,
+		// and the first preset's setup form is shown.
+		const providerRows = page.locator('.sessions-models-provider');
+		await expect(providerRows).toHaveCount(6);
+		await expect(page.locator('.sessions-models-provider.unconfigured')).toHaveCount(6);
+		await expect(page.locator('.sessions-models-form-title')).toHaveText('Set up Kimi Code Plan');
+
+		// Set up Z.ai — the base URL is prefilled from the preset; point it at the mock server.
+		await providerRows.filter({ hasText: 'Z.ai (GLM)' }).click();
+		await expect(page.locator('.sessions-models-form-title')).toHaveText('Set up Z.ai (GLM)');
+		await expect(page.locator('.sessions-models-field-baseurl')).toHaveValue('https://api.z.ai/api/paas/v4');
+		await page.locator('.sessions-models-field-baseurl').fill(mockServer.baseURL);
+
+		// The key is required...
+		await page.locator('.sessions-models-provider-save').click();
+		await expect(page.locator('.sessions-models-error')).toContainText('API key is required');
+		// ...and verified with a real chat probe before anything is saved — the
+		// mock's /models endpoint is unauthenticated, so only the probe can
+		// catch a bad key.
+		await page.locator('.sessions-models-field-apikey').fill('bad-key');
+		await page.locator('.sessions-models-provider-save').click();
+		await expect(page.locator('.sessions-models-error')).toContainText('rejected the API key');
+		// The typed base URL survives the error re-render.
+		await expect(page.locator('.sessions-models-field-baseurl')).toHaveValue(mockServer.baseURL);
 		await page.locator('.sessions-models-field-apikey').fill('sk-test-1');
 		await page.locator('.sessions-models-provider-save').click();
 
-		await expect(page.locator('.sessions-models-provider')).toHaveCount(1);
-		await expect(page.locator('.sessions-models-provider-name')).toHaveText('Z.ai');
+		await expect(page.locator('.sessions-models-provider-name')).toHaveText('Z.ai (GLM)');
 		await expect(page.locator('.sessions-models-detail-meta')).toContainText('key set');
+		await expect(providerRows.filter({ hasText: 'Z.ai (GLM)' })).not.toHaveClass(/unconfigured/);
 
-		// Add two models; each is enabled by default.
-		await page.locator('.sessions-models-add-model').click();
-		await page.locator('.sessions-models-field-model').fill('glm-4.6');
-		await page.locator('.sessions-models-field-modellabel').fill('GLM-4.6');
-		await page.locator('.sessions-models-field-context').fill('1000000');
-		await page.locator('.sessions-models-model-save').click();
-
+		// Setup seeded the preset's models; each is enabled by default.
 		const models = page.locator('.sessions-models-model-row');
-		await expect(models).toHaveCount(1);
-		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-4.6');
+		await expect(models).toHaveCount(3);
+		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-5.2');
 		await expect(models.first().locator('.sessions-models-model-badge')).toHaveText('1M');
 		await expect(models.first().locator('.sessions-settings-toggle')).toHaveClass(/\bon\b/);
 
+		// Add model offers the endpoint's live model list as candidates.
 		await page.locator('.sessions-models-add-model').click();
-		await page.locator('.sessions-models-field-model').fill('glm-turbo');
-		await page.locator('.sessions-models-field-modellabel').fill('GLM-Turbo');
-		await page.locator('.sessions-models-field-context').fill('200000');
+		const candidates = page.locator('.sessions-models-candidate');
+		await expect(candidates).toHaveCount(2);
+		await candidates.filter({ hasText: 'mock-alpha' }).click();
+		await expect(page.locator('.sessions-models-field-model')).toHaveValue('mock-alpha');
+		await page.locator('.sessions-models-field-context').fill('1000000');
 		await page.locator('.sessions-models-model-save').click();
-		await expect(models).toHaveCount(2);
-		await expect(models.filter({ hasText: 'GLM-Turbo' }).locator('.sessions-models-model-badge')).toHaveText('200K');
+		await expect(models).toHaveCount(4);
+		await expect(models.filter({ hasText: 'mock-alpha' }).locator('.sessions-models-model-badge')).toHaveText('1M');
 
-		// Disable GLM-4.6 via its enabled toggle.
-		await models.filter({ hasText: 'GLM-4.6' }).locator('.sessions-settings-toggle').click();
-		await expect(models.filter({ hasText: 'GLM-4.6' }).locator('.sessions-settings-toggle')).not.toHaveClass(/\bon\b/);
+		// Disable GLM-4.7 via its enabled toggle.
+		await models.filter({ hasText: 'GLM-4.7' }).locator('.sessions-settings-toggle').click();
+		await expect(models.filter({ hasText: 'GLM-4.7' }).locator('.sessions-settings-toggle')).not.toHaveClass(/\bon\b/);
 
-		// Reorder: move GLM-Turbo to the top (row actions reveal on hover).
-		const turboRow = models.filter({ hasText: 'GLM-Turbo' });
-		await turboRow.hover();
-		await turboRow.locator('.sessions-models-move-up').click();
-		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-Turbo');
+		// Reorder: move mock-alpha up one slot (row actions reveal on hover).
+		const alphaRow = models.filter({ hasText: 'mock-alpha' });
+		await alphaRow.hover();
+		await alphaRow.locator('.sessions-models-move-up').click();
+		await expect(models.nth(2).locator('.sessions-models-model-label')).toContainText('mock-alpha');
 
-		// Edit GLM-4.6 inline, then delete it.
-		const glmRow = models.filter({ hasText: 'GLM-4.6' });
-		await glmRow.hover();
-		await glmRow.locator('.sessions-models-edit-model').click();
-		await page.locator('.sessions-models-field-modellabel').fill('GLM Air');
+		// Edit mock-alpha inline, then delete it.
+		await alphaRow.hover();
+		await alphaRow.locator('.sessions-models-edit-model').click();
+		await page.locator('.sessions-models-field-modellabel').fill('Mock Alpha');
 		await page.locator('.sessions-models-model-save').click();
-		await expect(models.filter({ hasText: 'GLM Air' })).toHaveCount(1);
+		await expect(models.filter({ hasText: 'Mock Alpha' })).toHaveCount(1);
 
-		const airRow = models.filter({ hasText: 'GLM Air' });
-		await airRow.hover();
-		await airRow.locator('.sessions-models-delete-model').click();
-		await expect(models).toHaveCount(1);
-		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-Turbo');
+		const renamedRow = models.filter({ hasText: 'Mock Alpha' });
+		await renamedRow.hover();
+		await renamedRow.locator('.sessions-models-delete-model').click();
+		await expect(models).toHaveCount(3);
+
+		// Clearing resets the provider to unconfigured — the catalog row stays.
+		await page.locator('.sessions-models-delete-provider').click();
+		await expect(page.locator('.sessions-models-form-title')).toHaveText('Set up Z.ai (GLM)');
+		await expect(providerRows).toHaveCount(6);
+		await expect(page.locator('.sessions-models-provider.unconfigured')).toHaveCount(6);
 	} finally {
 		await app?.close();
+		await mockServer.close();
 	}
 });
 
 interface IMockModelServer {
 	readonly baseURL: string;
+	/** The `model` field of the most recent /chat/completions request. */
+	readonly lastChatModel: string | undefined;
+	/** The `reasoning_effort` field of the most recent /chat/completions request. */
+	readonly lastChatEffort: string | undefined;
 	close(): Promise<void>;
 }
 
-/** Minimal OpenAI-compatible /chat/completions SSE endpoint that streams `reply` in two chunks. */
+/**
+ * Minimal OpenAI-compatible endpoint. Like several real gateways, GET
+ * /v1/models is served without auth — only /chat/completions enforces the
+ * key (401 for `bad-key`), which is what the save-time probe must catch.
+ */
 function startMockModelServer(reply: string): Promise<IMockModelServer> {
 	return new Promise(resolve => {
+		let lastChatModel: string | undefined;
+		let lastChatEffort: string | undefined;
 		const server: Server = createServer((request, response) => {
+			if (request.method === 'GET' && request.url === '/v1/models') {
+				response.writeHead(200, { 'content-type': 'application/json' });
+				response.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }, { id: 'mock-beta' }] }));
+				return;
+			}
+
 			if (request.method === 'POST' && request.url === '/v1/chat/completions') {
-				response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
-				const midpoint = Math.ceil(reply.length / 2);
-				response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(0, midpoint) } }] })}\n\n`);
-				response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(midpoint) }, finish_reason: 'stop' }] })}\n\n`);
-				response.write('data: [DONE]\n\n');
-				response.end();
+				if (request.headers.authorization === 'Bearer bad-key') {
+					response.writeHead(401, { 'content-type': 'application/json' });
+					response.end(JSON.stringify({ error: { message: 'invalid api key' } }));
+					return;
+				}
+				let raw = '';
+				request.on('data', chunk => (raw += String(chunk)));
+				request.on('end', () => {
+					try {
+						const body = JSON.parse(raw) as { model?: string; reasoning_effort?: string };
+						lastChatModel = body.model;
+						lastChatEffort = body.reasoning_effort;
+					} catch {
+						// leave the previous values
+					}
+					response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+					const midpoint = Math.ceil(reply.length / 2);
+					response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(0, midpoint) } }] })}\n\n`);
+					response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(midpoint) }, finish_reason: 'stop' }] })}\n\n`);
+					response.write('data: [DONE]\n\n');
+					response.end();
+				});
 				return;
 			}
 
@@ -911,7 +963,16 @@ function startMockModelServer(reply: string): Promise<IMockModelServer> {
 
 		server.listen(0, '127.0.0.1', () => {
 			const port = (server.address() as AddressInfo).port;
-			resolve({ baseURL: `http://127.0.0.1:${port}/v1`, close: () => new Promise<void>(done => server.close(() => done())) });
+			resolve({
+				baseURL: `http://127.0.0.1:${port}/v1`,
+				get lastChatModel() {
+					return lastChatModel;
+				},
+				get lastChatEffort() {
+					return lastChatEffort;
+				},
+				close: () => new Promise<void>(done => server.close(() => done())),
+			});
 		});
 	});
 }
@@ -928,28 +989,67 @@ test('a configured model streams a real reply into the conversation', async () =
 		const page = await app.firstWindow();
 		await page.waitForSelector('.sessions-sidebar');
 
-		// Configure a custom provider pointing at the mock server, then a model under it.
+		// Point the OpenAI preset at the mock server — the base URL stays editable,
+		// setup verifies against GET /v1/models and seeds the preset's model list.
 		await page.locator('.sessions-sidebar-settings-button').click();
 		await page.locator('[data-settings-nav-id="models"]').click();
-		await page.locator('.sessions-models-add-provider').first().click();
-		await page.locator('.sessions-models-preset-card', { hasText: 'Custom provider' }).click();
-		await page.locator('.sessions-models-field-name').fill('Test');
+		await page.locator('.sessions-models-provider', { hasText: 'OpenAI' }).click();
 		await page.locator('.sessions-models-field-baseurl').fill(mockServer.baseURL);
 		await page.locator('.sessions-models-field-apikey').fill('x');
 		await page.locator('.sessions-models-provider-save').click();
-		await page.locator('.sessions-models-add-model').click();
-		await page.locator('.sessions-models-field-model').fill('test');
-		await page.locator('.sessions-models-model-save').click();
-		await expect(page.locator('.sessions-models-model-row')).toHaveCount(1);
+		await expect(page.locator('.sessions-models-model-row')).toHaveCount(2);
 		await page.locator('.sessions-settings-close').click();
 
-		// Start a conversation — the reply is streamed from the model, not the mock.
+		// The composer picker shows the first enabled model; switch to the second.
 		await page.waitForSelector('.sessions-new-session-view');
+		await expect(page.locator('.new-session-model')).toContainText('GPT-5.5');
+		await page.locator('.new-session-model').click();
+		const pickerItems = page.locator('.sessions-model-menu-item');
+		await expect(pickerItems).toHaveCount(2);
+		await pickerItems.filter({ hasText: 'GPT-5.4 Mini' }).click();
+		await expect(page.locator('.new-session-model')).toContainText('GPT-5.4 Mini');
+
+		// GPT-5.4 Mini declares an effort knob: pick "high" (Auto + 4 levels).
+		const effortButton = page.locator('.new-session-effort');
+		await expect(effortButton).toBeVisible();
+		await expect(effortButton).toContainText('Effort');
+		await effortButton.click();
+		const effortItems = page.locator('.sessions-model-menu-item');
+		await expect(effortItems).toHaveCount(5);
+		await effortItems.filter({ hasText: 'high' }).click();
+		await expect(effortButton).toContainText('high');
+
+		// Start a conversation — the reply is streamed from the model, not the mock.
 		await page.locator('.new-session-input').fill('hi there');
 		await page.locator('.new-session-send-button').click();
 
 		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toContainText('Hello from the test model.');
 		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).not.toContainText('Mock response');
+
+		// The run used the picked model and effort; the conversation composer shows both.
+		expect(mockServer.lastChatModel).toBe('gpt-5.4-mini');
+		expect(mockServer.lastChatEffort).toBe('high');
+		await expect(page.locator('.conversation-model')).toContainText('GPT-5.4 Mini');
+		await expect(page.locator('.conversation-effort')).toContainText('high');
+
+		// The ring in the model button reports context usage against the
+		// selected model's window (gpt-5.4-mini declares 400K).
+		const ring = page.locator('.conversation-context-ring');
+		await expect(ring).toBeVisible();
+		await expect(ring).toHaveAttribute('title', /Context: ~\d+ of 400K tokens used \(\d+%\)/);
+
+		// The conversation composer hugs the window bottom — its picker must
+		// flip upward and stay fully inside the viewport.
+		await page.locator('.conversation-model').click();
+		const conversationMenu = page.locator('.sessions-model-menu');
+		await expect(conversationMenu).toBeVisible();
+		const menuBox = await conversationMenu.boundingBox();
+		const triggerBox = await page.locator('.conversation-model').boundingBox();
+		const windowHeight = await page.evaluate(() => window.innerHeight);
+		expect(menuBox && menuBox.y >= 0 && menuBox.y + menuBox.height <= windowHeight).toBeTruthy();
+		expect(menuBox && triggerBox && menuBox.y + menuBox.height <= triggerBox.y).toBeTruthy();
+		await page.keyboard.press('Escape');
+		await expect(conversationMenu).toBeHidden();
 	} finally {
 		await app?.close();
 		await mockServer.close();
@@ -978,8 +1078,12 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask ZCode anything/);
 	await expect(page.locator('.new-session-input')).toBeVisible();
 	await expect(page.locator('.new-session-access')).toContainText('Full access');
-	await expect(page.locator('.new-session-model')).toContainText('GLM-5.2');
-	await expect(page.locator('.new-session-agent')).toContainText('Max');
+	// No provider is configured in this fixture, so the picker shows the empty label.
+	await expect(page.locator('.new-session-model')).toContainText('No model');
+	// The agent-picker placeholder is gone until agents ship.
+	await expect(page.locator('.new-session-agent')).toHaveCount(0);
+	// No configured model -> no effort knob; the hidden attribute must win over the class display.
+	await expect(page.locator('.new-session-effort')).toBeHidden();
 
 	const boxes = await page.locator('.part.sessionspart, .part.sidebar').evaluateAll(nodes =>
 		nodes.map(node => {
@@ -1678,8 +1782,8 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	await expect(composer).toBeVisible();
 	await expect(composer.locator('.conversation-input')).toHaveAttribute('placeholder', 'Keep typing to queue follow-up changes');
 	await expect(composer.locator('.conversation-access')).toContainText('Full access');
-	await expect(composer.locator('.conversation-model')).toContainText('GLM-5.2');
-	await expect(composer.locator('.conversation-agent')).toContainText('Max');
+	await expect(composer.locator('.conversation-model')).toContainText('No model');
+	await expect(composer.locator('.conversation-agent')).toHaveCount(0);
 	await expect(composer.locator('.conversation-reconnect-status')).toContainText(/Reconnecting\.\.\. \d+\/10/);
 	await expect(composer.locator('.conversation-stop-button')).toBeVisible();
 	await assertConversationToolbarInteraction(composer);
@@ -1687,14 +1791,7 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 
 async function assertConversationToolbarInteraction(composer: Locator): Promise<void> {
 	const metrics = await composer.evaluate(element => {
-		const controls = [
-			'.conversation-access',
-			'.conversation-reconnect-status',
-			'.conversation-model',
-			'.conversation-agent',
-			'.conversation-stop-button',
-			'.conversation-send-button',
-		] as const;
+		const controls = ['.conversation-access', '.conversation-reconnect-status', '.conversation-model', '.conversation-stop-button', '.conversation-send-button'] as const;
 		const read = (selector: string) => {
 			const node = element.querySelector<HTMLElement>(selector);
 			if (!node) {
@@ -1728,7 +1825,6 @@ async function assertConversationToolbarInteraction(composer: Locator): Promise<
 	expect(control('.conversation-access').height).toBe(28);
 	expect(control('.conversation-reconnect-status').height).toBe(28);
 	expect(control('.conversation-model').height).toBe(28);
-	expect(control('.conversation-agent').height).toBe(28);
 	expect(control('.conversation-stop-button').width).toBe(28);
 	expect(control('.conversation-stop-button').height).toBe(28);
 	expect(control('.conversation-send-button').hidden).toBe(true);

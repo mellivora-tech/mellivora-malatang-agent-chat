@@ -318,8 +318,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 		}
 
 		const sessionId = session.sessionId;
-		// No explicit selection yet — the runtime resolves the first enabled model.
-		const modelId = undefined;
+		// The composer's picker; the runtime still falls back to the first
+		// enabled model when nothing is selected.
+		const modelId = this.modelsService?.selectedModel.get()?.id;
 		this.sequence += 1;
 		const assistantId = `${sessionId}-assistant-${this.sequence}`;
 		const transcript = toTranscript(session.messages.get());

@@ -5,6 +5,7 @@
 
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { clearNode } from '../../base/browser/dom.js';
+import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
@@ -29,15 +30,17 @@ export class SessionsPart extends Part {
 	constructor(
 		private readonly sessionsService?: ISessionsService,
 		private readonly projectsService?: IProjectsService,
+		modelsService?: IModelsService,
 	) {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
 			new NewSessionView({
 				onStartSession: query => this.sessionsService?.startSession(query, this.getStartSessionOptions()) ?? Promise.resolve(),
 				...(this.projectsService ? { projectsService: this.projectsService } : {}),
+				...(modelsService ? { modelsService } : {}),
 			}),
 		);
-		this.sessionView = this._register(new SessionView(this.sessionsService));
+		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService));
 	}
 
 	private getStartSessionOptions(): { workspace: { label: string; description: string }; projectId: string } | undefined {

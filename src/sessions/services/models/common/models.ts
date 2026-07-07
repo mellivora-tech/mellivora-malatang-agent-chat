@@ -17,11 +17,22 @@
 
 export type ModelProvider = 'openai-compatible' | 'anthropic';
 
+/**
+ * Reasoning-effort levels across providers. Which subset a model actually
+ * accepts is declared per preset model (`efforts`) — e.g. GPT-5.5 takes
+ * none→xhigh, Claude takes low→max, GLM-5.2/DeepSeek V4 only high/max.
+ */
+export type ModelEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export const MODEL_EFFORTS: readonly ModelEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+
 export interface IModelParams {
 	readonly temperature?: number;
 	readonly maxTokens?: number;
 	/** Adaptive thinking / reasoning toggle where the provider supports it. */
 	readonly thinking?: boolean;
+	/** Reasoning effort; omitted = provider default (nothing is sent). */
+	readonly effort?: ModelEffort;
 }
 
 /** A model offered by a provider. Upsert payload from the renderer. */
@@ -79,6 +90,37 @@ export interface IModelRegistryView {
 	readonly providers: readonly IProviderView[];
 }
 
+/**
+ * Ask the provider's list-models endpoint what it serves. Used to verify
+ * connectivity/key before saving a provider and to suggest candidates when
+ * adding a model. `providerId` fills any omitted field (including the stored
+ * API key) from the saved provider.
+ */
+export interface IRemoteModelsRequest {
+	readonly providerId?: string;
+	readonly type?: ModelProvider;
+	readonly baseURL?: string;
+	/** Omit to use the stored key of {@link providerId}. */
+	readonly apiKey?: string;
+}
+
+export interface IRemoteModel {
+	readonly id: string;
+	/** Only some providers report it (e.g. Anthropic's max_input_tokens). */
+	readonly contextLength?: number;
+}
+
+/**
+ * Verify a provider end to end before saving: reachability, then a one-token
+ * chat probe as the authoritative key check (list-models is often served
+ * unauthenticated). Resolves when the connection is usable; rejects with a
+ * user-facing message otherwise.
+ */
+export interface IProviderVerificationRequest extends IRemoteModelsRequest {
+	/** A known chat model to probe with; falls back to the endpoint's first listed model. */
+	readonly probeModel?: string;
+}
+
 /** The shape exposed on `agentWindow.models` by the preload script. */
 export interface IModelsBridge {
 	list(): Promise<IModelRegistryView>;
@@ -87,6 +129,12 @@ export interface IModelsBridge {
 	upsertModel(providerId: string, input: IModelEntryInput): Promise<IModelRegistryView>;
 	removeModel(modelId: string): Promise<IModelRegistryView>;
 	setModelEnabled(modelId: string, enabled: boolean): Promise<IModelRegistryView>;
+	/** Set or clear (undefined = provider default) the model's reasoning effort. */
+	setModelEffort(modelId: string, effort: ModelEffort | undefined): Promise<IModelRegistryView>;
 	/** Reorder a model within its provider (order sets priority; first enabled is the default). */
 	moveModel(modelId: string, direction: 'up' | 'down'): Promise<IModelRegistryView>;
+	/** List the models the endpoint actually serves; rejects when unreachable or the key is bad. */
+	listRemoteModels(request: IRemoteModelsRequest): Promise<readonly IRemoteModel[]>;
+	/** See {@link IProviderVerificationRequest}. */
+	verifyProvider(request: IProviderVerificationRequest): Promise<void>;
 }

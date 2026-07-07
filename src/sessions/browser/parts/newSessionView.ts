@@ -5,11 +5,14 @@
 
 import { append } from '../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
+import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
+import { installEffortPicker, installModelPicker } from './modelPicker.js';
 
 export interface INewSessionViewOptions {
 	readonly onStartSession?: (query: string) => Promise<unknown>;
 	readonly projectsService?: IProjectsService;
+	readonly modelsService?: IModelsService;
 }
 
 export class NewSessionView extends Disposable {
@@ -95,23 +98,26 @@ export class NewSessionView extends Disposable {
 		modelIndicator.className = 'new-session-model-indicator';
 		modelIndicator.setAttribute('aria-hidden', 'true');
 		const modelLabel = append(model, document.createElement('span'));
-		modelLabel.textContent = 'GLM-5.2';
+		modelLabel.textContent = 'No model';
 		const modelChevron = append(model, document.createElement('span'));
 		modelChevron.className = 'codicon codicon-chevron-down';
 		modelChevron.setAttribute('aria-hidden', 'true');
+		if (this.options.modelsService) {
+			// Host the menu outside the composer, which clips overflow.
+			this._register(installModelPicker({ host: content, trigger: model, label: modelLabel, modelsService: this.options.modelsService }));
+		}
 
-		const agent = append(rightControls, document.createElement('button')) as HTMLButtonElement;
-		agent.className = 'new-session-agent';
-		agent.type = 'button';
-		agent.title = 'Pick agent';
-		const agentIcon = append(agent, document.createElement('span'));
-		agentIcon.className = 'codicon codicon-github-alt';
-		agentIcon.setAttribute('aria-hidden', 'true');
-		const agentLabel = append(agent, document.createElement('span'));
-		agentLabel.textContent = 'Max';
-		const agentChevron = append(agent, document.createElement('span'));
-		agentChevron.className = 'codicon codicon-chevron-down';
-		agentChevron.setAttribute('aria-hidden', 'true');
+		const effort = append(rightControls, document.createElement('button')) as HTMLButtonElement;
+		effort.className = 'new-session-effort';
+		effort.type = 'button';
+		effort.hidden = true;
+		const effortLabel = append(effort, document.createElement('span'));
+		const effortChevron = append(effort, document.createElement('span'));
+		effortChevron.className = 'codicon codicon-chevron-down';
+		effortChevron.setAttribute('aria-hidden', 'true');
+		if (this.options.modelsService) {
+			this._register(installEffortPicker({ host: content, trigger: effort, label: effortLabel, modelsService: this.options.modelsService }));
+		}
 
 		const sendButton = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		sendButton.className = 'new-session-send-button';

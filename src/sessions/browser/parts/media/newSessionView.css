@@ -84,6 +84,10 @@
 	overflow: hidden;
 }
 
+.new-session-composer [hidden] {
+	display: none !important;
+}
+
 .new-session-composer-context {
 	display: inline-flex;
 	align-items: center;
@@ -126,7 +130,7 @@
 .new-session-toolbar-right,
 .new-session-access,
 .new-session-model,
-.new-session-agent {
+.new-session-effort {
 	display: flex;
 	align-items: center;
 	min-width: 0;
@@ -149,7 +153,7 @@
 .new-session-toolbar-button,
 .new-session-access,
 .new-session-model,
-.new-session-agent,
+.new-session-effort,
 .new-session-send-button {
 	border: 0;
 	background: transparent;
@@ -172,7 +176,7 @@
 
 .new-session-access,
 .new-session-model,
-.new-session-agent {
+.new-session-effort {
 	gap: var(--vscode-agents-space-5);
 	height: var(--vscode-agents-size-actionMedium);
 	padding: 0;
@@ -206,7 +210,7 @@
 .new-session-toolbar-button:hover,
 .new-session-access:hover,
 .new-session-model:hover,
-.new-session-agent:hover {
+.new-session-effort:hover {
 	color: var(--vscode-agents-color-input-foreground);
 }
 
@@ -269,12 +273,79 @@
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
 }
 
+/* Model picker dropdown — shared by the new-session and conversation composers. */
+.sessions-model-menu {
+	position: absolute;
+	z-index: 3;
+	display: flex;
+	flex-direction: column;
+	min-width: 220px;
+	max-width: 340px;
+	max-height: 320px;
+	overflow-y: auto;
+	padding: var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+}
+
+.sessions-model-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	text-align: left;
+	cursor: default;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.sessions-model-menu-item:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
+}
+
+.sessions-model-menu-item .sessions-model-check-hidden {
+	visibility: hidden;
+}
+
+.sessions-model-menu-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.sessions-model-menu-provider {
+	margin-left: auto;
+	padding-left: var(--vscode-agents-space-12);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.sessions-model-menu-empty {
+	padding: var(--vscode-agents-space-8);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	white-space: normal;
+}
+
+.sessions-model-menu-item:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
+}
+
 .new-session-send-button:focus-visible,
 .new-session-project-item:focus-visible,
 .new-session-composer-context:focus-visible,
 .new-session-access:focus-visible,
 .new-session-model:focus-visible,
-.new-session-agent:focus-visible,
+.new-session-effort:focus-visible,
 .new-session-toolbar-button:focus-visible {
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
 	outline-offset: var(--vscode-agents-space-2);
