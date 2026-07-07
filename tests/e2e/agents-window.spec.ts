@@ -1566,12 +1566,12 @@ async function assertConversationToolbarInteraction(composer: Locator): Promise<
 	expect(control('.conversation-access').borderRadius).toBe('5px');
 
 	const access = composer.locator('.conversation-access');
-	const beforeHover = await access.evaluate(node => getComputedStyle(node).backgroundColor);
-	const accessBox = await access.boundingBox();
-	expect(accessBox).not.toBeNull();
 	await composer.page().mouse.move(0, 0);
-	await composer.page().mouse.move(accessBox!.x + accessBox!.width / 2, accessBox!.y + accessBox!.height / 2);
+	const beforeHover = await access.evaluate(node => getComputedStyle(node).backgroundColor);
 	expect(beforeHover).toBe('rgba(0, 0, 0, 0)');
+	// locator.hover() auto-waits for actionability and moves to the element
+	// center, which is far more reliable than manual boundingBox coordinates.
+	await access.hover();
 	await expect.poll(async () => access.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(beforeHover);
 }
 
