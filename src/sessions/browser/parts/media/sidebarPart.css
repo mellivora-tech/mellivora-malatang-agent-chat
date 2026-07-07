@@ -827,27 +827,35 @@
 	height: var(--vscode-agents-space-30);
 }
 
+/* Settings open as a full-window surface (Cursor-style), not a floating modal. */
 .sessions-settings-dialog-backdrop {
 	position: fixed;
 	inset: 0;
 	z-index: 100;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--vscode-agents-color-scrim);
+	background: var(--vscode-agents-color-modal-background);
 }
 
 .sessions-settings-dialog {
-	width: min(900px, calc(100% - var(--vscode-agents-space-80)));
-	height: min(620px, calc(100% - var(--vscode-agents-space-80)));
+	width: 100%;
+	height: 100%;
 	display: grid;
 	grid-template-rows: var(--vscode-agents-size-settings-header) minmax(0, 1fr);
 	overflow: hidden;
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
-	border-radius: var(--vscode-agents-radius-panel);
 	background: var(--vscode-agents-color-modal-background);
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-24) var(--vscode-agents-space-80) var(--vscode-agents-color-shadow);
+}
+
+/* The header doubles as the window drag region; clear the macOS traffic lights. */
+.sessions-settings-header {
+	-webkit-app-region: drag;
+}
+
+.sessions-settings-header button {
+	-webkit-app-region: no-drag;
+}
+
+.platform-darwin .sessions-settings-title {
+	padding-left: 72px;
 }
 
 .sessions-settings-header {
@@ -1481,4 +1489,151 @@
 	background: var(--vscode-agents-color-control-hoverBackground);
 	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+/* Nav group separator */
+.sessions-settings-nav-sep {
+	height: var(--vscode-agents-space-1);
+	margin: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+	background: var(--vscode-agents-color-divider);
+}
+
+/* Cursor-style settings page: title -> sections (muted label + card of rows) */
+.sessions-settings-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-24);
+	width: 100%;
+	max-width: 720px;
+}
+
+.sessions-settings-page-title {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-heading1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-settings-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-8);
+}
+
+.sessions-settings-section-title {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-settings-card {
+	display: flex;
+	flex-direction: column;
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-card);
+	overflow: hidden;
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 24%, transparent);
+}
+
+.sessions-settings-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-16);
+	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-16);
+	border-top: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+}
+
+.sessions-settings-row:first-child {
+	border-top: none;
+}
+
+.sessions-settings-row-text {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-2);
+	min-width: 0;
+}
+
+.sessions-settings-row-title {
+	font-size: var(--vscode-agents-fontSize-body1);
+}
+
+.sessions-settings-row-desc {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-settings-row-control {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	flex: 0 0 auto;
+}
+
+/* Toggle switch */
+.sessions-settings-toggle {
+	position: relative;
+	width: 38px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: var(--vscode-agents-radius-round);
+	background: var(--vscode-agents-color-control-border);
+	cursor: default;
+	transition: background 120ms ease;
+}
+
+.sessions-settings-toggle.on {
+	background: var(--vscode-agents-color-success, #3fb950);
+}
+
+.sessions-settings-toggle-knob {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 18px;
+	height: 18px;
+	border-radius: var(--vscode-agents-radius-round);
+	background: #ffffff;
+	transition: transform 120ms ease;
+}
+
+.sessions-settings-toggle.on .sessions-settings-toggle-knob {
+	transform: translateX(16px);
+}
+
+/* Dropdown + button controls reuse the model select / action button styling */
+.sessions-settings-dropdown {
+	height: var(--vscode-agents-size-control);
+	padding: 0 var(--vscode-agents-space-32) 0 var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	appearance: none;
+	-webkit-appearance: none;
+	cursor: default;
+	box-sizing: border-box;
+}
+
+.sessions-settings-btn {
+	height: var(--vscode-agents-size-control);
+	padding: 0 var(--vscode-agents-space-12);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	cursor: default;
+}
+
+.sessions-settings-btn:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+/* Reduce-motion preference: kill transitions and animations app-wide */
+.reduce-motion,
+.reduce-motion * {
+	transition: none !important;
+	animation: none !important;
 }

@@ -1456,11 +1456,30 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await expect(dialog).toBeVisible();
 	await expect(dialog.locator('.sessions-settings-title')).toHaveText('Settings');
 
-	// Models is the default section (the one real feature).
-	await expect(dialog.locator('[data-settings-nav-id="models"]')).toHaveClass(/active/);
-	await expect(dialog.locator('.sessions-models')).toBeVisible();
-	// The main pane scrolls when many config items overflow.
+	// Settings open full-window: the dialog fills the viewport width.
+	const dialogBox = await dialog.boundingBox();
+	const viewport = page.viewportSize();
+	expect(dialogBox && viewport && dialogBox.width >= viewport.width - 1).toBeTruthy();
+
+	// General is the default section, rendered with the settings-row language.
+	await expect(dialog.locator('[data-settings-nav-id="general"]')).toHaveClass(/active/);
+	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('General');
+	await expect(dialog.locator('.sessions-settings-row-title').first()).toHaveText('Reduce motion');
+	await expect(dialog.locator('.sessions-settings-toggle')).toBeVisible();
+	// The main pane scrolls when content overflows.
 	await expect(dialog.locator('.sessions-settings-main')).toHaveCSS('overflow-y', 'auto');
+
+	// Appearance offers a real theme control that re-themes the app live.
+	await dialog.locator('[data-settings-nav-id="appearance"]').click();
+	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('Appearance');
+	await expect(dialog.locator('.sessions-settings-dropdown')).toBeVisible();
+	await dialog.locator('.sessions-settings-dropdown').selectOption('light');
+	await expect(page.locator('.agent-sessions-workbench')).toHaveAttribute('data-agents-theme', 'light');
+	await dialog.locator('.sessions-settings-dropdown').selectOption('dark');
+
+	// Models is a real section too.
+	await dialog.locator('[data-settings-nav-id="models"]').click();
+	await expect(dialog.locator('.sessions-models')).toBeVisible();
 
 	// The mock rows and fake counts are gone; only the single window action remains.
 	await expect(dialog.locator('[data-settings-nav-id="overview"]')).toHaveCount(0);
@@ -1511,10 +1530,8 @@ async function assertSettingsDialogThemeTokens(page: Page): Promise<void> {
 			dialogBackgroundToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-modal-background').trim()),
 			dialogColor: dialogStyle.color,
 			dialogColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-text-primary').trim()),
-			dialogBorderColor: dialogStyle.borderColor,
-			dialogBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-panel-border').trim()),
 			backdropBackground: backdropStyle.backgroundColor,
-			backdropBackgroundToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-scrim').trim()),
+			backdropBackgroundToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-modal-background').trim()),
 			navBorderColor: navStyle.borderRightColor,
 			navBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-divider').trim()),
 			contentBorderColor: contentStyle.borderColor,
@@ -1525,7 +1542,6 @@ async function assertSettingsDialogThemeTokens(page: Page): Promise<void> {
 	expect(metrics.theme).toBe('dark');
 	expect(metrics.dialogBackground).toBe(metrics.dialogBackgroundToken);
 	expect(metrics.dialogColor).toBe(metrics.dialogColorToken);
-	expect(metrics.dialogBorderColor).toBe(metrics.dialogBorderColorToken);
 	expect(metrics.backdropBackground).toBe(metrics.backdropBackgroundToken);
 	expect(metrics.navBorderColor).toBe(metrics.navBorderColorToken);
 	expect(metrics.contentBorderColor).toBe(metrics.contentBorderColorToken);

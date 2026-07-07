@@ -9,6 +9,7 @@ import { DisposableStore, toDisposable, type IDisposable } from '../base/common/
 import { registerFileSessionsProvider } from '../contrib/fileProvider/browser/fileSessions.contribution.js';
 import { ServiceCollection } from '../platform/instantiation/instantiation.js';
 import { applyThemeTokens } from '../platform/theme/theme.js';
+import { applyUiPreferences } from './parts/settingsPrefs.js';
 import type { IAgentBridge } from '../services/agent/common/agent.js';
 import { ModelsService } from '../services/models/browser/modelsService.js';
 import type { IModelsBridge } from '../services/models/common/models.js';
@@ -124,6 +125,8 @@ export class Workbench {
 
 		this.container.replaceChildren(this.root);
 		applyThemeTokens(this.root);
+		// Re-apply persisted UI preferences (theme, reduced motion) over the default.
+		applyUiPreferences();
 		this.createParts();
 		this.bindPartServices();
 		this.installResizeListener();

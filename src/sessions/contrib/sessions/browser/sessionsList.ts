@@ -8,6 +8,9 @@ import { clearNode } from '../../../base/browser/dom.js';
 import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
 import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
+import { settingsDropdown, settingsRow, settingsSection, settingsToggle } from '../../../browser/parts/settingsControls.js';
+import { readPreferences, updatePreferences } from '../../../browser/parts/settingsPrefs.js';
+import type { ThemeId } from '../../../platform/theme/theme.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import { SessionStatus, type IActiveSession, type ISession, type ISessionChangesSummary, type ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import type { IProjectsService } from '../../../services/projects/browser/projectsService.js';
@@ -67,7 +70,7 @@ const SETTINGS_PLACEHOLDERS: Readonly<Record<string, { readonly icon: string; re
 export class SessionsList extends Disposable {
 	private readonly rowSubscriptions = this._register(new DisposableStore());
 	private readonly collapsedSidebarSections = new Set<SidebarTreeSectionId>();
-	private settingsSection = 'models';
+	private settingsSection = 'general';
 	private settingsNavElement: HTMLElement | undefined;
 	private settingsMainElement: HTMLElement | undefined;
 	private modelSettingsView: ModelSettingsView | undefined;
@@ -510,8 +513,8 @@ export class SessionsList extends Disposable {
 			return;
 		}
 
-		// Each fresh open lands on Models (the real feature).
-		this.settingsSection = 'models';
+		// Each fresh open lands on General.
+		this.settingsSection = 'general';
 		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
 		host.appendChild(this.renderSettingsDialog());
 	}
@@ -581,15 +584,25 @@ export class SessionsList extends Disposable {
 		clearNode(nav);
 		clearNode(main);
 
-		const rows: readonly { id: string; icon: string; label: string; placeholder?: boolean }[] = [
-			{ id: 'models', icon: 'codicon-server-environment', label: 'Models' },
-			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', placeholder: true },
-			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', placeholder: true },
-			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', placeholder: true },
-			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', placeholder: true },
+		const rows: readonly { id: string; icon: string; label: string; group: number; placeholder?: boolean }[] = [
+			{ id: 'general', icon: 'codicon-settings-gear', label: 'General', group: 1 },
+			{ id: 'appearance', icon: 'codicon-color-mode', label: 'Appearance', group: 1 },
+			{ id: 'models', icon: 'codicon-server-environment', label: 'Models', group: 2 },
+			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', group: 3, placeholder: true },
+			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', group: 3, placeholder: true },
+			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', group: 3, placeholder: true },
+			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', group: 3, placeholder: true },
 		];
 
+		let previousGroup: number | undefined;
 		for (const row of rows) {
+			if (previousGroup !== undefined && row.group !== previousGroup) {
+				const separator = document.createElement('div');
+				separator.className = 'sessions-settings-nav-sep';
+				nav.appendChild(separator);
+			}
+			previousGroup = row.group;
+
 			const button = document.createElement('button');
 			button.className = row.placeholder ? 'sessions-settings-nav-row sessions-settings-nav-row-placeholder' : 'sessions-settings-nav-row';
 			if (row.id === this.settingsSection) {
@@ -611,7 +624,59 @@ export class SessionsList extends Disposable {
 			nav.appendChild(button);
 		}
 
-		main.appendChild(this.settingsSection === 'models' ? this.getModelSettingsView() : this.renderComingSoon(this.settingsSection));
+		main.appendChild(this.renderSettingsSection(this.settingsSection));
+	}
+
+	private renderSettingsSection(section: string): HTMLElement {
+		switch (section) {
+			case 'general':
+				return this.renderGeneralSettings();
+			case 'appearance':
+				return this.renderAppearanceSettings();
+			case 'models':
+				return this.getModelSettingsView();
+			default:
+				return this.renderComingSoon(section);
+		}
+	}
+
+	private renderGeneralSettings(): HTMLElement {
+		const page = document.createElement('div');
+		page.className = 'sessions-settings-page';
+		const title = page.appendChild(document.createElement('h2'));
+		title.className = 'sessions-settings-page-title';
+		title.textContent = 'General';
+
+		const prefs = readPreferences();
+		const card = settingsSection(page, 'Behavior');
+		const motion = settingsRow(card, { title: 'Reduce motion', description: 'Minimize animations and transitions across the app.' });
+		settingsToggle(motion, prefs.reduceMotion, value => updatePreferences({ reduceMotion: value }));
+
+		return page;
+	}
+
+	private renderAppearanceSettings(): HTMLElement {
+		const page = document.createElement('div');
+		page.className = 'sessions-settings-page';
+		const title = page.appendChild(document.createElement('h2'));
+		title.className = 'sessions-settings-page-title';
+		title.textContent = 'Appearance';
+
+		const prefs = readPreferences();
+		const card = settingsSection(page, 'Theme');
+		const theme = settingsRow(card, { title: 'Color theme', description: 'Choose how the app looks.' });
+		settingsDropdown(
+			theme,
+			[
+				{ value: 'dark', label: 'Dark' },
+				{ value: 'light', label: 'Light' },
+				{ value: 'highContrast', label: 'High Contrast' },
+			],
+			prefs.theme,
+			value => updatePreferences({ theme: value as ThemeId }),
+		);
+
+		return page;
 	}
 
 	private getModelSettingsView(): HTMLElement {
