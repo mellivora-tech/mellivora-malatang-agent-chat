@@ -162,10 +162,10 @@ export class SessionsList extends Disposable {
 	private renderNavigationSections(container: HTMLElement, sessions: readonly SessionLike[]): void {
 		const model = this.createSidebarSessionModel(sessions);
 		this.renderPinnedSection(container, model.pinned);
+		this.renderProjectsSection(container, model.projects);
 		if (model.chat.length > 0) {
 			this.renderChatSection(container, model.chat);
 		}
-		this.renderProjectsSection(container, model.projects);
 	}
 
 	private createSidebarSessionModel(sessions: readonly SessionLike[]): {

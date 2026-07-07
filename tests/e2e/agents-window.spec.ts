@@ -179,7 +179,7 @@ test('starting a conversation creates a running session shell', async () => {
 		const chatSection = page.locator('[data-session-group="chat"]');
 		await expect(chatSection.locator('.sessions-tree-section-label')).toHaveText('Chat');
 		await expect(chatSection.locator('.sessions-project-task-title')).toHaveText('hello');
-		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Pinned', 'Chat', 'Projects']);
+		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Pinned', 'Projects', 'Chat']);
 
 		await assertRightSidePaneInteraction(page);
 		await page.screenshot({ path: 'test-results/agents-window-running-session.png', fullPage: true });
