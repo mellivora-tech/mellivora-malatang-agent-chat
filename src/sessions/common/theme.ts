@@ -111,7 +111,7 @@ const darkColors: SemanticColorMap = {
 	'agents.color.control.border': 'rgba(204, 204, 204, 0.16)',
 	'agents.color.control.hoverBackground': 'rgba(204, 204, 204, 0.1)',
 	'agents.color.selection.background': 'rgba(0, 120, 212, 0.18)',
-	'agents.color.activeSession.background': '#252526',
+	'agents.color.activeSession.background': '#1a1a1a',
 	'agents.color.inactiveSession.background': '#1e1e1e',
 	'agents.color.success': '#7ee787',
 	'agents.color.danger': '#ff7b72',

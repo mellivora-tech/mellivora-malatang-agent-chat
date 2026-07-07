@@ -97,7 +97,7 @@ body {
 	border-bottom-left-radius: 0;
 	border-top-right-radius: var(--vscode-agents-radius-stage);
 	border-bottom-right-radius: var(--vscode-agents-radius-stage);
-	background: var(--vscode-agents-color-panel-background);
+	background: var(--vscode-agents-color-stage-background);
 }
 
 .agent-sessions-workbench .part.titlebar {
