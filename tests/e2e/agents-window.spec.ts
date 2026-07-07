@@ -1454,7 +1454,8 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await footer.locator('.sessions-sidebar-settings-button').click();
 	const dialog = page.locator('.sessions-settings-dialog');
 	await expect(dialog).toBeVisible();
-	await expect(dialog.locator('.sessions-settings-title')).toHaveText('Settings');
+	// No title band anymore — full-bleed with a Back affordance in the nav.
+	await expect(dialog.locator('.sessions-settings-back')).toBeVisible();
 
 	// Settings open full-window: the dialog fills the viewport width.
 	const dialogBox = await dialog.boundingBox();

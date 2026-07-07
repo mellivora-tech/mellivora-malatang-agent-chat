@@ -71,6 +71,7 @@ export class SessionsList extends Disposable {
 	private readonly rowSubscriptions = this._register(new DisposableStore());
 	private readonly collapsedSidebarSections = new Set<SidebarTreeSectionId>();
 	private settingsSection = 'general';
+	private closeSettings: (() => void) | undefined;
 	private settingsNavElement: HTMLElement | undefined;
 	private settingsMainElement: HTMLElement | undefined;
 	private modelSettingsView: ModelSettingsView | undefined;
@@ -536,27 +537,24 @@ export class SessionsList extends Disposable {
 		dialog.setAttribute('aria-label', 'Settings');
 		backdrop.appendChild(dialog);
 
-		const header = document.createElement('div');
-		header.className = 'sessions-settings-header';
-		const title = document.createElement('h1');
-		title.className = 'sessions-settings-title';
-		title.textContent = 'Settings';
-		header.appendChild(title);
-		const actions = document.createElement('div');
-		actions.className = 'sessions-settings-window-actions';
+		const close = (): void => backdrop.remove();
+		this.closeSettings = close;
+
+		// A minimal, transparent drag strip (no title band) — full-bleed like Cursor.
+		const topbar = document.createElement('div');
+		topbar.className = 'sessions-settings-topbar';
 		const closeButton = document.createElement('button');
 		closeButton.className = 'sessions-settings-close';
 		closeButton.type = 'button';
 		closeButton.title = 'Close';
 		closeButton.setAttribute('aria-label', 'Close');
-		closeButton.addEventListener('click', () => backdrop.remove());
+		closeButton.addEventListener('click', close);
 		const closeIcon = document.createElement('span');
 		closeIcon.className = 'codicon codicon-close';
 		closeIcon.setAttribute('aria-hidden', 'true');
 		closeButton.appendChild(closeIcon);
-		actions.appendChild(closeButton);
-		header.appendChild(actions);
-		dialog.appendChild(header);
+		topbar.appendChild(closeButton);
+		dialog.appendChild(topbar);
 
 		const body = document.createElement('div');
 		body.className = 'sessions-settings-body';
@@ -583,6 +581,17 @@ export class SessionsList extends Disposable {
 
 		clearNode(nav);
 		clearNode(main);
+
+		const back = document.createElement('button');
+		back.className = 'sessions-settings-back';
+		back.type = 'button';
+		const backIcon = document.createElement('span');
+		backIcon.className = 'codicon codicon-arrow-left';
+		backIcon.setAttribute('aria-hidden', 'true');
+		back.appendChild(backIcon);
+		back.appendChild(document.createTextNode('Back'));
+		back.addEventListener('click', () => this.closeSettings?.());
+		nav.appendChild(back);
 
 		const rows: readonly { id: string; icon: string; label: string; group: number; placeholder?: boolean }[] = [
 			{ id: 'general', icon: 'codicon-settings-gear', label: 'General', group: 1 },

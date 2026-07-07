@@ -112,11 +112,6 @@ export class ModelSettingsView extends Disposable {
 			icon.setAttribute('aria-hidden', 'true');
 			const text = append(empty, document.createElement('p'));
 			text.textContent = 'Add a provider to configure models for chatting.';
-			const cta = append(empty, document.createElement('button')) as HTMLButtonElement;
-			cta.className = 'sessions-models-add-provider';
-			cta.type = 'button';
-			cta.innerHTML = '<span class="codicon codicon-add" aria-hidden="true"></span><span>Add provider</span>';
-			cta.addEventListener('click', () => this.openProviderForm(undefined));
 			return;
 		}
 

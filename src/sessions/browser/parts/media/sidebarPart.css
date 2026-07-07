@@ -845,42 +845,18 @@
 	color: var(--vscode-agents-color-text-primary);
 }
 
-/* The header doubles as the window drag region; clear the macOS traffic lights. */
-.sessions-settings-header {
+/* A transparent drag strip (no title band) — full-bleed like Cursor; the macOS
+   traffic lights sit at its empty left, the close button at its right. */
+.sessions-settings-topbar {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 0 var(--vscode-agents-space-16);
 	-webkit-app-region: drag;
 }
 
-.sessions-settings-header button {
+.sessions-settings-topbar button {
 	-webkit-app-region: no-drag;
-}
-
-.platform-darwin .sessions-settings-title {
-	padding-left: 72px;
-}
-
-.sessions-settings-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	min-width: 0;
-	padding: 0 var(--vscode-agents-space-20);
-	box-sizing: border-box;
-}
-
-.sessions-settings-title {
-	margin: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	color: var(--vscode-agents-color-text-secondary);
-	font-size: var(--vscode-agents-fontSize-heading2);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
-}
-
-.sessions-settings-window-actions {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--vscode-agents-space-8);
 }
 
 .sessions-settings-window-action,
@@ -954,6 +930,25 @@
 .sessions-settings-nav-count {
 	color: var(--vscode-agents-color-text-muted);
 	font-variant-numeric: tabular-nums;
+}
+
+.sessions-settings-back {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	align-self: flex-start;
+	margin-bottom: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
+	border: 0;
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-body1);
+	cursor: default;
+}
+
+.sessions-settings-back:hover {
+	color: var(--vscode-agents-color-text-primary);
 }
 
 .sessions-settings-main {
@@ -1120,8 +1115,7 @@
 }
 
 .sessions-models-provider.active {
-	border-color: var(--vscode-agents-color-panel-border);
-	background: color-mix(in srgb, var(--vscode-agents-color-background) 40%, transparent);
+	background: var(--vscode-agents-color-control-hoverBackground);
 }
 
 .sessions-models-provider-row-name {
@@ -1222,10 +1216,9 @@
 .sessions-models-model-list {
 	display: flex;
 	flex-direction: column;
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-card);
 	overflow: hidden;
-	background: color-mix(in srgb, var(--vscode-agents-color-background) 24%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 45%, transparent);
 }
 
 .sessions-models-model-row {
@@ -1491,11 +1484,9 @@
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-/* Nav group separator */
+/* Nav group separator: whitespace, not a line (Cursor-style) */
 .sessions-settings-nav-sep {
-	height: var(--vscode-agents-space-1);
-	margin: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
-	background: var(--vscode-agents-color-divider);
+	height: var(--vscode-agents-space-14);
 }
 
 /* Cursor-style settings page: title -> sections (muted label + card of rows) */
@@ -1527,10 +1518,9 @@
 .sessions-settings-card {
 	display: flex;
 	flex-direction: column;
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-card);
 	overflow: hidden;
-	background: color-mix(in srgb, var(--vscode-agents-color-background) 24%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 45%, transparent);
 }
 
 .sessions-settings-row {
