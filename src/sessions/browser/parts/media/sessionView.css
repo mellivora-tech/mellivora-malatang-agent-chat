@@ -133,8 +133,7 @@
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: auto;
-	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2 + var(--vscode-agents-space-18)))
-		var(--vscode-agents-space-18);
+	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-18);
 	box-sizing: border-box;
 }
 
@@ -176,7 +175,7 @@
 .conversation-message.user {
 	display: flex;
 	justify-content: flex-end;
-	max-width: var(--vscode-agents-size-composer-width);
+	max-width: var(--vscode-agents-size-conversation-width);
 }
 
 .conversation-message.user .conversation-message-avatar,

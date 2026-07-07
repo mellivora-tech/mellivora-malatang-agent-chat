@@ -174,6 +174,13 @@ test('starting a conversation creates a running session shell', async () => {
 		await page.locator('.new-session-send-button').click();
 
 		await assertRunningConversationShell(page);
+
+		// A session with no workspace lands in the Chat section — a top-level peer of Pinned and Projects.
+		const chatSection = page.locator('[data-session-group="chat"]');
+		await expect(chatSection.locator('.sessions-tree-section-label')).toHaveText('Chat');
+		await expect(chatSection.locator('.sessions-project-task-title')).toHaveText('hello');
+		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Pinned', 'Chat', 'Projects']);
+
 		await assertRightSidePaneInteraction(page);
 		await page.screenshot({ path: 'test-results/agents-window-running-session.png', fullPage: true });
 
@@ -902,7 +909,7 @@ async function assertShellLayout(page: Page, width: number, height: number): Pro
 	expect(metrics.sidebarY).toBe(0);
 	expect(metrics.sidebarWidth).toBe(270);
 	expect(metrics.sidebarHeight).toBe(height);
-	expect(metrics.stageX).toBe(270);
+	expect(metrics.stageX).toBe(274);
 	expect(metrics.stageY).toBeGreaterThanOrEqual(4);
 	expect(metrics.stageY).toBeLessThanOrEqual(8);
 	expect(metrics.stageWidth).toBeGreaterThan(width - 280);
@@ -944,7 +951,7 @@ async function assertThemeTokens(page: Page): Promise<void> {
 		theme: 'dark',
 		panelBackground: '#252526',
 		sidebarBackground: '#24343a',
-		stageBackground: '#111111',
+		stageBackground: '#1a1a1a',
 		textPrimary: '#cccccc',
 		focusBorder: '#0078d4',
 		titlebarHeight: '52px',
@@ -1574,16 +1581,18 @@ async function assertRunningConversationMessageLayout(page: Page): Promise<void>
 	const metrics = await page.locator('.conversation-view').evaluate(view => {
 		const inputWrap = document.querySelector<HTMLElement>('.conversation-input-wrap');
 		const userBubble = view.querySelector<HTMLElement>('.conversation-message.user .conversation-message-bubble');
+		const workingRow = view.querySelector<HTMLElement>('.conversation-working-row');
 		const workingLabel = view.querySelector<HTMLElement>('.conversation-working-label');
 		const thinkingRow = view.querySelector<HTMLElement>('.conversation-thinking-row');
 		const thinkingSpinner = thinkingRow?.querySelector<HTMLElement>('.codicon-loading');
 		const thinkingLabel = thinkingRow?.querySelector<HTMLElement>('span:last-child');
-		if (!inputWrap || !userBubble || !workingLabel || !thinkingRow || !thinkingSpinner || !thinkingLabel) {
+		if (!inputWrap || !userBubble || !workingRow || !workingLabel || !thinkingRow || !thinkingSpinner || !thinkingLabel) {
 			throw new Error('Running conversation layout nodes were not found');
 		}
 
 		const inputRect = inputWrap.getBoundingClientRect();
 		const userBubbleRect = userBubble.getBoundingClientRect();
+		const workingRowRect = workingRow.getBoundingClientRect();
 		const workingLabelRect = workingLabel.getBoundingClientRect();
 		const thinkingSpinnerRect = thinkingSpinner.getBoundingClientRect();
 		const thinkingLabelRect = thinkingLabel.getBoundingClientRect();
@@ -1593,6 +1602,7 @@ async function assertRunningConversationMessageLayout(page: Page): Promise<void>
 			userRole: userBubble.closest<HTMLElement>('.conversation-message')?.dataset['role'],
 			userBubbleRight: Math.round(userBubbleRect.right),
 			inputRight: Math.round(inputRect.right),
+			messageColumnRight: Math.round(workingRowRect.right),
 			workingLabelLeft: Math.round(workingLabelRect.left),
 			thinkingLabelLeft: Math.round(thinkingLabelRect.left),
 			thinkingSpinnerLeft: Math.round(thinkingSpinnerRect.left),
@@ -1602,7 +1612,9 @@ async function assertRunningConversationMessageLayout(page: Page): Promise<void>
 	expect(metrics.status).toBe('in-progress');
 	expect(metrics.interactivity).toBe('full');
 	expect(metrics.userRole).toBe('user');
-	expect(metrics.userBubbleRight).toBe(metrics.inputRight);
+	// User bubble right-aligns to the message column (wider than the composer).
+	expect(metrics.userBubbleRight).toBe(metrics.messageColumnRight);
+	expect(metrics.userBubbleRight).toBeGreaterThan(metrics.inputRight);
 	expect(metrics.workingLabelLeft).toBe(metrics.thinkingLabelLeft);
 	expect(metrics.thinkingSpinnerLeft).toBeLessThan(metrics.thinkingLabelLeft);
 }
@@ -1664,7 +1676,9 @@ async function assertHistoricalConversationMessageLayout(page: Page, expectedSta
 	expect(metrics.status).toBe(expectedStatus);
 	expect(metrics.interactivity).toBe(expectedInteractivity);
 	expect(metrics.roles).toEqual(['user', 'assistant', 'tool']);
-	expect(metrics.user.bubbleRight).toBe(metrics.inputRight);
+	// User bubble right-aligns to the message column (same right edge as the assistant row), not the narrower composer.
+	expect(metrics.user.rowRight).toBe(metrics.assistant.rowRight);
+	expect(metrics.user.bubbleRight).toBe(metrics.user.rowRight);
 	expect(metrics.assistant.bodyLeft).toBe(metrics.tool.bodyLeft);
 	expect(metrics.assistant.textLeft).toBe(metrics.assistant.bodyLeft);
 	expect(metrics.tool.textLeft).toBe(metrics.tool.bodyLeft);
@@ -1700,6 +1714,10 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
 	await expect(changesView.locator('.changes-summary-stat.files .changes-summary-value')).toHaveText('5');
 
+	await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/side-pane-open/);
+	await assertSidePaneDockedToStage(page);
+	await page.screenshot({ path: 'test-results/agents-window-side-pane.png', fullPage: true });
+
 	await page.locator('.auxiliary-tab[data-tab-id="terminal"]').click();
 	await assertSidePaneTab(page, 'terminal', 'Terminal', 'No terminal session started');
 
@@ -1709,6 +1727,33 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await toggle.click();
 	await expect(page.locator('.part.auxiliarybar')).toBeHidden();
 	await expect(toggle).not.toHaveClass(/active/);
+}
+
+async function assertSidePaneDockedToStage(page: Page): Promise<void> {
+	const geometry = await page.evaluate(() => {
+		const stage = document.querySelector('.part.sessionspart');
+		const aux = document.querySelector('.part.auxiliarybar');
+		if (!stage || !aux) {
+			return undefined;
+		}
+
+		const stageRect = stage.getBoundingClientRect();
+		const auxRect = aux.getBoundingClientRect();
+		return {
+			stageRight: Math.round(stageRect.right),
+			auxLeft: Math.round(auxRect.left),
+			stageTop: Math.round(stageRect.top),
+			auxTop: Math.round(auxRect.top),
+			stageBottom: Math.round(stageRect.bottom),
+			auxBottom: Math.round(auxRect.bottom),
+		};
+	});
+
+	expect(geometry).toBeDefined();
+	// Flush at the seam (single divider) and aligned top/bottom (one shared frame).
+	expect(Math.abs(geometry!.stageRight - geometry!.auxLeft)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry!.stageTop - geometry!.auxTop)).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry!.stageBottom - geometry!.auxBottom)).toBeLessThanOrEqual(1);
 }
 
 async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyText?: string): Promise<void> {

@@ -40,7 +40,7 @@ body {
 	width: 100vw;
 	height: 100vh;
 	overflow: hidden;
-	background: var(--vscode-agents-color-background);
+	background: var(--vscode-agents-color-sidebar-background);
 }
 
 .agent-sessions-workbench.shell-gradient-background::before {
@@ -66,17 +66,21 @@ body {
 	--part-margin-top: var(--vscode-agents-size-stage-margin);
 	--part-margin-right: var(--vscode-agents-size-stage-margin);
 	--part-margin-bottom: var(--vscode-agents-size-stage-margin);
-	--part-margin-left: 0px;
+	--part-margin-left: var(--vscode-agents-size-stage-margin);
 	border-color: var(--vscode-agents-color-stage-border);
 	border-radius: var(--vscode-agents-radius-stage);
 	background: var(--vscode-agents-color-stage-background);
 }
 
-.agent-sessions-workbench.sidebar-hidden .part.sessionspart {
-	--part-margin-left: var(--vscode-agents-size-stage-margin);
+/* When the side pane is open, the stage and the auxiliary bar share one frame:
+   the stage opens its right side (right border becomes the divider) and the
+   auxiliary bar rounds only its outer (right) corners. */
+.agent-sessions-workbench.side-pane-open .part.sessionspart {
+	--part-margin-right: 0px;
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
 }
 
-.agent-sessions-workbench .part.auxiliarybar,
 .agent-sessions-workbench .part.panel,
 .agent-sessions-workbench .part.editor {
 	background: var(--vscode-agents-color-panel-background);
@@ -86,7 +90,14 @@ body {
 	--part-margin-top: var(--vscode-agents-size-stage-margin);
 	--part-margin-right: var(--vscode-agents-size-stage-margin);
 	--part-margin-bottom: var(--vscode-agents-size-stage-margin);
-	--part-margin-left: var(--vscode-agents-space-4);
+	--part-margin-left: 0px;
+	border-color: var(--vscode-agents-color-stage-border);
+	border-left: 0;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+	border-top-right-radius: var(--vscode-agents-radius-stage);
+	border-bottom-right-radius: var(--vscode-agents-radius-stage);
+	background: var(--vscode-agents-color-panel-background);
 }
 
 .agent-sessions-workbench .part.titlebar {

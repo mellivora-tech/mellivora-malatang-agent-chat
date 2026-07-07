@@ -146,7 +146,9 @@ export class Workbench {
 			updateAuxiliaryVisibility();
 		};
 		const updateAuxiliaryVisibility = () => {
-			this.grid.setPartVisible('auxiliaryBar', this.sessionsPartService.mode.get() === 'conversation' && this.sessionsPartService.sidePaneVisible.get());
+			const auxiliaryVisible = this.sessionsPartService.mode.get() === 'conversation' && this.sessionsPartService.sidePaneVisible.get();
+			this.grid.setPartVisible('auxiliaryBar', auxiliaryVisible);
+			this.root.classList.toggle('side-pane-open', auxiliaryVisible);
 			this.layout();
 		};
 

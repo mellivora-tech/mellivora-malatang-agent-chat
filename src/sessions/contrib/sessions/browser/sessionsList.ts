@@ -18,7 +18,7 @@ export interface ISessionsListOptions {
 }
 
 type SessionLike = ISession | IActiveSession;
-type SidebarTreeSectionId = 'pinned' | 'projects';
+type SidebarTreeSectionId = 'pinned' | 'chat' | 'projects';
 
 interface ISessionListRow {
 	readonly id: string;
@@ -162,11 +162,15 @@ export class SessionsList extends Disposable {
 	private renderNavigationSections(container: HTMLElement, sessions: readonly SessionLike[]): void {
 		const model = this.createSidebarSessionModel(sessions);
 		this.renderPinnedSection(container, model.pinned);
+		if (model.chat.length > 0) {
+			this.renderChatSection(container, model.chat);
+		}
 		this.renderProjectsSection(container, model.projects);
 	}
 
 	private createSidebarSessionModel(sessions: readonly SessionLike[]): {
 		readonly pinned: readonly ISessionListRow[];
+		readonly chat: readonly ISessionListRow[];
 		readonly projects: readonly ISidebarProjectGroup[];
 	} {
 		const activeSessionId = this.getActiveSessionId();
@@ -201,24 +205,29 @@ export class SessionsList extends Disposable {
 			projects.push({ id: project.id, name: project.name, count: rows.length, expanded: true, rows });
 		}
 
-		// Sessions without a project (or whose project vanished) share one
-		// fallback group, rendered only when non-empty.
-		const fallbackRows = unpinned.filter(session => session.projectId === undefined || !knownProjectIds.has(session.projectId)).map(toRow);
-		if (fallbackRows.length > 0) {
-			projects.push({ id: 'no-project', name: 'Workspace', count: fallbackRows.length, expanded: true, rows: fallbackRows });
-		}
+		// Sessions without a project (or whose project vanished) collect into
+		// the Chat section, a top-level peer of Pinned and Projects.
+		const chat = unpinned.filter(session => session.projectId === undefined || !knownProjectIds.has(session.projectId)).map(toRow);
 
-		return { pinned, projects };
+		return { pinned, chat, projects };
 	}
 
 	private renderPinnedSection(container: HTMLElement, rows: readonly ISessionListRow[]): void {
+		this.renderRowsSection(container, 'pinned', 'Pinned', rows, 'No pinned items');
+	}
+
+	private renderChatSection(container: HTMLElement, rows: readonly ISessionListRow[]): void {
+		this.renderRowsSection(container, 'chat', 'Chat', rows, 'No chats yet');
+	}
+
+	private renderRowsSection(container: HTMLElement, id: SidebarTreeSectionId, title: string, rows: readonly ISessionListRow[], emptyText: string): void {
 		const list = document.createElement('div');
 		list.className = 'sessions-list-section-rows';
 
 		if (rows.length === 0) {
 			const empty = document.createElement('div');
 			empty.className = 'sessions-list-empty';
-			empty.textContent = 'No pinned items';
+			empty.textContent = emptyText;
 			list.appendChild(empty);
 		} else {
 			for (const row of rows) {
@@ -226,7 +235,7 @@ export class SessionsList extends Disposable {
 			}
 		}
 
-		this.renderSidebarTreeSection(container, 'pinned', 'Pinned', list);
+		this.renderSidebarTreeSection(container, id, title, list);
 	}
 
 	private renderProjectsSection(container: HTMLElement, projects: readonly ISidebarProjectGroup[]): void {

@@ -85,7 +85,7 @@ const darkColors: SemanticColorMap = {
 	'agents.color.background': '#111111',
 	'agents.color.gradient.tint': '#0078d4',
 	'agents.color.sidebar.background': '#24343a',
-	'agents.color.stage.background': '#111111',
+	'agents.color.stage.background': '#1a1a1a',
 	'agents.color.stage.border': 'rgba(117, 187, 199, 0.28)',
 	'agents.color.watermark': 'rgba(204, 204, 204, 0.11)',
 	'agents.color.panel.background': '#252526',
