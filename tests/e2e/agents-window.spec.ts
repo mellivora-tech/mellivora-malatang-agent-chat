@@ -179,7 +179,7 @@ test('starting a conversation creates a running session shell', async () => {
 		const chatSection = page.locator('[data-session-group="chat"]');
 		await expect(chatSection.locator('.sessions-tree-section-label')).toHaveText('Chat');
 		await expect(chatSection.locator('.sessions-project-task-title')).toHaveText('hello');
-		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Pinned', 'Projects', 'Chat']);
+		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Projects', 'Chat']);
 
 		await assertRightSidePaneInteraction(page);
 		await page.screenshot({ path: 'test-results/agents-window-running-session.png', fullPage: true });
@@ -1066,11 +1066,11 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 	const projectsSection = page.locator('[data-session-group="projects"]');
 	const projects = projectsSection.locator('.sessions-project-browser');
 
-	await expect(page.locator('.sessions-sidebar-tree-section')).toHaveCount(2);
-	await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Pinned', 'Projects']);
-	await expect(page.locator('[data-session-group="chats"]')).toHaveCount(0);
-	await expect(pinned.locator('.sessions-list-empty')).toHaveText('No pinned items');
-	await assertCollapsibleSidebarSection(pinned, 'Pinned');
+	// Pinned and Chat sections stay hidden while empty; only Projects shows here.
+	await expect(page.locator('.sessions-sidebar-tree-section')).toHaveCount(1);
+	await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Projects']);
+	await expect(page.locator('[data-session-group="chat"]')).toHaveCount(0);
+	await expect(pinned).toHaveCount(0);
 	await assertCollapsibleSidebarSection(projectsSection, 'Projects');
 
 	await expect(projects.locator('.sessions-project-group')).toHaveCount(2);
@@ -1246,8 +1246,7 @@ async function assertPinMovesProjectTaskToPinned(page: Page): Promise<void> {
 	const obsidian = projects.locator('[data-project-id="obsidian"]');
 	const row = obsidian.locator('.sessions-project-task-row').filter({ hasText: '梳理下文档' });
 
-	await expect(pinned).toBeVisible();
-	await expect(pinned.locator('.sessions-list-empty')).toHaveText('No pinned items');
+	await expect(pinned).toHaveCount(0);
 	await expect(row).toHaveCount(1);
 
 	await row.hover();
@@ -1263,8 +1262,7 @@ async function assertPinMovesProjectTaskToPinned(page: Page): Promise<void> {
 	await pinned.locator('.sessions-project-task-row').hover();
 	await pinned.locator('.sessions-project-task-pin').click();
 
-	await expect(pinned.locator('.sessions-project-task-row')).toHaveCount(0);
-	await expect(pinned.locator('.sessions-list-empty')).toHaveText('No pinned items');
+	await expect(pinned).toHaveCount(0);
 	await expect(obsidian.locator('.sessions-project-task-row')).toHaveCount(1);
 	await expect(obsidian.locator('.sessions-project-empty')).toHaveCount(0);
 }
