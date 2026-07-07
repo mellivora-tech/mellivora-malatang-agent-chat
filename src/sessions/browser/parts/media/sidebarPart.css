@@ -27,7 +27,7 @@
 	gap: var(--vscode-agents-space-14);
 	min-width: 0;
 	height: var(--vscode-agents-size-sidebar-header);
-	padding: var(--vscode-agents-space-68) var(--vscode-agents-size-sidebar-gutter) var(--vscode-agents-space-4);
+	padding: var(--vscode-agents-space-44) var(--vscode-agents-size-sidebar-gutter) var(--vscode-agents-space-4);
 	box-sizing: border-box;
 	font-size: var(--vscode-agents-fontSize-heading3);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
