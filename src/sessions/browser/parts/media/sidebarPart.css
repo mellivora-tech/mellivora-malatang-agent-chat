@@ -960,6 +960,8 @@
 
 .sessions-settings-main-content {
 	min-height: 100%;
+	max-width: 960px;
+	margin-inline: auto;
 	padding: var(--vscode-agents-space-52) var(--vscode-agents-space-56);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-card);
@@ -1074,7 +1076,9 @@
 	align-items: stretch;
 	gap: var(--vscode-agents-space-24);
 	width: 100%;
+	max-width: 960px;
 	min-height: 100%;
+	margin-inline: auto;
 	box-sizing: border-box;
 }
 
@@ -1495,6 +1499,7 @@
 	gap: var(--vscode-agents-space-24);
 	width: 100%;
 	max-width: 720px;
+	margin-inline: auto;
 }
 
 .sessions-settings-page-title {
