@@ -1181,7 +1181,7 @@ async function assertSidebarHeaderToolbar(page: Page): Promise<void> {
 		};
 	});
 
-	expect(toolbarMetrics.headerHeight).toBe(172);
+	expect(toolbarMetrics.headerHeight).toBe(148);
 	expect(toolbarMetrics.sidebarGutter).toBe('14px');
 	expect(toolbarMetrics.headerTopToSidebar).toBe(0);
 	expect(toolbarMetrics.headerLeftInset).toBe(14);

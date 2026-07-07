@@ -836,31 +836,33 @@
 }
 
 .sessions-settings-dialog {
+	position: relative;
 	width: 100%;
 	height: 100%;
 	display: grid;
-	grid-template-rows: var(--vscode-agents-size-settings-header) minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
 	overflow: hidden;
 	background: var(--vscode-agents-color-modal-background);
 	color: var(--vscode-agents-color-text-primary);
 }
 
-/* A transparent drag strip (no title band) — full-bleed like Cursor; the macOS
-   traffic lights sit at its empty left, the close button at its right. */
-.sessions-settings-topbar {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	padding: 0 var(--vscode-agents-space-16);
+/* Full-bleed (no header band): a transparent drag strip spans the top and the
+   close button floats at the top-right; nav and content run to the edge. */
+.sessions-settings-dragstrip {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: var(--vscode-agents-space-32);
 	-webkit-app-region: drag;
+	z-index: 1;
 }
 
-.sessions-settings-topbar button {
-	-webkit-app-region: no-drag;
-}
-
-.sessions-settings-window-action,
 .sessions-settings-close {
+	position: absolute;
+	top: var(--vscode-agents-space-8);
+	right: var(--vscode-agents-space-12);
+	z-index: 2;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -871,9 +873,9 @@
 	background: transparent;
 	color: var(--vscode-agents-color-text-secondary);
 	cursor: default;
+	-webkit-app-region: no-drag;
 }
 
-.sessions-settings-window-action:hover,
 .sessions-settings-close:hover {
 	background: var(--vscode-agents-color-control-hoverBackground);
 	color: var(--vscode-agents-color-text-primary);
@@ -890,7 +892,8 @@
 	flex-direction: column;
 	gap: var(--vscode-agents-space-2);
 	min-width: 0;
-	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-38) var(--vscode-agents-space-10) var(--vscode-agents-space-12);
+	background: var(--vscode-agents-color-sidebar-background);
 	border-right: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
 	box-sizing: border-box;
 }
@@ -954,7 +957,7 @@
 	min-width: 0;
 	min-height: 0;
 	overflow-y: auto;
-	padding: var(--vscode-agents-space-28) var(--vscode-agents-space-52) var(--vscode-agents-space-40);
+	padding: var(--vscode-agents-space-38) var(--vscode-agents-space-52) var(--vscode-agents-space-40);
 	box-sizing: border-box;
 }
 

@@ -540,9 +540,12 @@ export class SessionsList extends Disposable {
 		const close = (): void => backdrop.remove();
 		this.closeSettings = close;
 
-		// A minimal, transparent drag strip (no title band) — full-bleed like Cursor.
-		const topbar = document.createElement('div');
-		topbar.className = 'sessions-settings-topbar';
+		// Full-bleed (no header band): a transparent drag strip at the top and a
+		// floating close button at the top-right; nav and content run to the edge.
+		const dragStrip = document.createElement('div');
+		dragStrip.className = 'sessions-settings-dragstrip';
+		dialog.appendChild(dragStrip);
+
 		const closeButton = document.createElement('button');
 		closeButton.className = 'sessions-settings-close';
 		closeButton.type = 'button';
@@ -553,8 +556,7 @@ export class SessionsList extends Disposable {
 		closeIcon.className = 'codicon codicon-close';
 		closeIcon.setAttribute('aria-hidden', 'true');
 		closeButton.appendChild(closeIcon);
-		topbar.appendChild(closeButton);
-		dialog.appendChild(topbar);
+		dialog.appendChild(closeButton);
 
 		const body = document.createElement('div');
 		body.className = 'sessions-settings-body';
