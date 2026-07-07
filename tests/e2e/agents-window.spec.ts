@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -807,6 +809,134 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 	}
 });
 
+test('model settings support add, edit, set default, and delete', async () => {
+	let app: ElectronApplication | undefined;
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+		});
+		const page = await app.firstWindow();
+		await page.waitForSelector('.sessions-sidebar');
+
+		await page.locator('.sessions-sidebar-settings-button').click();
+		await expect(page.locator('.sessions-settings-dialog')).toBeVisible();
+		await page.locator('[data-settings-nav-id="models"]').click();
+		await expect(page.locator('.sessions-models-empty')).toBeVisible();
+
+		// Add a model.
+		await page.locator('.sessions-models-add').click();
+		await page.locator('.sessions-models-field-label').fill('Kimi K2');
+		await page.locator('.sessions-models-field-provider').selectOption('openai-compatible');
+		await page.locator('.sessions-models-field-baseurl').fill('https://api.moonshot.cn/v1');
+		await page.locator('.sessions-models-field-model').fill('kimi-k2');
+		await page.locator('.sessions-models-field-apikey').fill('sk-test-1');
+		await page.locator('.sessions-models-save').click();
+
+		const rows = page.locator('.sessions-models-row');
+		await expect(rows).toHaveCount(1);
+		await expect(rows.first().locator('.sessions-models-row-name')).toContainText('Kimi K2');
+		await expect(rows.first().locator('.sessions-models-default-badge')).toBeVisible();
+		await expect(rows.first().locator('.sessions-models-row-meta')).toContainText('key set');
+
+		// Edit its label; the key is preserved.
+		await rows.first().locator('.sessions-models-edit').click();
+		await page.locator('.sessions-models-field-label').fill('Kimi K2 Pro');
+		await page.locator('.sessions-models-save').click();
+		await expect(page.locator('.sessions-models-row-name')).toContainText('Kimi K2 Pro');
+		await expect(page.locator('.sessions-models-row-meta')).toContainText('key set');
+
+		// Add a second model and make it the default.
+		await page.locator('.sessions-models-add').click();
+		await page.locator('.sessions-models-field-label').fill('Claude');
+		await page.locator('.sessions-models-field-provider').selectOption('anthropic');
+		await page.locator('.sessions-models-field-baseurl').fill('https://api.anthropic.com');
+		await page.locator('.sessions-models-field-model').fill('claude-opus-4-8');
+		await page.locator('.sessions-models-save').click();
+		await expect(rows).toHaveCount(2);
+
+		const claudeRow = rows.filter({ hasText: 'Claude' });
+		await claudeRow.locator('.sessions-models-set-default').click();
+		await expect(claudeRow.locator('.sessions-models-default-badge')).toBeVisible();
+
+		// Delete the first model; the default remains on Claude.
+		await rows.filter({ hasText: 'Kimi K2 Pro' }).locator('.sessions-models-delete').click();
+		await expect(rows).toHaveCount(1);
+		await expect(page.locator('.sessions-models-row-name')).toContainText('Claude');
+		await expect(page.locator('.sessions-models-default-badge')).toBeVisible();
+	} finally {
+		await app?.close();
+	}
+});
+
+interface IMockModelServer {
+	readonly baseURL: string;
+	close(): Promise<void>;
+}
+
+/** Minimal OpenAI-compatible /chat/completions SSE endpoint that streams `reply` in two chunks. */
+function startMockModelServer(reply: string): Promise<IMockModelServer> {
+	return new Promise(resolve => {
+		const server: Server = createServer((request, response) => {
+			if (request.method === 'POST' && request.url === '/v1/chat/completions') {
+				response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+				const midpoint = Math.ceil(reply.length / 2);
+				response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(0, midpoint) } }] })}\n\n`);
+				response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(midpoint) }, finish_reason: 'stop' }] })}\n\n`);
+				response.write('data: [DONE]\n\n');
+				response.end();
+				return;
+			}
+
+			response.writeHead(404).end();
+		});
+
+		server.listen(0, '127.0.0.1', () => {
+			const port = (server.address() as AddressInfo).port;
+			resolve({ baseURL: `http://127.0.0.1:${port}/v1`, close: () => new Promise<void>(done => server.close(() => done())) });
+		});
+	});
+}
+
+test('a configured model streams a real reply into the conversation', async () => {
+	const mockServer = await startMockModelServer('Hello from the test model.');
+	let app: ElectronApplication | undefined;
+
+	try {
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+		});
+		const page = await app.firstWindow();
+		await page.waitForSelector('.sessions-sidebar');
+
+		// Configure a model pointing at the mock server.
+		await page.locator('.sessions-sidebar-settings-button').click();
+		await page.locator('[data-settings-nav-id="models"]').click();
+		await page.locator('.sessions-models-add').click();
+		await page.locator('.sessions-models-field-label').fill('Test');
+		await page.locator('.sessions-models-field-provider').selectOption('openai-compatible');
+		await page.locator('.sessions-models-field-baseurl').fill(mockServer.baseURL);
+		await page.locator('.sessions-models-field-model').fill('test');
+		await page.locator('.sessions-models-field-apikey').fill('x');
+		await page.locator('.sessions-models-save').click();
+		await expect(page.locator('.sessions-models-row')).toHaveCount(1);
+		await page.locator('.sessions-settings-close').click();
+
+		// Start a conversation — the reply is streamed from the model, not the mock.
+		await page.waitForSelector('.sessions-new-session-view');
+		await page.locator('.new-session-input').fill('hi there');
+		await page.locator('.new-session-send-button').click();
+
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toContainText('Hello from the test model.');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).not.toContainText('Mock response');
+	} finally {
+		await app?.close();
+		await mockServer.close();
+	}
+});
+
 async function captureAndAssert(page: Page, screenshot: { readonly width: number; readonly height: number; readonly path: string }): Promise<void> {
 	await page.setViewportSize({ width: screenshot.width, height: screenshot.height });
 	await page.waitForSelector('.monaco-workbench.agent-sessions-workbench');
@@ -1307,15 +1437,27 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await footer.locator('.sessions-sidebar-settings-button').click();
 	const dialog = page.locator('.sessions-settings-dialog');
 	await expect(dialog).toBeVisible();
-	await expect(dialog.locator('.sessions-settings-title')).toHaveText('Agent Customizations for Copilot CLI');
+	await expect(dialog.locator('.sessions-settings-title')).toHaveText('Settings');
+
+	// Models is the default section (the one real feature).
+	await expect(dialog.locator('[data-settings-nav-id="models"]')).toHaveClass(/active/);
+	await expect(dialog.locator('.sessions-models')).toBeVisible();
+	// The main pane scrolls when many config items overflow.
+	await expect(dialog.locator('.sessions-settings-main')).toHaveCSS('overflow-y', 'auto');
+
+	// The mock rows and fake counts are gone; only the single window action remains.
+	await expect(dialog.locator('[data-settings-nav-id="overview"]')).toHaveCount(0);
+	await expect(dialog.locator('.sessions-settings-nav-count')).toHaveCount(0);
+	await expect(dialog.locator('.sessions-settings-window-action')).toHaveCount(0);
+
+	// Unbuilt sections show a consistent "coming soon" placeholder.
+	await dialog.locator('[data-settings-nav-id="mcp-servers"]').click();
 	await expect(dialog.locator('[data-settings-nav-id="mcp-servers"]')).toHaveClass(/active/);
+	const placeholder = dialog.locator('.sessions-settings-coming-soon');
+	await expect(placeholder.locator('h2')).toHaveText('MCP Servers');
+	await expect(placeholder.locator('.sessions-settings-coming-soon-badge')).toHaveText('Coming soon');
 	await assertSettingsDialogThemeTokens(page);
-	await expect(dialog.locator('.sessions-settings-main h2')).toHaveText('MCP Servers');
-	await expect(dialog.locator('.sessions-settings-search')).toHaveAttribute('placeholder', 'Type to search...');
-	await expect(dialog.locator('.sessions-settings-marketplace')).toContainText('Browse Marketplace');
-	await expect(dialog.locator('[data-settings-group="workspace"] .sessions-settings-group-title')).toContainText('Workspace');
-	await expect(dialog.locator('[data-settings-group="user"] .sessions-settings-group-title')).toContainText('User');
-	await expect(dialog.locator('[data-settings-group="builtin"] .sessions-settings-group-title')).toContainText('Built-In');
+
 	await dialog.locator('.sessions-settings-close').click();
 	await expect(dialog).toBeHidden();
 }
@@ -1333,18 +1475,16 @@ async function assertSettingsDialogThemeTokens(page: Page): Promise<void> {
 
 		const root = document.querySelector<HTMLElement>('.agent-sessions-workbench');
 		const backdrop = dialog.closest<HTMLElement>('.sessions-settings-dialog-backdrop');
-		const search = dialog.querySelector<HTMLElement>('.sessions-settings-search');
 		const nav = dialog.querySelector<HTMLElement>('.sessions-settings-nav');
 		const content = dialog.querySelector<HTMLElement>('.sessions-settings-main-content');
 
-		if (!root || !backdrop || !search || !nav || !content) {
+		if (!root || !backdrop || !nav || !content) {
 			throw new Error('Settings dialog theme nodes were not found');
 		}
 
 		const rootStyle = getComputedStyle(root);
 		const dialogStyle = getComputedStyle(dialog);
 		const backdropStyle = getComputedStyle(backdrop);
-		const searchStyle = getComputedStyle(search);
 		const navStyle = getComputedStyle(nav);
 		const contentStyle = getComputedStyle(content);
 
@@ -1358,10 +1498,6 @@ async function assertSettingsDialogThemeTokens(page: Page): Promise<void> {
 			dialogBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-panel-border').trim()),
 			backdropBackground: backdropStyle.backgroundColor,
 			backdropBackgroundToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-scrim').trim()),
-			searchBackground: searchStyle.backgroundColor,
-			searchBackgroundToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-input-background').trim()),
-			searchOutlineColor: searchStyle.outlineColor,
-			searchOutlineColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-focusBorder').trim()),
 			navBorderColor: navStyle.borderRightColor,
 			navBorderColorToken: normalizeColor(rootStyle.getPropertyValue('--vscode-agents-color-divider').trim()),
 			contentBorderColor: contentStyle.borderColor,
@@ -1374,8 +1510,6 @@ async function assertSettingsDialogThemeTokens(page: Page): Promise<void> {
 	expect(metrics.dialogColor).toBe(metrics.dialogColorToken);
 	expect(metrics.dialogBorderColor).toBe(metrics.dialogBorderColorToken);
 	expect(metrics.backdropBackground).toBe(metrics.backdropBackgroundToken);
-	expect(metrics.searchBackground).toBe(metrics.searchBackgroundToken);
-	expect(metrics.searchOutlineColor).toBe(metrics.searchOutlineColorToken);
 	expect(metrics.navBorderColor).toBe(metrics.navBorderColorToken);
 	expect(metrics.contentBorderColor).toBe(metrics.contentBorderColorToken);
 }

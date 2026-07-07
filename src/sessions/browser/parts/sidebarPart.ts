@@ -5,6 +5,7 @@
 
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { SessionsList } from '../../contrib/sessions/browser/sessionsList.js';
+import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
@@ -14,6 +15,7 @@ export interface ISidebarPartOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly projectsService?: IProjectsService;
+	readonly modelsService?: IModelsService;
 }
 
 export class SidebarPart extends Part {
@@ -32,6 +34,7 @@ export class SidebarPart extends Part {
 				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
 				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 				...(this.options.projectsService ? { projectsService: this.options.projectsService } : {}),
+				...(this.options.modelsService ? { modelsService: this.options.modelsService } : {}),
 			}),
 		);
 	}

@@ -9,6 +9,9 @@ import { DisposableStore, toDisposable, type IDisposable } from '../base/common/
 import { registerFileSessionsProvider } from '../contrib/fileProvider/browser/fileSessions.contribution.js';
 import { ServiceCollection } from '../platform/instantiation/instantiation.js';
 import { applyThemeTokens } from '../platform/theme/theme.js';
+import type { IAgentBridge } from '../services/agent/common/agent.js';
+import { ModelsService } from '../services/models/browser/modelsService.js';
+import type { IModelsBridge } from '../services/models/common/models.js';
 import { AuxiliaryBarPart } from './parts/auxiliaryBarPart.js';
 import { EditorPart } from './parts/editorPart.js';
 import { PanelPart } from './parts/panelPart.js';
@@ -31,6 +34,8 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly projects?: IProjectsBridge;
 		readonly sessions?: ISessionsBridge;
 		readonly appState?: IAppStateBridge;
+		readonly models?: IModelsBridge;
+		readonly agent?: IAgentBridge;
 	};
 };
 
@@ -38,6 +43,7 @@ export class Workbench {
 	private readonly root = document.createElement('div');
 	private readonly services = new ServiceCollection();
 	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects, (globalThis as AgentWindowGlobals).agentWindow?.appState);
+	private readonly modelsService = new ModelsService((globalThis as AgentWindowGlobals).agentWindow?.models);
 	private readonly providersService = new SessionsProvidersService();
 	private readonly managementService = new SessionsManagementService(this.providersService);
 	private readonly sessionsPartService = new SessionsPartService();
@@ -51,6 +57,7 @@ export class Workbench {
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
 		projectsService: this.projectsService,
+		modelsService: this.modelsService,
 	});
 	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
@@ -60,6 +67,7 @@ export class Workbench {
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();
 	private readonly partSubscriptions = new DisposableStore();
+	private readonly agentBridge = (globalThis as AgentWindowGlobals).agentWindow?.agent;
 	private readonly grid = new WorkbenchGrid(
 		{
 			titlebar: this.titlebarPart,
@@ -96,6 +104,7 @@ export class Workbench {
 		this.services.set(IProjectsService, this.projectsService);
 		this.services.set(ISessionsProvidersService, this.providersService);
 		void this.projectsService.initialize();
+		void this.modelsService.initialize();
 		this.services.set(ISessionsManagementService, this.managementService);
 		this.services.set(ISessionsService, this.sessionsService);
 		this.services.set(ISessionsPartService, this.sessionsPartService);
@@ -107,6 +116,8 @@ export class Workbench {
 				this.providersService,
 				agentWindow.sessions,
 				agentWindow.mockResponseDelayMs === undefined ? {} : { responseDelayMs: agentWindow.mockResponseDelayMs },
+				this.agentBridge,
+				this.modelsService,
 			);
 			void provider.initialize();
 		}

@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
+import { clearNode } from '../../../base/browser/dom.js';
 import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
+import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
+import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import { SessionStatus, type IActiveSession, type ISession, type ISessionChangesSummary, type ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import type { IProjectsService } from '../../../services/projects/browser/projectsService.js';
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
@@ -15,6 +18,7 @@ export interface ISessionsListOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly projectsService?: IProjectsService;
+	readonly modelsService?: IModelsService;
 }
 
 type SessionLike = ISession | IActiveSession;
@@ -53,9 +57,20 @@ interface ISidebarProjectGroup {
 	readonly rows: readonly ISessionListRow[];
 }
 
+const SETTINGS_PLACEHOLDERS: Readonly<Record<string, { readonly icon: string; readonly title: string; readonly description: string }>> = {
+	agents: { icon: 'codicon-extensions', title: 'Agents', description: 'Define reusable agent personas with their own model, prompt, and tools.' },
+	skills: { icon: 'codicon-lightbulb', title: 'Skills', description: 'Package task-specific instructions the agent loads on demand.' },
+	'mcp-servers': { icon: 'codicon-server', title: 'MCP Servers', description: 'Connect external tools and services over the Model Context Protocol.' },
+	tools: { icon: 'codicon-tools', title: 'Tools', description: 'Manage the built-in tools and their approval policy.' },
+};
+
 export class SessionsList extends Disposable {
 	private readonly rowSubscriptions = this._register(new DisposableStore());
 	private readonly collapsedSidebarSections = new Set<SidebarTreeSectionId>();
+	private settingsSection = 'models';
+	private settingsNavElement: HTMLElement | undefined;
+	private settingsMainElement: HTMLElement | undefined;
+	private modelSettingsView: ModelSettingsView | undefined;
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -495,6 +510,8 @@ export class SessionsList extends Disposable {
 			return;
 		}
 
+		// Each fresh open lands on Models (the real feature).
+		this.settingsSection = 'models';
 		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
 		host.appendChild(this.renderSettingsDialog());
 	}
@@ -502,78 +519,88 @@ export class SessionsList extends Disposable {
 	private renderSettingsDialog(): HTMLElement {
 		const backdrop = document.createElement('div');
 		backdrop.className = 'sessions-settings-dialog-backdrop';
+		// Click on the scrim (outside the dialog) closes it.
+		backdrop.addEventListener('click', event => {
+			if (event.target === backdrop) {
+				backdrop.remove();
+			}
+		});
 
 		const dialog = document.createElement('div');
 		dialog.className = 'sessions-settings-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', 'Agent Customizations for Copilot CLI');
+		dialog.setAttribute('aria-label', 'Settings');
 		backdrop.appendChild(dialog);
 
 		const header = document.createElement('div');
 		header.className = 'sessions-settings-header';
 		const title = document.createElement('h1');
 		title.className = 'sessions-settings-title';
-		title.textContent = 'Agent Customizations for Copilot CLI';
+		title.textContent = 'Settings';
 		header.appendChild(title);
 		const actions = document.createElement('div');
 		actions.className = 'sessions-settings-window-actions';
-		for (const action of [
-			{ icon: 'codicon-open-preview', label: 'Open' },
-			{ icon: 'codicon-screen-full', label: 'Fullscreen' },
-			{ icon: 'codicon-close', label: 'Close', close: true },
-		]) {
-			const button = document.createElement('button');
-			button.className = action.close ? 'sessions-settings-close' : 'sessions-settings-window-action';
-			button.type = 'button';
-			button.title = action.label;
-			button.setAttribute('aria-label', action.label);
-			if (action.close) {
-				button.addEventListener('click', () => {
-					backdrop.hidden = true;
-				});
-			}
-			const icon = document.createElement('span');
-			icon.className = `codicon ${action.icon}`;
-			icon.setAttribute('aria-hidden', 'true');
-			button.appendChild(icon);
-			actions.appendChild(button);
-		}
+		const closeButton = document.createElement('button');
+		closeButton.className = 'sessions-settings-close';
+		closeButton.type = 'button';
+		closeButton.title = 'Close';
+		closeButton.setAttribute('aria-label', 'Close');
+		closeButton.addEventListener('click', () => backdrop.remove());
+		const closeIcon = document.createElement('span');
+		closeIcon.className = 'codicon codicon-close';
+		closeIcon.setAttribute('aria-hidden', 'true');
+		closeButton.appendChild(closeIcon);
+		actions.appendChild(closeButton);
 		header.appendChild(actions);
 		dialog.appendChild(header);
 
 		const body = document.createElement('div');
 		body.className = 'sessions-settings-body';
-		body.append(this.renderSettingsNavigation(), this.renderSettingsMain());
+		const nav = document.createElement('nav');
+		nav.className = 'sessions-settings-nav';
+		nav.setAttribute('aria-label', 'Settings');
+		const main = document.createElement('main');
+		main.className = 'sessions-settings-main';
+		this.settingsNavElement = nav;
+		this.settingsMainElement = main;
+		body.append(nav, main);
 		dialog.appendChild(body);
+		this.refreshSettingsBody();
 
 		return backdrop;
 	}
 
-	private renderSettingsNavigation(): HTMLElement {
-		const nav = document.createElement('nav');
-		nav.className = 'sessions-settings-nav';
-		nav.setAttribute('aria-label', 'Agent customizations');
+	private refreshSettingsBody(): void {
+		const nav = this.settingsNavElement;
+		const main = this.settingsMainElement;
+		if (!nav || !main) {
+			return;
+		}
 
-		const rows = [
-			{ id: 'overview', icon: 'codicon-home', label: 'Overview' },
-			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', count: '3' },
-			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', count: '44' },
-			{ id: 'instructions', icon: 'codicon-book', label: 'Instructions', count: '23' },
-			{ id: 'hooks', icon: 'codicon-zap', label: 'Hooks' },
-			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', count: '4', active: true },
-			{ id: 'plugins', icon: 'codicon-plug', label: 'Plugins' },
-			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', count: '12' },
+		clearNode(nav);
+		clearNode(main);
+
+		const rows: readonly { id: string; icon: string; label: string; placeholder?: boolean }[] = [
+			{ id: 'models', icon: 'codicon-server-environment', label: 'Models' },
+			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', placeholder: true },
+			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', placeholder: true },
+			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', placeholder: true },
+			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', placeholder: true },
 		];
 
 		for (const row of rows) {
 			const button = document.createElement('button');
-			button.className = 'sessions-settings-nav-row';
-			if (row.active) {
+			button.className = row.placeholder ? 'sessions-settings-nav-row sessions-settings-nav-row-placeholder' : 'sessions-settings-nav-row';
+			if (row.id === this.settingsSection) {
 				button.classList.add('active');
 			}
 			button.type = 'button';
 			button.dataset.settingsNavId = row.id;
+			button.addEventListener('click', () => {
+				this.settingsSection = row.id;
+				this.refreshSettingsBody();
+			});
 			const icon = document.createElement('span');
 			icon.className = `codicon ${row.icon}`;
 			icon.setAttribute('aria-hidden', 'true');
@@ -581,89 +608,59 @@ export class SessionsList extends Disposable {
 			const label = document.createElement('span');
 			label.textContent = row.label;
 			button.appendChild(label);
-			if (row.count) {
-				const count = document.createElement('span');
-				count.className = 'sessions-settings-nav-count';
-				count.textContent = row.count;
-				button.appendChild(count);
-			}
 			nav.appendChild(button);
 		}
 
-		return nav;
+		main.appendChild(this.settingsSection === 'models' ? this.getModelSettingsView() : this.renderComingSoon(this.settingsSection));
 	}
 
-	private renderSettingsMain(): HTMLElement {
-		const main = document.createElement('main');
-		main.className = 'sessions-settings-main';
+	private getModelSettingsView(): HTMLElement {
+		if (!this.options.modelsService) {
+			const placeholder = document.createElement('div');
+			placeholder.className = 'sessions-settings-main-content';
+			placeholder.textContent = 'Model management is unavailable.';
+			return placeholder;
+		}
+
+		if (!this.modelSettingsView) {
+			this.modelSettingsView = this._register(new ModelSettingsView(this.options.modelsService));
+		}
+
+		return this.modelSettingsView.element;
+	}
+
+	private renderComingSoon(section: string): HTMLElement {
+		const info = SETTINGS_PLACEHOLDERS[section] ?? { icon: 'codicon-circle-large-outline', title: section, description: '' };
 
 		const content = document.createElement('div');
 		content.className = 'sessions-settings-main-content';
-		main.appendChild(content);
+
+		const empty = document.createElement('div');
+		empty.className = 'sessions-settings-coming-soon';
+		empty.dataset.settingsPlaceholder = section;
+
+		const icon = document.createElement('span');
+		icon.className = `codicon ${info.icon} sessions-settings-coming-soon-icon`;
+		icon.setAttribute('aria-hidden', 'true');
+		empty.appendChild(icon);
 
 		const title = document.createElement('h2');
-		title.textContent = 'MCP Servers';
-		content.appendChild(title);
+		title.textContent = info.title;
+		empty.appendChild(title);
 
-		const description = document.createElement('p');
-		description.textContent = 'An open standard that lets AI use external tools and services. MCP servers provide tools for file operations, databases, APIs, and more.';
-		content.appendChild(description);
-
-		const link = document.createElement('a');
-		link.href = '#';
-		link.textContent = 'Learn more about MCP servers';
-		content.appendChild(link);
-
-		const controls = document.createElement('div');
-		controls.className = 'sessions-settings-controls';
-		const search = document.createElement('input');
-		search.className = 'sessions-settings-search';
-		search.placeholder = 'Type to search...';
-		controls.appendChild(search);
-		const marketplace = document.createElement('button');
-		marketplace.className = 'sessions-settings-marketplace';
-		marketplace.type = 'button';
-		marketplace.innerHTML = '<span class="codicon codicon-library" aria-hidden="true"></span><span>Browse Marketplace</span>';
-		controls.appendChild(marketplace);
-		const add = document.createElement('button');
-		add.className = 'sessions-settings-add';
-		add.type = 'button';
-		add.title = 'Add MCP Server';
-		add.setAttribute('aria-label', 'Add MCP Server');
-		add.innerHTML = '<span class="codicon codicon-add" aria-hidden="true"></span>';
-		controls.appendChild(add);
-		content.appendChild(controls);
-
-		const groups = document.createElement('div');
-		groups.className = 'sessions-settings-groups';
-		content.appendChild(groups);
-
-		for (const group of [
-			{ id: 'workspace', title: 'Workspace', count: '2', rows: ['component-explorer', 'vscode-automation-mcp'] },
-			{ id: 'user', title: 'User', count: '1', rows: ['Docs by LangChain'] },
-			{ id: 'builtin', title: 'Built-In', count: '1', rows: ['GitHub'] },
-		]) {
-			const section = document.createElement('section');
-			section.className = 'sessions-settings-group';
-			section.dataset.settingsGroup = group.id;
-			const heading = document.createElement('button');
-			heading.className = 'sessions-settings-group-title';
-			heading.type = 'button';
-			heading.innerHTML = `<span>${group.title}</span><span>${group.count}</span><span class="codicon codicon-chevron-down" aria-hidden="true"></span>`;
-			section.appendChild(heading);
-			const rows = document.createElement('div');
-			rows.className = 'sessions-settings-group-rows';
-			for (const row of group.rows) {
-				const item = document.createElement('div');
-				item.className = 'sessions-settings-group-row';
-				item.textContent = row;
-				rows.appendChild(item);
-			}
-			section.appendChild(rows);
-			groups.appendChild(section);
+		if (info.description) {
+			const description = document.createElement('p');
+			description.textContent = info.description;
+			empty.appendChild(description);
 		}
 
-		return main;
+		const badge = document.createElement('span');
+		badge.className = 'sessions-settings-coming-soon-badge';
+		badge.textContent = 'Coming soon';
+		empty.appendChild(badge);
+
+		content.appendChild(empty);
+		return content;
 	}
 
 	private bindRows(sessions: readonly SessionLike[]): void {

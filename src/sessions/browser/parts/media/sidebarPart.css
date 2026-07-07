@@ -831,12 +831,15 @@
 	position: fixed;
 	inset: 0;
 	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	background: var(--vscode-agents-color-scrim);
 }
 
 .sessions-settings-dialog {
-	position: absolute;
-	inset: var(--vscode-agents-space-14);
+	width: min(900px, calc(100% - var(--vscode-agents-space-80)));
+	height: min(620px, calc(100% - var(--vscode-agents-space-80)));
 	display: grid;
 	grid-template-rows: var(--vscode-agents-size-settings-header) minmax(0, 1fr);
 	overflow: hidden;
@@ -948,7 +951,8 @@
 .sessions-settings-main {
 	min-width: 0;
 	min-height: 0;
-	padding: var(--vscode-agents-space-48) var(--vscode-agents-space-52);
+	overflow-y: auto;
+	padding: var(--vscode-agents-space-28) var(--vscode-agents-space-52) var(--vscode-agents-space-40);
 	box-sizing: border-box;
 }
 
@@ -1059,4 +1063,250 @@
 	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-heading2);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+/* Model management (settings dialog) */
+.sessions-models {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-16);
+	width: 100%;
+	max-width: 760px;
+	box-sizing: border-box;
+}
+
+.sessions-models-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-12);
+}
+
+.sessions-models-header h2 {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-heading1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-models-add,
+.sessions-models-save,
+.sessions-models-cancel,
+.sessions-models-set-default,
+.sessions-models-edit,
+.sessions-models-delete {
+	height: var(--vscode-agents-size-control);
+	padding: 0 var(--vscode-agents-space-12);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	cursor: default;
+}
+
+.sessions-models-add,
+.sessions-models-save {
+	border-color: color-mix(in srgb, var(--vscode-agents-color-badge-background) 38%, var(--vscode-agents-color-control-border));
+	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 18%, transparent);
+}
+
+.sessions-models-add:hover,
+.sessions-models-save:hover,
+.sessions-models-cancel:hover,
+.sessions-models-set-default:hover,
+.sessions-models-edit:hover,
+.sessions-models-delete:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+.sessions-models-empty {
+	margin: 0;
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-heading3);
+}
+
+.sessions-models-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-8);
+}
+
+.sessions-models-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-12);
+	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-14);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-card);
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 28%, transparent);
+}
+
+.sessions-models-row-main {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-3);
+	min-width: 0;
+}
+
+.sessions-models-row-name {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	font-size: var(--vscode-agents-fontSize-body1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-models-default-badge {
+	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-8);
+	border-radius: var(--vscode-agents-radius-round);
+	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 24%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label3);
+	font-weight: var(--vscode-agents-fontWeight-regular);
+}
+
+.sessions-models-row-meta {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-models-row-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	flex: 0 0 auto;
+}
+
+.sessions-models-form {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-14);
+	padding: var(--vscode-agents-space-20);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-card);
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 28%, transparent);
+}
+
+.sessions-models-form-title {
+	margin-bottom: var(--vscode-agents-space-2);
+	font-size: var(--vscode-agents-fontSize-heading3);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-models-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+	font-size: var(--vscode-agents-fontSize-label1);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.sessions-models-field.sessions-models-field-inline {
+	flex-direction: row;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+}
+
+.sessions-models-field input[type='text'],
+.sessions-models-field input[type='password'],
+.sessions-models-field select {
+	height: var(--vscode-agents-size-control);
+	padding: 0 var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	box-sizing: border-box;
+}
+
+.sessions-models-field-baseurl,
+.sessions-models-field-model,
+.sessions-models-field-apikey {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-models-select {
+	position: relative;
+	display: flex;
+}
+
+.sessions-models-select select {
+	flex: 1;
+	appearance: none;
+	-webkit-appearance: none;
+	padding-right: var(--vscode-agents-space-32);
+	cursor: default;
+}
+
+.sessions-models-select-chevron {
+	position: absolute;
+	top: 50%;
+	right: var(--vscode-agents-space-10);
+	transform: translateY(-50%);
+	pointer-events: none;
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.sessions-models-error {
+	color: var(--vscode-agents-color-danger);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-models-form-actions {
+	display: flex;
+	gap: var(--vscode-agents-space-8);
+}
+
+/* Unbuilt settings sections: muted nav row + a consistent "coming soon" state */
+.sessions-settings-nav-row-placeholder,
+.sessions-settings-nav-row-placeholder .codicon {
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.sessions-settings-nav-row-placeholder.active,
+.sessions-settings-nav-row-placeholder.active .codicon {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.sessions-settings-coming-soon {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--vscode-agents-space-12);
+	min-height: 100%;
+	text-align: center;
+}
+
+.sessions-settings-coming-soon-icon {
+	font-size: var(--vscode-agents-space-32);
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.sessions-settings-coming-soon h2 {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-heading1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.sessions-settings-coming-soon p {
+	max-width: 44ch;
+	margin: 0;
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-heading3);
+	line-height: 1.5;
+}
+
+.sessions-settings-coming-soon-badge {
+	margin-top: var(--vscode-agents-space-4);
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-10);
+	border-radius: var(--vscode-agents-radius-round);
+	background: var(--vscode-agents-color-control-hoverBackground);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
 }

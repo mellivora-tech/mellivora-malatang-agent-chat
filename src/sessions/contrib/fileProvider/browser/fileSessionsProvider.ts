@@ -5,6 +5,8 @@
 
 import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
+import type { IAgentBridge, IAgentMessage } from '../../../services/agent/common/agent.js';
+import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
@@ -96,6 +98,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 	constructor(
 		private readonly bridge: ISessionsBridge,
 		options: IFileSessionsProviderOptions = {},
+		private readonly agent?: IAgentBridge,
+		private readonly modelsService?: IModelsService,
 	) {
 		this.responseDelayMs = options.responseDelayMs ?? DEFAULT_RESPONSE_DELAY_MS;
 	}
@@ -174,7 +178,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		this.sessions.unshift(session);
 		this.refs.set(sessionId, ref);
 		this.onDidChangeSessionsEmitter.fire({ added: [session], removed: [], changed: [] });
-		this.scheduleAssistantReply(session, query);
+		this.generateReply(session, query);
 		return session;
 	}
 
@@ -195,13 +199,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 		session.updatedAt.set(now);
 		session.isRead.set(false);
 		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-		this.scheduleAssistantReply(session, query);
+		this.generateReply(session, query);
 		return session;
 	}
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		const session = this.getMutableSession(sessionId);
 		this.cancelPendingReply(sessionId);
+		void this.agent?.stop(sessionId);
 		if (session.status.get() === SessionStatus.InProgress) {
 			const now = new Date();
 			await this.enqueueWrite(() => this.bridge.append(this.getRef(sessionId), { type: 'state', timestamp: now.toISOString(), status: SessionStatus.NeedsInput }));
@@ -296,7 +301,84 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return next;
 	}
 
-	private scheduleAssistantReply(session: IMutableSession, query: string): void {
+	private generateReply(session: IMutableSession, query: string): void {
+		if (this.agent && (this.modelsService?.registry.get().models.length ?? 0) > 0) {
+			void this.runAgentReply(session);
+			return;
+		}
+
+		this.scheduleMockReply(session, query);
+	}
+
+	private runAgentReply(session: IMutableSession): void {
+		const agent = this.agent;
+		if (!agent) {
+			return;
+		}
+
+		const sessionId = session.sessionId;
+		const modelId = this.modelsService?.registry.get().defaultModelId;
+		this.sequence += 1;
+		const assistantId = `${sessionId}-assistant-${this.sequence}`;
+		const transcript = toTranscript(session.messages.get());
+		let text = '';
+		let created = false;
+		let finalized = false;
+
+		const updateAssistant = (): void => {
+			const messages = session.messages.get();
+			if (!created) {
+				created = true;
+				session.messages.set([...messages, { id: assistantId, role: 'assistant', text }]);
+			} else {
+				session.messages.set(messages.map(message => (message.id === assistantId ? { ...message, text } : message)));
+			}
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		};
+
+		const finalize = (): void => {
+			if (finalized) {
+				return;
+			}
+			finalized = true;
+			dispose();
+			if (!created) {
+				updateAssistant();
+			}
+
+			const now = new Date();
+			this.enqueueWrite(async () => {
+				const ref = this.getRef(sessionId);
+				await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
+				await this.bridge.append(ref, { type: 'state', timestamp: now.toISOString(), status: SessionStatus.NeedsInput, isRead: false });
+			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
+
+			session.status.set(SessionStatus.NeedsInput);
+			session.updatedAt.set(now);
+			session.isRead.set(false);
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		};
+
+		const dispose = agent.onEvent(payload => {
+			if (payload.sessionId !== sessionId) {
+				return;
+			}
+			if (payload.event?.type === 'assistant_delta') {
+				text += payload.event.text;
+				updateAssistant();
+			} else if (payload.done) {
+				finalize();
+			}
+		});
+
+		void agent.run(sessionId, transcript, modelId).catch(error => {
+			text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
+			updateAssistant();
+			finalize();
+		});
+	}
+
+	private scheduleMockReply(session: IMutableSession, query: string): void {
 		this.cancelPendingReply(session.sessionId);
 		let resolve!: () => void;
 		const promise = new Promise<void>(r => {
@@ -340,6 +422,21 @@ function toRef(snapshot: ISessionSnapshot): ISessionRef {
 	return { sessionId: snapshot.sessionId, ...(snapshot.projectId ? { projectId: snapshot.projectId } : {}) };
 }
 
+// Map the UI transcript to harness messages. Text-only for now; the 'tool'
+// display role is dropped until client-side tools are wired.
+function toTranscript(messages: readonly ISessionMessage[]): IAgentMessage[] {
+	const transcript: IAgentMessage[] = [];
+	for (const message of messages) {
+		if (message.role === 'user') {
+			transcript.push({ role: 'user', content: [{ type: 'text', text: message.text }] });
+		} else if (message.role === 'assistant') {
+			transcript.push({ role: 'assistant', content: [{ type: 'text', text: message.text }] });
+		}
+	}
+
+	return transcript;
+}
+
 function coerceStatus(status: number): SessionStatus {
 	if (status === SessionStatus.InProgress) {
 		return SessionStatus.NeedsInput;
@@ -367,8 +464,10 @@ export function registerFileSessionsProvider(
 	providersService: ISessionsProvidersService,
 	bridge: ISessionsBridge,
 	options: IFileSessionsProviderOptions = {},
+	agent?: IAgentBridge,
+	modelsService?: IModelsService,
 ): FileSessionsProvider {
-	const provider = new FileSessionsProvider(bridge, options);
+	const provider = new FileSessionsProvider(bridge, options, agent, modelsService);
 	providersService.registerProvider(provider);
 	return provider;
 }
