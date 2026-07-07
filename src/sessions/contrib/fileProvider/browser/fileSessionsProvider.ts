@@ -302,7 +302,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 	}
 
 	private generateReply(session: IMutableSession, query: string): void {
-		if (this.agent && (this.modelsService?.registry.get().models.length ?? 0) > 0) {
+		const hasModel = this.modelsService?.registry.get().providers.some(provider => provider.models.length > 0) ?? false;
+		if (this.agent && hasModel) {
 			void this.runAgentReply(session);
 			return;
 		}

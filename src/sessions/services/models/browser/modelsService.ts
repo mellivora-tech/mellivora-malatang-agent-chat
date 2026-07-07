@@ -4,16 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { observableValue, type IObservable } from '../../../base/common/observable.js';
-import type { IModelConfigInput, IModelRegistryView, IModelsBridge } from '../common/models.js';
+import type { IModelEntryInput, IModelRegistryView, IModelsBridge, IProviderInput } from '../common/models.js';
 
-const EMPTY_REGISTRY: IModelRegistryView = { models: [] };
+const EMPTY_REGISTRY: IModelRegistryView = { providers: [] };
 
 export interface IModelsService {
 	readonly registry: IObservable<IModelRegistryView>;
 	initialize(): Promise<void>;
-	upsert(input: IModelConfigInput): Promise<void>;
-	remove(id: string): Promise<void>;
-	setDefault(id: string): Promise<void>;
+	upsertProvider(input: IProviderInput): Promise<void>;
+	removeProvider(id: string): Promise<void>;
+	upsertModel(providerId: string, input: IModelEntryInput): Promise<void>;
+	removeModel(modelId: string): Promise<void>;
+	setDefaultModel(modelId: string): Promise<void>;
 }
 
 /**
@@ -34,27 +36,43 @@ export class ModelsService implements IModelsService {
 		this.registryValue.set(await this.bridge.list());
 	}
 
-	async upsert(input: IModelConfigInput): Promise<void> {
+	async upsertProvider(input: IProviderInput): Promise<void> {
 		if (!this.bridge) {
 			return;
 		}
 
-		this.registryValue.set(await this.bridge.upsert(input));
+		this.registryValue.set(await this.bridge.upsertProvider(input));
 	}
 
-	async remove(id: string): Promise<void> {
+	async removeProvider(id: string): Promise<void> {
 		if (!this.bridge) {
 			return;
 		}
 
-		this.registryValue.set(await this.bridge.remove(id));
+		this.registryValue.set(await this.bridge.removeProvider(id));
 	}
 
-	async setDefault(id: string): Promise<void> {
+	async upsertModel(providerId: string, input: IModelEntryInput): Promise<void> {
 		if (!this.bridge) {
 			return;
 		}
 
-		this.registryValue.set(await this.bridge.setDefault(id));
+		this.registryValue.set(await this.bridge.upsertModel(providerId, input));
+	}
+
+	async removeModel(modelId: string): Promise<void> {
+		if (!this.bridge) {
+			return;
+		}
+
+		this.registryValue.set(await this.bridge.removeModel(modelId));
+	}
+
+	async setDefaultModel(modelId: string): Promise<void> {
+		if (!this.bridge) {
+			return;
+		}
+
+		this.registryValue.set(await this.bridge.setDefaultModel(modelId));
 	}
 }

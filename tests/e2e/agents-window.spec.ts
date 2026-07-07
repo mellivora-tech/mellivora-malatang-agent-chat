@@ -809,7 +809,7 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 	}
 });
 
-test('model settings support add, edit, set default, and delete', async () => {
+test('model settings manage providers and their models', async () => {
 	let app: ElectronApplication | undefined;
 
 	try {
@@ -825,46 +825,61 @@ test('model settings support add, edit, set default, and delete', async () => {
 		await page.locator('[data-settings-nav-id="models"]').click();
 		await expect(page.locator('.sessions-models-empty')).toBeVisible();
 
-		// Add a model.
-		await page.locator('.sessions-models-add').click();
-		await page.locator('.sessions-models-field-label').fill('Kimi K2');
+		// Add a provider (endpoint + key entered once).
+		await page.locator('.sessions-models-add-provider').first().click();
+		await page.locator('.sessions-models-field-name').fill('Z.ai');
 		await page.locator('.sessions-models-field-provider').selectOption('openai-compatible');
-		await page.locator('.sessions-models-field-baseurl').fill('https://api.moonshot.cn/v1');
-		await page.locator('.sessions-models-field-model').fill('kimi-k2');
+		await page.locator('.sessions-models-field-baseurl').fill('https://api.z.ai/v1');
 		await page.locator('.sessions-models-field-apikey').fill('sk-test-1');
-		await page.locator('.sessions-models-save').click();
+		await page.locator('.sessions-models-provider-save').click();
 
-		const rows = page.locator('.sessions-models-row');
-		await expect(rows).toHaveCount(1);
-		await expect(rows.first().locator('.sessions-models-row-name')).toContainText('Kimi K2');
-		await expect(rows.first().locator('.sessions-models-default-badge')).toBeVisible();
-		await expect(rows.first().locator('.sessions-models-row-meta')).toContainText('key set');
+		await expect(page.locator('.sessions-models-provider')).toHaveCount(1);
+		await expect(page.locator('.sessions-models-provider-name')).toHaveText('Z.ai');
+		await expect(page.locator('.sessions-models-enabled-badge')).toHaveText('Enabled');
+		await expect(page.locator('.sessions-models-detail-meta')).toContainText('key set');
 
-		// Edit its label; the key is preserved.
-		await rows.first().locator('.sessions-models-edit').click();
-		await page.locator('.sessions-models-field-label').fill('Kimi K2 Pro');
-		await page.locator('.sessions-models-save').click();
-		await expect(page.locator('.sessions-models-row-name')).toContainText('Kimi K2 Pro');
-		await expect(page.locator('.sessions-models-row-meta')).toContainText('key set');
+		// Add two models under the provider; the first becomes the default.
+		await page.locator('.sessions-models-add-model').click();
+		await page.locator('.sessions-models-field-model').fill('glm-4.6');
+		await page.locator('.sessions-models-field-modellabel').fill('GLM-4.6');
+		await page.locator('.sessions-models-field-context').fill('1000000');
+		await page.locator('.sessions-models-model-save').click();
 
-		// Add a second model and make it the default.
-		await page.locator('.sessions-models-add').click();
-		await page.locator('.sessions-models-field-label').fill('Claude');
-		await page.locator('.sessions-models-field-provider').selectOption('anthropic');
-		await page.locator('.sessions-models-field-baseurl').fill('https://api.anthropic.com');
-		await page.locator('.sessions-models-field-model').fill('claude-opus-4-8');
-		await page.locator('.sessions-models-save').click();
-		await expect(rows).toHaveCount(2);
+		const models = page.locator('.sessions-models-model-row');
+		await expect(models).toHaveCount(1);
+		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-4.6');
+		await expect(models.first().locator('.sessions-models-default-badge')).toBeVisible();
+		await expect(models.first().locator('.sessions-models-model-badge')).toHaveText('1M');
 
-		const claudeRow = rows.filter({ hasText: 'Claude' });
-		await claudeRow.locator('.sessions-models-set-default').click();
-		await expect(claudeRow.locator('.sessions-models-default-badge')).toBeVisible();
+		await page.locator('.sessions-models-add-model').click();
+		await page.locator('.sessions-models-field-model').fill('glm-4.6-turbo');
+		await page.locator('.sessions-models-field-modellabel').fill('GLM-Turbo');
+		await page.locator('.sessions-models-field-context').fill('200000');
+		await page.locator('.sessions-models-model-save').click();
+		await expect(models).toHaveCount(2);
+		await expect(models.filter({ hasText: 'GLM-Turbo' }).locator('.sessions-models-model-badge')).toHaveText('200K');
 
-		// Delete the first model; the default remains on Claude.
-		await rows.filter({ hasText: 'Kimi K2 Pro' }).locator('.sessions-models-delete').click();
-		await expect(rows).toHaveCount(1);
-		await expect(page.locator('.sessions-models-row-name')).toContainText('Claude');
-		await expect(page.locator('.sessions-models-default-badge')).toBeVisible();
+		// Make the second model the default (row actions reveal on hover).
+		const turboRow = models.filter({ hasText: 'GLM-Turbo' });
+		await turboRow.hover();
+		await turboRow.locator('.sessions-models-set-default').click();
+		await expect(turboRow.locator('.sessions-models-default-badge')).toBeVisible();
+
+		// Edit the first model's display name.
+		const glmRow = models.filter({ hasText: 'GLM-4.6' });
+		await glmRow.hover();
+		await glmRow.locator('.sessions-models-edit-model').click();
+		await page.locator('.sessions-models-field-modellabel').fill('GLM-4.6 Air');
+		await page.locator('.sessions-models-model-save').click();
+		await expect(models.filter({ hasText: 'GLM-4.6 Air' })).toHaveCount(1);
+
+		// Delete it; the default stays on GLM-Turbo.
+		const airRow = models.filter({ hasText: 'GLM-4.6 Air' });
+		await airRow.hover();
+		await airRow.locator('.sessions-models-delete-model').click();
+		await expect(models).toHaveCount(1);
+		await expect(models.first().locator('.sessions-models-model-label')).toContainText('GLM-Turbo');
+		await expect(models.first().locator('.sessions-models-default-badge')).toBeVisible();
 	} finally {
 		await app?.close();
 	}
@@ -911,17 +926,19 @@ test('a configured model streams a real reply into the conversation', async () =
 		const page = await app.firstWindow();
 		await page.waitForSelector('.sessions-sidebar');
 
-		// Configure a model pointing at the mock server.
+		// Configure a provider pointing at the mock server, then a model under it.
 		await page.locator('.sessions-sidebar-settings-button').click();
 		await page.locator('[data-settings-nav-id="models"]').click();
-		await page.locator('.sessions-models-add').click();
-		await page.locator('.sessions-models-field-label').fill('Test');
+		await page.locator('.sessions-models-add-provider').first().click();
+		await page.locator('.sessions-models-field-name').fill('Test');
 		await page.locator('.sessions-models-field-provider').selectOption('openai-compatible');
 		await page.locator('.sessions-models-field-baseurl').fill(mockServer.baseURL);
-		await page.locator('.sessions-models-field-model').fill('test');
 		await page.locator('.sessions-models-field-apikey').fill('x');
-		await page.locator('.sessions-models-save').click();
-		await expect(page.locator('.sessions-models-row')).toHaveCount(1);
+		await page.locator('.sessions-models-provider-save').click();
+		await page.locator('.sessions-models-add-model').click();
+		await page.locator('.sessions-models-field-model').fill('test');
+		await page.locator('.sessions-models-model-save').click();
+		await expect(page.locator('.sessions-models-model-row')).toHaveCount(1);
 		await page.locator('.sessions-settings-close').click();
 
 		// Start a conversation — the reply is streamed from the model, not the mock.

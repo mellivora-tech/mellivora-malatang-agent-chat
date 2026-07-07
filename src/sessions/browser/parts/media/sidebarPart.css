@@ -1066,36 +1066,84 @@
 }
 
 /* Model management (settings dialog) */
+/* Provider-centric layout: a providers rail on the left, a detail pane on the right. */
 .sessions-models {
 	display: flex;
-	flex-direction: column;
-	gap: var(--vscode-agents-space-16);
+	align-items: stretch;
+	gap: var(--vscode-agents-space-24);
 	width: 100%;
-	max-width: 760px;
+	min-height: 100%;
 	box-sizing: border-box;
 }
 
-.sessions-models-header {
+.sessions-models-providers {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--vscode-agents-space-12);
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+	flex: 0 0 168px;
+	padding-right: var(--vscode-agents-space-20);
+	border-right: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
 }
 
-.sessions-models-header h2 {
-	margin: 0;
-	font-size: var(--vscode-agents-fontSize-heading1);
+.sessions-models-column-title {
+	margin-bottom: var(--vscode-agents-space-4);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
-.sessions-models-add,
-.sessions-models-save,
-.sessions-models-cancel,
-.sessions-models-set-default,
-.sessions-models-edit,
-.sessions-models-delete {
+.sessions-models-provider {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid transparent;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	text-align: left;
+	cursor: default;
+}
+
+.sessions-models-provider:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+.sessions-models-provider.active {
+	border-color: var(--vscode-agents-color-panel-border);
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 40%, transparent);
+}
+
+.sessions-models-provider-row-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--vscode-agents-fontSize-body1);
+}
+
+.sessions-models-provider-dot {
+	flex: 0 0 auto;
+	width: var(--vscode-agents-space-8);
+	height: var(--vscode-agents-space-8);
+	border-radius: var(--vscode-agents-radius-round);
+	background: var(--vscode-agents-color-text-muted);
+}
+
+.sessions-models-provider-dot.on {
+	background: var(--vscode-agents-color-success, #3fb950);
+}
+
+.sessions-models-add-provider,
+.sessions-models-add-model {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	align-self: flex-start;
 	height: var(--vscode-agents-size-control);
-	padding: 0 var(--vscode-agents-space-12);
+	margin-top: var(--vscode-agents-space-4);
+	padding: 0 var(--vscode-agents-space-10);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-control-background);
@@ -1104,57 +1152,130 @@
 	cursor: default;
 }
 
-.sessions-models-add,
-.sessions-models-save {
-	border-color: color-mix(in srgb, var(--vscode-agents-color-badge-background) 38%, var(--vscode-agents-color-control-border));
-	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 18%, transparent);
-}
-
-.sessions-models-add:hover,
-.sessions-models-save:hover,
-.sessions-models-cancel:hover,
-.sessions-models-set-default:hover,
-.sessions-models-edit:hover,
-.sessions-models-delete:hover {
+.sessions-models-add-provider:hover,
+.sessions-models-add-model:hover {
 	background: var(--vscode-agents-color-control-hoverBackground);
 }
 
-.sessions-models-empty {
-	margin: 0;
-	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-fontSize-heading3);
-}
-
-.sessions-models-list {
+/* Detail pane */
+.sessions-models-detail {
 	display: flex;
 	flex-direction: column;
-	gap: var(--vscode-agents-space-8);
+	gap: var(--vscode-agents-space-12);
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
-.sessions-models-row {
+.sessions-models-detail-header {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-10);
+}
+
+.sessions-models-provider-name {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-heading2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-models-enabled-badge {
+	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-8);
+	border-radius: var(--vscode-agents-radius-round);
+	background: var(--vscode-agents-color-control-hoverBackground);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.sessions-models-enabled-badge.on {
+	background: color-mix(in srgb, var(--vscode-agents-color-success, #3fb950) 22%, transparent);
+	color: var(--vscode-agents-color-success, #3fb950);
+}
+
+.sessions-models-detail-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	margin-left: auto;
+}
+
+.sessions-models-detail-meta {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.sessions-models-section-title {
+	margin-top: var(--vscode-agents-space-4);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+/* Model list: a bordered card of divider-separated rows (Cursor/Z.ai style) */
+.sessions-models-model-list {
+	display: flex;
+	flex-direction: column;
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-card);
+	overflow: hidden;
+	background: color-mix(in srgb, var(--vscode-agents-color-background) 24%, transparent);
+}
+
+.sessions-models-model-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--vscode-agents-space-12);
-	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-14);
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
-	border-radius: var(--vscode-agents-radius-card);
-	background: color-mix(in srgb, var(--vscode-agents-color-background) 28%, transparent);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	border-top: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
 }
 
-.sessions-models-row-main {
-	display: flex;
-	flex-direction: column;
-	gap: var(--vscode-agents-space-3);
-	min-width: 0;
+.sessions-models-model-row:first-child {
+	border-top: none;
 }
 
-.sessions-models-row-name {
+.sessions-models-model-label {
 	display: flex;
 	align-items: center;
 	gap: var(--vscode-agents-space-8);
+	min-width: 0;
+	white-space: nowrap;
 	font-size: var(--vscode-agents-fontSize-body1);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-models-model-right {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-10);
+	flex: 0 0 auto;
+}
+
+.sessions-models-model-badge {
+	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	color: var(--vscode-agents-color-text-muted);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.sessions-models-model-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	max-width: 0;
+	overflow: hidden;
+	opacity: 0;
+}
+
+.sessions-models-model-row:hover .sessions-models-model-actions {
+	max-width: 320px;
+	opacity: 1;
+}
+
+.sessions-models-model-empty {
+	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-14);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
 }
 
 .sessions-models-default-badge {
@@ -1166,19 +1287,70 @@
 	font-weight: var(--vscode-agents-fontWeight-regular);
 }
 
-.sessions-models-row-meta {
+/* Empty detail (no provider yet) */
+.sessions-models-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--vscode-agents-space-12);
+	min-height: 100%;
+	margin: 0;
+	text-align: center;
 	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-.sessions-models-row-actions {
-	display: flex;
-	align-items: center;
-	gap: var(--vscode-agents-space-6);
-	flex: 0 0 auto;
+.sessions-models-empty-icon {
+	font-size: var(--vscode-agents-space-32);
+	color: var(--vscode-agents-color-text-muted);
+}
+
+/* Small text action buttons (edit/remove/set-default/delete) */
+.sessions-models-set-default,
+.sessions-models-edit-model,
+.sessions-models-delete-model,
+.sessions-models-edit-provider,
+.sessions-models-delete-provider,
+.sessions-models-save,
+.sessions-models-cancel,
+.sessions-models-provider-save,
+.sessions-models-provider-cancel,
+.sessions-models-model-save,
+.sessions-models-model-cancel {
+	height: var(--vscode-agents-size-control);
+	padding: 0 var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	cursor: default;
+}
+
+.sessions-models-save,
+.sessions-models-provider-save,
+.sessions-models-model-save {
+	border-color: color-mix(in srgb, var(--vscode-agents-color-badge-background) 38%, var(--vscode-agents-color-control-border));
+	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 18%, transparent);
+}
+
+.sessions-models-set-default:hover,
+.sessions-models-edit-model:hover,
+.sessions-models-delete-model:hover,
+.sessions-models-edit-provider:hover,
+.sessions-models-delete-provider:hover,
+.sessions-models-save:hover,
+.sessions-models-cancel:hover,
+.sessions-models-provider-save:hover,
+.sessions-models-provider-cancel:hover,
+.sessions-models-model-save:hover,
+.sessions-models-model-cancel:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
 }
 
 .sessions-models-form {
+	margin-top: var(--vscode-agents-space-4);
 	display: flex;
 	flex-direction: column;
 	gap: var(--vscode-agents-space-14);

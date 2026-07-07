@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IAgentBridge, IAgentEventPayload, IAgentMessage } from '../sessions/services/agent/common/agent.js';
 import type { IAppState, IAppStateBridge } from '../sessions/services/appState/common/appState.js';
-import type { IModelConfigInput, IModelsBridge } from '../sessions/services/models/common/models.js';
+import type { IModelEntryInput, IModelsBridge, IProviderInput } from '../sessions/services/models/common/models.js';
 import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 
@@ -32,9 +32,11 @@ const appState: IAppStateBridge = {
 
 const models: IModelsBridge = {
 	list: () => ipcRenderer.invoke('models:list'),
-	upsert: (input: IModelConfigInput) => ipcRenderer.invoke('models:upsert', input),
-	remove: (id: string) => ipcRenderer.invoke('models:remove', id),
-	setDefault: (id: string) => ipcRenderer.invoke('models:setDefault', id),
+	upsertProvider: (input: IProviderInput) => ipcRenderer.invoke('models:upsertProvider', input),
+	removeProvider: (id: string) => ipcRenderer.invoke('models:removeProvider', id),
+	upsertModel: (providerId: string, input: IModelEntryInput) => ipcRenderer.invoke('models:upsertModel', providerId, input),
+	removeModel: (modelId: string) => ipcRenderer.invoke('models:removeModel', modelId),
+	setDefaultModel: (modelId: string) => ipcRenderer.invoke('models:setDefault', modelId),
 };
 
 const agent: IAgentBridge = {
