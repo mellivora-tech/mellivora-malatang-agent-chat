@@ -888,27 +888,26 @@
 .sessions-settings-nav {
 	display: flex;
 	flex-direction: column;
-	gap: var(--vscode-agents-space-5);
+	gap: var(--vscode-agents-space-2);
 	min-width: 0;
-	padding: var(--vscode-agents-space-18) var(--vscode-agents-space-12);
+	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-10);
 	border-right: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
 	box-sizing: border-box;
 }
 
 .sessions-settings-nav-row {
 	display: grid;
-	grid-template-columns: var(--vscode-agents-size-actionMedium) minmax(0, 1fr) auto;
+	grid-template-columns: var(--vscode-agents-size-actionSmall) minmax(0, 1fr) auto;
 	align-items: center;
-	gap: var(--vscode-agents-space-10);
-	min-height: var(--vscode-agents-size-control);
-	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-10);
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8);
 	border: 0;
 	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-secondary);
 	font: inherit;
 	font-size: var(--vscode-agents-fontSize-body1);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	font-weight: var(--vscode-agents-fontWeight-regular);
 	text-align: left;
 	cursor: default;
 	box-sizing: border-box;
@@ -1486,7 +1485,7 @@
 
 /* Nav group separator: whitespace, not a line (Cursor-style) */
 .sessions-settings-nav-sep {
-	height: var(--vscode-agents-space-14);
+	height: var(--vscode-agents-space-8);
 }
 
 /* Cursor-style settings page: title -> sections (muted label + card of rows) */
