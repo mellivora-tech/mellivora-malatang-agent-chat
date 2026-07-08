@@ -6,6 +6,7 @@
 import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
 import type { IAgentBridge, IAgentMessage, PermissionMode } from '../../../services/agent/common/agent.js';
+import type { IGitBridge } from '../../../services/git/common/git.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type {
 	ISession,
@@ -33,7 +34,8 @@ interface IPendingReply {
 }
 
 const DEFAULT_RESPONSE_DELAY_MS = 3000;
-const STARTED_CHANGES_SUMMARY: ISessionChangesSummary = { files: 5, additions: 3431, deletions: 815 };
+
+type GitGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge } };
 
 interface IMutableSession extends ISession {
 	readonly workspace: ObservableValue<ISessionWorkspace | undefined>;
@@ -125,6 +127,21 @@ export class FileSessionsProvider implements ISessionsProvider {
 		this.responseDelayMs = options.responseDelayMs ?? DEFAULT_RESPONSE_DELAY_MS;
 	}
 
+	private readonly git: IGitBridge | undefined = (globalThis as GitGlobals).agentWindow?.git;
+
+	/** Pull the project's real working-tree diff onto the session and persist it. */
+	private async refreshChangesSummary(session: IMutableSession): Promise<void> {
+		if (!this.git || !session.projectId) {
+			return;
+		}
+		const summary = await this.git.diffStat(session.projectId);
+		session.changesSummary.set(summary);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		await this.enqueueWrite(async () => {
+			await this.bridge.append(this.getRef(session.sessionId), { type: 'state', timestamp: new Date().toISOString(), ...(summary ? { changesSummary: summary } : {}) });
+		});
+	}
+
 	async initialize(): Promise<void> {
 		if (this.initialized) {
 			return;
@@ -176,7 +193,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 				status: SessionStatus.InProgress,
 				title: query,
 				description: 'Agent is working on the first prompt.',
-				changesSummary: STARTED_CHANGES_SUMMARY,
 				isRead: false,
 				permissionMode: initialMode,
 			});
@@ -194,7 +210,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 			...(options?.workspace ? { workspace: options.workspace } : {}),
 			messages: [userMessage],
 			interactivity: SessionInteractivity.Full,
-			changesSummary: STARTED_CHANGES_SUMMARY,
 			isRead: false,
 			permissionMode: initialMode,
 		});
@@ -202,7 +217,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		this.sessions.unshift(session);
 		this.refs.set(sessionId, ref);
 		this.onDidChangeSessionsEmitter.fire({ added: [session], removed: [], changed: [] });
-		this.generateReply(session, query);
+		void this.refreshChangesSummary(session);
+		this.generateReply(session);
 		return session;
 	}
 
@@ -223,7 +239,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		session.updatedAt.set(now);
 		session.isRead.set(false);
 		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-		this.generateReply(session, query);
+		this.generateReply(session);
 		return session;
 	}
 
@@ -428,14 +444,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return next;
 	}
 
-	private generateReply(session: IMutableSession, query: string): void {
+	private generateReply(session: IMutableSession): void {
 		const hasModel = this.modelsService?.registry.get().providers.some(provider => provider.models.some(model => model.enabled)) ?? false;
 		if (this.agent && hasModel) {
 			void this.runAgentReply(session);
 			return;
 		}
 
-		this.scheduleMockReply(session, query);
+		// No agent bridge or no enabled model — say so honestly instead of faking a reply.
+		this.scheduleNoModelReply(session);
 	}
 
 	private runAgentReply(session: IMutableSession): void {
@@ -532,6 +549,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 			session.updatedAt.set(now);
 			session.isRead.set(false);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+			// The run may have edited files — reflect the real diff now.
+			void this.refreshChangesSummary(session);
 		};
 
 		const dispose = agent.onEvent(payload => {
@@ -609,7 +628,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		});
 	}
 
-	private scheduleMockReply(session: IMutableSession, query: string): void {
+	/** When there is no model to answer, reply with an honest prompt to configure one. */
+	private scheduleNoModelReply(session: IMutableSession): void {
 		this.cancelPendingReply(session.sessionId);
 		let resolve!: () => void;
 		const promise = new Promise<void>(r => {
@@ -619,7 +639,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.pendingReplies.delete(session.sessionId);
 			this.sequence += 1;
 			const now = new Date();
-			const message: ISessionMessage = { id: `${session.sessionId}-assistant-${this.sequence}`, role: 'assistant', text: `Mock response for: ${query}` };
+			const message: ISessionMessage = {
+				id: `${session.sessionId}-assistant-${this.sequence}`,
+				role: 'assistant',
+				text: 'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
+				timestamp: now,
+			};
 			// Timer-driven writes cannot surface to a caller; log and keep the
 			// in-memory session consistent so the UI never wedges.
 			this.enqueueWrite(async () => {

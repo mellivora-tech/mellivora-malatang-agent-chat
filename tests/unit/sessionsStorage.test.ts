@@ -96,14 +96,14 @@ test('appendSessionEntry and loadSession round-trip messages and folded state', 
 			isRead: false,
 			changesSummary: { files: 5, additions: 3431, deletions: 815 },
 		});
-		await appendSessionEntry(root, ref, { type: 'message', id: 'm2', role: 'assistant', text: 'Mock response for: hello', timestamp: '2026-07-07T00:02:00.000Z' });
+		await appendSessionEntry(root, ref, { type: 'message', id: 'm2', role: 'assistant', text: 'Assistant reply', timestamp: '2026-07-07T00:02:00.000Z' });
 		await appendSessionEntry(root, ref, { type: 'state', timestamp: '2026-07-07T00:02:00.000Z', status: 2 });
 
 		const snapshot = await loadSession(root, ref);
 		assert.ok(snapshot);
 		assert.deepEqual(snapshot.messages, [
 			{ id: 'm1', role: 'user', text: 'hello', timestamp: '2026-07-07T00:01:00.000Z' },
-			{ id: 'm2', role: 'assistant', text: 'Mock response for: hello', timestamp: '2026-07-07T00:02:00.000Z' },
+			{ id: 'm2', role: 'assistant', text: 'Assistant reply', timestamp: '2026-07-07T00:02:00.000Z' },
 		]);
 		assert.equal(snapshot.title, 'hello');
 		assert.equal(snapshot.status, 2);

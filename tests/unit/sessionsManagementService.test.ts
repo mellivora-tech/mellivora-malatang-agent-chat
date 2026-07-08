@@ -8,7 +8,6 @@ import { SessionsManagementService } from '../../src/sessions/services/sessions/
 import { SessionsPartService } from '../../src/sessions/services/sessions/browser/sessionsPartService.js';
 import { SessionsProvidersService } from '../../src/sessions/services/sessions/browser/sessionsProvidersService.js';
 import { SessionsService } from '../../src/sessions/services/sessions/browser/sessionsService.js';
-import { registerMockSessionsProvider } from '../../src/sessions/contrib/mockProvider/browser/mockSessions.contribution.js';
 import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../src/sessions/services/sessions/common/sessionsProvider.js';
 
 function createSession(sessionId: string, providerId: string): ISession {
@@ -46,7 +45,7 @@ class TestProvider implements ISessionsProvider {
 
 	constructor(
 		readonly id: string,
-		private readonly sessions: readonly ISession[],
+		private readonly sessions: ISession[],
 	) {
 		this.onDidChangeSessions = this.emitter.event;
 		this.label = id;
@@ -62,6 +61,7 @@ class TestProvider implements ISessionsProvider {
 
 	async startSession(query: string, options?: IStartSessionOptions): Promise<ISession> {
 		const session = createSession(`started-${query}`, this.id);
+		this.sessions.push(session);
 		this.starts.push(query);
 		this.requests.push(`start:${query}`);
 		this.startOptions.push(options);
@@ -227,12 +227,13 @@ test('sessions service starts a session and marks it active', async () => {
 	const management = new SessionsManagementService(providersService);
 	const sessionsPartService = new SessionsPartService();
 	const sessionsService = new SessionsService(management, sessionsPartService);
-	const provider = registerMockSessionsProvider(providersService, { responseDelayMs: 1 });
+	const provider = new TestProvider('test', []);
+	providersService.registerProvider(provider);
 
 	const session = await sessionsService.startSession('hello');
 
 	assert.equal(typeof sessionsPartService.showConversation, 'function');
-	assert.equal(session.title.get(), 'hello');
+	assert.equal(session.sessionId, 'started-hello');
 	assert.equal(sessionsService.activeSession.get()?.sessionId, session.sessionId);
 	assert.deepEqual(
 		sessionsService.visibleSessions.get().map(candidate => candidate?.sessionId),
@@ -243,5 +244,4 @@ test('sessions service starts a session and marks it active', async () => {
 		provider.getSessions().some(candidate => candidate.sessionId === session.sessionId),
 		true,
 	);
-	await provider.whenIdle();
 });

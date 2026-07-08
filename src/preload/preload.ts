@@ -55,6 +55,7 @@ const models: IModelsBridge = {
 const git: IGitBridge = {
 	branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId),
 	checkout: (projectId: string, branch: string) => ipcRenderer.invoke('git:checkout', projectId, branch),
+	diffStat: (projectId: string) => ipcRenderer.invoke('git:diffStat', projectId),
 };
 
 const agent: IAgentBridge = {

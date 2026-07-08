@@ -305,7 +305,9 @@ test('sessions persist across app relaunch', async () => {
 		await first.page.waitForSelector('.sessions-new-session-view');
 		await first.page.locator('.new-session-input').fill('persist me');
 		await first.page.locator('.new-session-send-button').click();
-		await expect(first.page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: persist me');
+		await expect(first.page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText(
+			'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
+		);
 		await first.app.close();
 		app = undefined;
 
@@ -324,7 +326,9 @@ test('sessions persist across app relaunch', async () => {
 		await expect(page.locator('.conversation-context-title')).toHaveText('persist me');
 		await expect(page.locator('.conversation-message')).toHaveCount(2);
 		await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('persist me');
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toHaveText('Mock response for: persist me');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toHaveText(
+			'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
+		);
 		await expect(page.locator('.conversation-view')).toHaveAttribute('data-status', 'needs-input');
 		await expect(page.locator('.conversation-thinking-row')).toHaveCount(0);
 		await expect(page.locator('.conversation-input')).toBeEnabled();
@@ -369,7 +373,9 @@ test('project sessions land under the project directory', async () => {
 
 		await page.locator('.new-session-input').fill('project session');
 		await page.locator('.new-session-send-button').click();
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: project session');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText(
+			'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
+		);
 		await expect(page.locator('.conversation-context-workspace').first()).toContainText('Persist Project');
 
 		const files = await readdir(join(projectDir, 'sessions'));
@@ -593,14 +599,18 @@ test('conversation supports stop and follow-up turns', async () => {
 		await page.locator('.new-session-input').fill('hello');
 		await page.locator('.new-session-send-button').click();
 
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: hello');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText(
+			'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
+		);
 		await expect(page.locator('.conversation-send-button')).toBeVisible();
 		await expect(page.locator('.conversation-stop-button')).toBeHidden();
 
 		await page.locator('.conversation-input').fill('follow up');
 		await page.locator('.conversation-input').press('Enter');
 		await expect(page.locator('.conversation-message.user .conversation-message-bubble').last()).toHaveText('follow up');
-		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText('Mock response for: follow up');
+		await expect(page.locator('.conversation-message.assistant .conversation-message-text').last()).toHaveText(
+			'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
+		);
 
 		expect(rendererErrors).toEqual([]);
 	} finally {

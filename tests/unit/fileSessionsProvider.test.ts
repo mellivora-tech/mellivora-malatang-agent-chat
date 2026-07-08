@@ -214,7 +214,8 @@ test('startSession persists header, user message, and initial state in order', a
 	assert.equal(stateEntry.status, SessionStatus.InProgress);
 	assert.equal(stateEntry.title, 'hello world');
 	assert.equal(stateEntry.isRead, false);
-	assert.deepEqual(stateEntry.changesSummary, { files: 5, additions: 3431, deletions: 815 });
+	// The initial state carries no changes summary — real stats come from git later.
+	assert.equal(stateEntry.changesSummary, undefined);
 
 	assert.equal(session.status.get(), SessionStatus.InProgress);
 	assert.equal(provider.getSessions()[0], session);
@@ -237,7 +238,7 @@ test('startSession routes project sessions via the projectId option', async () =
 	await provider.whenIdle();
 });
 
-test('the mock reply persists the assistant message and needs-input state', async () => {
+test('the no-model reply prompts the user to configure a model', async () => {
 	const bridge = createFakeBridge();
 	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
 	await provider.initialize();
@@ -248,12 +249,12 @@ test('the mock reply persists the assistant message and needs-input state', asyn
 	assert.equal(session.status.get(), SessionStatus.NeedsInput);
 	assert.deepEqual(
 		session.messages.get().map(message => message.text),
-		['hello', 'Mock response for: hello'],
+		['hello', 'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.'],
 	);
 	const entries = bridge.appends.map(call => call.entry);
 	const assistant = entries.find(entry => entry.type === 'message' && entry.role === 'assistant');
 	assert.ok(assistant);
-	assert.equal((assistant as { text: string }).text, 'Mock response for: hello');
+	assert.equal((assistant as { text: string }).text, 'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.');
 	const lastState = [...entries].reverse().find(entry => entry.type === 'state') as { status?: number };
 	assert.equal(lastState.status, SessionStatus.NeedsInput);
 });
@@ -402,7 +403,7 @@ test('reply append failures are logged without breaking the session', async t =>
 	assert.equal(session.status.get(), SessionStatus.NeedsInput);
 	assert.deepEqual(
 		session.messages.get().map(message => message.text),
-		['hello', 'Mock response for: hello'],
+		['hello', 'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.'],
 	);
 	assert.ok(errorSpy.mock.callCount() >= 1);
 });
