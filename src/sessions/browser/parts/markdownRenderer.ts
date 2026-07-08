@@ -101,8 +101,12 @@ export function renderMarkdown(source: string): DocumentFragment {
 			continue;
 		}
 
-		// Paragraph: join consecutive plain lines.
-		const paragraphLines: string[] = [];
+		// Paragraph: join consecutive plain lines. The current line is consumed
+		// unconditionally — it may LOOK like a block start that failed to parse
+		// (e.g. a lone "|" table row mid-stream); skipping it without advancing
+		// would loop forever.
+		const paragraphLines: string[] = [trimmed];
+		index++;
 		while (index < lines.length) {
 			const candidate = lines[index]!;
 			const candidateTrimmed = candidate.trim();
