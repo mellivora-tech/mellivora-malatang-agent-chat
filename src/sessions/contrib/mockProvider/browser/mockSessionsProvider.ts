@@ -14,6 +14,7 @@ import type {
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
+import type { PermissionMode } from '../../../services/agent/common/agent.js';
 import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
@@ -47,6 +48,7 @@ interface IMutableSession extends ISession {
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
+	readonly permissionMode: ObservableValue<PermissionMode>;
 }
 
 function createSession(options: {
@@ -83,6 +85,7 @@ function createSession(options: {
 		interactivity: observableValue(options.interactivity),
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
+		permissionMode: observableValue<PermissionMode>('ask'),
 	};
 }
 
@@ -260,6 +263,47 @@ export class MockSessionsProvider implements ISessionsProvider {
 		}
 
 		return session;
+	}
+
+	async setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.permissionMode.set(mode);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.messages.set(
+			session.messages.get().map(message => {
+				if (message.id !== messageId) {
+					return message;
+				}
+				const { feedback: _previous, ...rest } = message;
+				return feedback === undefined ? rest : { ...rest, feedback };
+			}),
+		);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		return session;
+	}
+
+	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
+		const source = this.getMutableSession(sessionId);
+		const history = source.messages.get();
+		const cutoff = history.findIndex(message => message.id === messageId);
+		const fork = createSession({
+			sessionId: `${sessionId}-fork-${Date.now()}`,
+			timestamp: new Date(),
+			icon: source.icon,
+			status: SessionStatus.NeedsInput,
+			title: `Fork of ${source.title.get()}`,
+			workspace: source.workspace.get() ?? { label: 'workspace' },
+			messages: cutoff === -1 ? [...history] : history.slice(0, cutoff + 1),
+			interactivity: SessionInteractivity.Full,
+		});
+		this.sessions.unshift(fork);
+		this.onDidChangeSessionsEmitter.fire({ added: [fork], removed: [], changed: [] });
+		return fork;
 	}
 
 	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {

@@ -89,6 +89,8 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let isArchived = false;
 	let isRead = true;
 	let isPinned = false;
+	let permissionMode: string | undefined;
+	const feedback = new Map<string, 'like' | 'dislike'>();
 
 	for (const line of lines.slice(1)) {
 		const entry = parseEntry(line);
@@ -98,6 +100,15 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 
 		if (entry.timestamp > updatedAt) {
 			updatedAt = entry.timestamp;
+		}
+
+		if (entry.type === 'feedback') {
+			if (entry.feedback === null) {
+				feedback.delete(entry.messageId);
+			} else {
+				feedback.set(entry.messageId, entry.feedback);
+			}
+			continue;
 		}
 
 		if (entry.type === 'message') {
@@ -133,6 +144,9 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		if (entry.isPinned !== undefined) {
 			isPinned = entry.isPinned;
 		}
+		if (entry.permissionMode !== undefined) {
+			permissionMode = entry.permissionMode;
+		}
 	}
 
 	return {
@@ -147,7 +161,8 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		isArchived,
 		isRead,
 		isPinned,
-		messages,
+		...(permissionMode !== undefined ? { permissionMode } : {}),
+		messages: messages.map(message => (feedback.has(message.id) ? { ...message, feedback: feedback.get(message.id)! } : message)),
 		// The directory decides project membership; the header copy is only
 		// for debuggability and may be stale.
 		...(projectId !== undefined ? { projectId } : {}),
@@ -188,7 +203,7 @@ function parseHeader(line: string | undefined): ISessionHeader | undefined {
 	return parsed as ISessionHeader;
 }
 
-function parseEntry(line: string): ISessionMessageEntry | ISessionStateEntry | undefined {
+function parseEntry(line: string): ISessionEntry | undefined {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(line);
@@ -214,6 +229,13 @@ function parseEntry(line: string): ISessionMessageEntry | ISessionStateEntry | u
 
 	if (candidate['type'] === 'state') {
 		return parsed as ISessionStateEntry;
+	}
+
+	if (candidate['type'] === 'feedback') {
+		if (typeof candidate['messageId'] !== 'string' || !['like', 'dislike', null].includes(candidate['feedback'] as never)) {
+			return undefined;
+		}
+		return parsed as ISessionEntry;
 	}
 
 	return undefined;

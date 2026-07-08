@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { IObservable } from '../../../base/common/observable.js';
+import type { PermissionMode } from '../../agent/common/agent.js';
 
 export const enum SessionStatus {
 	Untitled = 0,
@@ -49,6 +50,7 @@ export interface ISessionMessage {
 	/** Total run duration; unset while the run is still in progress. */
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStep[];
+	readonly feedback?: 'like' | 'dislike';
 }
 
 /** The model stream dropped; the harness is retrying with backoff. */
@@ -86,6 +88,7 @@ export interface ISession {
 	readonly interactivity: IObservable<SessionInteractivity>;
 	readonly pendingApproval: IObservable<ISessionPendingApproval | undefined>;
 	readonly reconnect: IObservable<ISessionReconnect | undefined>;
+	readonly permissionMode: IObservable<PermissionMode>;
 }
 
 export interface IActiveSession extends ISession {

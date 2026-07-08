@@ -26,6 +26,7 @@ function createSession(sessionId: string): ISession {
 		interactivity: observableValue(SessionInteractivity.Full),
 		pendingApproval: observableValue(undefined),
 		reconnect: observableValue(undefined),
+		permissionMode: observableValue('ask' as const),
 	};
 }
 

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Event } from '../../../base/common/event.js';
+import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession, ISessionWorkspace } from './session.js';
 
 export interface ISessionChangeEvent {
@@ -30,4 +31,8 @@ export interface ISessionsProvider {
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 	deleteSession(sessionId: string): Promise<void>;
+	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
+	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
+	/** Duplicate the session's history up to (and including) `messageId` into a new session. */
+	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 }

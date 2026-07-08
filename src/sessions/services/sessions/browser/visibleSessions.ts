@@ -71,6 +71,9 @@ class ActiveSession implements IActiveSession {
 	get reconnect() {
 		return this.session.reconnect;
 	}
+	get permissionMode() {
+		return this.session.permissionMode;
+	}
 }
 
 export class VisibleSessions {

@@ -78,6 +78,8 @@ function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBri
 					...existing,
 					messages: [...existing.messages, { id: entry.id, role: entry.role, text: entry.text, ...(entry.detail !== undefined ? { detail: entry.detail } : {}) }],
 				});
+			} else if (entry.type === 'feedback') {
+				// Feedback entries fold onto messages in the real store; the fake keeps them raw.
 			} else {
 				store.set(ref.sessionId, {
 					...existing,

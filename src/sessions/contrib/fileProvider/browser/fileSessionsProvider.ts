@@ -5,7 +5,7 @@
 
 import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
-import type { IAgentBridge, IAgentMessage } from '../../../services/agent/common/agent.js';
+import type { IAgentBridge, IAgentMessage, PermissionMode } from '../../../services/agent/common/agent.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type {
 	ISession,
@@ -49,6 +49,7 @@ interface IMutableSession extends ISession {
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
+	readonly permissionMode: ObservableValue<PermissionMode>;
 }
 
 function createSession(options: {
@@ -67,6 +68,7 @@ function createSession(options: {
 	isArchived?: boolean;
 	isRead?: boolean;
 	isPinned?: boolean;
+	permissionMode?: PermissionMode;
 }): IMutableSession {
 	return {
 		sessionId: options.sessionId,
@@ -88,7 +90,13 @@ function createSession(options: {
 		interactivity: observableValue(options.interactivity),
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
+		permissionMode: observableValue<PermissionMode>(options.permissionMode ?? 'ask'),
 	};
+}
+
+/** Renderer-side twin of the harness's asPermissionMode: unknown values fail closed to 'ask'. */
+function coercePermissionMode(value: unknown): PermissionMode {
+	return value === 'full' || value === 'plan' || value === 'auto-edit' || value === 'ask' ? value : 'ask';
 }
 
 export class FileSessionsProvider implements ISessionsProvider {
@@ -146,6 +154,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const ref: ISessionRef = { sessionId, ...(options?.projectId ? { projectId: options.projectId } : {}) };
 		const now = new Date();
 		this.sequence += 1;
+		const initialMode = permissionMode.get();
 		const userMessage: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query };
 
 		await this.enqueueWrite(async () => {
@@ -169,6 +178,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				description: 'Agent is working on the first prompt.',
 				changesSummary: STARTED_CHANGES_SUMMARY,
 				isRead: false,
+				permissionMode: initialMode,
 			});
 		});
 
@@ -186,6 +196,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			interactivity: SessionInteractivity.Full,
 			changesSummary: STARTED_CHANGES_SUMMARY,
 			isRead: false,
+			permissionMode: initialMode,
 		});
 
 		this.sessions.unshift(session);
@@ -247,6 +258,99 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.permissionMode.set(mode);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		await this.enqueueWrite(async () => {
+			await this.bridge.append(this.getRef(sessionId), { type: 'state', timestamp: new Date().toISOString(), permissionMode: mode });
+		});
+		return session;
+	}
+
+	async setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.messages.set(
+			session.messages.get().map(message => {
+				if (message.id !== messageId) {
+					return message;
+				}
+				const { feedback: _previous, ...rest } = message;
+				return feedback === undefined ? rest : { ...rest, feedback };
+			}),
+		);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		await this.enqueueWrite(async () => {
+			await this.bridge.append(this.getRef(sessionId), { type: 'feedback', messageId, feedback: feedback ?? null, timestamp: new Date().toISOString() });
+		});
+		return session;
+	}
+
+	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
+		const source = this.getMutableSession(sessionId);
+		const history = source.messages.get();
+		const cutoff = history.findIndex(message => message.id === messageId);
+		const messages = (cutoff === -1 ? history : history.slice(0, cutoff + 1)).map(message => ({ ...message }));
+
+		const forkId = generateSessionId();
+		const ref: ISessionRef = { sessionId: forkId, ...(source.projectId ? { projectId: source.projectId } : {}) };
+		const now = new Date();
+		const title = `Fork of ${source.title.get()}`;
+		const workspace = source.workspace.get();
+
+		await this.enqueueWrite(async () => {
+			await this.bridge.create({
+				type: 'session',
+				version: 1,
+				sessionId: forkId,
+				sessionType: 'agent-chat',
+				icon: 'codicon-new-session',
+				createdAt: now.toISOString(),
+				interactivity: 'full',
+				...(source.projectId ? { projectId: source.projectId } : {}),
+				...(workspace ? { workspace } : {}),
+			});
+			for (const message of messages) {
+				await this.bridge.append(ref, {
+					type: 'message',
+					id: message.id,
+					role: message.role,
+					text: message.text,
+					timestamp: now.toISOString(),
+					...(message.detail !== undefined ? { detail: message.detail } : {}),
+					...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+					...(message.steps !== undefined ? { steps: message.steps } : {}),
+				});
+			}
+			await this.bridge.append(ref, {
+				type: 'state',
+				timestamp: now.toISOString(),
+				status: SessionStatus.NeedsInput,
+				title,
+				permissionMode: source.permissionMode.get(),
+				isRead: true,
+			});
+		});
+
+		const fork = createSession({
+			sessionId: forkId,
+			...(source.projectId ? { projectId: source.projectId } : {}),
+			createdAt: now,
+			updatedAt: now,
+			icon: 'codicon-new-session',
+			status: SessionStatus.NeedsInput,
+			title,
+			...(workspace ? { workspace } : {}),
+			messages,
+			interactivity: SessionInteractivity.Full,
+			permissionMode: source.permissionMode.get(),
+		});
+		this.sessions.unshift(fork);
+		this.refs.set(forkId, ref);
+		this.onDidChangeSessionsEmitter.fire({ added: [fork], removed: [], changed: [] });
+		return fork;
+	}
+
 	async deleteSession(sessionId: string): Promise<void> {
 		const session = this.getMutableSession(sessionId);
 		this.cancelPendingReply(sessionId);
@@ -276,6 +380,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// restart, so it settles to NeedsInput.
 			status: coerceStatus(snapshot.status),
 			title: snapshot.title,
+			permissionMode: coercePermissionMode(snapshot.permissionMode),
 			messages: snapshot.messages.map(message => ({
 				id: message.id,
 				role: message.role,
@@ -283,6 +388,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.detail !== undefined ? { detail: message.detail } : {}),
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
+				...(message.feedback !== undefined ? { feedback: message.feedback } : {}),
 			})),
 			interactivity: coerceInteractivity(snapshot.interactivity),
 			isArchived: snapshot.isArchived,
@@ -495,7 +601,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		});
 
-		void agent.run(sessionId, transcript, modelId, session.projectId, permissionMode.get()).catch(error => {
+		void agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get()).catch(error => {
 			text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
 			updateAssistant();
 			finalize();

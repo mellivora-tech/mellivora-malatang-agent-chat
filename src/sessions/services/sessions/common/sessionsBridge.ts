@@ -59,6 +59,14 @@ export interface ISessionMessageEntry {
 	readonly steps?: readonly ISessionWorkStepData[];
 }
 
+/** User feedback on a single message; the last entry per message wins. */
+export interface ISessionFeedbackEntry {
+	readonly type: 'feedback';
+	readonly messageId: string;
+	readonly feedback: 'like' | 'dislike' | null;
+	readonly timestamp: string;
+}
+
 export interface ISessionStateEntry {
 	readonly type: 'state';
 	readonly timestamp: string;
@@ -69,9 +77,10 @@ export interface ISessionStateEntry {
 	readonly isArchived?: boolean;
 	readonly isRead?: boolean;
 	readonly isPinned?: boolean;
+	readonly permissionMode?: string;
 }
 
-export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry;
+export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry;
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
@@ -80,6 +89,7 @@ export interface ISessionSnapshotMessage {
 	readonly detail?: string;
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStepData[];
+	readonly feedback?: 'like' | 'dislike';
 }
 
 /** The hydrated result of folding one session file. */
@@ -99,6 +109,7 @@ export interface ISessionSnapshot {
 	readonly isArchived: boolean;
 	readonly isRead: boolean;
 	readonly isPinned: boolean;
+	readonly permissionMode?: string;
 	readonly messages: readonly ISessionSnapshotMessage[];
 }
 

@@ -11,10 +11,16 @@ import { SessionInteractivity, SessionStatus } from '../../services/sessions/com
 import { ConversationContext } from './conversationContext.js';
 import { renderMarkdown } from './markdownRenderer.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
+import { permissionMode } from '../../services/agent/browser/permissionModeService.js';
+import type { PermissionMode } from '../../services/agent/common/agent.js';
+import { toDisposable } from '../../base/common/lifecycle.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string): Promise<unknown>;
 	stopSession(sessionId: string): Promise<unknown>;
+	setSessionPermissionMode?(sessionId: string, mode: PermissionMode): Promise<unknown>;
+	setMessageFeedback?(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<unknown>;
+	forkSession?(sessionId: string, messageId: string): Promise<unknown>;
 }
 
 export class ConversationView extends Disposable {
@@ -39,6 +45,9 @@ export class ConversationView extends Disposable {
 	// Individually expanded tool steps ("messageId:index").
 	private readonly stepExpand = new Set<string>();
 	private scrollToBottomOnRender = false;
+	// Fan-out for the session-aware permission picker (the underlying observable
+	// swaps whenever another session becomes active).
+	private readonly permissionListeners = new Set<() => void>();
 	// Live elapsed time is measured from when the block first appeared in this view.
 	private readonly workFirstSeen = new Map<string, number>();
 	private workTicker: ReturnType<typeof setInterval> | undefined;
@@ -82,8 +91,28 @@ export class ConversationView extends Disposable {
 		const accessIcon = appendCodicon(access, 'codicon-shield');
 		const accessLabel = append(access, document.createElement('span'));
 		appendCodicon(access, 'codicon-chevron-down');
-		// Menu hosted on the view root — the composer clips overflow.
-		this._register(installPermissionPicker({ host: this.element, trigger: access, label: accessLabel, icon: accessIcon }));
+		// Menu hosted on the view root — the composer clips overflow. The picker
+		// reads and writes the ACTIVE session's mode (global default as fallback).
+		this._register(
+			installPermissionPicker(
+				{ host: this.element, trigger: access, label: accessLabel, icon: accessIcon },
+				{
+					get: () => this.session?.permissionMode.get() ?? permissionMode.get(),
+					set: mode => {
+						const session = this.session;
+						if (session) {
+							void this.messageSender?.setSessionPermissionMode?.(session.sessionId, mode);
+						} else {
+							permissionMode.set(mode);
+						}
+					},
+					subscribe: listener => {
+						this.permissionListeners.add(listener);
+						return toDisposable(() => this.permissionListeners.delete(listener));
+					},
+				},
+			),
+		);
 
 		// Backed by the harness's stream_retry events — hidden unless a retry is live.
 		this.reconnectStatus = append(leftControls, document.createElement('div'));
@@ -164,8 +193,10 @@ export class ConversationView extends Disposable {
 			this.sessionDisposables.add(session.status.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.reconnect.subscribe(() => this.updateReconnectStatus()));
+			this.sessionDisposables.add(session.permissionMode.subscribe(() => this.notifyPermissionListeners()));
 		}
 		this.updateReconnectStatus();
+		this.notifyPermissionListeners();
 
 		this.render();
 	}
@@ -177,6 +208,32 @@ export class ConversationView extends Disposable {
 		}
 
 		this.element.focus();
+	}
+
+	private buildMessageActions(message: ISessionMessage): IMessageActions | undefined {
+		const session = this.session;
+		if (!session || (message.role !== 'assistant' && message.role !== 'user')) {
+			return undefined;
+		}
+		const sender = this.messageSender;
+		return {
+			copy: () => void navigator.clipboard.writeText(message.text),
+			...(message.role === 'assistant' && sender?.setMessageFeedback
+				? {
+						feedback: (value: 'like' | 'dislike') => {
+							// Clicking the active choice clears it.
+							void sender.setMessageFeedback!(session.sessionId, message.id, message.feedback === value ? undefined : value);
+						},
+					}
+				: {}),
+			...(sender?.forkSession ? { fork: () => void sender.forkSession!(session.sessionId, message.id) } : {}),
+		};
+	}
+
+	private notifyPermissionListeners(): void {
+		for (const listener of this.permissionListeners) {
+			listener();
+		}
 	}
 
 	private updateReconnectStatus(): void {
@@ -228,7 +285,7 @@ export class ConversationView extends Disposable {
 			empty.textContent = this.session ? 'No messages yet' : 'No session selected';
 		} else {
 			for (const message of messages) {
-				this.transcript.appendChild(message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message));
+				this.transcript.appendChild(message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message, this.buildMessageActions(message)));
 			}
 		}
 
@@ -555,7 +612,13 @@ function formatTokens(tokens: number): string {
 	return String(tokens);
 }
 
-function createMessageRow(message: ISessionMessage): HTMLElement {
+interface IMessageActions {
+	copy(): void;
+	feedback?(value: 'like' | 'dislike'): void;
+	fork?(): void;
+}
+
+function createMessageRow(message: ISessionMessage, actions?: IMessageActions): HTMLElement {
 	const row = document.createElement('article');
 	row.className = `conversation-message ${message.role}`;
 	row.dataset.role = message.role;
@@ -598,7 +661,42 @@ function createMessageRow(message: ISessionMessage): HTMLElement {
 		detail.textContent = message.detail;
 	}
 
+	if (actions) {
+		body.appendChild(createMessageActionBar(message, actions));
+	}
+
 	return row;
+}
+
+/** Hover action bar: copy, like/dislike (assistant), fork-from-here. */
+function createMessageActionBar(message: ISessionMessage, actions: IMessageActions): HTMLElement {
+	const bar = document.createElement('div');
+	bar.className = 'conversation-message-actions';
+
+	const addAction = (icon: string, title: string, onClick: () => void, active = false): void => {
+		const button = append(bar, document.createElement('button')) as HTMLButtonElement;
+		button.className = `conversation-message-action${active ? ' active' : ''}`;
+		button.type = 'button';
+		button.title = title;
+		button.setAttribute('aria-label', title);
+		const iconEl = append(button, document.createElement('span'));
+		iconEl.className = `codicon ${icon}`;
+		iconEl.setAttribute('aria-hidden', 'true');
+		button.addEventListener('click', onClick);
+	};
+
+	addAction('codicon-copy', 'Copy', () => {
+		actions.copy();
+	});
+	if (actions.feedback) {
+		addAction('codicon-thumbsup', message.feedback === 'like' ? 'Remove like' : 'Like', () => actions.feedback!('like'), message.feedback === 'like');
+		addAction('codicon-thumbsdown', message.feedback === 'dislike' ? 'Remove dislike' : 'Dislike', () => actions.feedback!('dislike'), message.feedback === 'dislike');
+	}
+	if (actions.fork) {
+		addAction('codicon-git-branch', 'Fork from here', actions.fork);
+	}
+
+	return bar;
 }
 
 function formatWorkingDuration(startedAt: Date | undefined): string {

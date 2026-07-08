@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Event } from '../../../base/common/event.js';
+import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession } from './session.js';
 import type { ISessionChangeEvent, IStartSessionOptions } from './sessionsProvider.js';
 
@@ -17,4 +18,7 @@ export interface ISessionsManagementService {
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 	deleteSession(sessionId: string): Promise<void>;
+	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
+	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
+	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 }

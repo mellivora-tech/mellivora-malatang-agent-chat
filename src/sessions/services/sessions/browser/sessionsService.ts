@@ -5,6 +5,7 @@
 
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
+import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService } from '../common/sessionsManagement.js';
 import type { IStartSessionOptions } from '../common/sessionsProvider.js';
@@ -24,6 +25,9 @@ export interface ISessionsService {
 	sendMessage(sessionId: string, query: string): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
+	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
+	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
+	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 	deleteSession(sessionId: string): Promise<void>;
 }
@@ -93,6 +97,21 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		return this.managementService.stopSession(sessionId);
+	}
+
+	async setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession> {
+		return this.managementService.setSessionPermissionMode(sessionId, mode);
+	}
+
+	async setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession> {
+		return this.managementService.setMessageFeedback(sessionId, messageId, feedback);
+	}
+
+	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
+		const fork = await this.managementService.forkSession(sessionId, messageId);
+		this.visibleSessionsModel.setSessions(this.managementService.getSessions());
+		this.openSession(fork.sessionId);
+		return fork;
 	}
 
 	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {

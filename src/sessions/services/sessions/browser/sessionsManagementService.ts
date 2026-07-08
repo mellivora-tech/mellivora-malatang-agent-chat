@@ -6,6 +6,7 @@
 import { Emitter } from '../../../base/common/event.js';
 import { Disposable, type IDisposable } from '../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
+import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService as ISessionsManagementServiceContract } from '../common/sessionsManagement.js';
 import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../common/sessionsProvider.js';
@@ -60,6 +61,18 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 
 	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {
 		return this.getOwningProvider(sessionId).setSessionArchived(sessionId, isArchived);
+	}
+
+	async setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession> {
+		return this.getOwningProvider(sessionId).setSessionPermissionMode(sessionId, mode);
+	}
+
+	async setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession> {
+		return this.getOwningProvider(sessionId).setMessageFeedback(sessionId, messageId, feedback);
+	}
+
+	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
+		return this.getOwningProvider(sessionId).forkSession(sessionId, messageId);
 	}
 
 	async deleteSession(sessionId: string): Promise<void> {

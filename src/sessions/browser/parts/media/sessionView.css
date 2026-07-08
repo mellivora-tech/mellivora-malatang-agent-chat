@@ -24,6 +24,7 @@
 }
 
 .conversation-context-bar {
+	position: relative; /* anchors the branch menu */
 	border-bottom: 0;
 }
 
@@ -50,16 +51,6 @@
 .conversation-context-left {
 	gap: var(--vscode-agents-space-8);
 	width: 100%;
-}
-
-.conversation-context-title {
-	min-width: 0;
-	overflow: hidden;
-	color: var(--vscode-agents-color-text-primary);
-	font-size: var(--vscode-agents-fontSize-body1);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .conversation-context-pill,
@@ -110,6 +101,66 @@
 .conversation-context-more:focus-visible {
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
 	outline-offset: var(--vscode-agents-space-2);
+}
+
+.conversation-context-pill.has-error {
+	border-color: color-mix(in srgb, var(--vscode-agents-color-error, #f14c4c) 55%, transparent);
+	color: var(--vscode-agents-color-error, #f14c4c);
+}
+
+/* Branch picker anchored under the branch pill. */
+.conversation-branch-menu {
+	position: absolute;
+	z-index: 3;
+	display: flex;
+	flex-direction: column;
+	min-width: 200px;
+	max-width: 320px;
+	max-height: 280px;
+	overflow-y: auto;
+	padding: var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+}
+
+.conversation-branch-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	text-align: left;
+	cursor: default;
+	white-space: nowrap;
+}
+
+.conversation-branch-menu-item:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
+}
+
+.conversation-branch-menu-item .sessions-model-check-hidden {
+	visibility: hidden;
+}
+
+.conversation-branch-menu-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.conversation-branch-menu-error {
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8);
+	color: var(--vscode-agents-color-error, #f14c4c);
+	font-size: var(--vscode-agents-fontSize-label2);
+	white-space: normal;
+	word-break: break-word;
 }
 
 .session-view-content {
@@ -166,6 +217,51 @@
 
 .conversation-message.assistant {
 	grid-template-columns: minmax(0, 1fr);
+}
+
+/* Hover actions on messages: copy / like / dislike / fork. */
+.conversation-message-actions {
+	display: flex;
+	gap: var(--vscode-agents-space-2);
+	margin-top: var(--vscode-agents-space-4);
+	opacity: 0;
+	transition: opacity 100ms ease-out;
+}
+
+.conversation-message:hover .conversation-message-actions,
+.conversation-message-actions:focus-within {
+	opacity: 1;
+}
+
+.conversation-message.user .conversation-message-actions {
+	justify-content: flex-end;
+}
+
+.conversation-message-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--vscode-agents-space-24);
+	height: var(--vscode-agents-space-24);
+	padding: 0;
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	cursor: default;
+}
+
+.conversation-message-action:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-message-action.active {
+	color: var(--vscode-agents-color-info, #4daafc);
+}
+
+.conversation-message-action .codicon {
+	font-size: var(--vscode-agents-fontSize-label1);
 }
 
 /* Rendered markdown in assistant replies. */

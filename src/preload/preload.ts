@@ -14,6 +14,7 @@ import type {
 	IRemoteModelsRequest,
 	ModelEffort,
 } from '../sessions/services/models/common/models.js';
+import type { IGitBridge } from '../sessions/services/git/common/git.js';
 import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 
@@ -50,6 +51,11 @@ const models: IModelsBridge = {
 	verifyProvider: (request: IProviderVerificationRequest) => ipcRenderer.invoke('models:verifyProvider', request),
 };
 
+const git: IGitBridge = {
+	branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId),
+	checkout: (projectId: string, branch: string) => ipcRenderer.invoke('git:checkout', projectId, branch),
+};
+
 const agent: IAgentBridge = {
 	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode) =>
 		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode }),
@@ -74,5 +80,6 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	appState,
 	models,
 	agent,
+	git,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });

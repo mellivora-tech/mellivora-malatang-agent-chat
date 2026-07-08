@@ -6,6 +6,7 @@
 import { append } from '../../base/browser/dom.js';
 import { DisposableStore, toDisposable, type IDisposable } from '../../base/common/lifecycle.js';
 import { PERMISSION_MODES, permissionMode, permissionModeInfo } from '../../services/agent/browser/permissionModeService.js';
+import type { PermissionMode } from '../../services/agent/common/agent.js';
 import { listEnabledModels, type IModelsService } from '../../services/models/browser/modelsService.js';
 import type { ModelEffort } from '../../services/models/common/models.js';
 
@@ -101,35 +102,49 @@ export interface IPermissionPickerOptions extends IDropdownAnchor {
 	readonly icon?: HTMLElement;
 }
 
+/** Where a permission picker reads and writes its mode. */
+export interface IPermissionModeSource {
+	get(): PermissionMode;
+	set(mode: PermissionMode): void;
+	subscribe(listener: () => void): IDisposable;
+}
+
+/** The app-wide default mode — what new sessions start with. */
+const defaultPermissionModeSource: IPermissionModeSource = {
+	get: () => permissionMode.get(),
+	set: mode => permissionMode.set(mode),
+	subscribe: listener => permissionMode.subscribe(listener),
+};
+
 /**
  * The composer's approvals picker ("Full access ⌄"): choose how much the agent
  * may do without asking. The mode lives on a shared observable, so every
  * composer shows and drives the same choice, and runs read it at start time.
  */
-export function installPermissionPicker(options: IPermissionPickerOptions): IDisposable {
+export function installPermissionPicker(options: IPermissionPickerOptions, source: IPermissionModeSource = defaultPermissionModeSource): IDisposable {
 	const { trigger, label, icon } = options;
 	const disposables = new DisposableStore();
 
 	const updateLabel = (): void => {
-		const info = permissionModeInfo(permissionMode.get());
+		const info = permissionModeInfo(source.get());
 		label.textContent = info.label;
 		trigger.title = `Approvals: ${info.label} — ${info.description}`;
 		if (icon) {
 			icon.className = `codicon ${info.icon}`;
 		}
 	};
-	disposables.add(permissionMode.subscribe(updateLabel));
+	disposables.add(source.subscribe(updateLabel));
 	updateLabel();
 
 	disposables.add(
 		installDropdown(options, () => {
-			const current = permissionMode.get();
+			const current = source.get();
 			return PERMISSION_MODES.map(info => ({
 				label: info.label,
 				detail: info.description,
 				icon: info.icon,
 				checked: info.mode === current,
-				pick: () => permissionMode.set(info.mode),
+				pick: () => source.set(info.mode),
 			}));
 		}),
 	);

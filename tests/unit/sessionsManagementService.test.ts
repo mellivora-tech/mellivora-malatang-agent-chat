@@ -32,6 +32,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		interactivity: observableValue(SessionInteractivity.Full),
 		pendingApproval: observableValue(undefined),
 		reconnect: observableValue(undefined),
+		permissionMode: observableValue('ask' as const),
 	};
 }
 
@@ -74,6 +75,21 @@ class TestProvider implements ISessionsProvider {
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		this.requests.push(`stop:${sessionId}`);
+		return this.sessions[0]!;
+	}
+
+	async setSessionPermissionMode(sessionId: string): Promise<ISession> {
+		this.requests.push(`mode:${sessionId}`);
+		return this.sessions[0]!;
+	}
+
+	async setMessageFeedback(sessionId: string): Promise<ISession> {
+		this.requests.push(`feedback:${sessionId}`);
+		return this.sessions[0]!;
+	}
+
+	async forkSession(sessionId: string): Promise<ISession> {
+		this.requests.push(`fork:${sessionId}`);
 		return this.sessions[0]!;
 	}
 

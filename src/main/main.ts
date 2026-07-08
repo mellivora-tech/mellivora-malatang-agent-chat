@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAgentIpc } from './agentIpc.js';
+import { registerGitIpc } from './gitIpc.js';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
 import { registerAppStateIpc } from './appStateIpc.js';
 import { registerModelConfigIpc } from './modelConfigIpc.js';
@@ -74,6 +75,7 @@ app.whenReady().then(async () => {
 	registerAppStateIpc(dataRoot);
 	registerModelConfigIpc(dataRoot);
 	registerAgentIpc(dataRoot);
+	registerGitIpc(dataRoot);
 	await createWindow();
 });
 app.on('window-all-closed', () => handleWindowAllClosed(lifecycleHost));
