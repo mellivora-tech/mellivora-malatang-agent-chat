@@ -1,0 +1,108 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import type { IAgentEvent, IAgentTerminal } from '../agentTypes.js';
+import { agentLog } from './agentLog.js';
+
+export interface IRunLoggerContext {
+	readonly runId: string;
+	readonly sessionId: string;
+	readonly model: string;
+	readonly mode: string;
+	readonly hasWorkspace: boolean;
+	readonly toolCount: number;
+	readonly cwd?: string;
+	readonly projectId?: string;
+}
+
+export interface IRunLogger {
+	/** Map one loop event to a structured log event (with real timings). */
+	record(event: IAgentEvent): void;
+	end(terminal: IAgentTerminal): void;
+	error(where: 'model' | 'tool' | 'run', message: string): void;
+}
+
+/**
+ * Translates the agent loop's {@link IAgentEvent} stream into structured
+ * {@link AgentLogEvent}s on the shared bus, tracking per-turn time-to-first-token
+ * and per-tool durations. Extracted from the IPC handler so the mapping is
+ * unit-testable without a live model.
+ */
+export function createRunLogger(context: IRunLoggerContext): IRunLogger {
+	const base = { runId: context.runId, sessionId: context.sessionId };
+	const runStart = Date.now();
+	const toolStarts = new Map<string, { readonly name: string; readonly at: number }>();
+	let turn = 0;
+	let turnStart = runStart;
+	let awaitingFirstToken = false;
+	const now = (): string => new Date().toISOString();
+
+	agentLog.emit({
+		ts: now(),
+		...base,
+		type: 'run_start',
+		model: context.model,
+		mode: context.mode,
+		hasWorkspace: context.hasWorkspace,
+		toolCount: context.toolCount,
+		...(context.cwd ? { detail: { cwd: context.cwd, ...(context.projectId ? { projectId: context.projectId } : {}) } } : {}),
+	});
+
+	const markFirstToken = (): void => {
+		if (awaitingFirstToken) {
+			awaitingFirstToken = false;
+			agentLog.emit({ ts: now(), ...base, type: 'ttft', turn, ttftMs: Date.now() - turnStart });
+		}
+	};
+
+	return {
+		record(event) {
+			switch (event.type) {
+				case 'turn_start':
+					turn = event.turn;
+					turnStart = Date.now();
+					awaitingFirstToken = true;
+					agentLog.emit({ ts: now(), ...base, type: 'turn_start', turn });
+					break;
+				case 'assistant_delta':
+				case 'thinking_delta':
+					markFirstToken();
+					break;
+				case 'tool_use':
+					markFirstToken();
+					toolStarts.set(event.toolUseId, { name: event.name, at: Date.now() });
+					agentLog.emit({ ts: now(), ...base, type: 'tool_use', toolUseId: event.toolUseId, name: event.name, detail: { input: event.input } });
+					break;
+				case 'tool_result': {
+					const started = toolStarts.get(event.toolUseId);
+					toolStarts.delete(event.toolUseId);
+					agentLog.emit({
+						ts: now(),
+						...base,
+						type: 'tool_result',
+						toolUseId: event.toolUseId,
+						name: started?.name ?? 'unknown',
+						ok: !event.isError,
+						durationMs: started ? Date.now() - started.at : 0,
+						outputBytes: event.content.length,
+						detail: { output: event.content },
+					});
+					break;
+				}
+				case 'stream_retry':
+					agentLog.emit({ ts: now(), ...base, type: 'stream_retry', attempt: event.attempt, maxAttempts: event.maxAttempts, delayMs: event.delayMs });
+					break;
+				default:
+					break;
+			}
+		},
+		end(terminal) {
+			agentLog.emit({ ts: now(), ...base, type: 'run_end', reason: terminal.reason, turns: terminal.turns, durationMs: Date.now() - runStart });
+		},
+		error(where, message) {
+			agentLog.emit({ ts: now(), ...base, type: 'error', where, detail: { message } });
+		},
+	};
+}

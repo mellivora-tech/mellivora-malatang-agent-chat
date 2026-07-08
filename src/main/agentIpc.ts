@@ -6,6 +6,9 @@
 import { ipcMain } from 'electron';
 import { runAgentLoop } from './agent/agentLoop.js';
 import type { IAgentMessage, IAgentTerminal, IAgentTool } from './agent/agentTypes.js';
+import { agentLog } from './agent/observability/agentLog.js';
+import { createJsonlFileSink, resolveAgentLogsDir } from './agent/observability/jsonlFileSink.js';
+import { createRunLogger } from './agent/observability/runLogger.js';
 import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createModelClient } from './agent/createModelClient.js';
@@ -54,6 +57,13 @@ interface IApprovalResponsePayload {
 export function registerAgentIpc(dataRoot: string): void {
 	const abortControllers = new Map<string, AbortController>();
 	const pendingApprovals = new Map<string, { readonly sessionId: string; resolve(approved: boolean): void }>();
+
+	// Agent observability (P1): attach the local JSONL sink when enabled.
+	const logsDir = resolveAgentLogsDir(dataRoot, process.env);
+	if (logsDir) {
+		agentLog.attach(createJsonlFileSink(logsDir));
+		console.error(`[agent] observability log: ${logsDir}/latest.jsonl`);
+	}
 
 	const settleApprovals = (sessionId: string): void => {
 		for (const [requestId, pending] of [...pendingApprovals]) {
@@ -108,6 +118,17 @@ export function registerAgentIpc(dataRoot: string): void {
 				});
 			});
 
+		const runLogger = createRunLogger({
+			runId: `${payload.sessionId}-${Date.now()}`,
+			sessionId: payload.sessionId,
+			model: config.model,
+			mode,
+			hasWorkspace: cwd !== undefined,
+			toolCount: tools.length,
+			...(cwd ? { cwd } : {}),
+			...(payload.projectId ? { projectId: payload.projectId } : {}),
+		});
+
 		try {
 			const loop = runAgentLoop(payload.messages, {
 				system: cwd ? workspaceSystemPrompt(cwd, mode) : DEFAULT_SYSTEM,
@@ -119,11 +140,14 @@ export function registerAgentIpc(dataRoot: string): void {
 
 			let step = await loop.next();
 			while (!step.done) {
+				runLogger.record(step.value);
 				if (!sender.isDestroyed()) {
 					sender.send('agent:event', { sessionId: payload.sessionId, event: step.value });
 				}
 				step = await loop.next();
 			}
+
+			runLogger.end(step.value);
 
 			// The terminal rides the same channel so it can never overtake a
 			// trailing event the way the handler's return value can.
@@ -132,9 +156,13 @@ export function registerAgentIpc(dataRoot: string): void {
 			}
 
 			return step.value;
+		} catch (error) {
+			runLogger.error('run', error instanceof Error ? error.message : String(error));
+			throw error;
 		} finally {
 			abortControllers.delete(payload.sessionId);
 			settleApprovals(payload.sessionId);
+			agentLog.flush();
 		}
 	});
 

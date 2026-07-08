@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAgentIpc } from './agentIpc.js';
+import { agentLog } from './agent/observability/agentLog.js';
 import { registerGitIpc } from './gitIpc.js';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
 import { registerAppStateIpc } from './appStateIpc.js';
@@ -78,5 +79,7 @@ app.whenReady().then(async () => {
 	registerGitIpc(dataRoot);
 	await createWindow();
 });
+// Flush any buffered agent logs before the process exits.
+app.on('will-quit', () => agentLog.dispose());
 app.on('window-all-closed', () => handleWindowAllClosed(lifecycleHost));
 app.on('activate', () => handleActivate(lifecycleHost));
