@@ -7,7 +7,15 @@ import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
 import type { IAgentBridge, IAgentMessage } from '../../../services/agent/common/agent.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
-import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionPendingApproval, ISessionWorkStep, ISessionWorkspace } from '../../../services/sessions/common/session.js';
+import type {
+	ISession,
+	ISessionChangesSummary,
+	ISessionMessage,
+	ISessionPendingApproval,
+	ISessionReconnect,
+	ISessionWorkStep,
+	ISessionWorkspace,
+} from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
@@ -40,6 +48,7 @@ interface IMutableSession extends ISession {
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
+	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
 }
 
 function createSession(options: {
@@ -78,6 +87,7 @@ function createSession(options: {
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
+		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 	};
 }
 
@@ -346,12 +356,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const steps: ISessionWorkStep[] = [];
 		let stepStart = workStart;
 		let openToolLabel: string | undefined;
+		// Reasoning text streamed since the last step boundary; becomes the
+		// closing thinking step's expandable detail.
+		let thinkingBuffer = '';
 
 		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string): void => {
 			const durationMs = Date.now() - stepStart;
-			// Sub-second thinking stretches are noise, not steps.
-			if (kind !== 'thinking' || durationMs >= 1000) {
-				steps.push({ kind, label, durationMs, ...(detail === undefined ? {} : { detail }) });
+			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
+			if (kind === 'thinking') {
+				thinkingBuffer = '';
+			}
+			// Sub-second thinking stretches without content are noise, not steps.
+			if (kind !== 'thinking' || durationMs >= 1000 || stepDetail !== undefined) {
+				steps.push({ kind, label, durationMs, ...(stepDetail === undefined ? {} : { detail: stepDetail }) });
 			}
 			stepStart = Date.now();
 		};
@@ -383,6 +400,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			dispose();
 			disposeApprovals();
 			session.pendingApproval.set(undefined);
+			session.reconnect.set(undefined);
 			if (openToolLabel !== undefined) {
 				closeStep('tool', openToolLabel);
 				openToolLabel = undefined;
@@ -414,6 +432,20 @@ export class FileSessionsProvider implements ISessionsProvider {
 				return;
 			}
 			const event = payload.event;
+			if (event?.type === 'stream_retry') {
+				// The attempt restarts from scratch — drop its partial reasoning.
+				thinkingBuffer = '';
+				session.reconnect.set({ attempt: event.attempt, maxAttempts: event.maxAttempts });
+				return;
+			}
+			if (event?.type === 'thinking_delta') {
+				thinkingBuffer += event.text;
+				return;
+			}
+			if (session.reconnect.get() !== undefined) {
+				// Any other event means the stream recovered.
+				session.reconnect.set(undefined);
+			}
 			if (event?.type === 'assistant_delta') {
 				// First text after thinking closes the stretch; text after a tool
 				// result belongs to the next thinking stretch, so only close once.

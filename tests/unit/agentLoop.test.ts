@@ -9,7 +9,7 @@ import test from 'node:test';
 import { runAgentLoop } from '../../src/main/agent/agentLoop.js';
 import { allowAllPermissionGate, createApprovalPermissionGate, defineTool } from '../../src/main/agent/agentTools.js';
 import { createScriptedModelClient } from '../../src/main/agent/scriptedModelClient.js';
-import type { IAgentEvent, IAgentMessage, IAgentTerminal } from '../../src/main/agent/agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
 
 async function drive(loop: AsyncGenerator<IAgentEvent, IAgentTerminal>): Promise<{ events: IAgentEvent[]; terminal: IAgentTerminal }> {
 	const events: IAgentEvent[] = [];
@@ -120,4 +120,52 @@ test('an unknown tool becomes an error tool_result instead of throwing', async (
 	assert.equal(toolResult.isError, true);
 	assert.match(toolResult.content, /No such tool available/);
 	assert.equal(terminal.reason, 'completed');
+});
+
+test('transient stream failures retry with stream_retry events before any text', async () => {
+	let attempts = 0;
+	const flakyClient = {
+		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+			attempts += 1;
+			if (attempts <= 2) {
+				throw new Error('fetch failed');
+			}
+			yield { type: 'text_delta', text: 'recovered' };
+			yield { type: 'message_stop', stopReason: 'end_turn' };
+		},
+	};
+
+	const loop = runAgentLoop([userMessage('hi')], {
+		system: 's',
+		tools: [],
+		modelClient: flakyClient as never,
+		permissionGate: allowAllPermissionGate,
+	});
+	const { events, terminal } = await drive(loop);
+
+	const retries = events.filter(event => event.type === 'stream_retry');
+	assert.equal(retries.length, 2);
+	assert.deepEqual(
+		retries.map(event => (event.type === 'stream_retry' ? event.attempt : 0)),
+		[1, 2],
+	);
+	assert.equal(terminal.reason, 'completed');
+	assert.ok(events.some(event => event.type === 'assistant_delta' && event.text === 'recovered'));
+});
+
+test('non-retryable stream errors surface immediately', async () => {
+	const failingClient = {
+		// eslint-disable-next-line require-yield
+		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+			throw new Error('Anthropic request failed: 401 unauthorized');
+		},
+	};
+
+	const loop = runAgentLoop([userMessage('hi')], {
+		system: 's',
+		tools: [],
+		modelClient: failingClient as never,
+		permissionGate: allowAllPermissionGate,
+	});
+	await assert.rejects(async () => drive(loop), /401/);
 });

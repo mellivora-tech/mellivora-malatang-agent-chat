@@ -22,7 +22,7 @@ interface IAnthropicStreamEvent {
 	readonly type: string;
 	readonly index?: number;
 	readonly content_block?: IAnthropicContentBlock;
-	readonly delta?: { readonly type?: string; readonly text?: string; readonly partial_json?: string; readonly stop_reason?: string };
+	readonly delta?: { readonly type?: string; readonly text?: string; readonly thinking?: string; readonly partial_json?: string; readonly stop_reason?: string };
 }
 
 type AnthropicWireBlock =
@@ -88,6 +88,9 @@ export class AnthropicStreamAccumulator {
 		if (wire.type === 'content_block_delta') {
 			if (wire.delta?.type === 'text_delta' && typeof wire.delta.text === 'string' && wire.delta.text.length > 0) {
 				return [{ type: 'text_delta', text: wire.delta.text }];
+			}
+			if (wire.delta?.type === 'thinking_delta' && typeof wire.delta.thinking === 'string' && wire.delta.thinking.length > 0) {
+				return [{ type: 'thinking_delta', text: wire.delta.thinking }];
 			}
 			if (wire.delta?.type === 'input_json_delta' && typeof wire.delta.partial_json === 'string') {
 				const block = this.blocks.get(index);

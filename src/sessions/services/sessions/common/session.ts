@@ -51,6 +51,12 @@ export interface ISessionMessage {
 	readonly steps?: readonly ISessionWorkStep[];
 }
 
+/** The model stream dropped; the harness is retrying with backoff. */
+export interface ISessionReconnect {
+	readonly attempt: number;
+	readonly maxAttempts: number;
+}
+
 /** A tool call paused on the user's allow / deny. */
 export interface ISessionPendingApproval {
 	readonly requestId: string;
@@ -79,6 +85,7 @@ export interface ISession {
 	readonly messages: IObservable<readonly ISessionMessage[]>;
 	readonly interactivity: IObservable<SessionInteractivity>;
 	readonly pendingApproval: IObservable<ISessionPendingApproval | undefined>;
+	readonly reconnect: IObservable<ISessionReconnect | undefined>;
 }
 
 export interface IActiveSession extends ISession {

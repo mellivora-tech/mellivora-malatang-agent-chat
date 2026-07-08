@@ -53,6 +53,7 @@ export type ModelStopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal'
 
 export type IModelStreamEvent =
 	| { readonly type: 'text_delta'; readonly text: string }
+	| { readonly type: 'thinking_delta'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly block: IToolUseBlock }
 	| { readonly type: 'message_stop'; readonly stopReason: ModelStopReason };
 
@@ -141,9 +142,12 @@ export interface IPermissionGate {
 export type IAgentEvent =
 	| { readonly type: 'turn_start'; readonly turn: number }
 	| { readonly type: 'assistant_delta'; readonly text: string }
+	| { readonly type: 'thinking_delta'; readonly text: string }
 	| { readonly type: 'assistant_message'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly toolUseId: string; readonly name: string; readonly input: unknown }
-	| { readonly type: 'tool_result'; readonly toolUseId: string; readonly content: string; readonly isError: boolean };
+	| { readonly type: 'tool_result'; readonly toolUseId: string; readonly content: string; readonly isError: boolean }
+	/** The model stream failed before producing output; the loop is backing off and will retry. */
+	| { readonly type: 'stream_retry'; readonly attempt: number; readonly maxAttempts: number; readonly delayMs: number };
 
 export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'refusal';
 

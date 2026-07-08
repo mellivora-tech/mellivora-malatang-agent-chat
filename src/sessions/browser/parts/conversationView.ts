@@ -9,6 +9,7 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IActiveSession, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import { ConversationContext } from './conversationContext.js';
+import { renderMarkdown } from './markdownRenderer.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface ISessionMessageSender {
@@ -25,6 +26,8 @@ export class ConversationView extends Disposable {
 	private readonly sendButton: HTMLButtonElement;
 	private readonly stopButton: HTMLButtonElement;
 	private readonly sendError: HTMLElement;
+	private readonly reconnectStatus: HTMLElement;
+	private readonly reconnectLabel: HTMLElement;
 	private readonly contextRing: HTMLElement;
 	private readonly header = this._register(new ConversationContext());
 	private readonly sessionDisposables = this._register(new DisposableStore());
@@ -81,6 +84,14 @@ export class ConversationView extends Disposable {
 		appendCodicon(access, 'codicon-chevron-down');
 		// Menu hosted on the view root — the composer clips overflow.
 		this._register(installPermissionPicker({ host: this.element, trigger: access, label: accessLabel, icon: accessIcon }));
+
+		// Backed by the harness's stream_retry events — hidden unless a retry is live.
+		this.reconnectStatus = append(leftControls, document.createElement('div'));
+		this.reconnectStatus.className = 'conversation-reconnect-status';
+		this.reconnectStatus.setAttribute('aria-live', 'polite');
+		this.reconnectStatus.hidden = true;
+		appendCodicon(this.reconnectStatus, 'codicon-loading codicon-modifier-spin');
+		this.reconnectLabel = append(this.reconnectStatus, document.createElement('span'));
 
 		const rightControls = append(toolbar, document.createElement('div'));
 		rightControls.className = 'conversation-toolbar-right';
@@ -152,7 +163,9 @@ export class ConversationView extends Disposable {
 			this.sessionDisposables.add(session.interactivity.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.status.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
+			this.sessionDisposables.add(session.reconnect.subscribe(() => this.updateReconnectStatus()));
 		}
+		this.updateReconnectStatus();
 
 		this.render();
 	}
@@ -164,6 +177,12 @@ export class ConversationView extends Disposable {
 		}
 
 		this.element.focus();
+	}
+
+	private updateReconnectStatus(): void {
+		const reconnect = this.session?.reconnect.get();
+		this.reconnectStatus.hidden = !reconnect;
+		this.reconnectLabel.textContent = reconnect ? `Reconnecting… ${reconnect.attempt}/${reconnect.maxAttempts}` : '';
 	}
 
 	private _registerEventListeners(): void {
@@ -563,6 +582,10 @@ function createMessageRow(message: ISessionMessage): HTMLElement {
 		const bubble = append(body, document.createElement('div'));
 		bubble.className = 'conversation-message-bubble';
 		bubble.textContent = message.text;
+	} else if (message.role === 'assistant') {
+		const text = append(body, document.createElement('div'));
+		text.className = 'conversation-message-text conversation-markdown';
+		text.appendChild(renderMarkdown(message.text));
 	} else {
 		const text = append(body, document.createElement('div'));
 		text.className = 'conversation-message-text';

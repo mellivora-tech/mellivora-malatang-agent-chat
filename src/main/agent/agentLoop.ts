@@ -8,6 +8,30 @@ import { toolSpec } from './agentTools.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 50;
+const MAX_STREAM_ATTEMPTS = 10;
+const BASE_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 10_000;
+
+/** Connection hiccups and transient server errors heal on retry; auth/validation do not. */
+function isRetryableStreamError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	if (/failed: (408|409|429|5\d\d)/.test(message)) {
+		return true;
+	}
+	return /fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|EAI_AGAIN|socket hang up|network|terminated/i.test(message);
+}
+
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+	return new Promise(resolve => {
+		const timer = setTimeout(done, ms);
+		function done(): void {
+			clearTimeout(timer);
+			signal.removeEventListener('abort', done);
+			resolve();
+		}
+		signal.addEventListener('abort', done, { once: true });
+	});
+}
 
 /**
  * The harness. A single `async function*` driving a `while (true)` loop:
@@ -42,27 +66,50 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		const request: IModelRequest = { system: config.system, messages: prepareRequestMessages(messages), tools: specs, signal };
 
 		// Inner streaming generator: accumulate the assistant message and collect
-		// any tool_use blocks as they arrive.
-		let assistantText = '';
-		const toolUses: IToolUseBlock[] = [];
-		let stopReason: ModelStopReason = 'end_turn';
+		// any tool_use blocks as they arrive. A stream that fails before any text
+		// reached the consumer is retried with backoff (a retry after visible text
+		// would duplicate output, so those errors surface instead).
+		let assistantText: string;
+		let toolUses: IToolUseBlock[];
+		let stopReason: ModelStopReason;
 
-		for await (const event of config.modelClient.stream(request)) {
-			if (signal.aborted) {
-				return { reason: 'aborted', turns: turn };
-			}
+		for (let attempt = 1; ; attempt++) {
+			assistantText = '';
+			toolUses = [];
+			stopReason = 'end_turn';
+			try {
+				for await (const event of config.modelClient.stream(request)) {
+					if (signal.aborted) {
+						return { reason: 'aborted', turns: turn };
+					}
 
-			switch (event.type) {
-				case 'text_delta':
-					assistantText += event.text;
-					yield { type: 'assistant_delta', text: event.text };
-					break;
-				case 'tool_use':
-					toolUses.push(event.block);
-					break;
-				case 'message_stop':
-					stopReason = event.stopReason;
-					break;
+					switch (event.type) {
+						case 'text_delta':
+							assistantText += event.text;
+							yield { type: 'assistant_delta', text: event.text };
+							break;
+						case 'thinking_delta':
+							yield { type: 'thinking_delta', text: event.text };
+							break;
+						case 'tool_use':
+							toolUses.push(event.block);
+							break;
+						case 'message_stop':
+							stopReason = event.stopReason;
+							break;
+					}
+				}
+				break;
+			} catch (error) {
+				if (signal.aborted) {
+					return { reason: 'aborted', turns: turn };
+				}
+				if (assistantText.length > 0 || attempt >= MAX_STREAM_ATTEMPTS || !isRetryableStreamError(error)) {
+					throw error;
+				}
+				const delayMs = Math.min(MAX_RETRY_DELAY_MS, BASE_RETRY_DELAY_MS * 2 ** (attempt - 1));
+				yield { type: 'stream_retry', attempt, maxAttempts: MAX_STREAM_ATTEMPTS, delayMs };
+				await delay(delayMs, signal);
 			}
 		}
 

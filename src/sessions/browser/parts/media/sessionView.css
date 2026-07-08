@@ -168,6 +168,120 @@
 	grid-template-columns: minmax(0, 1fr);
 }
 
+/* Rendered markdown in assistant replies. */
+.conversation-markdown {
+	line-height: 1.6;
+}
+
+.conversation-markdown > *:first-child {
+	margin-top: 0;
+}
+
+.conversation-markdown > *:last-child {
+	margin-bottom: 0;
+}
+
+.conversation-markdown p {
+	margin: 0 0 var(--vscode-agents-space-10);
+}
+
+.conversation-markdown .md-heading {
+	margin: var(--vscode-agents-space-18) 0 var(--vscode-agents-space-8);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	line-height: 1.3;
+}
+
+.conversation-markdown h1.md-heading {
+	font-size: 1.35em;
+}
+
+.conversation-markdown h2.md-heading {
+	font-size: 1.2em;
+}
+
+.conversation-markdown h3.md-heading {
+	font-size: 1.08em;
+}
+
+.conversation-markdown h4.md-heading,
+.conversation-markdown h5.md-heading,
+.conversation-markdown h6.md-heading {
+	font-size: 1em;
+}
+
+.conversation-markdown hr {
+	margin: var(--vscode-agents-space-14) 0;
+	border: 0;
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+}
+
+.conversation-markdown .md-list {
+	margin: 0 0 var(--vscode-agents-space-10);
+	padding-left: var(--vscode-agents-space-22);
+}
+
+.conversation-markdown .md-list li {
+	margin: var(--vscode-agents-space-2) 0;
+}
+
+.conversation-markdown .md-inline-code {
+	padding: 0 var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-radius-control, 4px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 0.92em;
+}
+
+.conversation-markdown .md-code-block {
+	margin: 0 0 var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
+	overflow-x: auto;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: 1.5;
+}
+
+.conversation-markdown blockquote {
+	margin: 0 0 var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-12);
+	border-left: var(--vscode-agents-space-3) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 22%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-markdown .md-table-wrap {
+	margin: 0 0 var(--vscode-agents-space-12);
+	overflow-x: auto;
+}
+
+.conversation-markdown .md-table {
+	border-collapse: collapse;
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-markdown .md-table th,
+.conversation-markdown .md-table td {
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	text-align: left;
+}
+
+.conversation-markdown .md-table th {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 7%, transparent);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-markdown .md-table td {
+	font-variant-numeric: tabular-nums;
+}
+
+.conversation-markdown .md-link {
+	color: var(--vscode-agents-color-info, #4daafc);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
 /* Work block — "Worked for 16m 56s ⌄" with per-step durations inside. */
 .conversation-work {
 	max-width: var(--vscode-agents-size-conversation-width);
@@ -492,7 +606,8 @@ button.conversation-work-step-row:hover {
 .conversation-toolbar-right,
 .conversation-access,
 .conversation-model,
-.conversation-effort {
+.conversation-effort,
+.conversation-reconnect-status {
 	display: flex;
 	align-items: center;
 	min-width: 0;
@@ -579,7 +694,8 @@ button.conversation-work-step-row:hover {
 
 .conversation-access span:not(.codicon),
 .conversation-model span:not(.codicon),
-.conversation-effort span:not(.codicon) {
+.conversation-effort span:not(.codicon),
+.conversation-reconnect-status span:not(.codicon) {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -637,6 +753,15 @@ button.conversation-work-step-row:hover {
 .conversation-send-button:focus-visible {
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
 	outline-offset: var(--vscode-agents-space-2);
+}
+
+.conversation-reconnect-status {
+	gap: var(--vscode-agents-space-5);
+	height: var(--vscode-agents-size-actionMedium);
+	padding: 0 var(--vscode-agents-space-6);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
 .conversation-send-error {

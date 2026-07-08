@@ -68,6 +68,9 @@ class ActiveSession implements IActiveSession {
 	get pendingApproval() {
 		return this.session.pendingApproval;
 	}
+	get reconnect() {
+		return this.session.reconnect;
+	}
 }
 
 export class VisibleSessions {

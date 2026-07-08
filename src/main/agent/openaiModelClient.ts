@@ -16,7 +16,7 @@ interface IOpenAIToolCallDelta {
 
 interface IOpenAIChunk {
 	readonly choices?: readonly {
-		readonly delta?: { readonly content?: string; readonly tool_calls?: readonly IOpenAIToolCallDelta[] };
+		readonly delta?: { readonly content?: string; readonly reasoning_content?: string; readonly tool_calls?: readonly IOpenAIToolCallDelta[] };
 		readonly finish_reason?: string | null;
 	}[];
 }
@@ -98,6 +98,10 @@ export class OpenAIStreamAccumulator {
 		}
 
 		const events: IModelStreamEvent[] = [];
+		const reasoning = choice.delta?.reasoning_content;
+		if (typeof reasoning === 'string' && reasoning.length > 0) {
+			events.push({ type: 'thinking_delta', text: reasoning });
+		}
 		const content = choice.delta?.content;
 		if (typeof content === 'string' && content.length > 0) {
 			events.push({ type: 'text_delta', text: content });

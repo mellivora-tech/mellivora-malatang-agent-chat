@@ -415,6 +415,7 @@ test('agent runs assemble a work block with tool steps and persist it', async ()
 		run: async sessionId => {
 			runSessionId = sessionId;
 			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'thinking_delta', text: '先看一下文件结构' } });
 			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'read_file', input: { path: 'src/a.ts' } } });
 			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'ok', isError: false } });
 			emit({ event: { type: 'assistant_delta', text: 'Hello' } });
@@ -454,10 +455,15 @@ test('agent runs assemble a work block with tool steps and persist it', async ()
 		toolSteps.map(step => step.label),
 		['read_file src/a.ts'],
 	);
+	const thinkingSteps = (work.steps ?? []).filter(step => step.kind === 'thinking');
+	assert.ok(
+		thinkingSteps.some(step => step.detail?.includes('先看一下文件结构')),
+		'streamed reasoning lands on the thinking step detail',
+	);
 	assert.ok(messages.indexOf(work) < messages.findIndex(message => message.role === 'assistant'), 'work block precedes the reply');
 	assert.equal(messages.find(message => message.role === 'assistant')?.text, 'Hello');
 
 	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
 	assert.ok(persistedWork, 'work entry persisted');
-	assert.ok((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length === 1, 'persisted steps');
+	assert.ok(((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length ?? 0) >= 2, 'persisted steps include thinking and tool');
 });

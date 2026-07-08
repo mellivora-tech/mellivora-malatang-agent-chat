@@ -31,6 +31,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		messages: observableValue<readonly ISessionMessage[]>([]),
 		interactivity: observableValue(SessionInteractivity.Full),
 		pendingApproval: observableValue(undefined),
+		reconnect: observableValue(undefined),
 	};
 }
 

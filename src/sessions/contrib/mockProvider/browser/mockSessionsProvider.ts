@@ -5,7 +5,14 @@
 
 import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
-import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionPendingApproval, ISessionWorkspace } from '../../../services/sessions/common/session.js';
+import type {
+	ISession,
+	ISessionChangesSummary,
+	ISessionMessage,
+	ISessionPendingApproval,
+	ISessionReconnect,
+	ISessionWorkspace,
+} from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
@@ -39,6 +46,7 @@ interface IMutableSession extends ISession {
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
+	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
 }
 
 function createSession(options: {
@@ -74,6 +82,7 @@ function createSession(options: {
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
+		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 	};
 }
 
