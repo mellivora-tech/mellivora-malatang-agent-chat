@@ -27,6 +27,11 @@ export class ConversationView extends Disposable {
 	readonly element: HTMLElement;
 
 	private readonly transcript: HTMLElement;
+	private readonly timeline: HTMLElement;
+	private timelinePreview: HTMLElement | undefined;
+	// Which tick a rail scrub is previewing, and the turn each tick maps to.
+	private previewTick: HTMLElement | undefined;
+	private readonly tickTurns = new Map<HTMLElement, { user?: ISessionMessage; work?: ISessionMessage; assistant?: ISessionMessage }>();
 	private readonly composer: HTMLFormElement;
 	private readonly input: HTMLTextAreaElement;
 	private readonly sendButton: HTMLButtonElement;
@@ -61,7 +66,15 @@ export class ConversationView extends Disposable {
 		this.element = document.createElement('div');
 		this.element.className = 'conversation-view';
 
-		this.transcript = append(this.element, document.createElement('div'));
+		const bodyWrap = append(this.element, document.createElement('div'));
+		bodyWrap.className = 'conversation-body';
+
+		this.timeline = append(bodyWrap, document.createElement('div'));
+		this.timeline.className = 'conversation-timeline';
+		this.timeline.setAttribute('role', 'navigation');
+		this.timeline.setAttribute('aria-label', 'Conversation timeline');
+
+		this.transcript = append(bodyWrap, document.createElement('div'));
 		this.transcript.className = 'conversation-transcript';
 
 		this.composer = append(this.element, document.createElement('form'));
@@ -262,6 +275,40 @@ export class ConversationView extends Disposable {
 		});
 
 		this.input.addEventListener('input', () => this.updateComposerState());
+
+		// Dock-style magnification follows the pointer along the rail. The
+		// pointer position is re-read at frame time so a leave between the move
+		// and its animation frame cannot resurrect the magnification.
+		let magnifyPointerY: number | undefined;
+		let magnifyScheduled = false;
+		this.timeline.addEventListener('mousemove', event => {
+			magnifyPointerY = event.clientY;
+			if (magnifyScheduled) {
+				return;
+			}
+			magnifyScheduled = true;
+			requestAnimationFrame(() => {
+				magnifyScheduled = false;
+				this.magnifyTicks(magnifyPointerY);
+			});
+		});
+		this.timeline.addEventListener('mouseleave', () => {
+			magnifyPointerY = undefined;
+			this.magnifyTicks(undefined);
+		});
+
+		// Keep the timeline's position marker in sync with the reading position.
+		let scrollScheduled = false;
+		this.transcript.addEventListener('scroll', () => {
+			if (scrollScheduled) {
+				return;
+			}
+			scrollScheduled = true;
+			requestAnimationFrame(() => {
+				scrollScheduled = false;
+				this.updateTimelineCurrent();
+			});
+		});
 	}
 
 	private render(): void {
@@ -307,8 +354,190 @@ export class ConversationView extends Disposable {
 		}
 
 		this.updateWorkTicker(hasLiveWork);
+		this.renderTimeline(messages);
 		this.updateComposerState();
 		this.updateContextRing();
+	}
+
+	/**
+	 * The rail on the left maps the whole conversation: ONE tick per turn
+	 * (a user message plus everything up to the next one — work, reply).
+	 * Hovering previews the turn (question, answer excerpt, files touched),
+	 * moving the pointer magnifies nearby ticks dock-style, clicking jumps
+	 * to the turn's start.
+	 */
+	private renderTimeline(messages: readonly ISessionMessage[]): void {
+		clearNode(this.timeline);
+		this.closeTimelinePreview();
+		this.previewTick = undefined;
+		this.tickTurns.clear();
+
+		interface ITurn {
+			user?: ISessionMessage;
+			work?: ISessionMessage;
+			assistant?: ISessionMessage;
+			blocks: ISessionMessage[];
+		}
+		const turns: ITurn[] = [];
+		for (const message of messages) {
+			if (message.role === 'tool') {
+				continue;
+			}
+			if (message.role === 'user' || turns.length === 0) {
+				turns.push({ blocks: [] });
+			}
+			const turn = turns[turns.length - 1]!;
+			turn.blocks.push(message);
+			if (message.role === 'user') {
+				turn.user = message;
+			} else if (message.role === 'work') {
+				turn.work = message;
+			} else if (message.role === 'assistant') {
+				turn.assistant = message;
+			}
+		}
+
+		this.timeline.classList.toggle('empty', turns.length < 2);
+
+		for (const turn of turns) {
+			const firstBlock = turn.blocks[0]!;
+			const tick = append(this.timeline, document.createElement('button')) as HTMLButtonElement;
+			tick.className = 'conversation-timeline-tick';
+			tick.type = 'button';
+			tick.dataset.targetId = firstBlock.id;
+			// The turn's member ids, so the scroll marker can map any visible
+			// message back to its tick.
+			tick.dataset.blockIds = turn.blocks.map(block => block.id).join(' ');
+			tick.setAttribute('aria-label', 'Jump to turn');
+			tick.addEventListener('click', () => {
+				this.transcript.querySelector(`[data-message-id="${firstBlock.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			});
+			// Preview is driven by rail proximity (see magnifyTicks), not by
+			// hovering the 2px-tall tick itself — that was near impossible to hit.
+			this.tickTurns.set(tick, turn);
+		}
+
+		this.updateTimelineCurrent();
+	}
+
+	/**
+	 * Dock-style magnification driven by pointer proximity, plus the scrub
+	 * preview: the tick nearest the pointer previews its turn. Relaxes on leave.
+	 */
+	private magnifyTicks(pointerY: number | undefined): void {
+		// A bit above the tick spacing (~12px) so the nearest tick clearly leads
+		// while its immediate neighbour still tapers — wider reads as a sticky blob.
+		const radius = 22;
+		if (pointerY === undefined) {
+			for (const tick of this.timeline.querySelectorAll<HTMLElement>('.conversation-timeline-tick')) {
+				tick.style.transform = '';
+				tick.style.background = '';
+			}
+			this.previewTick = undefined;
+			this.closeTimelinePreview();
+			return;
+		}
+
+		let nearest: HTMLElement | undefined;
+		let nearestDistance = Infinity;
+		for (const tick of this.timeline.querySelectorAll<HTMLElement>('.conversation-timeline-tick')) {
+			const rect = tick.getBoundingClientRect();
+			const distance = Math.abs(pointerY - (rect.top + rect.height / 2));
+			if (distance < nearestDistance) {
+				nearestDistance = distance;
+				nearest = tick;
+			}
+			const factor = Math.max(0, 1 - distance / radius);
+			// Length only — thickness stays constant.
+			tick.style.transform = factor > 0 ? `scaleX(${1 + factor * 3.5})` : '';
+			// Ticks within reach also brighten toward the pointer (22% at the
+			// edge of the radius up to ~90% under it).
+			tick.style.background = factor > 0 ? `color-mix(in srgb, var(--vscode-agents-color-text-primary) ${Math.round(22 + factor * 68)}%, transparent)` : '';
+		}
+
+		// Scrubbing the rail previews the nearest turn; only rebuild on change.
+		if (nearest && nearest !== this.previewTick) {
+			this.previewTick = nearest;
+			const turn = this.tickTurns.get(nearest);
+			if (turn) {
+				this.openTimelinePreview(nearest, turn);
+			}
+		}
+	}
+
+	/** Highlight the tick for the message at the top of the viewport. */
+	private updateTimelineCurrent(): void {
+		const rows = this.transcript.querySelectorAll<HTMLElement>('[data-message-id]');
+		let currentId: string | undefined;
+		const atBottom = this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < 8;
+		if (atBottom && rows.length > 0) {
+			// Reading the live end — the last message is current.
+			currentId = rows[rows.length - 1]!.dataset.messageId;
+		} else {
+			const anchor = this.transcript.scrollTop + 48;
+			for (const row of rows) {
+				if (row.offsetTop <= anchor) {
+					currentId = row.dataset.messageId;
+				} else {
+					break;
+				}
+			}
+		}
+		for (const tick of this.timeline.querySelectorAll<HTMLElement>('.conversation-timeline-tick')) {
+			tick.classList.toggle('current', currentId !== undefined && (tick.dataset.blockIds ?? '').split(' ').includes(currentId));
+		}
+	}
+
+	/** One card per turn: the question as title, the reply excerpt, files touched. */
+	private openTimelinePreview(tick: HTMLElement, turn: { user?: ISessionMessage; work?: ISessionMessage; assistant?: ISessionMessage }): void {
+		this.closeTimelinePreview();
+
+		const card = document.createElement('div');
+		card.className = 'conversation-timeline-preview';
+
+		if (turn.user) {
+			const title = append(card, document.createElement('div'));
+			title.className = 'conversation-timeline-preview-title';
+			title.textContent = turn.user.text;
+		}
+
+		const excerpt = append(card, document.createElement('div'));
+		excerpt.className = 'conversation-timeline-preview-text';
+		excerpt.textContent = turn.assistant ? turn.assistant.text.slice(0, 240) : 'Working…';
+
+		const files = extractWorkFiles(turn.work);
+		if (files.length > 0) {
+			const chips = append(card, document.createElement('div'));
+			chips.className = 'conversation-timeline-preview-files';
+			for (const file of files.slice(0, 3)) {
+				const chip = append(chips, document.createElement('span'));
+				chip.className = 'conversation-timeline-preview-file';
+				const icon = append(chip, document.createElement('span'));
+				icon.className = 'codicon codicon-code';
+				icon.setAttribute('aria-hidden', 'true');
+				const name = append(chip, document.createElement('span'));
+				name.className = 'conversation-timeline-preview-file-name';
+				name.textContent = file;
+			}
+			if (files.length > 3) {
+				const more = append(chips, document.createElement('span'));
+				more.className = 'conversation-timeline-preview-file';
+				more.textContent = `+${files.length - 3}`;
+			}
+		}
+
+		this.element.appendChild(card);
+		const viewRect = this.element.getBoundingClientRect();
+		const tickRect = tick.getBoundingClientRect();
+		const top = Math.min(Math.max(8, tickRect.top - viewRect.top - 12), this.element.clientHeight - card.offsetHeight - 8);
+		card.style.top = `${top}px`;
+		card.style.left = `${this.timeline.offsetWidth + 6}px`;
+		this.timelinePreview = card;
+	}
+
+	private closeTimelinePreview(): void {
+		this.timelinePreview?.remove();
+		this.timelinePreview = undefined;
 	}
 
 	/**
@@ -326,6 +555,7 @@ export class ConversationView extends Disposable {
 		const block = document.createElement('section');
 		block.className = 'conversation-work';
 		block.classList.toggle('live', live);
+		block.dataset.messageId = message.id;
 
 		const header = append(block, document.createElement('button')) as HTMLButtonElement;
 		header.className = 'conversation-work-header';
@@ -622,6 +852,7 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions): 
 	const row = document.createElement('article');
 	row.className = `conversation-message ${message.role}`;
 	row.dataset.role = message.role;
+	row.dataset.messageId = message.id;
 
 	// Assistant messages render as plain text — no avatar, no author label.
 	if (message.role !== 'assistant') {
@@ -666,6 +897,21 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions): 
 	}
 
 	return row;
+}
+
+/** File names touched by a work block's write/edit tool steps. */
+function extractWorkFiles(work: ISessionMessage | undefined): string[] {
+	const files: string[] = [];
+	for (const step of work?.steps ?? []) {
+		const match = /^(?:write_file|edit_file|read_file) (.+)$/.exec(step.label);
+		if (step.kind === 'tool' && match) {
+			const name = match[1]!.split('/').pop()!;
+			if (!files.includes(name)) {
+				files.push(name);
+			}
+		}
+	}
+	return files;
 }
 
 /** "Today 14:23" / "Yesterday 09:05" / "Jul 6 18:30" — always 24-hour. */

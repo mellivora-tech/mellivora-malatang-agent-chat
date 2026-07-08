@@ -213,6 +213,143 @@
 	min-height: 0;
 }
 
+.conversation-body {
+	display: flex;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Timeline rail — the conversation's map: one tick per turn. */
+.conversation-timeline {
+	z-index: 2; /* magnified ticks stretch over the transcript */
+	display: flex;
+	flex: 0 0 auto;
+	flex-direction: column;
+	justify-content: center;
+	gap: var(--vscode-agents-space-10);
+	width: var(--vscode-agents-space-44);
+	padding: var(--vscode-agents-space-12) 0;
+	overflow: visible;
+}
+
+.conversation-timeline.empty {
+	visibility: hidden;
+}
+
+.conversation-timeline-tick {
+	position: relative; /* anchors the current-viewport box */
+	flex: 0 1 auto;
+	align-self: flex-start;
+	width: var(--vscode-agents-space-8);
+	min-height: var(--vscode-agents-space-2);
+	height: var(--vscode-agents-space-2);
+	margin-left: var(--vscode-agents-space-6);
+	padding: 0;
+	border: 0;
+	border-radius: var(--vscode-agents-space-1);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 22%, transparent);
+	cursor: default;
+	/* Dock-style magnification: JS drives transform; the transition smooths both grow and relax. */
+	transform-origin: left center;
+	transition: transform 90ms ease-out;
+	will-change: transform;
+}
+
+.conversation-timeline-tick:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 65%, transparent);
+}
+
+/* Current turn: the tick simply lights up. */
+.conversation-timeline-tick.current {
+	background: var(--vscode-agents-color-text-primary);
+}
+
+/* Hover preview card next to the rail. */
+.conversation-timeline-preview {
+	position: absolute;
+	z-index: 5;
+	width: 300px;
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-container, 10px);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	pointer-events: none;
+}
+
+.conversation-timeline-preview-title {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 1;
+	margin-bottom: var(--vscode-agents-space-6);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-body2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	word-break: break-word;
+}
+
+.conversation-timeline-preview-header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-8);
+	margin-bottom: var(--vscode-agents-space-6);
+}
+
+.conversation-timeline-preview-who {
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-timeline-preview-time {
+	color: var(--vscode-agents-color-text-subtle, var(--vscode-agents-color-text-muted));
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.conversation-timeline-preview-text {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: 1.5;
+	word-break: break-word;
+}
+
+.conversation-timeline-preview-files {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--vscode-agents-space-4);
+	margin-top: var(--vscode-agents-space-8);
+}
+
+.conversation-timeline-preview-file {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-3);
+	max-width: 120px;
+	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control, 4px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-muted);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.conversation-timeline-preview-file .codicon {
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.conversation-timeline-preview-file-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .conversation-transcript {
 	flex: 1 1 auto;
 	min-height: 0;
