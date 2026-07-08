@@ -516,7 +516,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		};
 
-		const finalize = (): void => {
+		const finalize = (reason?: string): void => {
 			if (finalized) {
 				return;
 			}
@@ -533,7 +533,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 			const workDuration = Date.now() - workStart;
 			updateWork(workDuration);
-			if (!created) {
+
+			// A run that ends without any text (e.g. the step limit) must not leave a
+			// blank assistant bubble — say what happened, or persist no reply at all.
+			if (!created && text === '') {
+				if (reason === 'max_turns') {
+					text = 'I reached the step limit before finishing — ask me to continue, or narrow the task.';
+				} else if (reason === 'aborted') {
+					text = 'Stopped.';
+				}
+			}
+			const hasReply = text !== '';
+			if (hasReply) {
 				updateAssistant();
 			}
 
@@ -541,7 +552,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
 				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
-				await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
+				if (hasReply) {
+					await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
+				}
 				await this.bridge.append(ref, { type: 'state', timestamp: now.toISOString(), status: SessionStatus.NeedsInput, isRead: false });
 			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
 
@@ -592,7 +605,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					updateWork();
 				}
 			} else if (payload.done) {
-				finalize();
+				finalize(payload.done.reason);
 			}
 		});
 

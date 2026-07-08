@@ -470,3 +470,48 @@ test('agent runs assemble a work block with tool steps and persist it', async ()
 	assert.ok(persistedWork, 'work entry persisted');
 	assert.ok(((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length ?? 0) >= 2, 'persisted steps include thinking and tool');
 });
+
+test('a run that ends at the step limit with no text shows a note, not a blank bubble', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		// Tool-only run that never produces assistant text, then hits max_turns.
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'list_dir', input: { path: '.' } } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'src', isError: false } });
+			emit({ done: { reason: 'max_turns', turns: 50 } });
+			return { reason: 'max_turns', turns: 50 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('do something');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.ok(assistant, 'a reply message exists');
+	assert.notEqual(assistant.text, '', 'the reply is not a blank bubble');
+	assert.match(assistant.text, /step limit/i, 'it explains the run hit the step limit');
+
+	// And no empty assistant message was persisted.
+	const persistedAssistants = bridge.appends.filter(call => call.entry.type === 'message' && call.entry.role === 'assistant');
+	assert.ok(
+		persistedAssistants.every(call => (call.entry as { text: string }).text !== ''),
+		'no blank assistant entry persisted',
+	);
+});

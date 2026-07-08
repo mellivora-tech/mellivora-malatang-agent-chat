@@ -45,6 +45,9 @@ export class ConversationView extends Disposable {
 	private session: IActiveSession | undefined;
 	private isSending = false;
 	private isStopping = false;
+	// A follow-up typed while a run is live is held here and sent when it settles,
+	// so a second run never overlaps the first (single slot; a newer one replaces it).
+	private queuedFollowUp: string | undefined;
 	// Work blocks: user toggles override the default (open while live, closed when done).
 	private readonly workExpandOverride = new Map<string, boolean>();
 	// Individually expanded tool steps ("messageId:index").
@@ -197,13 +200,19 @@ export class ConversationView extends Disposable {
 		this.sessionDisposables.clear();
 		this.header.openSession(session);
 		this.setSendError(undefined);
+		this.queuedFollowUp = undefined;
 		// A freshly opened conversation starts at its latest message.
 		this.scrollToBottomOnRender = true;
 
 		if (session) {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.interactivity.subscribe(() => this.render()));
-			this.sessionDisposables.add(session.status.subscribe(() => this.render()));
+			this.sessionDisposables.add(
+				session.status.subscribe(() => {
+					this.render();
+					this.flushQueuedFollowUp();
+				}),
+			);
 			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.reconnect.subscribe(() => this.updateReconnectStatus()));
 			this.sessionDisposables.add(session.permissionMode.subscribe(() => this.notifyPermissionListeners()));
@@ -721,13 +730,39 @@ export class ConversationView extends Disposable {
 		this.sendButton.disabled = !canType || !hasText;
 		this.sendButton.hidden = isRunning;
 		this.stopButton.hidden = !isRunning;
-		this.input.placeholder = isRunning ? 'Keep typing to queue follow-up changes' : interactivity === SessionInteractivity.ReadOnly ? 'Session is read-only' : 'Ask Codex';
+		this.input.placeholder = isRunning
+			? this.queuedFollowUp
+				? `Queued: ${this.queuedFollowUp}`
+				: 'Working… your next message will be queued'
+			: interactivity === SessionInteractivity.ReadOnly
+				? 'Session is read-only'
+				: 'Ask Codex';
+	}
+
+	/** Send a queued follow-up once the current run has settled. */
+	private flushQueuedFollowUp(): void {
+		const query = this.queuedFollowUp;
+		if (query === undefined || this.isSending || !this.session || this.session.status.get() === SessionStatus.InProgress) {
+			return;
+		}
+		this.queuedFollowUp = undefined;
+		this.input.value = query;
+		void this.send();
 	}
 
 	private async send(): Promise<void> {
 		const query = this.input.value.trim();
 		const session = this.session;
 		if (!query || !session || this.isSending || session.interactivity.get() !== SessionInteractivity.Full) {
+			return;
+		}
+
+		// Never start a second run on top of a live one — hold the follow-up and
+		// send it when the run settles (see flushQueuedFollowUp).
+		if (session.status.get() === SessionStatus.InProgress) {
+			this.queuedFollowUp = query;
+			this.input.value = '';
+			this.updateComposerState();
 			return;
 		}
 

@@ -29,6 +29,9 @@ function workspaceSystemPrompt(cwd: string, mode: PermissionMode): string {
 		lines.push(
 			'Tools: read_file, list_dir, glob, grep to explore; write_file, edit_file to change files; bash to run commands.',
 			'Prefer reading before writing. Some actions may pause for the user to approve.',
+			// Steer bash away from commands that block a turn or fabricate "evidence".
+			'For tasks that only need understanding the code — assessing, summarizing, reviewing, explaining — read the relevant files; do NOT run the build or test suite just to "check".',
+			'Use bash only for short, purposeful commands. Avoid long-running or blocking ones — dev servers, watch modes, full end-to-end / integration suites, or anything that launches the app or waits indefinitely — as they stall the turn. If a long command is genuinely required, scope it narrowly and set a timeout.',
 		);
 	}
 	lines.push('All paths are relative to the working directory; you cannot access files outside it.');
