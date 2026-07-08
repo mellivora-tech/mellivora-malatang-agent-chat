@@ -6,6 +6,7 @@
 import { spawn } from 'node:child_process';
 import { defineTool } from '../agentTools.js';
 import type { IAgentTool } from '../agentTypes.js';
+import { sandboxedShellCommand } from './bashSandbox.js';
 import { asRecord, invalid, optionalPositiveInt, requireString, valid } from './workspace.js';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -18,9 +19,11 @@ interface IBashInput {
 }
 
 /**
- * Runs a shell command with the workspace as cwd. NOT sandboxed — the command
- * can touch anything the app can, which is why the permission gates route bash
- * to explicit approval in every mode short of full access.
+ * Runs a shell command with the workspace as cwd. On macOS it runs inside a
+ * Seatbelt sandbox that confines file WRITES to the workspace and standard
+ * scratch/cache dirs (reads and network stay open so builds/tests/git work);
+ * elsewhere it is unsandboxed. Either way the permission gates route bash to
+ * explicit approval in every mode short of full access.
  */
 export function createBashTool(cwd: string): IAgentTool {
 	return defineTool({
@@ -53,7 +56,8 @@ export function createBashTool(cwd: string): IAgentTool {
 			const timeout = Math.min(timeout_ms ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
 			return new Promise(resolve => {
-				const child = spawn('/bin/sh', ['-c', command], { cwd, env: process.env });
+				const { file, args } = sandboxedShellCommand(command, cwd, process.env);
+				const child = spawn(file, args, { cwd, env: process.env });
 				let output = '';
 				let truncated = false;
 				let settled = false;
