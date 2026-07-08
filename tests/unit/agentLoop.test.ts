@@ -9,7 +9,7 @@ import test from 'node:test';
 import { runAgentLoop } from '../../src/main/agent/agentLoop.js';
 import { allowAllPermissionGate, createApprovalPermissionGate, defineTool } from '../../src/main/agent/agentTools.js';
 import { createScriptedModelClient } from '../../src/main/agent/scriptedModelClient.js';
-import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelRequest, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
 
 async function drive(loop: AsyncGenerator<IAgentEvent, IAgentTerminal>): Promise<{ events: IAgentEvent[]; terminal: IAgentTerminal }> {
 	const events: IAgentEvent[] = [];
@@ -168,4 +168,48 @@ test('non-retryable stream errors surface immediately', async () => {
 		permissionGate: allowAllPermissionGate,
 	});
 	await assert.rejects(async () => drive(loop), /401/);
+});
+
+test('convergence brake: soft reminder, then the hard phase withholds tools to force an answer', async () => {
+	const calls: { tools: number; soft: boolean; hard: boolean }[] = [];
+	// A model that keeps calling a tool as long as it has one — without the brake
+	// it would loop until max_turns. Its behaviour is driven by request.tools.
+	const client = {
+		async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+			const text = request.messages
+				.flatMap(message => message.content)
+				.map(block => (block.type === 'text' ? block.text : ''))
+				.join('\n');
+			calls.push({ tools: request.tools.length, soft: text.includes('used most of your step budget'), hard: text.includes('Step budget reached') });
+			if (request.tools.length > 0) {
+				yield { type: 'tool_use', block: { type: 'tool_use', id: `t${calls.length}`, name: 'echo', input: { text: 'x' } } };
+				yield { type: 'message_stop', stopReason: 'tool_use' };
+			} else {
+				yield { type: 'text_delta', text: 'final answer' };
+				yield { type: 'message_stop', stopReason: 'end_turn' };
+			}
+		},
+	};
+
+	const { terminal } = await drive(
+		runAgentLoop([userMessage('go')], {
+			system: 's',
+			tools: [echoTool],
+			modelClient: client as never,
+			permissionGate: allowAllPermissionGate,
+			maxTurns: 10,
+		}),
+	);
+
+	// maxTurns 10 → soft brake at turn 7, hard brake at turn 9. The hard phase
+	// removes tools, so the model must answer before ever hitting the cap.
+	assert.equal(terminal.reason, 'completed', 'forced to synthesize instead of hitting max_turns');
+	assert.ok(terminal.turns < 10, `stopped before the cap at turn ${terminal.turns}`);
+	assert.ok(
+		calls.some(call => call.soft && call.tools > 0),
+		'soft reminder injected while tools were still available',
+	);
+	const hardCall = calls.find(call => call.hard);
+	assert.ok(hardCall, 'hard reminder injected');
+	assert.equal(hardCall.tools, 0, 'tools withheld in the hard phase');
 });

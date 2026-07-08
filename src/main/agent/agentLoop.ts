@@ -7,7 +7,26 @@ import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, ICont
 import { toolSpec } from './agentTools.js';
 import { executeToolUses } from './toolRunner.js';
 
-const DEFAULT_MAX_TURNS = 50;
+const DEFAULT_MAX_TURNS = 100;
+// Deterministic convergence brake — enforced by the harness, not the model.
+// Soft: nudge the model to wrap up. Hard: withhold tools so it MUST answer.
+const SOFT_BRAKE_RATIO = 0.7;
+const HARD_BRAKE_RATIO = 0.9;
+const SOFT_BRAKE_REMINDER =
+	'<system-reminder>You have used most of your step budget. Wrap up: finish the current thread and give your final answer soon. Do not open new lines of investigation.</system-reminder>';
+const HARD_BRAKE_REMINDER =
+	'<system-reminder>Step budget reached. Tools are no longer available this turn — give your final answer now from what you already know, and state plainly anything you could not verify (e.g. it depends on runtime data).</system-reminder>';
+
+/** Append a reminder to the model's view of the transcript without touching history. */
+function withReminder(messages: readonly IAgentMessage[], reminder: string): IAgentMessage[] {
+	const block: IContentBlock = { type: 'text', text: reminder };
+	const last = messages[messages.length - 1];
+	if (last && last.role === 'user') {
+		return [...messages.slice(0, -1), { role: 'user', content: [...last.content, block] }];
+	}
+	return [...messages, { role: 'user', content: [block] }];
+}
+
 const MAX_STREAM_ATTEMPTS = 10;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10_000;
@@ -53,6 +72,8 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// The full transcript. `prepareRequestMessages` (point 5 seam) decides what a
 	// request actually sends, keeping "history" and "what the model sees" separate.
 	const messages: IAgentMessage[] = [...initialMessages];
+	const softBrakeTurn = Math.max(1, Math.floor(maxTurns * SOFT_BRAKE_RATIO));
+	const hardBrakeTurn = Math.max(1, Math.floor(maxTurns * HARD_BRAKE_RATIO));
 	let turn = 0;
 
 	while (true) {
@@ -63,7 +84,17 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		turn += 1;
 		yield { type: 'turn_start', turn };
 
-		const request: IModelRequest = { system: config.system, messages: prepareRequestMessages(messages), tools: specs, signal };
+		// Convergence brake: past the soft line, nudge; past the hard line, withhold
+		// tools so the model can only produce a final answer (deterministic — it does
+		// not rely on the model choosing to stop).
+		const brake = specs.length > 0 && turn >= hardBrakeTurn ? 'hard' : specs.length > 0 && turn >= softBrakeTurn ? 'soft' : 'none';
+		const requestMessages =
+			brake === 'hard'
+				? withReminder(prepareRequestMessages(messages), HARD_BRAKE_REMINDER)
+				: brake === 'soft'
+					? withReminder(prepareRequestMessages(messages), SOFT_BRAKE_REMINDER)
+					: prepareRequestMessages(messages);
+		const request: IModelRequest = { system: config.system, messages: requestMessages, tools: brake === 'hard' ? [] : specs, signal };
 
 		// Inner streaming generator: accumulate the assistant message and collect
 		// any tool_use blocks as they arrive. A stream that fails before any text

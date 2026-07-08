@@ -32,6 +32,8 @@ function workspaceSystemPrompt(cwd: string, mode: PermissionMode): string {
 			// Steer bash away from commands that block a turn or fabricate "evidence".
 			'For tasks that only need understanding the code — assessing, summarizing, reviewing, explaining — read the relevant files; do NOT run the build or test suite just to "check".',
 			'Use bash only for short, purposeful commands. Avoid long-running or blocking ones — dev servers, watch modes, full end-to-end / integration suites, or anything that launches the app or waits indefinitely — as they stall the turn. If a long command is genuinely required, scope it narrowly and set a timeout.',
+			'Batch independent work into a single step: when you need several files or several searches, issue those tool calls together in one turn rather than one at a time — it is far faster and avoids running out of steps.',
+			'For any multi-step task, call update_plan first to lay out a short finite checklist, keep it updated as you go, and once every step is done STOP and give your final answer — do not keep pulling threads. If a question cannot be answered from the code alone (e.g. it depends on runtime data), say so and stop rather than reading more.',
 		);
 	}
 	lines.push('All paths are relative to the working directory; you cannot access files outside it.');

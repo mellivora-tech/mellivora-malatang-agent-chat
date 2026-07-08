@@ -74,7 +74,11 @@ export function buildOpenAIRequestBody(config: IModelClientConfig, request: IMod
 		model: config.model,
 		messages: toOpenAIMessages(request.system, request.messages),
 		stream: true,
-		...(request.tools.length > 0 ? { tools: toOpenAITools(request.tools) } : {}),
+		// Explicitly allow several tool calls per turn so the model can batch
+		// independent work (reading many files at once) instead of one-per-turn,
+		// which otherwise burns through the turn budget. Some OpenAI-compatible
+		// providers default this off, so set it rather than rely on the default.
+		...(request.tools.length > 0 ? { tools: toOpenAITools(request.tools), parallel_tool_calls: true } : {}),
 		...(config.params?.temperature !== undefined ? { temperature: config.params.temperature } : {}),
 		...(config.params?.maxTokens !== undefined ? { max_tokens: config.params.maxTokens } : {}),
 		...(config.params?.effort ? { reasoning_effort: config.params.effort } : {}),

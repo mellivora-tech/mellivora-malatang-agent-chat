@@ -85,7 +85,7 @@ test('paths that escape the workspace are refused', async () => {
 test('mutating tools appear only with includeMutations, marked non-read-only', () => {
 	const cwd = tmpdir();
 	const readOnly = createWorkspaceTools(cwd).map(tool => tool.name);
-	assert.deepEqual(readOnly, ['read_file', 'list_dir', 'glob', 'grep']);
+	assert.deepEqual(readOnly, ['update_plan', 'read_file', 'list_dir', 'glob', 'grep']);
 
 	const all = byName(createWorkspaceTools(cwd, { includeMutations: true }));
 	for (const name of ['write_file', 'edit_file', 'bash']) {
@@ -136,4 +136,28 @@ test('bash runs in the workspace cwd and reports failures', async () => {
 	const fail = await run(tools.bash!, { command: 'exit 3' });
 	assert.equal(fail.isError, true);
 	assert.match(fail.content, /Exit code: 3/);
+});
+
+test('update_plan is a no-op meta-tool that renders the checklist', async () => {
+	const tools = byName(createWorkspaceTools('/repo'));
+	const plan = tools.update_plan!;
+	assert.equal(plan.isReadOnly({}), true, 'meta-tool is always allowed');
+
+	const result = await run(plan, {
+		steps: [
+			{ title: 'Find the controller', status: 'done' },
+			{ title: 'Trace the service', status: 'active' },
+			{ title: 'Read the mapper', status: 'pending' },
+		],
+	});
+	assert.match(result.content, /1\/3 done/);
+	assert.match(result.content, /\[x\] Find the controller/);
+	assert.match(result.content, /\[~\] Trace the service/);
+	assert.match(result.content, /\[ \] Read the mapper/);
+
+	const finished = await run(plan, { steps: [{ title: 'x', status: 'done' }] });
+	assert.match(finished.content, /stop and give your final answer/i);
+
+	// Bad input is rejected.
+	assert.equal(plan.validateInput({ steps: [{ title: '', status: 'done' }] }).ok, false);
 });

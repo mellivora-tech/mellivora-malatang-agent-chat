@@ -9,7 +9,7 @@ import test from 'node:test';
 import { AnthropicModelClient, AnthropicStreamAccumulator, toAnthropicMessages } from '../../src/main/agent/anthropicModelClient.js';
 import type { IAgentMessage, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
 import { createModelClient } from '../../src/main/agent/createModelClient.js';
-import { OpenAIModelClient, OpenAIStreamAccumulator, toOpenAIMessages } from '../../src/main/agent/openaiModelClient.js';
+import { OpenAIModelClient, OpenAIStreamAccumulator, buildOpenAIRequestBody, toOpenAIMessages } from '../../src/main/agent/openaiModelClient.js';
 import type { IStoredModelConfig } from '../../src/main/modelConfigStorage.js';
 
 function runOpenAI(chunks: readonly unknown[]): IModelStreamEvent[] {
@@ -131,4 +131,17 @@ test('createModelClient picks the client class from the provider', () => {
 	const base: Omit<IStoredModelConfig, 'provider'> = { id: 'm', label: 'M', baseURL: 'https://x/v1', model: 'm' };
 	assert.ok(createModelClient({ ...base, provider: 'openai-compatible' }) instanceof OpenAIModelClient);
 	assert.ok(createModelClient({ ...base, provider: 'anthropic' }) instanceof AnthropicModelClient);
+});
+
+test('openai request enables parallel_tool_calls when tools are present (batching)', () => {
+	const config = { baseURL: 'https://x/v1', model: 'm' };
+	const signal = new AbortController().signal;
+	const tools = [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' as const } }];
+
+	const withTools = buildOpenAIRequestBody(config, { system: 's', messages: [], tools, signal });
+	assert.equal(withTools['parallel_tool_calls'], true, 'model is allowed to batch tool calls');
+	assert.ok(Array.isArray(withTools['tools']));
+
+	const noTools = buildOpenAIRequestBody(config, { system: 's', messages: [], tools: [], signal });
+	assert.equal('parallel_tool_calls' in noTools, false, 'no tools → no parallel flag');
 });

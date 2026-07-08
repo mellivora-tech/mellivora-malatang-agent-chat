@@ -10,6 +10,7 @@ import { createGlobTool } from './globTool.js';
 import { createGrepTool } from './grepTool.js';
 import { createListDirTool } from './listDirTool.js';
 import { createReadFileTool } from './readFileTool.js';
+import { createUpdatePlanTool } from './updatePlanTool.js';
 import { createWriteFileTool } from './writeFileTool.js';
 
 export interface IWorkspaceToolsOptions {
@@ -27,7 +28,9 @@ export interface IWorkspaceToolsOptions {
  * NOT sandboxed (it can run anything) — gates route it to explicit approval.
  */
 export function createWorkspaceTools(cwd: string, options: IWorkspaceToolsOptions = {}): readonly IAgentTool[] {
-	const readOnly = [createReadFileTool(cwd), createListDirTool(cwd), createGlobTool(cwd), createGrepTool(cwd)];
+	// update_plan is a meta-tool (no side effects) available in every mode — it
+	// helps the model bound its own exploration.
+	const readOnly = [createUpdatePlanTool(), createReadFileTool(cwd), createListDirTool(cwd), createGlobTool(cwd), createGrepTool(cwd)];
 	if (!options.includeMutations) {
 		return readOnly;
 	}
