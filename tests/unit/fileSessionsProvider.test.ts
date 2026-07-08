@@ -8,6 +8,7 @@ import test from 'node:test';
 
 import { FileSessionsProvider } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
 import { SessionInteractivity, SessionStatus } from '../../src/sessions/services/sessions/common/session.js';
+import type { IAgentBridge, IAgentEventPayload } from '../../src/sessions/services/agent/common/agent.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionSnapshot, ISessionsBridge } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
 
 interface IAppendCall {
@@ -402,4 +403,61 @@ test('reply append failures are logged without breaking the session', async t =>
 		['hello', 'Mock response for: hello'],
 	);
 	assert.ok(errorSpy.mock.callCount() >= 1);
+});
+
+test('agent runs assemble a work block with tool steps and persist it', async () => {
+	const bridge = createFakeBridge();
+
+	// A scripted agent bridge: capture the event listener, drive one run.
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	let runSessionId = '';
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			runSessionId = sessionId;
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'read_file', input: { path: 'src/a.ts' } } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'ok', isError: false } });
+			emit({ event: { type: 'assistant_delta', text: 'Hello' } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('do something');
+	// The scripted run is synchronous but fires through microtasks; yield twice.
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	assert.equal(runSessionId, session.sessionId);
+	const messages = session.messages.get();
+	const work = messages.find(message => message.role === 'work');
+	assert.ok(work, 'a work message exists');
+	assert.ok(typeof work.durationMs === 'number', 'work block settled with a total duration');
+	const toolSteps = (work.steps ?? []).filter(step => step.kind === 'tool');
+	assert.deepEqual(
+		toolSteps.map(step => step.label),
+		['read_file src/a.ts'],
+	);
+	assert.ok(messages.indexOf(work) < messages.findIndex(message => message.role === 'assistant'), 'work block precedes the reply');
+	assert.equal(messages.find(message => message.role === 'assistant')?.text, 'Hello');
+
+	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
+	assert.ok(persistedWork, 'work entry persisted');
+	assert.ok((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length === 1, 'persisted steps');
 });

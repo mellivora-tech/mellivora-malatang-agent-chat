@@ -476,7 +476,7 @@ export class SessionsList extends Disposable {
 
 		if (row.status === SessionStatus.InProgress && row.isActive) {
 			const spinner = document.createElement('span');
-			spinner.className = 'codicon codicon-loading sessions-project-task-spinner';
+			spinner.className = 'codicon codicon-loading codicon-modifier-spin sessions-project-task-spinner';
 			spinner.setAttribute('aria-hidden', 'true');
 			main.appendChild(spinner);
 		}

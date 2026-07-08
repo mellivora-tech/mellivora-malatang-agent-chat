@@ -31,11 +31,24 @@ export interface ISessionChangesSummary {
 	readonly deletions: number;
 }
 
+/** One step inside a work block: a thinking stretch or a tool call. */
+export interface ISessionWorkStep {
+	readonly kind: 'thinking' | 'tool';
+	readonly label: string;
+	readonly durationMs: number;
+	/** Expandable detail — for tool steps, the (truncated) output. */
+	readonly detail?: string;
+}
+
 export interface ISessionMessage {
 	readonly id: string;
-	readonly role: 'user' | 'assistant' | 'tool';
+	/** 'work' messages summarize one agent run: total duration plus its steps. */
+	readonly role: 'user' | 'assistant' | 'tool' | 'work';
 	readonly text: string;
 	readonly detail?: string;
+	/** Total run duration; unset while the run is still in progress. */
+	readonly durationMs?: number;
+	readonly steps?: readonly ISessionWorkStep[];
 }
 
 /** A tool call paused on the user's allow / deny. */

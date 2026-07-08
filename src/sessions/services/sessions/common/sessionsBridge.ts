@@ -39,13 +39,24 @@ export interface ISessionHeader {
 	readonly interactivity: 'full' | 'read-only' | 'hidden';
 }
 
+/** One step inside a work block: a thinking stretch or a tool call. */
+export interface ISessionWorkStepData {
+	readonly kind: 'thinking' | 'tool';
+	readonly label: string;
+	readonly durationMs: number;
+	readonly detail?: string;
+}
+
 export interface ISessionMessageEntry {
 	readonly type: 'message';
 	readonly id: string;
-	readonly role: 'user' | 'assistant' | 'tool';
+	/** 'work' entries summarize one agent run: total duration plus its steps. */
+	readonly role: 'user' | 'assistant' | 'tool' | 'work';
 	readonly text: string;
 	readonly detail?: string;
 	readonly timestamp: string;
+	readonly durationMs?: number;
+	readonly steps?: readonly ISessionWorkStepData[];
 }
 
 export interface ISessionStateEntry {
@@ -64,9 +75,11 @@ export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry;
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
-	readonly role: 'user' | 'assistant' | 'tool';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work';
 	readonly text: string;
 	readonly detail?: string;
+	readonly durationMs?: number;
+	readonly steps?: readonly ISessionWorkStepData[];
 }
 
 /** The hydrated result of folding one session file. */

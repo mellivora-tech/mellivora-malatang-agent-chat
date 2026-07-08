@@ -101,7 +101,14 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		}
 
 		if (entry.type === 'message') {
-			messages.push({ id: entry.id, role: entry.role, text: entry.text, ...(entry.detail !== undefined ? { detail: entry.detail } : {}) });
+			messages.push({
+				id: entry.id,
+				role: entry.role,
+				text: entry.text,
+				...(entry.detail !== undefined ? { detail: entry.detail } : {}),
+				...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
+				...(entry.steps !== undefined ? { steps: entry.steps } : {}),
+			});
 			continue;
 		}
 
@@ -212,8 +219,8 @@ function parseEntry(line: string): ISessionMessageEntry | ISessionStateEntry | u
 	return undefined;
 }
 
-function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' {
-	return value === 'user' || value === 'assistant' || value === 'tool';
+function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' {
+	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work';
 }
 
 async function listJsonlFiles(dir: string): Promise<readonly string[]> {

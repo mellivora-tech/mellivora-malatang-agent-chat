@@ -7,7 +7,7 @@ import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
 import type { IAgentBridge, IAgentMessage } from '../../../services/agent/common/agent.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
-import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionPendingApproval, ISessionWorkspace } from '../../../services/sessions/common/session.js';
+import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionPendingApproval, ISessionWorkStep, ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
@@ -266,7 +266,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// restart, so it settles to NeedsInput.
 			status: coerceStatus(snapshot.status),
 			title: snapshot.title,
-			messages: snapshot.messages.map(message => ({ id: message.id, role: message.role, text: message.text, ...(message.detail !== undefined ? { detail: message.detail } : {}) })),
+			messages: snapshot.messages.map(message => ({
+				id: message.id,
+				role: message.role,
+				text: message.text,
+				...(message.detail !== undefined ? { detail: message.detail } : {}),
+				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+				...(message.steps !== undefined ? { steps: message.steps } : {}),
+			})),
 			interactivity: coerceInteractivity(snapshot.interactivity),
 			isArchived: snapshot.isArchived,
 			isRead: snapshot.isRead,
@@ -326,10 +333,36 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const modelId = this.modelsService?.selectedModel.get()?.id;
 		this.sequence += 1;
 		const assistantId = `${sessionId}-assistant-${this.sequence}`;
+		const workId = `${sessionId}-work-${this.sequence}`;
 		const transcript = toTranscript(session.messages.get());
 		let text = '';
 		let created = false;
 		let finalized = false;
+
+		// The work block tracks how the run spends its time: thinking stretches
+		// between events, and one step per tool call. Timestamps are taken on the
+		// renderer side as events arrive.
+		const workStart = Date.now();
+		const steps: ISessionWorkStep[] = [];
+		let stepStart = workStart;
+		let openToolLabel: string | undefined;
+
+		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string): void => {
+			const durationMs = Date.now() - stepStart;
+			// Sub-second thinking stretches are noise, not steps.
+			if (kind !== 'thinking' || durationMs >= 1000) {
+				steps.push({ kind, label, durationMs, ...(detail === undefined ? {} : { detail }) });
+			}
+			stepStart = Date.now();
+		};
+
+		const updateWork = (durationMs?: number): void => {
+			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: [...steps], ...(durationMs === undefined ? {} : { durationMs }) };
+			const messages = session.messages.get();
+			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		};
+		updateWork();
 
 		const updateAssistant = (): void => {
 			const messages = session.messages.get();
@@ -350,6 +383,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 			dispose();
 			disposeApprovals();
 			session.pendingApproval.set(undefined);
+			if (openToolLabel !== undefined) {
+				closeStep('tool', openToolLabel);
+				openToolLabel = undefined;
+			} else {
+				closeStep('thinking', 'Thought');
+			}
+			const workDuration = Date.now() - workStart;
+			updateWork(workDuration);
 			if (!created) {
 				updateAssistant();
 			}
@@ -357,6 +398,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			const now = new Date();
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
+				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
 				await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
 				await this.bridge.append(ref, { type: 'state', timestamp: now.toISOString(), status: SessionStatus.NeedsInput, isRead: false });
 			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
@@ -371,9 +413,26 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (payload.sessionId !== sessionId) {
 				return;
 			}
-			if (payload.event?.type === 'assistant_delta') {
-				text += payload.event.text;
+			const event = payload.event;
+			if (event?.type === 'assistant_delta') {
+				// First text after thinking closes the stretch; text after a tool
+				// result belongs to the next thinking stretch, so only close once.
+				if (text === '' && openToolLabel === undefined) {
+					closeStep('thinking', 'Thought');
+					updateWork();
+				}
+				text += event.text;
 				updateAssistant();
+			} else if (event?.type === 'tool_use') {
+				closeStep('thinking', 'Thought');
+				openToolLabel = describeWorkTool(event.name, event.input);
+				updateWork();
+			} else if (event?.type === 'tool_result') {
+				if (openToolLabel !== undefined) {
+					closeStep('tool', openToolLabel, truncateStepDetail(event.content, event.isError));
+					openToolLabel = undefined;
+					updateWork();
+				}
 			} else if (payload.done) {
 				finalize();
 			}
@@ -457,6 +516,21 @@ function toRef(snapshot: ISessionSnapshot): ISessionRef {
 
 // Map the UI transcript to harness messages. Text-only for now; the 'tool'
 // display role is dropped until client-side tools are wired.
+const MAX_STEP_DETAIL_CHARS = 2000;
+
+/** Tool output stored on the step for the expandable view; errors keep a marker. */
+function truncateStepDetail(content: string, isError: boolean): string {
+	const trimmed = content.length > MAX_STEP_DETAIL_CHARS ? `${content.slice(0, MAX_STEP_DETAIL_CHARS)}\n… (truncated)` : content;
+	return isError ? `[error]\n${trimmed}` : trimmed;
+}
+
+/** Short human label for a tool step: the tool plus its most telling argument. */
+function describeWorkTool(name: string, input: unknown): string {
+	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+	const arg = [record['command'], record['path'], record['pattern']].find(value => typeof value === 'string' && value !== '');
+	return typeof arg === 'string' ? `${name} ${arg}` : name;
+}
+
 function toTranscript(messages: readonly ISessionMessage[]): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
 	for (const message of messages) {

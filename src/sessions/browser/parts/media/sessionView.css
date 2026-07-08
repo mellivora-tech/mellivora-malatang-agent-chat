@@ -168,6 +168,114 @@
 	grid-template-columns: minmax(0, 1fr);
 }
 
+/* Work block — "Worked for 16m 56s ⌄" with per-step durations inside. */
+.conversation-work {
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-14);
+}
+
+.conversation-work-header {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-2) 0;
+	border: 0;
+	background: transparent;
+	color: var(--vscode-agents-color-text-secondary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-body2);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	cursor: default;
+}
+
+.conversation-work-header:hover {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-work-header .codicon {
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-work-steps {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-6);
+	margin-top: var(--vscode-agents-space-8);
+	padding-left: var(--vscode-agents-space-2);
+}
+
+/* `hidden` loses to the author display above — restore it explicitly. */
+.conversation-work-steps[hidden] {
+	display: none;
+}
+
+.conversation-work-step {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+}
+
+.conversation-work-step-row {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-body2);
+	text-align: left;
+	cursor: default;
+}
+
+button.conversation-work-step-row:hover {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-work-step .codicon {
+	flex: 0 0 auto;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-work-step-chevron {
+	opacity: 0.7;
+}
+
+.conversation-work-step-detail {
+	margin: 0 0 var(--vscode-agents-space-4) var(--vscode-agents-space-24);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+	overflow-x: auto;
+	max-height: 260px;
+	overflow-y: auto;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.conversation-work-step-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.conversation-work-step.tool .conversation-work-step-label {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-work-step-duration {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-subtle, var(--vscode-agents-color-text-muted));
+	font-variant-numeric: tabular-nums;
+}
+
 .conversation-approval {
 	display: flex;
 	flex-direction: column;

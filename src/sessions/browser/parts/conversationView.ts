@@ -6,7 +6,7 @@
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
-import type { IActiveSession, ISessionMessage, ISessionPendingApproval } from '../../services/sessions/common/session.js';
+import type { IActiveSession, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import { ConversationContext } from './conversationContext.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
@@ -32,6 +32,13 @@ export class ConversationView extends Disposable {
 	private session: IActiveSession | undefined;
 	private isSending = false;
 	private isStopping = false;
+	// Work blocks: user toggles override the default (open while live, closed when done).
+	private readonly workExpandOverride = new Map<string, boolean>();
+	// Individually expanded tool steps ("messageId:index").
+	private readonly stepExpand = new Set<string>();
+	// Live elapsed time is measured from when the block first appeared in this view.
+	private readonly workFirstSeen = new Map<string, number>();
+	private workTicker: ReturnType<typeof setInterval> | undefined;
 
 	constructor(
 		private readonly messageSender?: ISessionMessageSender,
@@ -78,7 +85,7 @@ export class ConversationView extends Disposable {
 		this.reconnectStatus = append(leftControls, document.createElement('div'));
 		this.reconnectStatus.className = 'conversation-reconnect-status';
 		this.reconnectStatus.setAttribute('aria-live', 'polite');
-		appendCodicon(this.reconnectStatus, 'codicon-loading');
+		appendCodicon(this.reconnectStatus, 'codicon-loading codicon-modifier-spin');
 		const reconnectLabel = append(this.reconnectStatus, document.createElement('span'));
 		reconnectLabel.textContent = 'Reconnecting... 1/10';
 
@@ -200,22 +207,142 @@ export class ConversationView extends Disposable {
 			empty.textContent = this.session ? 'No messages yet' : 'No session selected';
 		} else {
 			for (const message of messages) {
-				this.transcript.appendChild(createMessageRow(message));
+				this.transcript.appendChild(message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message));
 			}
 		}
 
+		const hasLiveWork = messages.some(message => message.role === 'work' && message.durationMs === undefined);
 		const approval = this.session?.pendingApproval.get();
 		if (approval) {
 			this.transcript.appendChild(createApprovalCard(approval));
 			// A question is on screen — keep it in view.
 			this.transcript.scrollTop = this.transcript.scrollHeight;
-		} else if (this.session?.status.get() === SessionStatus.InProgress) {
+		} else if (this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
+			// Mock/legacy runs without a work block keep the plain progress rows.
 			this.transcript.appendChild(this.createWorkingRow());
 			this.transcript.appendChild(this.createThinkingRow());
 		}
 
+		this.updateWorkTicker(hasLiveWork);
 		this.updateComposerState();
 		this.updateContextRing();
+	}
+
+	/**
+	 * "Worked for 16m 56s ⌄" — one collapsible block per agent run, holding the
+	 * thinking stretches and tool calls with their durations. Open while the run
+	 * is live (header ticks every second), collapsed once it settles.
+	 */
+	private createWorkBlock(message: ISessionMessage): HTMLElement {
+		const live = message.durationMs === undefined;
+		if (live && !this.workFirstSeen.has(message.id)) {
+			this.workFirstSeen.set(message.id, Date.now());
+		}
+		const expanded = this.workExpandOverride.get(message.id) ?? live;
+
+		const block = document.createElement('section');
+		block.className = 'conversation-work';
+		block.classList.toggle('live', live);
+
+		const header = append(block, document.createElement('button')) as HTMLButtonElement;
+		header.className = 'conversation-work-header';
+		header.type = 'button';
+		header.setAttribute('aria-expanded', String(expanded));
+		if (live) {
+			const spinner = append(header, document.createElement('span'));
+			spinner.className = 'codicon codicon-loading codicon-modifier-spin';
+			spinner.setAttribute('aria-hidden', 'true');
+		}
+		const title = append(header, document.createElement('span'));
+		title.className = 'conversation-work-title';
+		title.textContent = live
+			? `Working for ${formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now()))}`
+			: `Worked for ${formatDurationMs(message.durationMs ?? 0)}`;
+		const chevron = append(header, document.createElement('span'));
+		chevron.className = `codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`;
+		chevron.setAttribute('aria-hidden', 'true');
+		header.addEventListener('click', () => {
+			this.workExpandOverride.set(message.id, !expanded);
+			this.render();
+		});
+
+		const stepsList = append(block, document.createElement('div'));
+		stepsList.className = 'conversation-work-steps';
+		stepsList.hidden = !expanded;
+		(message.steps ?? []).forEach((step, index) => {
+			stepsList.appendChild(this.createWorkStepRow(`${message.id}:${index}`, step));
+		});
+
+		return block;
+	}
+
+	/** "⏱ Thought for a few seconds" / "🔧 read_file src/a.ts · 2s" — tool steps expand to their output. */
+	private createWorkStepRow(key: string, step: ISessionWorkStep): HTMLElement {
+		const wrapper = document.createElement('div');
+		wrapper.className = `conversation-work-step ${step.kind}`;
+
+		const row = append(wrapper, document.createElement(step.detail ? 'button' : 'div')) as HTMLElement;
+		row.className = 'conversation-work-step-row';
+		if (row instanceof HTMLButtonElement) {
+			row.type = 'button';
+		}
+
+		const icon = append(row, document.createElement('span'));
+		icon.className = `codicon ${step.kind === 'thinking' ? 'codicon-history' : 'codicon-tools'}`;
+		icon.setAttribute('aria-hidden', 'true');
+
+		const label = append(row, document.createElement('span'));
+		label.className = 'conversation-work-step-label';
+		if (step.kind === 'thinking') {
+			label.textContent = `Thought for ${thinkingDurationText(step.durationMs)}`;
+		} else {
+			label.textContent = step.label;
+			const duration = append(row, document.createElement('span'));
+			duration.className = 'conversation-work-step-duration';
+			duration.textContent = formatDurationMs(step.durationMs);
+		}
+
+		if (step.detail) {
+			const open = this.stepExpand.has(key);
+			row.setAttribute('aria-expanded', String(open));
+			const chevron = append(row, document.createElement('span'));
+			chevron.className = `codicon ${open ? 'codicon-chevron-down' : 'codicon-chevron-right'} conversation-work-step-chevron`;
+			chevron.setAttribute('aria-hidden', 'true');
+			row.addEventListener('click', () => {
+				if (this.stepExpand.has(key)) {
+					this.stepExpand.delete(key);
+				} else {
+					this.stepExpand.add(key);
+				}
+				this.render();
+			});
+			if (open) {
+				const detail = append(wrapper, document.createElement('pre'));
+				detail.className = 'conversation-work-step-detail';
+				detail.textContent = step.detail;
+			}
+		}
+
+		return wrapper;
+	}
+
+	private updateWorkTicker(hasLiveWork: boolean): void {
+		if (hasLiveWork && this.workTicker === undefined) {
+			// The header shows elapsed seconds; deltas already re-render constantly,
+			// the ticker only covers quiet stretches (thinking, long tool calls).
+			this.workTicker = setInterval(() => this.render(), 1000);
+		} else if (!hasLiveWork && this.workTicker !== undefined) {
+			clearInterval(this.workTicker);
+			this.workTicker = undefined;
+		}
+	}
+
+	override dispose(): void {
+		if (this.workTicker !== undefined) {
+			clearInterval(this.workTicker);
+			this.workTicker = undefined;
+		}
+		super.dispose();
 	}
 
 	/**
@@ -258,7 +385,7 @@ export class ConversationView extends Disposable {
 		row.className = 'conversation-thinking-row';
 
 		const spinner = append(row, document.createElement('span'));
-		spinner.className = 'codicon codicon-loading';
+		spinner.className = 'codicon codicon-loading codicon-modifier-spin';
 		spinner.setAttribute('aria-hidden', 'true');
 
 		const label = append(row, document.createElement('span'));
@@ -462,6 +589,7 @@ function messageIcon(role: ISessionMessage['role']): string {
 		case 'assistant':
 			return 'codicon-copilot';
 		case 'tool':
+		case 'work':
 			return 'codicon-tools';
 	}
 }
@@ -473,8 +601,20 @@ function messageLabel(role: ISessionMessage['role']): string {
 		case 'assistant':
 			return 'Codex';
 		case 'tool':
+		case 'work':
 			return 'Tool';
 	}
+}
+
+function formatDurationMs(ms: number): string {
+	const totalSeconds = Math.max(1, Math.round(ms / 1000));
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds % 60;
+	return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+function thinkingDurationText(ms: number): string {
+	return ms < 10_000 ? 'a few seconds' : formatDurationMs(ms);
 }
 
 function conversationStatusId(status: SessionStatus): string {
