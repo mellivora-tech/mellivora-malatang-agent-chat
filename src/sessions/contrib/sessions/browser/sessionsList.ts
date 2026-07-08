@@ -116,7 +116,14 @@ export class SessionsList extends Disposable {
 			{ id: 'settings', label: 'Settings', icon: 'codicon-settings-gear', group: 'suggested', run: () => this.openSettingsDialog() },
 		];
 		if (this.options.onToggleSidebar) {
-			actions.push({ id: 'toggle-sidebar', label: 'Toggle sidebar', icon: 'codicon-layout-sidebar-left', group: 'panels', keybinding: '⌘ B', run: () => this.options.onToggleSidebar?.() });
+			actions.push({
+				id: 'toggle-sidebar',
+				label: 'Toggle sidebar',
+				icon: 'codicon-layout-sidebar-left',
+				group: 'panels',
+				keybinding: '⌘ B',
+				run: () => this.options.onToggleSidebar?.(),
+			});
 		}
 		actions.push({ id: 'toggle-side-pane', label: 'Toggle side pane', icon: 'codicon-layout-sidebar-right', group: 'panels', run: () => partService?.toggleSidePane() });
 		return actions;
@@ -863,19 +870,25 @@ function getStatusLabel(status: SessionStatus): string {
 	}
 }
 
+/** Compact relative time for list rows: "now", "27m", "1h", "4d"; dates past a week. */
 function formatTimestamp(date: Date): string {
 	const diff = Date.now() - date.getTime();
 	const minutes = Math.max(0, Math.floor(diff / 60000));
 	if (minutes < 1) {
-		return 'just now';
+		return 'now';
 	}
 	if (minutes < 60) {
-		return `${minutes}m ago`;
+		return `${minutes}m`;
 	}
 
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) {
-		return `${hours}h ago`;
+		return `${hours}h`;
+	}
+
+	const days = Math.floor(hours / 24);
+	if (days < 7) {
+		return `${days}d`;
 	}
 
 	return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });

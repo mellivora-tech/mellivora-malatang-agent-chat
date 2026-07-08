@@ -53,7 +53,10 @@ const GROUP_TITLES: Readonly<Record<SearchPaletteActionGroup, string>> = {
 
 const TASK_LIMIT = 6;
 
-type Entry = { readonly kind: 'header'; readonly label: string } | { readonly kind: 'item'; readonly label: string; readonly icon: string; readonly keybinding?: string; readonly run: () => void } | { readonly kind: 'empty'; readonly label: string };
+type Entry =
+	| { readonly kind: 'header'; readonly label: string }
+	| { readonly kind: 'item'; readonly label: string; readonly icon: string; readonly keybinding?: string; readonly run: () => void }
+	| { readonly kind: 'empty'; readonly label: string };
 
 export class SearchPalette extends Disposable {
 	private readonly openStore = this._register(new DisposableStore());
@@ -307,7 +310,12 @@ export class SearchPalette extends Disposable {
 		switch (this.tab) {
 			case 'tasks': {
 				const tasks = taskEntries();
-				return tasks.length > 0 ? [{ kind: 'header', label: 'Recent tasks' }, ...tasks] : [{ kind: 'header', label: 'Recent tasks' }, { kind: 'empty', label: query ? 'No matching tasks' : 'No tasks yet' }];
+				return tasks.length > 0
+					? [{ kind: 'header', label: 'Recent tasks' }, ...tasks]
+					: [
+							{ kind: 'header', label: 'Recent tasks' },
+							{ kind: 'empty', label: query ? 'No matching tasks' : 'No tasks yet' },
+						];
 			}
 			case 'files':
 				return this.fileEntries();
@@ -315,7 +323,11 @@ export class SearchPalette extends Disposable {
 				return [...withHeader(GROUP_TITLES.suggested, actionEntries('suggested')), ...withHeader(GROUP_TITLES.panels, actionEntries('panels'))];
 			case 'all':
 			default:
-				return [...withHeader('Recent tasks', taskEntries(TASK_LIMIT)), ...withHeader(GROUP_TITLES.suggested, actionEntries('suggested')), ...withHeader(GROUP_TITLES.panels, actionEntries('panels'))];
+				return [
+					...withHeader('Recent tasks', taskEntries(TASK_LIMIT)),
+					...withHeader(GROUP_TITLES.suggested, actionEntries('suggested')),
+					...withHeader(GROUP_TITLES.panels, actionEntries('panels')),
+				];
 		}
 	}
 

@@ -88,7 +88,8 @@ export const agentsSizeSidebarWidth = registerSize('agents.size.sidebar.width', 
 export const agentsSizeSidebarGutter = registerSize('agents.size.sidebar.gutter', '14px');
 export const agentsSizeSidebarHeader = registerSize('agents.size.sidebar.header', '148px');
 export const agentsSizeSidebarMenuRow = registerSize('agents.size.sidebar.menuRow', '30px');
-export const agentsSizeSidebarListTitleOffset = registerSize('agents.size.sidebar.listTitleOffset', '48px');
+// 46px lines list titles up with the header menu text axis (icon x22 + 16 icon + 8 gap).
+export const agentsSizeSidebarListTitleOffset = registerSize('agents.size.sidebar.listTitleOffset', '46px');
 export const agentsSizeSidebarFooter = registerSize('agents.size.sidebar.footer', '48px');
 export const agentsSizeStageMargin = registerSize('agents.size.stage.margin', '4px');
 export const agentsSizeConversationWidth = registerSize('agents.size.conversation.width', '950px');
