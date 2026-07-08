@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { IAgentBridge, IAgentEventPayload, IAgentMessage } from '../sessions/services/agent/common/agent.js';
+import type { IAgentBridge, IAgentEventPayload, IAgentMessage, IApprovalRequestPayload, PermissionMode } from '../sessions/services/agent/common/agent.js';
 import type { IAppState, IAppStateBridge } from '../sessions/services/appState/common/appState.js';
 import type {
 	IModelEntryInput,
@@ -51,14 +51,20 @@ const models: IModelsBridge = {
 };
 
 const agent: IAgentBridge = {
-	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string) =>
-		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId }),
+	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode) =>
+		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode }),
 	stop: (sessionId: string) => ipcRenderer.invoke('agent:stop', sessionId),
 	onEvent: (listener: (payload: IAgentEventPayload) => void) => {
 		const handler = (_event: unknown, payload: IAgentEventPayload): void => listener(payload);
 		ipcRenderer.on('agent:event', handler);
 		return () => ipcRenderer.removeListener('agent:event', handler);
 	},
+	onApprovalRequest: (listener: (payload: IApprovalRequestPayload) => void) => {
+		const handler = (_event: unknown, payload: IApprovalRequestPayload): void => listener(payload);
+		ipcRenderer.on('agent:approval-request', handler);
+		return () => ipcRenderer.removeListener('agent:approval-request', handler);
+	},
+	respondApproval: (requestId: string, approved: boolean) => ipcRenderer.invoke('agent:approval-response', { requestId, approved }),
 };
 
 contextBridge.exposeInMainWorld('agentWindow', {

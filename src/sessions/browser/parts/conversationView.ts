@@ -6,10 +6,10 @@
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
-import type { IActiveSession, ISessionMessage } from '../../services/sessions/common/session.js';
+import type { IActiveSession, ISessionMessage, ISessionPendingApproval } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import { ConversationContext } from './conversationContext.js';
-import { installEffortPicker, installModelPicker } from './modelPicker.js';
+import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string): Promise<unknown>;
@@ -69,10 +69,11 @@ export class ConversationView extends Disposable {
 		access.className = 'conversation-access';
 		access.type = 'button';
 		access.title = 'Approvals';
-		appendCodicon(access, 'codicon-shield');
+		const accessIcon = appendCodicon(access, 'codicon-shield');
 		const accessLabel = append(access, document.createElement('span'));
-		accessLabel.textContent = 'Full access';
 		appendCodicon(access, 'codicon-chevron-down');
+		// Menu hosted on the view root — the composer clips overflow.
+		this._register(installPermissionPicker({ host: this.element, trigger: access, label: accessLabel, icon: accessIcon }));
 
 		this.reconnectStatus = append(leftControls, document.createElement('div'));
 		this.reconnectStatus.className = 'conversation-reconnect-status';
@@ -148,6 +149,7 @@ export class ConversationView extends Disposable {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.interactivity.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.status.subscribe(() => this.render()));
+			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
 		}
 
 		this.render();
@@ -202,7 +204,12 @@ export class ConversationView extends Disposable {
 			}
 		}
 
-		if (this.session?.status.get() === SessionStatus.InProgress) {
+		const approval = this.session?.pendingApproval.get();
+		if (approval) {
+			this.transcript.appendChild(createApprovalCard(approval));
+			// A question is on screen — keep it in view.
+			this.transcript.scrollTop = this.transcript.scrollHeight;
+		} else if (this.session?.status.get() === SessionStatus.InProgress) {
 			this.transcript.appendChild(this.createWorkingRow());
 			this.transcript.appendChild(this.createThinkingRow());
 		}
@@ -323,6 +330,41 @@ export class ConversationView extends Disposable {
 		this.sendError.textContent = message ?? '';
 		this.sendError.hidden = !message;
 	}
+}
+
+/** The gate paused on a mutating tool: say what it wants and offer Allow / Deny. */
+function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
+	const card = document.createElement('div');
+	card.className = 'conversation-approval';
+	card.setAttribute('role', 'alertdialog');
+	card.setAttribute('aria-label', 'Approval required');
+
+	const header = append(card, document.createElement('div'));
+	header.className = 'conversation-approval-header';
+	appendCodicon(header, 'codicon-shield');
+	const title = append(header, document.createElement('span'));
+	title.textContent = approval.toolName === 'bash' ? 'Run this command?' : 'Apply this change?';
+
+	const detail = append(card, document.createElement('code'));
+	detail.className = 'conversation-approval-detail';
+	detail.textContent = approval.detail;
+
+	const actions = append(card, document.createElement('div'));
+	actions.className = 'conversation-approval-actions';
+
+	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
+	allow.className = 'conversation-approval-allow';
+	allow.type = 'button';
+	allow.textContent = 'Allow';
+	allow.addEventListener('click', () => approval.respond(true));
+
+	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
+	deny.className = 'conversation-approval-deny';
+	deny.type = 'button';
+	deny.textContent = 'Deny';
+	deny.addEventListener('click', () => approval.respond(false));
+
+	return card;
 }
 
 function appendCodicon(parent: HTMLElement, codicon: string): HTMLElement {

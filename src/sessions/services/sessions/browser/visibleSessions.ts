@@ -65,6 +65,9 @@ class ActiveSession implements IActiveSession {
 	get interactivity() {
 		return this.session.interactivity;
 	}
+	get pendingApproval() {
+		return this.session.pendingApproval;
+	}
 }
 
 export class VisibleSessions {

@@ -30,6 +30,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		isPinned: observableValue(false),
 		messages: observableValue<readonly ISessionMessage[]>([]),
 		interactivity: observableValue(SessionInteractivity.Full),
+		pendingApproval: observableValue(undefined),
 	};
 }
 

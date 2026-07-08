@@ -7,8 +7,9 @@ import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
 import type { IAgentBridge, IAgentMessage } from '../../../services/agent/common/agent.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
-import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionWorkspace } from '../../../services/sessions/common/session.js';
+import type { ISession, ISessionChangesSummary, ISessionMessage, ISessionPendingApproval, ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
+import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
 import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
@@ -38,6 +39,7 @@ interface IMutableSession extends ISession {
 	readonly isPinned: ObservableValue<boolean>;
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
+	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
 }
 
 function createSession(options: {
@@ -75,6 +77,7 @@ function createSession(options: {
 		isPinned: observableValue(options.isPinned ?? false),
 		messages: observableValue(options.messages),
 		interactivity: observableValue(options.interactivity),
+		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
 	};
 }
 
@@ -345,6 +348,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 			finalized = true;
 			dispose();
+			disposeApprovals();
+			session.pendingApproval.set(undefined);
 			if (!created) {
 				updateAssistant();
 			}
@@ -374,7 +379,32 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 		});
 
-		void agent.run(sessionId, transcript, modelId, session.projectId).catch(error => {
+		// A gate approval pauses the run: surface it on the session (the
+		// conversation view renders Allow / Deny) and flag NeedsInput.
+		const disposeApprovals = agent.onApprovalRequest(payload => {
+			if (payload.sessionId !== sessionId) {
+				return;
+			}
+			const approval: ISessionPendingApproval = {
+				requestId: payload.requestId,
+				toolName: payload.toolName,
+				detail: payload.detail,
+				respond: approved => {
+					if (session.pendingApproval.get()?.requestId !== payload.requestId) {
+						return;
+					}
+					session.pendingApproval.set(undefined);
+					session.status.set(SessionStatus.InProgress);
+					this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+					void agent.respondApproval(payload.requestId, approved);
+				},
+			};
+			session.pendingApproval.set(approval);
+			session.status.set(SessionStatus.NeedsInput);
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		});
+
+		void agent.run(sessionId, transcript, modelId, session.projectId, permissionMode.get()).catch(error => {
 			text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
 			updateAssistant();
 			finalize();

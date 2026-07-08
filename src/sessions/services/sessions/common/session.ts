@@ -38,6 +38,15 @@ export interface ISessionMessage {
 	readonly detail?: string;
 }
 
+/** A tool call paused on the user's allow / deny. */
+export interface ISessionPendingApproval {
+	readonly requestId: string;
+	readonly toolName: string;
+	/** One-line summary of what the tool wants to do (command, file path…). */
+	readonly detail: string;
+	respond(approved: boolean): void;
+}
+
 export interface ISession {
 	readonly sessionId: string;
 	readonly providerId: string;
@@ -56,6 +65,7 @@ export interface ISession {
 	readonly isPinned: IObservable<boolean>;
 	readonly messages: IObservable<readonly ISessionMessage[]>;
 	readonly interactivity: IObservable<SessionInteractivity>;
+	readonly pendingApproval: IObservable<ISessionPendingApproval | undefined>;
 }
 
 export interface IActiveSession extends ISession {

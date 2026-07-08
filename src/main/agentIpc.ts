@@ -5,8 +5,8 @@
 
 import { ipcMain } from 'electron';
 import { runAgentLoop } from './agent/agentLoop.js';
-import { allowAllPermissionGate } from './agent/agentTools.js';
 import type { IAgentMessage, IAgentTerminal, IAgentTool } from './agent/agentTypes.js';
+import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createModelClient } from './agent/createModelClient.js';
 import { getProject } from './projectsStorage.js';
@@ -14,14 +14,22 @@ import { resolveModelConfig } from './modelConfigStorage.js';
 
 const DEFAULT_SYSTEM = 'You are a helpful coding agent.';
 
-/** System prompt for a run bound to a workspace, listing the available tools. */
-function workspaceSystemPrompt(cwd: string): string {
-	return [
-		"You are a helpful coding agent working inside the user's project.",
-		`Working directory: ${cwd}`,
-		'You have read-only tools to explore the codebase: read_file, list_dir, glob, grep.',
-		'Prefer these tools to inspect files before answering. All paths are relative to the working directory; you cannot access files outside it.',
-	].join('\n');
+/** System prompt for a run bound to a workspace, reflecting the permission mode. */
+function workspaceSystemPrompt(cwd: string, mode: PermissionMode): string {
+	const lines = ["You are a helpful coding agent working inside the user's project.", `Working directory: ${cwd}`];
+	if (mode === 'plan') {
+		lines.push(
+			'You are in plan mode: explore with the read-only tools (read_file, list_dir, glob, grep) and present a plan.',
+			'Do not attempt to change files or run commands — propose what you would do instead.',
+		);
+	} else {
+		lines.push(
+			'Tools: read_file, list_dir, glob, grep to explore; write_file, edit_file to change files; bash to run commands.',
+			'Prefer reading before writing. Some actions may pause for the user to approve.',
+		);
+	}
+	lines.push('All paths are relative to the working directory; you cannot access files outside it.');
+	return lines.join('\n');
 }
 
 interface IAgentRunPayload {
@@ -29,15 +37,32 @@ interface IAgentRunPayload {
 	readonly messages: readonly IAgentMessage[];
 	readonly modelId?: string;
 	readonly projectId?: string;
+	readonly permissionMode?: string;
+}
+
+interface IApprovalResponsePayload {
+	readonly requestId: string;
+	readonly approved: boolean;
 }
 
 /**
  * Drives the agent loop in the main process and streams its events to the
- * renderer over `agent:event`. Tools are not wired yet, so this handles
- * streaming text turns; the loop, clients, and gate are ready for tools.
+ * renderer over `agent:event`. Mutating tools consult the permission gate for
+ * the session's mode; 'ask'/'auto-edit' route through an approval round-trip
+ * with the renderer (`agent:approval-request` / `agent:approval-response`).
  */
 export function registerAgentIpc(dataRoot: string): void {
 	const abortControllers = new Map<string, AbortController>();
+	const pendingApprovals = new Map<string, { readonly sessionId: string; resolve(approved: boolean): void }>();
+
+	const settleApprovals = (sessionId: string): void => {
+		for (const [requestId, pending] of [...pendingApprovals]) {
+			if (pending.sessionId === sessionId) {
+				pendingApprovals.delete(requestId);
+				pending.resolve(false);
+			}
+		}
+	};
 
 	ipcMain.handle('agent:run', async (event, payload: IAgentRunPayload): Promise<IAgentTerminal> => {
 		const config = await resolveModelConfig(dataRoot, payload.modelId ?? '');
@@ -45,23 +70,50 @@ export function registerAgentIpc(dataRoot: string): void {
 			throw new Error('No model is configured. Add one in Settings → Models.');
 		}
 
+		const mode = asPermissionMode(payload.permissionMode);
+
 		// Bind file tools to the session's project directory. The workspace root is
 		// resolved here from the stored project — never from a renderer-supplied path.
 		const project = payload.projectId ? await getProject(dataRoot, payload.projectId) : undefined;
 		const cwd = project?.path;
-		const tools: readonly IAgentTool[] = cwd ? createWorkspaceTools(cwd) : [];
+		const tools: readonly IAgentTool[] = cwd ? createWorkspaceTools(cwd, { includeMutations: mode !== 'plan' }) : [];
 
 		const controller = new AbortController();
 		abortControllers.set(payload.sessionId, controller);
 		const sender = event.sender;
 
+		// A mutation the gate cannot auto-decide becomes a question to the renderer;
+		// the reply (or an abort / run end) resolves it. Denied by default.
+		const requestApproval = (tool: IAgentTool, input: unknown, context: { toolUseId: string }): Promise<boolean> =>
+			new Promise<boolean>(resolve => {
+				if (controller.signal.aborted || sender.isDestroyed()) {
+					resolve(false);
+					return;
+				}
+				pendingApprovals.set(context.toolUseId, { sessionId: payload.sessionId, resolve });
+				controller.signal.addEventListener(
+					'abort',
+					() => {
+						if (pendingApprovals.delete(context.toolUseId)) {
+							resolve(false);
+						}
+					},
+					{ once: true },
+				);
+				sender.send('agent:approval-request', {
+					sessionId: payload.sessionId,
+					requestId: context.toolUseId,
+					toolName: tool.name,
+					detail: describeToolCall(tool.name, input),
+				});
+			});
+
 		try {
 			const loop = runAgentLoop(payload.messages, {
-				system: cwd ? workspaceSystemPrompt(cwd) : DEFAULT_SYSTEM,
+				system: cwd ? workspaceSystemPrompt(cwd, mode) : DEFAULT_SYSTEM,
 				tools,
-				// Read-only tools only today; swap in the approval gate with the mutating tools.
 				modelClient: createModelClient(config),
-				permissionGate: allowAllPermissionGate,
+				permissionGate: createGateForMode(mode, requestApproval),
 				signal: controller.signal,
 			});
 
@@ -82,6 +134,15 @@ export function registerAgentIpc(dataRoot: string): void {
 			return step.value;
 		} finally {
 			abortControllers.delete(payload.sessionId);
+			settleApprovals(payload.sessionId);
+		}
+	});
+
+	ipcMain.handle('agent:approval-response', (_event, payload: IApprovalResponsePayload) => {
+		const pending = pendingApprovals.get(payload.requestId);
+		if (pending) {
+			pendingApprovals.delete(payload.requestId);
+			pending.resolve(payload.approved === true);
 		}
 	});
 

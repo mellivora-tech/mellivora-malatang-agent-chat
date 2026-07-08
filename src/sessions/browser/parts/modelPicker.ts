@@ -5,13 +5,17 @@
 
 import { append } from '../../base/browser/dom.js';
 import { DisposableStore, toDisposable, type IDisposable } from '../../base/common/lifecycle.js';
+import { PERMISSION_MODES, permissionMode, permissionModeInfo } from '../../services/agent/browser/permissionModeService.js';
 import { listEnabledModels, type IModelsService } from '../../services/models/browser/modelsService.js';
 import type { ModelEffort } from '../../services/models/common/models.js';
 
-export interface IComposerPickerOptions {
+export interface IDropdownAnchor {
 	/** Positioned ancestor that hosts the dropdown (the composer clips overflow). */
 	readonly host: HTMLElement;
 	readonly trigger: HTMLButtonElement;
+}
+
+export interface IComposerPickerOptions extends IDropdownAnchor {
 	readonly label: HTMLElement;
 	readonly modelsService: IModelsService;
 }
@@ -92,10 +96,53 @@ export function installEffortPicker(options: IComposerPickerOptions): IDisposabl
 	return disposables;
 }
 
+export interface IPermissionPickerOptions extends IDropdownAnchor {
+	readonly label: HTMLElement;
+	readonly icon?: HTMLElement;
+}
+
+/**
+ * The composer's approvals picker ("Full access ⌄"): choose how much the agent
+ * may do without asking. The mode lives on a shared observable, so every
+ * composer shows and drives the same choice, and runs read it at start time.
+ */
+export function installPermissionPicker(options: IPermissionPickerOptions): IDisposable {
+	const { trigger, label, icon } = options;
+	const disposables = new DisposableStore();
+
+	const updateLabel = (): void => {
+		const info = permissionModeInfo(permissionMode.get());
+		label.textContent = info.label;
+		trigger.title = `Approvals: ${info.label} — ${info.description}`;
+		if (icon) {
+			icon.className = `codicon ${info.icon}`;
+		}
+	};
+	disposables.add(permissionMode.subscribe(updateLabel));
+	updateLabel();
+
+	disposables.add(
+		installDropdown(options, () => {
+			const current = permissionMode.get();
+			return PERMISSION_MODES.map(info => ({
+				label: info.label,
+				detail: info.description,
+				icon: info.icon,
+				checked: info.mode === current,
+				pick: () => permissionMode.set(info.mode),
+			}));
+		}),
+	);
+
+	return disposables;
+}
+
 interface IDropdownItem {
 	readonly label: string;
 	readonly detail?: string;
 	readonly checked: boolean;
+	/** Leading codicon; switches the row to the two-line icon + title/description layout. */
+	readonly icon?: string;
 	pick(): void;
 }
 
@@ -104,7 +151,7 @@ interface IDropdownItem {
  * above it when the composer sits near the window bottom; closes on outside
  * click, Escape, or pick.
  */
-function installDropdown(options: IComposerPickerOptions, buildItems: (menu: HTMLElement) => readonly IDropdownItem[]): IDisposable {
+function installDropdown(options: IDropdownAnchor, buildItems: (menu: HTMLElement) => readonly IDropdownItem[]): IDisposable {
 	const { host, trigger } = options;
 	let menu: HTMLElement | undefined;
 
@@ -134,19 +181,40 @@ function installDropdown(options: IComposerPickerOptions, buildItems: (menu: HTM
 
 		for (const entry of buildItems(menu)) {
 			const item = append(menu, document.createElement('button')) as HTMLButtonElement;
-			item.className = 'sessions-model-menu-item';
 			item.type = 'button';
 			item.setAttribute('role', 'menuitem');
-			const check = append(item, document.createElement('span'));
-			check.className = `codicon codicon-check${entry.checked ? '' : ' sessions-model-check-hidden'}`;
-			check.setAttribute('aria-hidden', 'true');
-			const name = append(item, document.createElement('span'));
-			name.className = 'sessions-model-menu-label';
-			name.textContent = entry.label;
-			if (entry.detail) {
-				const detail = append(item, document.createElement('span'));
-				detail.className = 'sessions-model-menu-provider';
-				detail.textContent = entry.detail;
+			if (entry.icon) {
+				// Two-line row: leading icon, title over description, check at the right.
+				item.className = 'sessions-model-menu-item sessions-menu-item-rich';
+				const icon = append(item, document.createElement('span'));
+				icon.className = `codicon ${entry.icon} sessions-menu-rich-icon`;
+				icon.setAttribute('aria-hidden', 'true');
+				const text = append(item, document.createElement('span'));
+				text.className = 'sessions-menu-rich-text';
+				const name = append(text, document.createElement('span'));
+				name.className = 'sessions-menu-rich-title';
+				name.textContent = entry.label;
+				if (entry.detail) {
+					const detail = append(text, document.createElement('span'));
+					detail.className = 'sessions-menu-rich-description';
+					detail.textContent = entry.detail;
+				}
+				const check = append(item, document.createElement('span'));
+				check.className = `codicon codicon-check sessions-menu-rich-check${entry.checked ? '' : ' sessions-model-check-hidden'}`;
+				check.setAttribute('aria-hidden', 'true');
+			} else {
+				item.className = 'sessions-model-menu-item';
+				const check = append(item, document.createElement('span'));
+				check.className = `codicon codicon-check${entry.checked ? '' : ' sessions-model-check-hidden'}`;
+				check.setAttribute('aria-hidden', 'true');
+				const name = append(item, document.createElement('span'));
+				name.className = 'sessions-model-menu-label';
+				name.textContent = entry.label;
+				if (entry.detail) {
+					const detail = append(item, document.createElement('span'));
+					detail.className = 'sessions-model-menu-provider';
+					detail.textContent = entry.detail;
+				}
 			}
 			item.addEventListener('click', () => {
 				entry.pick();

@@ -24,6 +24,7 @@ function createSession(sessionId: string): ISession {
 		isPinned: observableValue(false),
 		messages: observableValue<readonly ISessionMessage[]>([]),
 		interactivity: observableValue(SessionInteractivity.Full),
+		pendingApproval: observableValue(undefined),
 	};
 }
 

@@ -7,7 +7,7 @@ import { append } from '../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
-import { installEffortPicker, installModelPicker } from './modelPicker.js';
+import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface INewSessionViewOptions {
 	readonly onStartSession?: (query: string) => Promise<unknown>;
@@ -82,10 +82,11 @@ export class NewSessionView extends Disposable {
 		accessIcon.className = 'codicon codicon-shield';
 		accessIcon.setAttribute('aria-hidden', 'true');
 		const accessLabel = append(access, document.createElement('span'));
-		accessLabel.textContent = 'Full access';
 		const accessChevron = append(access, document.createElement('span'));
 		accessChevron.className = 'codicon codicon-chevron-down';
 		accessChevron.setAttribute('aria-hidden', 'true');
+		// Menu hosted on `content` — the composer clips overflow.
+		this._register(installPermissionPicker({ host: content, trigger: access, label: accessLabel, icon: accessIcon }));
 
 		const rightControls = append(toolbar, document.createElement('div'));
 		rightControls.className = 'new-session-toolbar-right';

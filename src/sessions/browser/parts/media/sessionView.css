@@ -168,6 +168,70 @@
 	grid-template-columns: minmax(0, 1fr);
 }
 
+.conversation-approval {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-10);
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-18);
+	padding: var(--vscode-agents-space-14) var(--vscode-agents-space-16);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-warning, #d29922) 45%, transparent);
+	border-radius: var(--vscode-agents-radius-container, 10px);
+	background: color-mix(in srgb, var(--vscode-agents-color-warning, #d29922) 8%, transparent);
+}
+
+.conversation-approval-header {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-approval-detail {
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+	overflow-x: auto;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-body2);
+	white-space: pre;
+}
+
+.conversation-approval-actions {
+	display: flex;
+	gap: var(--vscode-agents-space-8);
+}
+
+.conversation-approval-actions button {
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-14);
+	border: var(--vscode-agents-space-1) solid transparent;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	font: inherit;
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	cursor: default;
+}
+
+.conversation-approval-allow {
+	background: var(--vscode-agents-color-button-background, #2ea043);
+	color: var(--vscode-agents-color-button-foreground, #fff);
+}
+
+.conversation-approval-allow:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-button-background, #2ea043) 88%, #fff);
+}
+
+.conversation-approval-deny {
+	background: transparent;
+	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 24%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-approval-deny:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
 .conversation-message.user .conversation-message-avatar {
 	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 22%, transparent);
 	color: var(--vscode-agents-color-badge-foreground);
