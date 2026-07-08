@@ -29,31 +29,12 @@
 	width: min(var(--vscode-agents-size-watermark-width), 78vw);
 	height: var(--vscode-agents-space-180);
 	transform: translateX(-50%);
+	background-image: url('/assets/logo/logo.svg');
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: contain;
+	opacity: 0.92;
 	user-select: none;
-}
-
-.new-session-watermark::before,
-.new-session-watermark::after {
-	content: '';
-	position: absolute;
-	box-sizing: border-box;
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-watermark);
-	transform: skewX(-34deg);
-}
-
-.new-session-watermark::before {
-	left: var(--vscode-agents-space-10);
-	top: 0;
-	width: var(--vscode-agents-size-watermark-primaryStroke);
-	height: var(--vscode-agents-space-48);
-	border-bottom-left-radius: var(--vscode-agents-space-28);
-}
-
-.new-session-watermark::after {
-	left: var(--vscode-agents-size-watermark-primaryStroke);
-	top: 0;
-	width: var(--vscode-agents-size-watermark-secondaryStroke);
-	height: var(--vscode-agents-space-180);
 }
 
 .new-session-heading {
@@ -354,9 +335,5 @@
 @media (max-width: 920px) {
 	.new-session-content {
 		width: min(100% - var(--vscode-agents-space-40), var(--vscode-agents-size-composer-width));
-	}
-
-	.new-session-watermark {
-		font-size: 170px;
 	}
 }

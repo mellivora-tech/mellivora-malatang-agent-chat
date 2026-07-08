@@ -164,6 +164,10 @@
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 82%, transparent);
 }
 
+.conversation-message.assistant {
+	grid-template-columns: minmax(0, 1fr);
+}
+
 .conversation-message.user .conversation-message-avatar {
 	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 22%, transparent);
 	color: var(--vscode-agents-color-badge-foreground);

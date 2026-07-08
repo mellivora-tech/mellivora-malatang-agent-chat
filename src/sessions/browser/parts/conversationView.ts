@@ -364,18 +364,23 @@ function createMessageRow(message: ISessionMessage): HTMLElement {
 	row.className = `conversation-message ${message.role}`;
 	row.dataset.role = message.role;
 
-	const avatar = append(row, document.createElement('div'));
-	avatar.className = 'conversation-message-avatar';
-	const icon = append(avatar, document.createElement('span'));
-	icon.className = `codicon ${messageIcon(message.role)}`;
-	icon.setAttribute('aria-hidden', 'true');
+	// Assistant messages render as plain text — no avatar, no author label.
+	if (message.role !== 'assistant') {
+		const avatar = append(row, document.createElement('div'));
+		avatar.className = 'conversation-message-avatar';
+		const icon = append(avatar, document.createElement('span'));
+		icon.className = `codicon ${messageIcon(message.role)}`;
+		icon.setAttribute('aria-hidden', 'true');
+	}
 
 	const body = append(row, document.createElement('div'));
 	body.className = 'conversation-message-body';
 
-	const label = append(body, document.createElement('div'));
-	label.className = 'conversation-message-label';
-	label.textContent = messageLabel(message.role);
+	if (message.role !== 'assistant') {
+		const label = append(body, document.createElement('div'));
+		label.className = 'conversation-message-label';
+		label.textContent = messageLabel(message.role);
+	}
 
 	if (message.role === 'user') {
 		const bubble = append(body, document.createElement('div'));
