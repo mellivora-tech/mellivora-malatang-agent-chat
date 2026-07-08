@@ -103,6 +103,34 @@
 	outline-offset: var(--vscode-agents-space-2);
 }
 
+.conversation-context-pill {
+	position: relative; /* anchors the hover tooltip */
+}
+
+.conversation-context-tooltip {
+	position: absolute;
+	top: calc(100% + var(--vscode-agents-space-4));
+	left: 0;
+	z-index: 6;
+	max-width: 420px;
+	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 80ms ease-out 300ms;
+}
+
+.conversation-context-pill:hover .conversation-context-tooltip {
+	opacity: 1;
+}
+
 .conversation-context-pill.has-error {
 	border-color: color-mix(in srgb, var(--vscode-agents-color-error, #f14c4c) 55%, transparent);
 	color: var(--vscode-agents-color-error, #f14c4c);
@@ -140,6 +168,10 @@
 	text-align: left;
 	cursor: default;
 	white-space: nowrap;
+}
+
+.conversation-branch-menu-item:disabled {
+	opacity: 0.5;
 }
 
 .conversation-branch-menu-item:hover {
@@ -217,6 +249,14 @@
 
 .conversation-message.assistant {
 	grid-template-columns: minmax(0, 1fr);
+}
+
+.conversation-message-time {
+	align-self: center;
+	margin-left: var(--vscode-agents-space-6);
+	color: var(--vscode-agents-color-text-subtle, var(--vscode-agents-color-text-muted));
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-variant-numeric: tabular-nums;
 }
 
 /* Hover actions on messages: copy / like / dislike / fork. */

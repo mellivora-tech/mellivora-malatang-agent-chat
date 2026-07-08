@@ -668,6 +668,21 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions): 
 	return row;
 }
 
+/** "Today 14:23" / "Yesterday 09:05" / "Jul 6 18:30" — always 24-hour. */
+function formatMessageTime(date: Date): string {
+	const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+	const now = new Date();
+	const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+	const startOfYesterday = startOfToday - 86_400_000;
+	if (date.getTime() >= startOfToday) {
+		return `Today ${time}`;
+	}
+	if (date.getTime() >= startOfYesterday) {
+		return `Yesterday ${time}`;
+	}
+	return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${time}`;
+}
+
 /** Hover action bar: copy, like/dislike (assistant), fork-from-here. */
 function createMessageActionBar(message: ISessionMessage, actions: IMessageActions): HTMLElement {
 	const bar = document.createElement('div');
@@ -694,6 +709,13 @@ function createMessageActionBar(message: ISessionMessage, actions: IMessageActio
 	}
 	if (actions.fork) {
 		addAction('codicon-git-branch', 'Fork from here', actions.fork);
+	}
+
+	if (message.timestamp) {
+		const time = append(bar, document.createElement('span'));
+		time.className = 'conversation-message-time';
+		time.textContent = formatMessageTime(message.timestamp);
+		time.title = message.timestamp.toLocaleString();
 	}
 
 	return bar;

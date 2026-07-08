@@ -23,4 +23,6 @@ export interface IProjectsBridge {
 	list(): Promise<readonly IProject[]>;
 	create(input: IProjectInput): Promise<IProject>;
 	pickAndCreate(): Promise<IProject | undefined>;
+	/** Open the project directory in the OS file manager. */
+	revealInFolder(projectId: string): Promise<boolean>;
 }

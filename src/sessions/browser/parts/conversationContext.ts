@@ -6,10 +6,11 @@
 import { append } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import type { IGitBridge } from '../../services/git/common/git.js';
+import type { IProjectsBridge } from '../../services/projects/common/projects.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { ConversationContextBar } from './conversationContextBar.js';
 
-type GitGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge } };
+type GitGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge; readonly projects?: IProjectsBridge } };
 
 export class ConversationContext extends Disposable {
 	readonly element: HTMLElement;
@@ -17,6 +18,7 @@ export class ConversationContext extends Disposable {
 	private readonly bar = this._register(new ConversationContextBar('conversation-context-bar'));
 	private readonly sessionDisposables = this._register(new DisposableStore());
 	private readonly git: IGitBridge | undefined = (globalThis as GitGlobals).agentWindow?.git;
+	private readonly projects: IProjectsBridge | undefined = (globalThis as GitGlobals).agentWindow?.projects;
 	private session: IActiveSession | undefined;
 	private branchCurrent: string | undefined;
 	private branchList: readonly string[] = [];
@@ -80,7 +82,15 @@ export class ConversationContext extends Disposable {
 		left.className = 'conversation-context-left';
 
 		const workspace = this.session?.workspace.get();
-		left.appendChild(createPill('conversation-context-workspace', 'codicon-folder', workspace?.label ?? 'No workspace'));
+		const workspacePill = createPill('conversation-context-workspace', 'codicon-folder', workspace?.label ?? 'No workspace');
+		// The pill truncates; a custom tooltip reveals the full name (and path)
+		// on hover — native title tooltips are unreliable in frameless windows.
+		if (workspace) {
+			const tooltip = append(workspacePill, document.createElement('span'));
+			tooltip.className = 'conversation-context-tooltip';
+			tooltip.textContent = workspace.description ? `${workspace.label} — ${workspace.description}` : workspace.label;
+		}
+		left.appendChild(workspacePill);
 
 		// The branch pill exists only for sessions whose project is a git repo.
 		if (this.branchCurrent !== undefined) {
@@ -96,6 +106,7 @@ export class ConversationContext extends Disposable {
 		more.type = 'button';
 		more.title = 'More actions';
 		more.setAttribute('aria-label', 'More actions');
+		more.addEventListener('click', () => this.toggleMoreMenu(more));
 
 		const moreIcon = append(more, document.createElement('span'));
 		moreIcon.className = 'codicon codicon-ellipsis';
@@ -138,11 +149,56 @@ export class ConversationContext extends Disposable {
 		}
 
 		// Anchor below the pill, hosted on the bar (the composer clips overflow).
+		this.openAnchoredMenu(menu, anchor);
+	}
+
+	/** The ⋯ menu. One action today — open the project folder; more to come. */
+	private toggleMoreMenu(anchor: HTMLElement): void {
+		if (this.branchMenu) {
+			this.closeBranchMenu();
+			return;
+		}
+
+		const projectId = this.session?.projectId;
+		const menu = document.createElement('div');
+		menu.className = 'conversation-branch-menu';
+		menu.setAttribute('role', 'menu');
+
+		const item = append(menu, document.createElement('button')) as HTMLButtonElement;
+		item.className = 'conversation-branch-menu-item';
+		item.type = 'button';
+		item.setAttribute('role', 'menuitem');
+		item.disabled = !projectId || !this.projects;
+		const icon = append(item, document.createElement('span'));
+		icon.className = 'codicon codicon-folder-opened';
+		icon.setAttribute('aria-hidden', 'true');
+		const label = append(item, document.createElement('span'));
+		label.className = 'conversation-branch-menu-label';
+		label.textContent = 'Open project folder';
+		item.addEventListener('click', () => {
+			this.closeBranchMenu();
+			if (projectId) {
+				void this.projects?.revealInFolder(projectId);
+			}
+		});
+
+		this.openAnchoredMenu(menu, anchor);
+	}
+
+	/** Shared mount/dismiss for the context bar's dropdowns. */
+	private openAnchoredMenu(menu: HTMLElement, anchor: HTMLElement): void {
 		const host = this.element;
 		host.appendChild(menu);
 		const hostRect = host.getBoundingClientRect();
 		const anchorRect = anchor.getBoundingClientRect();
-		menu.style.top = `${anchorRect.bottom - hostRect.top + 4}px`;
+		// The context bar sits right above the composer at the window bottom, so
+		// menus open UPWARD by default (downward would cover the composer and has
+		// no room to grow); fall back to below only when the top is cramped.
+		const gap = 4;
+		const margin = 8;
+		const spaceAbove = anchorRect.top - gap - margin;
+		const openUp = spaceAbove >= menu.offsetHeight;
+		menu.style.top = openUp ? `${anchorRect.top - hostRect.top - menu.offsetHeight - gap}px` : `${anchorRect.bottom - hostRect.top + gap}px`;
 		menu.style.left = `${anchorRect.left - hostRect.left}px`;
 
 		const onOutsideMouseDown = (event: MouseEvent): void => {

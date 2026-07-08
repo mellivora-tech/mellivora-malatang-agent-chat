@@ -155,7 +155,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const now = new Date();
 		this.sequence += 1;
 		const initialMode = permissionMode.get();
-		const userMessage: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query };
+		const userMessage: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query, timestamp: now };
 
 		await this.enqueueWrite(async () => {
 			await this.bridge.create({
@@ -211,7 +211,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const ref = this.getRef(sessionId);
 		const now = new Date();
 		this.sequence += 1;
-		const message: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query };
+		const message: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query, timestamp: now };
 
 		await this.enqueueWrite(async () => {
 			await this.bridge.append(ref, { type: 'message', id: message.id, role: 'user', text: query, timestamp: now.toISOString() });
@@ -389,6 +389,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
 				...(message.feedback !== undefined ? { feedback: message.feedback } : {}),
+				...(message.timestamp !== undefined ? { timestamp: new Date(message.timestamp) } : {}),
 			})),
 			interactivity: coerceInteractivity(snapshot.interactivity),
 			isArchived: snapshot.isArchived,
@@ -491,7 +492,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			const messages = session.messages.get();
 			if (!created) {
 				created = true;
-				session.messages.set([...messages, { id: assistantId, role: 'assistant', text }]);
+				session.messages.set([...messages, { id: assistantId, role: 'assistant', text, timestamp: new Date() }]);
 			} else {
 				session.messages.set(messages.map(message => (message.id === assistantId ? { ...message, text } : message)));
 			}

@@ -24,6 +24,7 @@ const projects: IProjectsBridge = {
 	list: () => ipcRenderer.invoke('projects:list'),
 	create: (input: IProjectInput) => ipcRenderer.invoke('projects:create', input),
 	pickAndCreate: () => ipcRenderer.invoke('projects:pickAndCreate'),
+	revealInFolder: (projectId: string) => ipcRenderer.invoke('projects:revealInFolder', projectId),
 };
 
 const sessions: ISessionsBridge = {

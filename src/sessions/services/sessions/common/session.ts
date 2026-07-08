@@ -51,6 +51,8 @@ export interface ISessionMessage {
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStep[];
 	readonly feedback?: 'like' | 'dislike';
+	/** When the message landed (user: send time; assistant: reply completion). */
+	readonly timestamp?: Date;
 }
 
 /** The model stream dropped; the harness is retrying with backoff. */

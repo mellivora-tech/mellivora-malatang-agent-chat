@@ -119,6 +119,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 				...(entry.detail !== undefined ? { detail: entry.detail } : {}),
 				...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
 				...(entry.steps !== undefined ? { steps: entry.steps } : {}),
+				timestamp: entry.timestamp,
 			});
 			continue;
 		}

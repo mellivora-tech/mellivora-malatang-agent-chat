@@ -90,6 +90,7 @@ export interface ISessionSnapshotMessage {
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStepData[];
 	readonly feedback?: 'like' | 'dislike';
+	readonly timestamp?: string;
 }
 
 /** The hydrated result of folding one session file. */

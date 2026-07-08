@@ -39,6 +39,7 @@ function createBridge(options: { projects?: IProject[]; picked?: IProject | unde
 			projects.push(project);
 			return project;
 		},
+		revealInFolder: async () => true,
 		pickAndCreate: async () => {
 			if (options.picked) {
 				projects.push(options.picked);

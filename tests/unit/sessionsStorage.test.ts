@@ -102,8 +102,8 @@ test('appendSessionEntry and loadSession round-trip messages and folded state', 
 		const snapshot = await loadSession(root, ref);
 		assert.ok(snapshot);
 		assert.deepEqual(snapshot.messages, [
-			{ id: 'm1', role: 'user', text: 'hello' },
-			{ id: 'm2', role: 'assistant', text: 'Mock response for: hello' },
+			{ id: 'm1', role: 'user', text: 'hello', timestamp: '2026-07-07T00:01:00.000Z' },
+			{ id: 'm2', role: 'assistant', text: 'Mock response for: hello', timestamp: '2026-07-07T00:02:00.000Z' },
 		]);
 		assert.equal(snapshot.title, 'hello');
 		assert.equal(snapshot.status, 2);
@@ -140,7 +140,7 @@ test('loadSession keeps message detail when present', async () => {
 		await appendSessionEntry(root, ref, { type: 'message', id: 'm1', role: 'tool', text: 'typecheck', detail: 'All good.', timestamp: '2026-07-07T00:01:00.000Z' });
 
 		const snapshot = await loadSession(root, ref);
-		assert.deepEqual(snapshot?.messages, [{ id: 'm1', role: 'tool', text: 'typecheck', detail: 'All good.' }]);
+		assert.deepEqual(snapshot?.messages, [{ id: 'm1', role: 'tool', text: 'typecheck', detail: 'All good.', timestamp: '2026-07-07T00:01:00.000Z' }]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
