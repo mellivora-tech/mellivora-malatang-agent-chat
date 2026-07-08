@@ -24,7 +24,6 @@ export class ConversationView extends Disposable {
 	private readonly input: HTMLTextAreaElement;
 	private readonly sendButton: HTMLButtonElement;
 	private readonly stopButton: HTMLButtonElement;
-	private readonly reconnectStatus: HTMLElement;
 	private readonly sendError: HTMLElement;
 	private readonly contextRing: HTMLElement;
 	private readonly header = this._register(new ConversationContext());
@@ -36,6 +35,7 @@ export class ConversationView extends Disposable {
 	private readonly workExpandOverride = new Map<string, boolean>();
 	// Individually expanded tool steps ("messageId:index").
 	private readonly stepExpand = new Set<string>();
+	private scrollToBottomOnRender = false;
 	// Live elapsed time is measured from when the block first appeared in this view.
 	private readonly workFirstSeen = new Map<string, number>();
 	private workTicker: ReturnType<typeof setInterval> | undefined;
@@ -81,13 +81,6 @@ export class ConversationView extends Disposable {
 		appendCodicon(access, 'codicon-chevron-down');
 		// Menu hosted on the view root — the composer clips overflow.
 		this._register(installPermissionPicker({ host: this.element, trigger: access, label: accessLabel, icon: accessIcon }));
-
-		this.reconnectStatus = append(leftControls, document.createElement('div'));
-		this.reconnectStatus.className = 'conversation-reconnect-status';
-		this.reconnectStatus.setAttribute('aria-live', 'polite');
-		appendCodicon(this.reconnectStatus, 'codicon-loading codicon-modifier-spin');
-		const reconnectLabel = append(this.reconnectStatus, document.createElement('span'));
-		reconnectLabel.textContent = 'Reconnecting... 1/10';
 
 		const rightControls = append(toolbar, document.createElement('div'));
 		rightControls.className = 'conversation-toolbar-right';
@@ -151,6 +144,8 @@ export class ConversationView extends Disposable {
 		this.sessionDisposables.clear();
 		this.header.openSession(session);
 		this.setSendError(undefined);
+		// A freshly opened conversation starts at its latest message.
+		this.scrollToBottomOnRender = true;
 
 		if (session) {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
@@ -198,6 +193,13 @@ export class ConversationView extends Disposable {
 		this.element.dataset.status = this.session ? conversationStatusId(this.session.status.get()) : 'empty';
 		this.element.dataset.interactivity = this.session?.interactivity.get() ?? 'none';
 		this.header.element.hidden = !this.session;
+
+		// Rebuilding the transcript resets scrollTop. Follow the output while the
+		// reader is at (or near) the bottom; preserve their position otherwise.
+		const stickToBottom = this.scrollToBottomOnRender || this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < 48;
+		const previousScrollTop = this.transcript.scrollTop;
+		this.scrollToBottomOnRender = false;
+
 		clearNode(this.transcript);
 
 		const messages = this.session?.messages.get() ?? [];
@@ -215,12 +217,17 @@ export class ConversationView extends Disposable {
 		const approval = this.session?.pendingApproval.get();
 		if (approval) {
 			this.transcript.appendChild(createApprovalCard(approval));
-			// A question is on screen — keep it in view.
-			this.transcript.scrollTop = this.transcript.scrollHeight;
 		} else if (this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
 			// Mock/legacy runs without a work block keep the plain progress rows.
 			this.transcript.appendChild(this.createWorkingRow());
 			this.transcript.appendChild(this.createThinkingRow());
+		}
+
+		// An approval question always comes into view; otherwise honor stickiness.
+		if (approval || stickToBottom) {
+			this.transcript.scrollTop = this.transcript.scrollHeight;
+		} else {
+			this.transcript.scrollTop = previousScrollTop;
 		}
 
 		this.updateWorkTicker(hasLiveWork);
@@ -408,7 +415,6 @@ export class ConversationView extends Disposable {
 		this.sendButton.disabled = !canType || !hasText;
 		this.sendButton.hidden = isRunning;
 		this.stopButton.hidden = !isRunning;
-		this.reconnectStatus.hidden = !isRunning;
 		this.input.placeholder = isRunning ? 'Keep typing to queue follow-up changes' : interactivity === SessionInteractivity.ReadOnly ? 'Session is read-only' : 'Ask Codex';
 	}
 
@@ -422,6 +428,8 @@ export class ConversationView extends Disposable {
 		this.isSending = true;
 		this.setSendError(undefined);
 		this.updateComposerState();
+		// Sending returns the reader to the live end of the conversation.
+		this.scrollToBottomOnRender = true;
 
 		try {
 			await this.messageSender?.sendMessage(session.sessionId, query);
