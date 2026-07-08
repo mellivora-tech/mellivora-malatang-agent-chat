@@ -6,16 +6,29 @@
 import { ipcMain } from 'electron';
 import { runAgentLoop } from './agent/agentLoop.js';
 import { allowAllPermissionGate } from './agent/agentTools.js';
-import type { IAgentMessage, IAgentTerminal } from './agent/agentTypes.js';
+import type { IAgentMessage, IAgentTerminal, IAgentTool } from './agent/agentTypes.js';
+import { createWorkspaceTools } from './agent/tools/index.js';
 import { createModelClient } from './agent/createModelClient.js';
+import { getProject } from './projectsStorage.js';
 import { resolveModelConfig } from './modelConfigStorage.js';
 
 const DEFAULT_SYSTEM = 'You are a helpful coding agent.';
+
+/** System prompt for a run bound to a workspace, listing the available tools. */
+function workspaceSystemPrompt(cwd: string): string {
+	return [
+		"You are a helpful coding agent working inside the user's project.",
+		`Working directory: ${cwd}`,
+		'You have read-only tools to explore the codebase: read_file, list_dir, glob, grep.',
+		'Prefer these tools to inspect files before answering. All paths are relative to the working directory; you cannot access files outside it.',
+	].join('\n');
+}
 
 interface IAgentRunPayload {
 	readonly sessionId: string;
 	readonly messages: readonly IAgentMessage[];
 	readonly modelId?: string;
+	readonly projectId?: string;
 }
 
 /**
@@ -32,14 +45,21 @@ export function registerAgentIpc(dataRoot: string): void {
 			throw new Error('No model is configured. Add one in Settings → Models.');
 		}
 
+		// Bind file tools to the session's project directory. The workspace root is
+		// resolved here from the stored project — never from a renderer-supplied path.
+		const project = payload.projectId ? await getProject(dataRoot, payload.projectId) : undefined;
+		const cwd = project?.path;
+		const tools: readonly IAgentTool[] = cwd ? createWorkspaceTools(cwd) : [];
+
 		const controller = new AbortController();
 		abortControllers.set(payload.sessionId, controller);
 		const sender = event.sender;
 
 		try {
 			const loop = runAgentLoop(payload.messages, {
-				system: DEFAULT_SYSTEM,
-				tools: [],
+				system: cwd ? workspaceSystemPrompt(cwd) : DEFAULT_SYSTEM,
+				tools,
+				// Read-only tools only today; swap in the approval gate with the mutating tools.
 				modelClient: createModelClient(config),
 				permissionGate: allowAllPermissionGate,
 				signal: controller.signal,

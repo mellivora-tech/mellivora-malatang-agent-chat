@@ -19,8 +19,9 @@ export interface IAgentEventPayload {
 
 /** The shape exposed on `agentWindow.agent` by the preload script. */
 export interface IAgentBridge {
-	/** Run one agent turn for `sessionId` against `messages`, streaming events; resolves with the terminal. */
-	run(sessionId: string, messages: readonly IAgentMessage[], modelId?: string): Promise<IAgentTerminal>;
+	/** Run one agent turn for `sessionId` against `messages`, streaming events; resolves with the terminal.
+	 *  `projectId` binds the run's file tools to that project's directory (omit → text-only). */
+	run(sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string): Promise<IAgentTerminal>;
 	stop(sessionId: string): Promise<void>;
 	/** Subscribe to streamed events; returns an unsubscribe function. */
 	onEvent(listener: (payload: IAgentEventPayload) => void): () => void;

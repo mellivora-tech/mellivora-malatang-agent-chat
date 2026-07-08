@@ -374,7 +374,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 		});
 
-		void agent.run(sessionId, transcript, modelId).catch(error => {
+		void agent.run(sessionId, transcript, modelId, session.projectId).catch(error => {
 			text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
 			updateAssistant();
 			finalize();

@@ -51,7 +51,8 @@ const models: IModelsBridge = {
 };
 
 const agent: IAgentBridge = {
-	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string) => ipcRenderer.invoke('agent:run', { sessionId, messages, modelId }),
+	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string) =>
+		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId }),
 	stop: (sessionId: string) => ipcRenderer.invoke('agent:stop', sessionId),
 	onEvent: (listener: (payload: IAgentEventPayload) => void) => {
 		const handler = (_event: unknown, payload: IAgentEventPayload): void => listener(payload);
