@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { clearNode } from '../../../base/browser/dom.js';
+import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChanges, type ISearchPaletteTask } from '../../search/browser/searchPalette.js';
 import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
 import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
@@ -14,7 +15,7 @@ import type { ThemeId } from '../../../platform/theme/theme.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import { SessionStatus, type IActiveSession, type ISession, type ISessionChangesSummary, type ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import type { IProjectsService } from '../../../services/projects/browser/projectsService.js';
-import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
+import type { ISessionsPartService, WorkbenchMode } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 
 export interface ISessionsListOptions {
@@ -22,6 +23,7 @@ export interface ISessionsListOptions {
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
+	readonly onToggleSidebar?: () => void;
 }
 
 type SessionLike = ISession | IActiveSession;
@@ -75,14 +77,65 @@ export class SessionsList extends Disposable {
 	private settingsNavElement: HTMLElement | undefined;
 	private settingsMainElement: HTMLElement | undefined;
 	private modelSettingsView: ModelSettingsView | undefined;
+	private readonly searchPalette: SearchPalette;
 
 	constructor(
 		private readonly container: HTMLElement,
 		private readonly options: ISessionsListOptions = {},
 	) {
 		super();
+		this.searchPalette = this._register(
+			new SearchPalette({
+				getHost: () => document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container,
+				getTasks: () => this.getPaletteTasks(),
+				openTask: id => this.options.sessionsService?.openSession(id),
+				actions: this.buildPaletteActions(),
+				getRecentChanges: () => this.getPaletteRecentChanges(),
+			}),
+		);
+		this.registerGlobalShortcuts();
 		this.bind();
 		this.render();
+	}
+
+	private registerGlobalShortcuts(): void {
+		const onKeydown = (event: KeyboardEvent): void => {
+			if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+				event.preventDefault();
+				this.searchPalette.toggle();
+			}
+		};
+		document.addEventListener('keydown', onKeydown, true);
+		this._register(toDisposable(() => document.removeEventListener('keydown', onKeydown, true)));
+	}
+
+	private buildPaletteActions(): readonly ISearchPaletteAction[] {
+		const partService = this.options.sessionsPartService;
+		const actions: ISearchPaletteAction[] = [
+			{ id: 'new-task', label: 'New task', icon: 'codicon-add', group: 'suggested', keybinding: '⌘ N', run: () => partService?.showNewSession() },
+			{ id: 'settings', label: 'Settings', icon: 'codicon-settings-gear', group: 'suggested', run: () => this.openSettingsDialog() },
+		];
+		if (this.options.onToggleSidebar) {
+			actions.push({ id: 'toggle-sidebar', label: 'Toggle sidebar', icon: 'codicon-layout-sidebar-left', group: 'panels', keybinding: '⌘ B', run: () => this.options.onToggleSidebar?.() });
+		}
+		actions.push({ id: 'toggle-side-pane', label: 'Toggle side pane', icon: 'codicon-layout-sidebar-right', group: 'panels', run: () => partService?.toggleSidePane() });
+		return actions;
+	}
+
+	private getPaletteTasks(): readonly ISearchPaletteTask[] {
+		const sessions = this.getSessions().filter(session => !session.isArchived.get());
+		return [...sessions]
+			.sort((a, b) => b.updatedAt.get().getTime() - a.updatedAt.get().getTime())
+			.map(session => ({ id: session.sessionId, title: session.title.get(), timeLabel: formatTimestamp(session.updatedAt.get()) }));
+	}
+
+	private getPaletteRecentChanges(): ISearchPaletteRecentChanges | undefined {
+		const active = this.getActiveSession();
+		const summary = active?.changesSummary.get();
+		if (!summary) {
+			return undefined;
+		}
+		return { ...(active ? { taskTitle: active.title.get() } : {}), files: summary.files, additions: summary.additions, deletions: summary.deletions };
 	}
 
 	private bind(): void {
@@ -150,12 +203,13 @@ export class SessionsList extends Disposable {
 	}
 
 	private createHeaderActions(): readonly IAction[] {
+		const newTaskActive = this.getMode() === 'newSession';
 		return [
 			{
 				id: 'sessions.sidebar.new',
 				label: 'New task',
 				icon: 'codicon-new-session',
-				class: 'sessions-sidebar-menu-action',
+				class: `sessions-sidebar-menu-action${newTaskActive ? ' active' : ''}`,
 				keybinding: '⌘ N',
 				tooltip: 'New task',
 				run: () => this.options.sessionsPartService?.showNewSession(),
@@ -166,7 +220,7 @@ export class SessionsList extends Disposable {
 				icon: 'codicon-search',
 				class: 'sessions-sidebar-menu-action',
 				keybinding: '⌘ K',
-				run: () => {},
+				run: () => this.searchPalette.open(),
 			},
 			{
 				id: 'sessions.sidebar.skills',
@@ -194,7 +248,10 @@ export class SessionsList extends Disposable {
 		readonly chat: readonly ISessionListRow[];
 		readonly projects: readonly ISidebarProjectGroup[];
 	} {
-		const activeSessionId = this.getActiveSessionId();
+		// A session row reads as active only while its conversation is actually
+		// on screen. On the New Session page (mode 'newSession') no row is active,
+		// even though a session is still technically the "current" one.
+		const activeSessionId = this.getMode() === 'newSession' ? undefined : this.getActiveSessionId();
 		const toRow = (session: SessionLike): ISessionListRow => {
 			const workspace = session.workspace.get();
 			const isPinned = session.isPinned.get();
@@ -784,6 +841,10 @@ export class SessionsList extends Disposable {
 
 	private getActiveSessionId(): string | undefined {
 		return this.getActiveSession()?.sessionId;
+	}
+
+	private getMode(): WorkbenchMode | undefined {
+		return this.options.sessionsPartService?.mode.get();
 	}
 }
 

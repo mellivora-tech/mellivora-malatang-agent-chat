@@ -16,6 +16,7 @@ export interface ISidebarPartOptions {
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
+	readonly onToggleSidebar?: () => void;
 }
 
 export class SidebarPart extends Part {
@@ -35,6 +36,7 @@ export class SidebarPart extends Part {
 				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 				...(this.options.projectsService ? { projectsService: this.options.projectsService } : {}),
 				...(this.options.modelsService ? { modelsService: this.options.modelsService } : {}),
+				...(this.options.onToggleSidebar ? { onToggleSidebar: this.options.onToggleSidebar } : {}),
 			}),
 		);
 	}

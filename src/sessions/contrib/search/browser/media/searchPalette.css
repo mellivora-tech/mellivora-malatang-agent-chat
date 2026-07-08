@@ -1,0 +1,160 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.search-palette-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding-top: 12vh;
+	background: color-mix(in srgb, #000 55%, transparent);
+	backdrop-filter: blur(2px);
+}
+
+.search-palette {
+	display: flex;
+	flex-direction: column;
+	width: min(560px, calc(100vw - var(--vscode-agents-space-48)));
+	max-height: min(560px, 70vh);
+	overflow: hidden;
+	background: var(--vscode-agents-color-menu-background, #1b1d22);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-menu-border, rgba(255, 255, 255, 0.08));
+	border-radius: var(--vscode-agents-radius-container, 14px);
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.search-palette-search {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-14) var(--vscode-agents-space-16);
+	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-menu-border, rgba(255, 255, 255, 0.06));
+}
+
+.search-palette-search-icon {
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-size-icon);
+}
+
+.search-palette-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-size: var(--vscode-agents-fontSize-body1);
+	outline: none;
+}
+
+.search-palette-input::placeholder {
+	color: var(--vscode-agents-color-text-subtle);
+}
+
+.search-palette-tabs {
+	display: flex;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
+	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-menu-border, rgba(255, 255, 255, 0.06));
+}
+
+.search-palette-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-10);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control, 8px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	cursor: default;
+}
+
+.search-palette-tab .codicon {
+	font-size: var(--vscode-agents-size-icon);
+}
+
+.search-palette-tab:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.search-palette-tab.active {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.search-palette-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+}
+
+.search-palette-section {
+	padding: var(--vscode-agents-space-12) var(--vscode-agents-space-10) var(--vscode-agents-space-4);
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	letter-spacing: 0.02em;
+}
+
+.search-palette-section-empty,
+.search-palette-empty {
+	padding: var(--vscode-agents-space-16) var(--vscode-agents-space-10);
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-body2);
+	text-align: center;
+}
+
+.search-palette-row {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-10);
+	width: 100%;
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control, 8px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-size: var(--vscode-agents-fontSize-body1);
+	text-align: left;
+	cursor: default;
+}
+
+.search-palette-row-icon {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-size-icon);
+}
+
+.search-palette-row-label {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.search-palette-row-keys {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-variant-numeric: tabular-nums;
+}
+
+.search-palette-row.selected {
+	background: var(--vscode-agents-color-selection-background);
+}
+
+.search-palette-row.selected .search-palette-row-icon,
+.search-palette-row.selected .search-palette-row-keys {
+	color: var(--vscode-agents-color-text-primary);
+}

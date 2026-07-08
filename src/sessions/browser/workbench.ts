@@ -59,6 +59,7 @@ export class Workbench {
 		sessionsPartService: this.sessionsPartService,
 		projectsService: this.projectsService,
 		modelsService: this.modelsService,
+		onToggleSidebar: () => this.toggleSidebar(),
 	});
 	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService, this.modelsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({

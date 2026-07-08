@@ -111,8 +111,8 @@
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
-.sessions-sidebar-toolbar .action-item:nth-child(2) .sessions-sidebar-menu-action {
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
+.sessions-sidebar-toolbar .sessions-sidebar-menu-action.active {
+	background: var(--vscode-agents-color-selection-background);
 }
 
 .sessions-sidebar-toolbar .action-icon {
