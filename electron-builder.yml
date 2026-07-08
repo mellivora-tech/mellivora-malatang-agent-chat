@@ -1,0 +1,30 @@
+appId: com.mellivora.malatang-agent-chat
+productName: Malatang Agent Chat
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: build
+
+# electron-vite emits the compiled app into dist/; ship that plus the manifest.
+files:
+  - dist/**/*
+  - package.json
+
+mac:
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+
+linux:
+  icon: build/icon.png
+  category: Development
+  target:
+    - AppImage

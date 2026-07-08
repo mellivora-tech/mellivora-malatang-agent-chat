@@ -1,0 +1,14 @@
+<!-- Mellivora Malatang Agent Chat — primary "M" mark (ember).
+     Transparent ground; works on light or dark. Use for hero, about dialog, docs. -->
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mellivora Malatang Agent Chat">
+	<defs>
+		<linearGradient id="mmac-ember" x1="40" y1="34" x2="88" y2="96" gradientUnits="userSpaceOnUse">
+			<stop stop-color="#3fb950"/>
+			<stop offset=".62" stop-color="#2ea043"/>
+			<stop offset="1" stop-color="#e8562d"/>
+		</linearGradient>
+	</defs>
+	<circle cx="64" cy="64" r="54" stroke="#2ea043" stroke-width="4" fill="none" opacity=".32"/>
+	<path d="M40 92 V40 Q40 34 46 38 L64 72 L82 38 Q88 34 88 40 V92" stroke="url(#mmac-ember)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+	<circle cx="64" cy="30" r="4.5" fill="#e8562d"/>
+</svg>

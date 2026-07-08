@@ -1,0 +1,12 @@
+<!-- Ember "M" — ring dropped, stroke thickened for small sizes (favicon, titlebar, 16-32px). -->
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mellivora Malatang Agent Chat">
+	<defs>
+		<linearGradient id="mmac-ember-mark" x1="36" y1="30" x2="92" y2="98" gradientUnits="userSpaceOnUse">
+			<stop stop-color="#3fb950"/>
+			<stop offset=".6" stop-color="#2ea043"/>
+			<stop offset="1" stop-color="#e8562d"/>
+		</linearGradient>
+	</defs>
+	<path d="M34 98 V36 Q34 28 42 33 L64 74 L86 33 Q94 28 94 36 V98" stroke="url(#mmac-ember-mark)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+	<circle cx="64" cy="24" r="6" fill="#e8562d"/>
+</svg>
