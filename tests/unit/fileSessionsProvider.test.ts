@@ -6,7 +6,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { FileSessionsProvider } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
+import { FileSessionsProvider, toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
+import type { ISessionMessage } from '../../src/sessions/services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../src/sessions/services/sessions/common/session.js';
 import type { IAgentBridge, IAgentEventPayload } from '../../src/sessions/services/agent/common/agent.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionSnapshot, ISessionsBridge } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
@@ -514,4 +515,26 @@ test('a run that ends at the step limit with no text shows a note, not a blank b
 		persistedAssistants.every(call => (call.entry as { text: string }).text !== ''),
 		'no blank assistant entry persisted',
 	);
+});
+
+test('toTranscript drops empty and non-conversational messages (400 guard)', () => {
+	const messages: ISessionMessage[] = [
+		{ id: 'u1', role: 'user', text: 'hello' },
+		{ id: 'w1', role: 'work', text: '', durationMs: 10, steps: [] },
+		{ id: 'a1', role: 'assistant', text: '' }, // the poison: an empty assistant reply
+		{ id: 'u2', role: 'user', text: 'still there?' },
+		{ id: 'a2', role: 'assistant', text: 'yes' },
+		{ id: 't1', role: 'tool', text: 'tool output' },
+	];
+	const transcript = toTranscript(messages);
+	assert.deepEqual(
+		transcript.map(m => ({ role: m.role, text: (m.content[0] as { text: string }).text })),
+		[
+			{ role: 'user', text: 'hello' },
+			{ role: 'user', text: 'still there?' },
+			{ role: 'assistant', text: 'yes' },
+		],
+	);
+	// No message with empty content survives — that is exactly what the API rejects.
+	assert.ok(transcript.every(m => (m.content[0] as { text: string }).text.trim() !== ''));
 });

@@ -708,14 +708,23 @@ function describeWorkTool(name: string, input: unknown): string {
 	return typeof arg === 'string' ? `${name} ${arg}` : name;
 }
 
-function toTranscript(messages: readonly ISessionMessage[]): IAgentMessage[] {
+/**
+ * Build the message list sent to the model from the session history. Only
+ * user/assistant turns cross the wire (work/tool blocks are UI-only), and
+ * empty-text turns are dropped — the model APIs reject a request that contains
+ * an empty-content message ("assistant message must not be empty", HTTP 400),
+ * which a stray blank reply would otherwise poison every later run with.
+ */
+export function toTranscript(messages: readonly ISessionMessage[]): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
 	for (const message of messages) {
-		if (message.role === 'user') {
-			transcript.push({ role: 'user', content: [{ type: 'text', text: message.text }] });
-		} else if (message.role === 'assistant') {
-			transcript.push({ role: 'assistant', content: [{ type: 'text', text: message.text }] });
+		if (message.role !== 'user' && message.role !== 'assistant') {
+			continue;
 		}
+		if (message.text.trim() === '') {
+			continue;
+		}
+		transcript.push({ role: message.role, content: [{ type: 'text', text: message.text }] });
 	}
 
 	return transcript;
