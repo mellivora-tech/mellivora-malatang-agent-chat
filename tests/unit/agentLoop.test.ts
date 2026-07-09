@@ -170,6 +170,92 @@ test('a usage stream event forwards as an IAgentEvent for the renderer to read',
 	assert.equal(usage.outputTokens, 7);
 });
 
+test('loop guard: the third identical consecutive call is blocked and fed back as an error result', async () => {
+	delete process.env['AGENT_CHAT_LOOP_GUARD'];
+	let executions = 0;
+	const countingTool = defineTool({
+		name: 'probe',
+		description: 'Counts executions.',
+		inputSchema: { type: 'object' },
+		isReadOnly: () => true,
+		validateInput: input => ({ ok: true, value: input }),
+		call: async () => {
+			executions += 1;
+			return { content: 'ok' };
+		},
+	});
+	// Three turns, each repeating the exact same call; then a final answer.
+	const model = createScriptedModelClient([
+		{ emit: [{ type: 'tool_use', id: 't1', name: 'probe', input: { q: 'same' } }] },
+		{ emit: [{ type: 'tool_use', id: 't2', name: 'probe', input: { q: 'same' } }] },
+		{ emit: [{ type: 'tool_use', id: 't3', name: 'probe', input: { q: 'same' } }] },
+		{ emit: [{ type: 'text', text: 'fine, concluding.' }] },
+	]);
+
+	const { events, terminal } = await drive(runAgentLoop([userMessage('go')], { system: 's', tools: [countingTool], modelClient: model, permissionGate: allowAllPermissionGate }));
+
+	assert.equal(terminal.reason, 'completed');
+	assert.equal(executions, 2, 'first two identical calls execute; the third does not');
+
+	const results = events.filter((event): event is Extract<IAgentEvent, { type: 'tool_result' }> => event.type === 'tool_result');
+	assert.equal(results.length, 3, 'the blocked call still produces a tool_result for the model');
+	assert.equal(results[2]!.isError, true);
+	assert.match(results[2]!.content, /Loop guard/);
+
+	const guardEvents = events.filter((event): event is Extract<IAgentEvent, { type: 'loop_guard' }> => event.type === 'loop_guard');
+	assert.equal(guardEvents.length, 1, 'one loop_guard event for observability');
+	assert.equal(guardEvents[0]!.name, 'probe');
+	assert.equal(guardEvents[0]!.repeatCount, 3);
+});
+
+test('loop guard: three identical calls within a single batched turn — the third is blocked', async () => {
+	delete process.env['AGENT_CHAT_LOOP_GUARD'];
+	let executions = 0;
+	const countingTool = defineTool({
+		name: 'probe',
+		description: 'Counts executions.',
+		inputSchema: { type: 'object' },
+		isReadOnly: () => true,
+		validateInput: input => ({ ok: true, value: input }),
+		call: async () => {
+			executions += 1;
+			return { content: 'ok' };
+		},
+	});
+	const model = createScriptedModelClient([
+		{
+			emit: [
+				{ type: 'tool_use', id: 'b1', name: 'probe', input: { q: 'same' } },
+				{ type: 'tool_use', id: 'b2', name: 'probe', input: { q: 'same' } },
+				{ type: 'tool_use', id: 'b3', name: 'probe', input: { q: 'same' } },
+			],
+		},
+		{ emit: [{ type: 'text', text: 'done' }] },
+	]);
+
+	const { events } = await drive(runAgentLoop([userMessage('go')], { system: 's', tools: [countingTool], modelClient: model, permissionGate: allowAllPermissionGate }));
+
+	assert.equal(executions, 2, 'batch-internal repetition counted the same way');
+	const results = events.filter((event): event is Extract<IAgentEvent, { type: 'tool_result' }> => event.type === 'tool_result');
+	assert.equal(results[2]!.isError, true);
+	assert.match(results[2]!.content, /Loop guard/);
+});
+
+test('a max_tokens stop surfaces as max_output_tokens instead of masquerading as completed', async () => {
+	// Worst case: thinking ate the whole output budget — the stream stops at
+	// max_tokens without any visible text.
+	const client = {
+		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+			yield { type: 'thinking_delta', text: 'a very long think…' };
+			yield { type: 'message_stop', stopReason: 'max_tokens' };
+		},
+	};
+
+	const { terminal } = await drive(runAgentLoop([userMessage('hi')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }));
+
+	assert.equal(terminal.reason, 'max_output_tokens');
+});
+
 test('non-retryable stream errors surface immediately', async () => {
 	const failingClient = {
 		// eslint-disable-next-line require-yield

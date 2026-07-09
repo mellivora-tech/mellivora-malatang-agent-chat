@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { IAgentEvent, IAgentTool, IPermissionGate, IToolResultBlock, IToolUseBlock } from './agentTypes.js';
+import type { ILoopGuard } from './loopGuard.js';
 
 /**
  * Run the tool_use blocks from one assistant turn, yielding tool_use / tool_result
@@ -20,11 +21,25 @@ export async function* executeToolUses(
 	tools: readonly IAgentTool[],
 	permissionGate: IPermissionGate,
 	signal: AbortSignal,
+	guard?: ILoopGuard,
 ): AsyncGenerator<IAgentEvent, IToolResultBlock[]> {
 	const results: IToolResultBlock[] = [];
 
 	for (const use of toolUses) {
 		yield { type: 'tool_use', toolUseId: use.id, name: use.name, input: use.input };
+
+		// The guard sees every call (blocked ones included, so a 4th identical
+		// attempt is also blocked). A blocked call skips execution entirely —
+		// the error result is the model's feedback, same as any other failure.
+		const blocked = guard?.check(use);
+		if (blocked) {
+			yield { type: 'loop_guard', toolUseId: use.id, name: use.name, repeatCount: blocked.repeatCount };
+			const block = errorResult(use.id, blocked.message);
+			results.push(block);
+			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
+			continue;
+		}
+
 		const block = await runSingleToolUse(use, tools, permissionGate, signal);
 		results.push(block);
 		yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AnthropicModelClient, AnthropicStreamAccumulator, toAnthropicMessages } from '../../src/main/agent/anthropicModelClient.js';
+import { AnthropicModelClient, AnthropicStreamAccumulator, buildAnthropicRequestBody, toAnthropicMessages } from '../../src/main/agent/anthropicModelClient.js';
 import type { IAgentMessage, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
 import { createModelClient } from '../../src/main/agent/createModelClient.js';
 import { OpenAIModelClient, OpenAIStreamAccumulator, buildOpenAIRequestBody, toOpenAIMessages } from '../../src/main/agent/openaiModelClient.js';
@@ -159,6 +159,19 @@ test('Anthropic accumulator streams text and folds input_json_delta into one too
 test('Anthropic accumulator omits usage when message_start carries none', () => {
 	const events = runAnthropic([{ type: 'message_start' }, { type: 'message_delta', delta: { stop_reason: 'end_turn' } }, { type: 'message_stop' }]);
 	assert.equal(findUsage(events), undefined, 'no input_tokens → no usage event, renderer falls back to its estimate');
+});
+
+test('anthropic default max_tokens leaves room for thinking + text; params override wins', () => {
+	const signal = new AbortController().signal;
+	const request = { system: 's', messages: [], tools: [], signal };
+
+	// 4096 was the old default — with extended thinking on, a long think could
+	// consume it entirely and leave no visible text.
+	const body = buildAnthropicRequestBody({ baseURL: 'https://x', model: 'm' }, request);
+	assert.equal(body['max_tokens'], 32_000);
+
+	const overridden = buildAnthropicRequestBody({ baseURL: 'https://x', model: 'm', params: { maxTokens: 8000 } }, request);
+	assert.equal(overridden['max_tokens'], 8000);
 });
 
 test('createModelClient picks the client class from the provider', () => {

@@ -538,6 +538,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (!created && text === '') {
 				if (reason === 'max_turns') {
 					text = 'I reached the step limit before finishing — ask me to continue, or narrow the task.';
+				} else if (reason === 'max_output_tokens') {
+					// The whole output budget went to (hidden) reasoning before any
+					// visible text — without this note the run would end in silence.
+					text = 'I hit the output token limit before producing a reply — ask me to continue.';
 				} else if (reason === 'aborted') {
 					text = 'Stopped.';
 				}

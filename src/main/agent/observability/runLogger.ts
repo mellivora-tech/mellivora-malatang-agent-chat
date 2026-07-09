@@ -126,6 +126,9 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 					});
 					break;
 				}
+				case 'loop_guard':
+					agentLog.emit({ ts: now(), ...base, type: 'loop_guard', toolUseId: event.toolUseId, name: event.name, repeatCount: event.repeatCount });
+					break;
 				case 'stream_retry':
 					agentLog.emit({ ts: now(), ...base, type: 'stream_retry', attempt: event.attempt, maxAttempts: event.maxAttempts, delayMs: event.delayMs });
 					break;

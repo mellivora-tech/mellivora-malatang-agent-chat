@@ -144,6 +144,22 @@ test('runLogger maps a loop event stream into structured events with timings', (
 	assert.ok(typeof ttft.ttftMs === 'number' && ttft.ttftMs >= 0);
 });
 
+test('runLogger maps a loop_guard event onto the log bus with its repeat count', () => {
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	const logger = createRunLogger({ runId: 'r3', sessionId: 's3', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 1 });
+	logger.record({ type: 'turn_start', turn: 1 });
+	logger.record({ type: 'loop_guard', toolUseId: 't9', name: 'grep', repeatCount: 3 });
+	logger.end({ reason: 'completed', turns: 1 });
+
+	const guard = collected.events.find((event: AgentLogEvent) => event.type === 'loop_guard') as Extract<AgentLogEvent, { type: 'loop_guard' }>;
+	assert.ok(guard, 'loop_guard event reached the bus');
+	assert.equal(guard.name, 'grep');
+	assert.equal(guard.repeatCount, 3);
+	assert.equal(guard.toolUseId, 't9');
+});
+
 test('runLogger captures reasoning that resumes after the model has already started answering', () => {
 	// The renderer's own step bookkeeping can only close a 'thinking' step once
 	// per turn (on the FIRST visible-text delta); a model that keeps reasoning

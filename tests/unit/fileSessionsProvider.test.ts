@@ -517,6 +517,43 @@ test('a run that ends at the step limit with no text shows a note, not a blank b
 	);
 });
 
+test('a run truncated by the output token budget with no text shows a note, not silence', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		// Thinking consumed the whole max_tokens budget — the stream ends without
+		// a single assistant_delta having fired.
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'thinking_delta', text: 'reasoning that never converged…' } });
+			emit({ done: { reason: 'max_output_tokens', turns: 1 } });
+			return { reason: 'max_output_tokens', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('do something');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.ok(assistant, 'a reply message exists');
+	assert.match(assistant.text, /output token limit/i, 'it explains the reply was cut off by the token budget');
+});
+
 test('toTranscript drops empty and non-conversational messages (400 guard)', () => {
 	const messages: ISessionMessage[] = [
 		{ id: 'u1', role: 'user', text: 'hello' },

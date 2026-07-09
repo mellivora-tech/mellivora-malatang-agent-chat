@@ -46,6 +46,12 @@ export type AgentLogEvent =
 			readonly detail?: { readonly text: string };
 	  })
 	| (IBaseEvent & { readonly type: 'tool_use'; readonly toolUseId: string; readonly name: string; readonly detail?: { readonly input: unknown } })
+	/**
+	 * The loop guard blocked a repeated identical call. Top-level fields only —
+	 * the offending input is already on the adjacent tool_use event's detail.
+	 * Watch this event's rate in real logs to judge trigger/false-positive rates.
+	 */
+	| (IBaseEvent & { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number })
 	| (IBaseEvent & {
 			readonly type: 'tool_result';
 			readonly toolUseId: string;

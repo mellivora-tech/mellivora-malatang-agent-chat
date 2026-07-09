@@ -6,7 +6,14 @@
 import type { IAgentMessage, IModelClient, IModelClientConfig, IModelRequest, IModelStreamEvent, IToolSpec, ModelStopReason } from './agentTypes.js';
 import { readServerSentEvents } from './sse.js';
 
-const DEFAULT_MAX_TOKENS = 4096;
+// max_tokens is a shared budget for thinking + text + tool-call JSON. 4096 was
+// enough for text-only replies, but with extended thinking enabled a long
+// reasoning stretch can eat the whole budget and leave NO visible text (seen
+// live with Kimi: a 17K-char think hit max_tokens before the answer started).
+// 32K matches what Claude Code defaults to for current-generation models;
+// it is a ceiling, not a target — replies don't get longer or pricier unless
+// they genuinely need the room. Override per model via params.maxTokens.
+const DEFAULT_MAX_TOKENS = 32_000;
 const ANTHROPIC_VERSION = '2023-06-01';
 
 // --- Wire shapes ---------------------------------------------------------------

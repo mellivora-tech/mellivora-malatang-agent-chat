@@ -5,6 +5,7 @@
 
 import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IToolUseBlock, ModelStopReason } from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
+import { createLoopGuard } from './loopGuard.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 100;
@@ -74,6 +75,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	const messages: IAgentMessage[] = [...initialMessages];
 	const softBrakeTurn = Math.max(1, Math.floor(maxTurns * SOFT_BRAKE_RATIO));
 	const hardBrakeTurn = Math.max(1, Math.floor(maxTurns * HARD_BRAKE_RATIO));
+	// Fresh per run: a user's explicit "try again" starts a new run, so the
+	// repeated-call counter never fights a deliberate retry.
+	const loopGuard = createLoopGuard(process.env);
 	let turn = 0;
 
 	while (true) {
@@ -155,15 +159,19 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		assistantBlocks.push(...toolUses);
 		messages.push({ role: 'assistant', content: assistantBlocks });
 
-		// Stop condition: no tool_use block == the turn is complete.
+		// Stop condition: no tool_use block == the turn is complete. A max_tokens
+		// stop is surfaced as its own reason — the reply was truncated (possibly
+		// to nothing, if thinking consumed the whole budget), and folding it into
+		// 'completed' would hide that from logs and the UI.
 		if (toolUses.length === 0) {
-			return { reason: stopReason === 'refusal' ? 'refusal' : 'completed', turns: turn };
+			const reason = stopReason === 'refusal' ? 'refusal' : stopReason === 'max_tokens' ? 'max_output_tokens' : 'completed';
+			return { reason, turns: turn };
 		}
 
 		// Run the tools, then feed all results back as one user message. Appending
 		// tool_results before every tool has finished would interleave them with
 		// plain user content and the API would reject the next request.
-		const toolResults = yield* executeToolUses(toolUses, config.tools, config.permissionGate, signal);
+		const toolResults = yield* executeToolUses(toolUses, config.tools, config.permissionGate, signal, loopGuard);
 		messages.push({ role: 'user', content: toolResults });
 
 		if (turn >= maxTurns) {
