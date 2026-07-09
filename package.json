@@ -13,6 +13,7 @@
 		"build": "electron-vite build",
 		"start": "npm run build && electron dist/main/main.js",
 		"dev": "electron-vite dev",
+		"dev:debug": "AGENT_CHAT_DEBUG=1 npm run dev",
 		"predev": "npm run icons",
 		"icons": "node scripts/generate-icons.mjs",
 		"pack": "npm run build && npm run icons && electron-builder --dir",
