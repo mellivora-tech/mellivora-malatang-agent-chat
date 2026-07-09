@@ -55,6 +55,8 @@ export type IModelStreamEvent =
 	| { readonly type: 'text_delta'; readonly text: string }
 	| { readonly type: 'thinking_delta'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly block: IToolUseBlock }
+	/** The provider's own token count for this turn — ground truth for context-window occupancy. */
+	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number }
 	| { readonly type: 'message_stop'; readonly stopReason: ModelStopReason };
 
 /** The tool schema handed to the model (name + description + JSON Schema). */
@@ -147,7 +149,9 @@ export type IAgentEvent =
 	| { readonly type: 'tool_use'; readonly toolUseId: string; readonly name: string; readonly input: unknown }
 	| { readonly type: 'tool_result'; readonly toolUseId: string; readonly content: string; readonly isError: boolean }
 	/** The model stream failed before producing output; the loop is backing off and will retry. */
-	| { readonly type: 'stream_retry'; readonly attempt: number; readonly maxAttempts: number; readonly delayMs: number };
+	| { readonly type: 'stream_retry'; readonly attempt: number; readonly maxAttempts: number; readonly delayMs: number }
+	/** Real token counts for the turn just completed — the renderer uses inputTokens for the context-window meter. */
+	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number };
 
 export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'refusal';
 

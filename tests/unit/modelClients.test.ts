@@ -51,6 +51,10 @@ function stopReason(events: readonly IModelStreamEvent[]): string {
 	return event.stopReason;
 }
 
+function findUsage(events: readonly IModelStreamEvent[]): Extract<IModelStreamEvent, { type: 'usage' }> | undefined {
+	return events.find((candidate): candidate is Extract<IModelStreamEvent, { type: 'usage' }> => candidate.type === 'usage');
+}
+
 const conversation: readonly IAgentMessage[] = [
 	{ role: 'user', content: [{ type: 'text', text: 'hi' }] },
 	{
@@ -101,6 +105,24 @@ test('OpenAI accumulator reports end_turn / max_tokens without tool calls', () =
 	assert.equal(stopReason(runOpenAI([{ choices: [{ delta: {}, finish_reason: 'length' }] }])), 'max_tokens');
 });
 
+test('OpenAI accumulator reads real usage from the trailing (choice-less) chunk', () => {
+	const events = runOpenAI([{ choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }] }, { choices: [], usage: { prompt_tokens: 1234, completion_tokens: 5 } }]);
+	const usage = findUsage(events);
+	assert.ok(usage, 'expected a usage event');
+	assert.equal(usage.inputTokens, 1234);
+	assert.equal(usage.outputTokens, 5);
+});
+
+test('OpenAI accumulator omits usage when the provider never reports it', () => {
+	const events = runOpenAI([{ choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }] }]);
+	assert.equal(findUsage(events), undefined, 'no usage chunk → no usage event, renderer falls back to its estimate');
+});
+
+test('openai request body asks for usage on the trailing stream chunk', () => {
+	const body = buildOpenAIRequestBody({ baseURL: 'https://x/v1', model: 'm' }, { system: 's', messages: [], tools: [], signal: new AbortController().signal });
+	assert.deepEqual(body['stream_options'], { include_usage: true });
+});
+
 test('toAnthropicMessages maps blocks to Anthropic content blocks', () => {
 	const wire = toAnthropicMessages(conversation);
 	assert.deepEqual(wire[2]?.content, [{ type: 'tool_result', tool_use_id: 'tu1', content: 'echo: hi', is_error: false }]);
@@ -109,14 +131,14 @@ test('toAnthropicMessages maps blocks to Anthropic content blocks', () => {
 
 test('Anthropic accumulator streams text and folds input_json_delta into one tool block', () => {
 	const events = runAnthropic([
-		{ type: 'message_start' },
+		{ type: 'message_start', message: { usage: { input_tokens: 500, output_tokens: 1 } } },
 		{ type: 'content_block_start', index: 0, content_block: { type: 'text' } },
 		{ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Let me' } },
 		{ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'toolu_1', name: 'echo' } },
 		{ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"text":' } },
 		{ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '"hi"}' } },
 		{ type: 'content_block_stop', index: 1 },
-		{ type: 'message_delta', delta: { stop_reason: 'tool_use' } },
+		{ type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 12 } },
 		{ type: 'message_stop' },
 	]);
 
@@ -125,6 +147,18 @@ test('Anthropic accumulator streams text and folds input_json_delta into one too
 	assert.equal(toolUse.block.id, 'toolu_1');
 	assert.deepEqual(toolUse.block.input, { text: 'hi' });
 	assert.equal(stopReason(events), 'tool_use');
+
+	// message_start's input_tokens is the ground truth for this turn's prompt
+	// size; message_delta's usage updates output_tokens as generation proceeds.
+	const usage = findUsage(events);
+	assert.ok(usage, 'expected a usage event');
+	assert.equal(usage.inputTokens, 500);
+	assert.equal(usage.outputTokens, 12);
+});
+
+test('Anthropic accumulator omits usage when message_start carries none', () => {
+	const events = runAnthropic([{ type: 'message_start' }, { type: 'message_delta', delta: { stop_reason: 'end_turn' } }, { type: 'message_stop' }]);
+	assert.equal(findUsage(events), undefined, 'no input_tokens → no usage event, renderer falls back to its estimate');
 });
 
 test('createModelClient picks the client class from the provider', () => {

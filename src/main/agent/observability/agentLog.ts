@@ -31,6 +31,20 @@ export type AgentLogEvent =
 	  })
 	| (IBaseEvent & { readonly type: 'turn_start'; readonly turn: number })
 	| (IBaseEvent & { readonly type: 'ttft'; readonly turn: number; readonly ttftMs: number })
+	/**
+	 * One contiguous run of same-kind deltas (all 'thinking' or all 'text'),
+	 * closed the moment the stream switches kind, calls a tool, or the run ends.
+	 * A 'thinking' stretch appearing AFTER a 'text' stretch in the same turn
+	 * means the model kept reasoning after it had already started answering.
+	 */
+	| (IBaseEvent & {
+			readonly type: 'reasoning_stretch';
+			readonly turn: number;
+			readonly kind: 'thinking' | 'text';
+			readonly durationMs: number;
+			readonly chars: number;
+			readonly detail?: { readonly text: string };
+	  })
 	| (IBaseEvent & { readonly type: 'tool_use'; readonly toolUseId: string; readonly name: string; readonly detail?: { readonly input: unknown } })
 	| (IBaseEvent & {
 			readonly type: 'tool_result';

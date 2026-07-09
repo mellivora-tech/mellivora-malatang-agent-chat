@@ -111,15 +111,22 @@ test('runLogger maps a loop event stream into structured events with timings', (
 
 	const logger = createRunLogger({ runId: 'r1', sessionId: 's1', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 4, cwd: '/repo', projectId: 'p1' });
 	logger.record({ type: 'turn_start', turn: 1 });
-	logger.record({ type: 'assistant_delta', text: 'thinking…' }); // first token → ttft
-	logger.record({ type: 'assistant_delta', text: ' more' }); // no second ttft
+	logger.record({ type: 'assistant_delta', text: 'answering…' }); // first token → ttft
+	logger.record({ type: 'assistant_delta', text: ' more' }); // no second ttft; same stretch
+	// The tool call closes the open 'text' stretch (→ reasoning_stretch) before tool_use.
 	logger.record({ type: 'tool_use', toolUseId: 't1', name: 'read_file', input: { path: 'src/a.ts' } });
 	logger.record({ type: 'tool_result', toolUseId: 't1', content: 'file contents', isError: false });
 	logger.record({ type: 'stream_retry', attempt: 1, maxAttempts: 10, delayMs: 1000 });
 	logger.end({ reason: 'completed', turns: 1 });
 
 	const types = collected.events.map((event: AgentLogEvent) => event.type);
-	assert.deepEqual(types, ['run_start', 'turn_start', 'ttft', 'tool_use', 'tool_result', 'stream_retry', 'run_end']);
+	assert.deepEqual(types, ['run_start', 'turn_start', 'ttft', 'reasoning_stretch', 'tool_use', 'tool_result', 'stream_retry', 'run_end']);
+
+	const stretch = collected.events.find((event: AgentLogEvent) => event.type === 'reasoning_stretch') as Extract<AgentLogEvent, { type: 'reasoning_stretch' }>;
+	assert.equal(stretch.kind, 'text');
+	assert.equal(stretch.turn, 1);
+	assert.equal(stretch.chars, 'answering… more'.length);
+	assert.equal(stretch.detail?.text, 'answering… more');
 
 	const runStartEvent = collected.events[0] as Extract<AgentLogEvent, { type: 'run_start' }>;
 	assert.equal(runStartEvent.model, 'kimi');
@@ -135,6 +142,33 @@ test('runLogger maps a loop event stream into structured events with timings', (
 	const ttft = collected.events.find((event: AgentLogEvent) => event.type === 'ttft') as Extract<AgentLogEvent, { type: 'ttft' }>;
 	assert.equal(ttft.turn, 1);
 	assert.ok(typeof ttft.ttftMs === 'number' && ttft.ttftMs >= 0);
+});
+
+test('runLogger captures reasoning that resumes after the model has already started answering', () => {
+	// The renderer's own step bookkeeping can only close a 'thinking' step once
+	// per turn (on the FIRST visible-text delta); a model that keeps reasoning
+	// after that point gets silently absorbed there. runLogger tracks every
+	// kind switch independently, so this is the ground truth for that question.
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	const logger = createRunLogger({ runId: 'r2', sessionId: 's2', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 0 });
+	logger.record({ type: 'turn_start', turn: 1 });
+	logger.record({ type: 'thinking_delta', text: 'first I should check the schema. ' });
+	logger.record({ type: 'assistant_delta', text: 'Based on the design, ' });
+	logger.record({ type: 'thinking_delta', text: 'actually let me reconsider the column mapping. ' });
+	logger.record({ type: 'assistant_delta', text: 'the viewCode decouples grouping from the real company.' });
+	logger.end({ reason: 'completed', turns: 1 });
+
+	const stretches = collected.events.filter((event: AgentLogEvent) => event.type === 'reasoning_stretch') as Extract<AgentLogEvent, { type: 'reasoning_stretch' }>[];
+	assert.deepEqual(
+		stretches.map(s => s.kind),
+		['thinking', 'text', 'thinking', 'text'],
+		'kind switches are captured in order, including thinking resuming after text had already started',
+	);
+	assert.equal(stretches[0]?.detail?.text, 'first I should check the schema. ');
+	assert.equal(stretches[2]?.detail?.text, 'actually let me reconsider the column mapping. ');
+	assert.equal(stretches[3]?.detail?.text, 'the viewCode decouples grouping from the real company.');
 });
 
 test('jsonl file sink appends events and links latest.jsonl', () => {

@@ -27,6 +27,7 @@ function createSession(sessionId: string): ISession {
 		pendingApproval: observableValue(undefined),
 		reconnect: observableValue(undefined),
 		permissionMode: observableValue('ask' as const),
+		contextUsage: observableValue(undefined),
 	};
 }
 

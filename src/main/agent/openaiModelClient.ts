@@ -14,11 +14,18 @@ interface IOpenAIToolCallDelta {
 	readonly function?: { readonly name?: string; readonly arguments?: string };
 }
 
+interface IOpenAIUsage {
+	readonly prompt_tokens?: number;
+	readonly completion_tokens?: number;
+}
+
 interface IOpenAIChunk {
 	readonly choices?: readonly {
 		readonly delta?: { readonly content?: string; readonly reasoning_content?: string; readonly tool_calls?: readonly IOpenAIToolCallDelta[] };
 		readonly finish_reason?: string | null;
 	}[];
+	/** Only present on the trailing chunk when the request set stream_options.include_usage. */
+	readonly usage?: IOpenAIUsage;
 }
 
 interface IOpenAIMessage {
@@ -74,6 +81,10 @@ export function buildOpenAIRequestBody(config: IModelClientConfig, request: IMod
 		model: config.model,
 		messages: toOpenAIMessages(request.system, request.messages),
 		stream: true,
+		// Standard OpenAI field: asks the trailing stream chunk to carry real
+		// prompt/completion token counts (ground truth for the context-window
+		// meter, in place of the char-count estimate).
+		stream_options: { include_usage: true },
 		// Explicitly allow several tool calls per turn so the model can batch
 		// independent work (reading many files at once) instead of one-per-turn,
 		// which otherwise burns through the turn budget. Some OpenAI-compatible
@@ -90,9 +101,21 @@ export class OpenAIStreamAccumulator {
 	private readonly toolCalls = new Map<number, { id: string; name: string; args: string }>();
 	private readonly order: number[] = [];
 	private finishReason: string | undefined;
+	private inputTokens: number | undefined;
+	private outputTokens: number | undefined;
 
 	push(chunk: unknown): IModelStreamEvent[] {
-		const choice = (chunk as IOpenAIChunk).choices?.[0];
+		const wire = chunk as IOpenAIChunk;
+		// With stream_options.include_usage, the trailing chunk carries usage and
+		// an EMPTY choices array — read it before the no-choice early return below.
+		if (typeof wire.usage?.prompt_tokens === 'number') {
+			this.inputTokens = wire.usage.prompt_tokens;
+		}
+		if (typeof wire.usage?.completion_tokens === 'number') {
+			this.outputTokens = wire.usage.completion_tokens;
+		}
+
+		const choice = wire.choices?.[0];
 		if (!choice) {
 			return [];
 		}
@@ -125,6 +148,13 @@ export class OpenAIStreamAccumulator {
 			if (call) {
 				events.push({ type: 'tool_use', block: { type: 'tool_use', id: call.id || `call_${index}`, name: call.name, input: safeJsonParse(call.args) } });
 			}
+		}
+
+		// prompt_tokens is the ground truth for this turn's prompt size — the
+		// renderer uses it as the context-window occupancy reading. Omitted when
+		// the provider ignores stream_options.include_usage.
+		if (this.inputTokens !== undefined) {
+			events.push({ type: 'usage', inputTokens: this.inputTokens, ...(this.outputTokens !== undefined ? { outputTokens: this.outputTokens } : {}) });
 		}
 
 		events.push({ type: 'message_stop', stopReason: this.stopReason() });

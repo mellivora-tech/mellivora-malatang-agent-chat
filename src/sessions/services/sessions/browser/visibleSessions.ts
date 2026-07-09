@@ -74,6 +74,9 @@ class ActiveSession implements IActiveSession {
 	get permissionMode() {
 		return this.session.permissionMode;
 	}
+	get contextUsage() {
+		return this.session.contextUsage;
+	}
 }
 
 export class VisibleSessions {

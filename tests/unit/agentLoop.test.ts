@@ -153,6 +153,23 @@ test('transient stream failures retry with stream_retry events before any text',
 	assert.ok(events.some(event => event.type === 'assistant_delta' && event.text === 'recovered'));
 });
 
+test('a usage stream event forwards as an IAgentEvent for the renderer to read', async () => {
+	const client = {
+		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+			yield { type: 'text_delta', text: 'ok' };
+			yield { type: 'usage', inputTokens: 4321, outputTokens: 7 };
+			yield { type: 'message_stop', stopReason: 'end_turn' };
+		},
+	};
+
+	const { events } = await drive(runAgentLoop([userMessage('hi')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }));
+
+	const usage = events.find((event): event is Extract<IAgentEvent, { type: 'usage' }> => event.type === 'usage');
+	assert.ok(usage, 'expected a usage event');
+	assert.equal(usage.inputTokens, 4321);
+	assert.equal(usage.outputTokens, 7);
+});
+
 test('non-retryable stream errors surface immediately', async () => {
 	const failingClient = {
 		// eslint-disable-next-line require-yield

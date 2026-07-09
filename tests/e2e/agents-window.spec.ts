@@ -962,6 +962,9 @@ function startMockModelServer(reply: string): Promise<IMockModelServer> {
 					const midpoint = Math.ceil(reply.length / 2);
 					response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(0, midpoint) } }] })}\n\n`);
 					response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply.slice(midpoint) }, finish_reason: 'stop' }] })}\n\n`);
+					// The trailing, choice-less usage chunk a real OpenAI-compatible
+					// provider sends back for stream_options.include_usage.
+					response.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 4000, completion_tokens: 6 } })}\n\n`);
 					response.write('data: [DONE]\n\n');
 					response.end();
 				});
@@ -1043,10 +1046,12 @@ test('a configured model streams a real reply into the conversation', async () =
 		await expect(page.locator('.conversation-effort')).toContainText('high');
 
 		// The ring in the model button reports context usage against the
-		// selected model's window (gpt-5.4-mini declares 400K).
+		// selected model's window (gpt-5.4-mini declares 400K); the mock server's
+		// trailing usage chunk (prompt_tokens: 4000) is the real (non-estimated)
+		// reading — 4000 / 400000 = 1%.
 		const ring = page.locator('.conversation-context-ring');
 		await expect(ring).toBeVisible();
-		await expect(ring).toHaveAttribute('title', /Context: ~\d+ of 400K tokens used \(\d+%\)/);
+		await expect(ring).toHaveAttribute('aria-label', 'Context window: 1% used, ~4K of 400K tokens');
 
 		// The conversation composer hugs the window bottom — its picker must
 		// flip upward and stay fully inside the viewport.

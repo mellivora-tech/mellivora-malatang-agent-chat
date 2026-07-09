@@ -61,6 +61,11 @@ export interface ISessionReconnect {
 	readonly maxAttempts: number;
 }
 
+/** Real token count from the most recent request — ground truth for the context-window meter. */
+export interface ISessionContextUsage {
+	readonly inputTokens: number;
+}
+
 /** A tool call paused on the user's allow / deny. */
 export interface ISessionPendingApproval {
 	readonly requestId: string;
@@ -91,6 +96,8 @@ export interface ISession {
 	readonly pendingApproval: IObservable<ISessionPendingApproval | undefined>;
 	readonly reconnect: IObservable<ISessionReconnect | undefined>;
 	readonly permissionMode: IObservable<PermissionMode>;
+	/** Undefined until the first real usage reading arrives; the UI falls back to an estimate until then. */
+	readonly contextUsage: IObservable<ISessionContextUsage | undefined>;
 }
 
 export interface IActiveSession extends ISession {

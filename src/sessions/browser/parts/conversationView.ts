@@ -59,6 +59,11 @@ export class ConversationView extends Disposable {
 	// Live elapsed time is measured from when the block first appeared in this view.
 	private readonly workFirstSeen = new Map<string, number>();
 	private workTicker: ReturnType<typeof setInterval> | undefined;
+	// Rendered rows keyed by message id, so a streaming delta patches only the
+	// row that actually changed instead of tearing down the whole transcript —
+	// rebuilding every row on every token would restart hover-revealed UI (e.g.
+	// the message action bar's fade-in) on unrelated, unchanged messages too.
+	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage }>();
 
 	constructor(
 		private readonly messageSender?: ISessionMessageSender,
@@ -198,6 +203,10 @@ export class ConversationView extends Disposable {
 
 		this.session = session;
 		this.sessionDisposables.clear();
+		// Row identities belong to the session that produced them — a fresh
+		// session gets a clean slate rather than reusing stale nodes.
+		clearNode(this.transcript);
+		this.renderedRows.clear();
 		this.header.openSession(session);
 		this.setSendError(undefined);
 		this.queuedFollowUp = undefined;
@@ -216,6 +225,7 @@ export class ConversationView extends Disposable {
 			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.reconnect.subscribe(() => this.updateReconnectStatus()));
 			this.sessionDisposables.add(session.permissionMode.subscribe(() => this.notifyPermissionListeners()));
+			this.sessionDisposables.add(session.contextUsage.subscribe(() => this.updateContextRing()));
 		}
 		this.updateReconnectStatus();
 		this.notifyPermissionListeners();
@@ -326,27 +336,23 @@ export class ConversationView extends Disposable {
 		this.element.dataset.interactivity = this.session?.interactivity.get() ?? 'none';
 		this.header.element.hidden = !this.session;
 
-		// Rebuilding the transcript resets scrollTop. Follow the output while the
-		// reader is at (or near) the bottom; preserve their position otherwise.
+		// A structural change (new/removed row) can move scrollTop; a pure content
+		// patch never does. Follow the output while the reader is at (or near) the
+		// bottom; preserve their position otherwise.
 		const stickToBottom = this.scrollToBottomOnRender || this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < 48;
 		const previousScrollTop = this.transcript.scrollTop;
 		this.scrollToBottomOnRender = false;
 
-		clearNode(this.transcript);
-
 		const messages = this.session?.messages.get() ?? [];
-		if (messages.length === 0) {
-			const empty = append(this.transcript, document.createElement('div'));
-			empty.className = 'conversation-empty';
-			empty.textContent = this.session ? 'No messages yet' : 'No session selected';
-		} else {
-			for (const message of messages) {
-				this.transcript.appendChild(message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message, this.buildMessageActions(message)));
-			}
-		}
+		this.reconcileTranscript(messages);
 
 		const hasLiveWork = messages.some(message => message.role === 'work' && message.durationMs === undefined);
 		const approval = this.session?.pendingApproval.get();
+		// These trailing rows aren't part of the keyed reconciliation above (they
+		// aren't backed by a message id) — always re-evaluate them.
+		this.transcript.querySelector('.conversation-approval')?.remove();
+		this.transcript.querySelector('.conversation-working-row')?.remove();
+		this.transcript.querySelector('.conversation-thinking-row')?.remove();
 		if (approval) {
 			this.transcript.appendChild(createApprovalCard(approval));
 		} else if (this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
@@ -366,6 +372,151 @@ export class ConversationView extends Disposable {
 		this.renderTimeline(messages);
 		this.updateComposerState();
 		this.updateContextRing();
+	}
+
+	/**
+	 * Keyed diff against {@link renderedRows}: a row is created once and then
+	 * patched in place for as long as its message id survives. This is what
+	 * keeps hover-revealed UI (the message action bar's fade-in, a work step's
+	 * expanded detail) from restarting on every streamed token — only the row
+	 * whose content actually changed gets touched; every other row, including
+	 * ones the reader is currently hovering, is left completely alone.
+	 */
+	private reconcileTranscript(messages: readonly ISessionMessage[]): void {
+		if (messages.length === 0) {
+			if (this.renderedRows.size > 0) {
+				clearNode(this.transcript);
+				this.renderedRows.clear();
+			}
+			if (!this.transcript.querySelector('.conversation-empty')) {
+				const empty = append(this.transcript, document.createElement('div'));
+				empty.className = 'conversation-empty';
+				empty.textContent = this.session ? 'No messages yet' : 'No session selected';
+			}
+			return;
+		}
+		this.transcript.querySelector('.conversation-empty')?.remove();
+
+		const seen = new Set<string>();
+		let cursor: ChildNode | null = this.transcript.firstChild;
+
+		for (const message of messages) {
+			seen.add(message.id);
+			const existing = this.renderedRows.get(message.id);
+
+			let element: HTMLElement;
+			if (existing) {
+				element = existing.element;
+				if (message.role === 'work') {
+					// A work block's rendering also depends on state outside the
+					// message itself — the expand-override and per-step detail toggles
+					// (both set by clicks, not by a new message object) and the live
+					// ticker — so it always resyncs. Cheap, and work steps have no
+					// hover-fade UI to protect (unlike the message action bar below).
+					this.patchWorkBlock(element, message);
+				} else if (existing.message !== message) {
+					this.patchRow(element, message);
+				}
+				existing.message = message;
+			} else {
+				element = message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message, this.buildMessageActions(message));
+				this.renderedRows.set(message.id, { element, message });
+			}
+
+			if (element === cursor) {
+				cursor = cursor.nextSibling;
+			} else {
+				this.transcript.insertBefore(element, cursor);
+			}
+		}
+
+		for (const [id, entry] of this.renderedRows) {
+			if (!seen.has(id)) {
+				entry.element.remove();
+				this.renderedRows.delete(id);
+			}
+		}
+	}
+
+	/** Patch an existing user/assistant/tool row's dynamic content in place — never recreate it. Work blocks go through patchWorkBlock instead (see reconcileTranscript). */
+	private patchRow(element: HTMLElement, message: ISessionMessage): void {
+		const textEl = element.querySelector<HTMLElement>('.conversation-message-bubble, .conversation-message-text');
+		if (textEl) {
+			if (message.role === 'assistant') {
+				clearNode(textEl);
+				textEl.appendChild(renderMarkdown(message.text));
+			} else {
+				textEl.textContent = message.text;
+			}
+		}
+
+		let detailEl = element.querySelector<HTMLElement>('.conversation-tool-detail');
+		if (message.detail) {
+			if (!detailEl) {
+				detailEl = document.createElement('div');
+				detailEl.className = 'conversation-tool-detail';
+				element.querySelector('.conversation-message-body')?.appendChild(detailEl);
+			}
+			detailEl.textContent = message.detail;
+		} else {
+			detailEl?.remove();
+		}
+
+		setFeedbackButtonState(element.querySelector('[data-feedback="like"]'), 'like', message.feedback);
+		setFeedbackButtonState(element.querySelector('[data-feedback="dislike"]'), 'dislike', message.feedback);
+	}
+
+	/** Rebuild a work block's step list and refresh its header (title, spinner, expand state). */
+	private patchWorkBlock(block: HTMLElement, message: ISessionMessage): void {
+		this.updateWorkBlockHeader(block, message);
+
+		const stepsList = block.querySelector<HTMLElement>('.conversation-work-steps');
+		if (!stepsList) {
+			return;
+		}
+		clearNode(stepsList);
+		(message.steps ?? []).forEach((step, index) => {
+			stepsList.appendChild(this.createWorkStepRow(`${message.id}:${index}`, step));
+		});
+	}
+
+	/** The only place that decides a work block's title text, spinner, and expand state — called on real content changes and on the once-a-second live tick alike. */
+	private updateWorkBlockHeader(block: HTMLElement, message: ISessionMessage): void {
+		const live = message.durationMs === undefined;
+		if (live && !this.workFirstSeen.has(message.id)) {
+			this.workFirstSeen.set(message.id, Date.now());
+		}
+		const expanded = this.workExpandOverride.get(message.id) ?? live;
+
+		block.classList.toggle('live', live);
+
+		const header = block.querySelector<HTMLElement>('.conversation-work-header');
+		const title = block.querySelector<HTMLElement>('.conversation-work-title');
+		if (title) {
+			title.textContent = live
+				? `Working for ${formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now()))}`
+				: `Worked for ${formatDurationMs(message.durationMs ?? 0)}`;
+		}
+		if (header) {
+			header.setAttribute('aria-expanded', String(expanded));
+			const hasSpinner = header.querySelector('.codicon-loading') !== null;
+			if (live && !hasSpinner) {
+				const spinner = document.createElement('span');
+				spinner.className = 'codicon codicon-loading codicon-modifier-spin';
+				spinner.setAttribute('aria-hidden', 'true');
+				header.insertBefore(spinner, header.firstChild);
+			} else if (!live && hasSpinner) {
+				header.querySelector('.codicon-loading')?.remove();
+			}
+		}
+		const chevron = block.querySelector<HTMLElement>('.conversation-work-header > .codicon-chevron-down, .conversation-work-header > .codicon-chevron-right');
+		if (chevron) {
+			chevron.className = `codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`;
+		}
+		const stepsList = block.querySelector<HTMLElement>('.conversation-work-steps');
+		if (stepsList) {
+			stepsList.hidden = !expanded;
+		}
 	}
 
 	/**
@@ -583,8 +734,12 @@ export class ConversationView extends Disposable {
 		const chevron = append(header, document.createElement('span'));
 		chevron.className = `codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`;
 		chevron.setAttribute('aria-hidden', 'true');
+		// Reads aria-expanded fresh at click time, not the `expanded` captured
+		// above — this header element persists across patches (updateWorkBlockHeader
+		// keeps aria-expanded current), so a stale closure would toggle the wrong way.
 		header.addEventListener('click', () => {
-			this.workExpandOverride.set(message.id, !expanded);
+			const isExpanded = header.getAttribute('aria-expanded') === 'true';
+			this.workExpandOverride.set(message.id, !isExpanded);
 			this.render();
 		});
 
@@ -669,10 +824,12 @@ export class ConversationView extends Disposable {
 
 	/**
 	 * The ring beside the model picker shows how much of the selected model's
-	 * context window this conversation roughly occupies (~4 chars per token).
-	 * Hovering it reveals a two-line popover with the exact reading —
-	 * "Context window: / N% used (M% left)". Hidden until a window size is
-	 * known (there is nothing to be a percentage of otherwise).
+	 * context window this conversation occupies. Prefers the provider's real
+	 * token count from the most recent request (`session.contextUsage`); falls
+	 * back to a ~4-chars-per-token estimate until the first reading arrives (or
+	 * for providers that don't report usage). Hovering it reveals a two-line
+	 * popover with the exact reading — "Context window: / N% used (M% left)".
+	 * Hidden until a window size is known (nothing to be a percentage of).
 	 */
 	private updateContextRing(): void {
 		const fill = this.contextRing.querySelector<SVGCircleElement>('.ring-fill');
@@ -687,9 +844,15 @@ export class ConversationView extends Disposable {
 			return;
 		}
 
-		const messages = this.session?.messages.get() ?? [];
-		const chars = messages.reduce((sum, message) => sum + message.text.length, 0);
-		const tokens = Math.ceil(chars / 4);
+		const usage = this.session?.contextUsage.get();
+		let tokens: number;
+		if (usage) {
+			tokens = usage.inputTokens;
+		} else {
+			const messages = this.session?.messages.get() ?? [];
+			const chars = messages.reduce((sum, message) => sum + message.text.length, 0);
+			tokens = Math.ceil(chars / 4);
+		}
 		const ratio = Math.min(1, tokens / contextLength);
 		const usedPct = Math.round(ratio * 100);
 
@@ -697,7 +860,10 @@ export class ConversationView extends Disposable {
 		this.contextRing.dataset.level = ratio >= 0.95 ? 'danger' : ratio >= 0.8 ? 'warn' : 'ok';
 		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
 		value.textContent = `${usedPct}% used (${100 - usedPct}% left)`;
-		this.contextRing.setAttribute('aria-label', `Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens estimated`);
+		this.contextRing.setAttribute(
+			'aria-label',
+			`Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${usage ? '' : ' (estimated)'}`,
+		);
 	}
 
 	private createWorkingRow(): HTMLElement {
@@ -986,12 +1152,17 @@ function createMessageActionBar(message: ISessionMessage, actions: IMessageActio
 	const bar = document.createElement('div');
 	bar.className = 'conversation-message-actions';
 
-	const addAction = (icon: string, title: string, onClick: () => void, active = false): void => {
+	const addAction = (icon: string, title: string, onClick: () => void, options?: { readonly active?: boolean; readonly feedbackKind?: 'like' | 'dislike' }): void => {
 		const button = append(bar, document.createElement('button')) as HTMLButtonElement;
-		button.className = `conversation-message-action${active ? ' active' : ''}`;
+		button.className = `conversation-message-action${options?.active ? ' active' : ''}`;
 		button.type = 'button';
 		button.title = title;
 		button.setAttribute('aria-label', title);
+		if (options?.feedbackKind) {
+			// A stable hook so a later patch can toggle the active state in place
+			// without recreating the button (see setFeedbackButtonState).
+			button.dataset.feedback = options.feedbackKind;
+		}
 		const iconEl = append(button, document.createElement('span'));
 		iconEl.className = `codicon ${icon}`;
 		iconEl.setAttribute('aria-hidden', 'true');
@@ -1002,8 +1173,14 @@ function createMessageActionBar(message: ISessionMessage, actions: IMessageActio
 		actions.copy();
 	});
 	if (actions.feedback) {
-		addAction('codicon-thumbsup', message.feedback === 'like' ? 'Remove like' : 'Like', () => actions.feedback!('like'), message.feedback === 'like');
-		addAction('codicon-thumbsdown', message.feedback === 'dislike' ? 'Remove dislike' : 'Dislike', () => actions.feedback!('dislike'), message.feedback === 'dislike');
+		addAction('codicon-thumbsup', message.feedback === 'like' ? 'Remove like' : 'Like', () => actions.feedback!('like'), {
+			active: message.feedback === 'like',
+			feedbackKind: 'like',
+		});
+		addAction('codicon-thumbsdown', message.feedback === 'dislike' ? 'Remove dislike' : 'Dislike', () => actions.feedback!('dislike'), {
+			active: message.feedback === 'dislike',
+			feedbackKind: 'dislike',
+		});
 	}
 	if (actions.fork) {
 		addAction('codicon-git-branch', 'Fork from here', actions.fork);
@@ -1017,6 +1194,18 @@ function createMessageActionBar(message: ISessionMessage, actions: IMessageActio
 	}
 
 	return bar;
+}
+
+/** Toggle a feedback button's active/title state in place — used when patching an existing row. */
+function setFeedbackButtonState(button: Element | null, kind: 'like' | 'dislike', feedback: 'like' | 'dislike' | undefined): void {
+	if (!(button instanceof HTMLButtonElement)) {
+		return;
+	}
+	const active = feedback === kind;
+	button.classList.toggle('active', active);
+	const title = kind === 'like' ? (active ? 'Remove like' : 'Like') : active ? 'Remove dislike' : 'Dislike';
+	button.title = title;
+	button.setAttribute('aria-label', title);
 }
 
 function formatWorkingDuration(startedAt: Date | undefined): string {

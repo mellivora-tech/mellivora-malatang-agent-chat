@@ -18,11 +18,19 @@ interface IAnthropicContentBlock {
 	readonly name?: string;
 }
 
+interface IAnthropicUsage {
+	readonly input_tokens?: number;
+	readonly output_tokens?: number;
+}
+
 interface IAnthropicStreamEvent {
 	readonly type: string;
 	readonly index?: number;
 	readonly content_block?: IAnthropicContentBlock;
 	readonly delta?: { readonly type?: string; readonly text?: string; readonly thinking?: string; readonly partial_json?: string; readonly stop_reason?: string };
+	/** message_start carries the prompt's usage; message_delta updates output_tokens as it grows. */
+	readonly message?: { readonly usage?: IAnthropicUsage };
+	readonly usage?: IAnthropicUsage;
 }
 
 type AnthropicWireBlock =
@@ -74,10 +82,23 @@ export class AnthropicStreamAccumulator {
 	private readonly blocks = new Map<number, { id: string; name: string; json: string }>();
 	private readonly order: number[] = [];
 	private stopReason: string | undefined;
+	private inputTokens: number | undefined;
+	private outputTokens: number | undefined;
 
 	push(event: unknown): IModelStreamEvent[] {
 		const wire = event as IAnthropicStreamEvent;
 		const index = wire.index ?? 0;
+
+		if (wire.type === 'message_start') {
+			const usage = wire.message?.usage;
+			if (typeof usage?.input_tokens === 'number') {
+				this.inputTokens = usage.input_tokens;
+			}
+			if (typeof usage?.output_tokens === 'number') {
+				this.outputTokens = usage.output_tokens;
+			}
+			return [];
+		}
 
 		if (wire.type === 'content_block_start' && wire.content_block?.type === 'tool_use') {
 			this.blocks.set(index, { id: wire.content_block.id ?? '', name: wire.content_block.name ?? '', json: '' });
@@ -101,8 +122,14 @@ export class AnthropicStreamAccumulator {
 			return [];
 		}
 
-		if (wire.type === 'message_delta' && typeof wire.delta?.stop_reason === 'string') {
-			this.stopReason = wire.delta.stop_reason;
+		if (wire.type === 'message_delta') {
+			if (typeof wire.delta?.stop_reason === 'string') {
+				this.stopReason = wire.delta.stop_reason;
+			}
+			if (typeof wire.usage?.output_tokens === 'number') {
+				this.outputTokens = wire.usage.output_tokens;
+			}
+			return [];
 		}
 
 		return [];
@@ -115,6 +142,12 @@ export class AnthropicStreamAccumulator {
 			if (block) {
 				events.push({ type: 'tool_use', block: { type: 'tool_use', id: block.id, name: block.name, input: safeJsonParse(block.json) } });
 			}
+		}
+
+		// input_tokens on message_start is the ground truth for this turn's prompt
+		// size — the renderer uses it as the context-window occupancy reading.
+		if (this.inputTokens !== undefined) {
+			events.push({ type: 'usage', inputTokens: this.inputTokens, ...(this.outputTokens !== undefined ? { outputTokens: this.outputTokens } : {}) });
 		}
 
 		events.push({ type: 'message_stop', stopReason: this.mapStop() });

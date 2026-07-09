@@ -37,7 +37,36 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 	let turn = 0;
 	let turnStart = runStart;
 	let awaitingFirstToken = false;
+	let stretch: { kind: 'thinking' | 'text'; turn: number; startedAt: number; text: string } | undefined;
 	const now = (): string => new Date().toISOString();
+
+	// Ground truth for whether the model kept reasoning after it had already
+	// started its visible answer — independent of the renderer's own step
+	// bookkeeping, which can only close a 'thinking' step once per turn.
+	const flushStretch = (): void => {
+		if (!stretch) {
+			return;
+		}
+		agentLog.emit({
+			ts: now(),
+			...base,
+			type: 'reasoning_stretch',
+			turn: stretch.turn,
+			kind: stretch.kind,
+			durationMs: Date.now() - stretch.startedAt,
+			chars: stretch.text.length,
+			...(stretch.text.trim() === '' ? {} : { detail: { text: stretch.text } }),
+		});
+		stretch = undefined;
+	};
+
+	const appendStretch = (kind: 'thinking' | 'text', text: string): void => {
+		if (stretch?.kind !== kind) {
+			flushStretch();
+			stretch = { kind, turn, startedAt: Date.now(), text: '' };
+		}
+		stretch.text += text;
+	};
 
 	agentLog.emit({
 		ts: now(),
@@ -61,17 +90,23 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 		record(event) {
 			switch (event.type) {
 				case 'turn_start':
+					flushStretch();
 					turn = event.turn;
 					turnStart = Date.now();
 					awaitingFirstToken = true;
 					agentLog.emit({ ts: now(), ...base, type: 'turn_start', turn });
 					break;
 				case 'assistant_delta':
+					markFirstToken();
+					appendStretch('text', event.text);
+					break;
 				case 'thinking_delta':
 					markFirstToken();
+					appendStretch('thinking', event.text);
 					break;
 				case 'tool_use':
 					markFirstToken();
+					flushStretch();
 					toolStarts.set(event.toolUseId, { name: event.name, at: Date.now() });
 					agentLog.emit({ ts: now(), ...base, type: 'tool_use', toolUseId: event.toolUseId, name: event.name, detail: { input: event.input } });
 					break;
@@ -99,6 +134,7 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 			}
 		},
 		end(terminal) {
+			flushStretch();
 			agentLog.emit({ ts: now(), ...base, type: 'run_end', reason: terminal.reason, turns: terminal.turns, durationMs: Date.now() - runStart });
 		},
 		error(where, message) {

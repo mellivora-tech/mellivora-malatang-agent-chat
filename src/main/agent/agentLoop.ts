@@ -125,6 +125,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 						case 'tool_use':
 							toolUses.push(event.block);
 							break;
+						case 'usage':
+							yield { type: 'usage', inputTokens: event.inputTokens, ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}) };
+							break;
 						case 'message_stop':
 							stopReason = event.stopReason;
 							break;

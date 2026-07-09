@@ -11,6 +11,7 @@ import type { IModelsService } from '../../../services/models/browser/modelsServ
 import type {
 	ISession,
 	ISessionChangesSummary,
+	ISessionContextUsage,
 	ISessionMessage,
 	ISessionPendingApproval,
 	ISessionReconnect,
@@ -52,6 +53,7 @@ interface IMutableSession extends ISession {
 	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
 	readonly permissionMode: ObservableValue<PermissionMode>;
+	readonly contextUsage: ObservableValue<ISessionContextUsage | undefined>;
 }
 
 function createSession(options: {
@@ -93,6 +95,7 @@ function createSession(options: {
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 		permissionMode: observableValue<PermissionMode>(options.permissionMode ?? 'ask'),
+		contextUsage: observableValue<ISessionContextUsage | undefined>(undefined),
 	};
 }
 
@@ -116,7 +119,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 	private readonly responseDelayMs: number;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private initialized = false;
-	private sequence = 0;
 
 	constructor(
 		private readonly bridge: ISessionsBridge,
@@ -167,12 +169,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 	}
 
 	async startSession(query: string, options?: IStartSessionOptions): Promise<ISession> {
-		const sessionId = generateSessionId();
+		const sessionId = generateId();
 		const ref: ISessionRef = { sessionId, ...(options?.projectId ? { projectId: options.projectId } : {}) };
 		const now = new Date();
-		this.sequence += 1;
 		const initialMode = permissionMode.get();
-		const userMessage: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query, timestamp: now };
+		const userMessage: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now };
 
 		await this.enqueueWrite(async () => {
 			await this.bridge.create({
@@ -226,8 +227,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const session = this.getMutableSession(sessionId);
 		const ref = this.getRef(sessionId);
 		const now = new Date();
-		this.sequence += 1;
-		const message: ISessionMessage = { id: `${sessionId}-user-${this.sequence}`, role: 'user', text: query, timestamp: now };
+		const message: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now };
 
 		await this.enqueueWrite(async () => {
 			await this.bridge.append(ref, { type: 'message', id: message.id, role: 'user', text: query, timestamp: now.toISOString() });
@@ -308,7 +308,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const cutoff = history.findIndex(message => message.id === messageId);
 		const messages = (cutoff === -1 ? history : history.slice(0, cutoff + 1)).map(message => ({ ...message }));
 
-		const forkId = generateSessionId();
+		const forkId = generateId();
 		const ref: ISessionRef = { sessionId: forkId, ...(source.projectId ? { projectId: source.projectId } : {}) };
 		const now = new Date();
 		const title = `Fork of ${source.title.get()}`;
@@ -465,9 +465,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// The composer's picker; the runtime still falls back to the first
 		// enabled model when nothing is selected.
 		const modelId = this.modelsService?.selectedModel.get()?.id;
-		this.sequence += 1;
-		const assistantId = `${sessionId}-assistant-${this.sequence}`;
-		const workId = `${sessionId}-work-${this.sequence}`;
+		const assistantId = `${sessionId}-assistant-${generateId()}`;
+		const workId = `${sessionId}-work-${generateId()}`;
 		const transcript = toTranscript(session.messages.get());
 		let text = '';
 		let created = false;
@@ -604,6 +603,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 					openToolLabel = undefined;
 					updateWork();
 				}
+			} else if (event?.type === 'usage') {
+				// The provider's real prompt size for the request just completed —
+				// the conversation view prefers this over its char-count estimate.
+				session.contextUsage.set({ inputTokens: event.inputTokens });
 			} else if (payload.done) {
 				finalize(payload.done.reason);
 			}
@@ -650,10 +653,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 		});
 		const timer = setTimeout(() => {
 			this.pendingReplies.delete(session.sessionId);
-			this.sequence += 1;
 			const now = new Date();
 			const message: ISessionMessage = {
-				id: `${session.sessionId}-assistant-${this.sequence}`,
+				id: `${session.sessionId}-assistant-${generateId()}`,
 				role: 'assistant',
 				text: 'No model is configured yet, so I can’t answer. Add a model in Settings › Models, then send your message again.',
 				timestamp: now,
@@ -749,8 +751,14 @@ function coerceInteractivity(interactivity: ISessionSnapshot['interactivity']): 
 	}
 }
 
-function generateSessionId(): string {
-	return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+/**
+ * A collision-safe id — unlike a per-instance counter, this can't clash with
+ * an id already persisted from a prior app run (a counter resets to 0 on
+ * every restart while its old, disk-persisted ids live on; a fresh message
+ * that happens to land on a reused number silently overwrites the old one).
+ */
+function generateId(): string {
+	return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function registerFileSessionsProvider(
