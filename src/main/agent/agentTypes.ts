@@ -153,7 +153,9 @@ export type IAgentEvent =
 	/** Real token counts for the turn just completed — the renderer uses inputTokens for the context-window meter. */
 	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number }
 	/** The loop guard blocked a repeated identical call — logged so trigger/false-positive rates are measurable; the renderer may ignore it. */
-	| { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number };
+	| { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number }
+	/** The reply verifier judged the final answer. verdict 'fail' means a single retry follows — the renderer replaces the rejected reply instead of appending. */
+	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string };
 
 /** 'max_output_tokens': the reply was cut off by the max_tokens budget — surfaced explicitly so truncation shows up in logs instead of masquerading as 'completed'. */
 export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'max_output_tokens' | 'refusal';

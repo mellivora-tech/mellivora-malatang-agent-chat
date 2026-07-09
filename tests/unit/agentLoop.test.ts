@@ -256,6 +256,118 @@ test('a max_tokens stop surfaces as max_output_tokens instead of masquerading as
 	assert.equal(terminal.reason, 'max_output_tokens');
 });
 
+/** A call-counting client: entry N answers the Nth stream() call; requests are captured for inspection. */
+function sequenceClient(outputs: readonly string[]): { client: IModelRequestCapturingClient; requests: IModelRequest[] } {
+	const requests: IModelRequest[] = [];
+	const client = {
+		async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+			requests.push(request);
+			const output = outputs[requests.length - 1] ?? '';
+			if (output !== '') {
+				yield { type: 'text_delta', text: output };
+			}
+			yield { type: 'message_stop', stopReason: 'end_turn' };
+		},
+	};
+	return { client, requests };
+}
+type IModelRequestCapturingClient = { stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> };
+
+test('reply verifier: a failed judgment feeds back and grants exactly one retry', async () => {
+	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	// call1 = off-topic answer; call2 = judge says NO; call3 = retry answer.
+	// A 4th call would be a second judgment — the once-per-run cap forbids it.
+	const { client, requests } = sequenceClient(['The weather is nice today.', 'NO\ntalks about weather, not the question', 'The answer is 42.']);
+
+	const { events, terminal } = await drive(
+		runAgentLoop([userMessage('what is 6 times 7?')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }),
+	);
+
+	assert.equal(terminal.reason, 'completed');
+	assert.equal(terminal.turns, 2, 'the retry is a second turn');
+	assert.equal(requests.length, 3, 'main + judge + retry, no second judgment');
+
+	const verifier = events.find((event): event is Extract<IAgentEvent, { type: 'reply_verifier' }> => event.type === 'reply_verifier');
+	assert.ok(verifier, 'reply_verifier event emitted');
+	assert.equal(verifier.verdict, 'fail');
+	assert.equal(verifier.retried, true);
+	assert.match(verifier.reason ?? '', /weather/);
+
+	// The judge saw the question and the answer; the retry saw the feedback.
+	const judgeText = JSON.stringify(requests[1]!.messages);
+	assert.match(judgeText, /6 times 7/);
+	assert.match(judgeText, /weather is nice/);
+	const retryText = JSON.stringify(requests[2]!.messages);
+	assert.match(retryText, /Reply verifier/);
+
+	const replies = events.filter(event => event.type === 'assistant_message');
+	assert.equal(replies.length, 2, 'both attempts streamed as assistant messages');
+});
+
+test('reply verifier: a passing judgment changes nothing', async () => {
+	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	const { client, requests } = sequenceClient(['42.', 'YES\ndirect answer']);
+
+	const { events, terminal } = await drive(
+		runAgentLoop([userMessage('what is 6 times 7?')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }),
+	);
+
+	assert.equal(terminal.reason, 'completed');
+	assert.equal(terminal.turns, 1);
+	assert.equal(requests.length, 2, 'main + judge only');
+	const verifier = events.find((event): event is Extract<IAgentEvent, { type: 'reply_verifier' }> => event.type === 'reply_verifier');
+	assert.equal(verifier?.verdict, 'pass');
+	assert.equal(verifier?.retried, false);
+});
+
+test('reply verifier: an unparseable judge is fail-open — no retry', async () => {
+	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	const { client, requests } = sequenceClient(['some answer', 'MAYBE, who can say']);
+
+	const { events, terminal } = await drive(
+		runAgentLoop([userMessage('question?')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }),
+	);
+
+	assert.equal(terminal.reason, 'completed');
+	assert.equal(requests.length, 2);
+	const verifier = events.find((event): event is Extract<IAgentEvent, { type: 'reply_verifier' }> => event.type === 'reply_verifier');
+	assert.equal(verifier?.verdict, 'error');
+	assert.equal(verifier?.retried, false);
+});
+
+test('reply verifier: AGENT_CHAT_REPLY_VERIFIER=off skips the judge entirely', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client, requests } = sequenceClient(['some answer']);
+		const { events } = await drive(runAgentLoop([userMessage('question?')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }));
+		assert.equal(requests.length, 1, 'no judge call');
+		assert.equal(
+			events.some(event => event.type === 'reply_verifier'),
+			false,
+		);
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
+test('reply verifier: refusal and truncation terminals are never verified', async () => {
+	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	const refusing = {
+		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+			yield { type: 'text_delta', text: 'cannot help with that' };
+			yield { type: 'message_stop', stopReason: 'refusal' };
+		},
+	};
+	const { events, terminal } = await drive(
+		runAgentLoop([userMessage('question?')], { system: 's', tools: [], modelClient: refusing as never, permissionGate: allowAllPermissionGate }),
+	);
+	assert.equal(terminal.reason, 'refusal');
+	assert.equal(
+		events.some(event => event.type === 'reply_verifier'),
+		false,
+	);
+});
+
 test('non-retryable stream errors surface immediately', async () => {
 	const failingClient = {
 		// eslint-disable-next-line require-yield

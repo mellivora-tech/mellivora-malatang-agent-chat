@@ -52,6 +52,12 @@ export type AgentLogEvent =
 	 * Watch this event's rate in real logs to judge trigger/false-positive rates.
 	 */
 	| (IBaseEvent & { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number })
+	/**
+	 * The reply verifier's judgment on a finished run. verdict/retried are
+	 * export-safe; the judge's free-text reason (derived from user content)
+	 * stays under detail. Watch fail rates in real logs to tune or disable.
+	 */
+	| (IBaseEvent & { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly detail?: { readonly reason?: string } })
 	| (IBaseEvent & {
 			readonly type: 'tool_result';
 			readonly toolUseId: string;

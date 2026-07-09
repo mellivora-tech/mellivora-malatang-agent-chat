@@ -160,6 +160,26 @@ test('runLogger maps a loop_guard event onto the log bus with its repeat count',
 	assert.equal(guard.toolUseId, 't9');
 });
 
+test('runLogger maps a reply_verifier event with its verdict; the reason stays under detail', () => {
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	const logger = createRunLogger({ runId: 'r4', sessionId: 's4', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 0 });
+	logger.record({ type: 'turn_start', turn: 1 });
+	logger.record({ type: 'reply_verifier', verdict: 'fail', retried: true, reason: 'wrong topic' });
+	logger.end({ reason: 'completed', turns: 2 });
+
+	const verifier = collected.events.find((event: AgentLogEvent) => event.type === 'reply_verifier') as Extract<AgentLogEvent, { type: 'reply_verifier' }>;
+	assert.ok(verifier, 'reply_verifier event reached the bus');
+	assert.equal(verifier.verdict, 'fail');
+	assert.equal(verifier.retried, true);
+	assert.equal(verifier.detail?.reason, 'wrong topic');
+	// Export safety: stripping detail keeps verdict/retried.
+	const exported = toExportable(verifier);
+	assert.equal('detail' in exported, false);
+	assert.equal((exported as { verdict: string }).verdict, 'fail');
+});
+
 test('runLogger captures reasoning that resumes after the model has already started answering', () => {
 	// The renderer's own step bookkeeping can only close a 'thinking' step once
 	// per turn (on the FIRST visible-text delta); a model that keeps reasoning

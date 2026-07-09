@@ -611,6 +611,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// The provider's real prompt size for the request just completed —
 				// the conversation view prefers this over its char-count estimate.
 				session.contextUsage.set({ inputTokens: event.inputTokens });
+			} else if (event?.type === 'reply_verifier') {
+				if (event.verdict === 'fail') {
+					// The rejected reply is REPLACED by the retry, not appended to —
+					// otherwise the off-target answer and its correction would render
+					// as one concatenated blob.
+					text = '';
+					if (created) {
+						created = false;
+						session.messages.set(session.messages.get().filter(message => message.id !== assistantId));
+						this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+					}
+				}
 			} else if (payload.done) {
 				finalize(payload.done.reason);
 			}

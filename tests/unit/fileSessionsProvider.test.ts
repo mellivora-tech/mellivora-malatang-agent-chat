@@ -517,6 +517,48 @@ test('a run that ends at the step limit with no text shows a note, not a blank b
 	);
 });
 
+test('a reply_verifier fail replaces the rejected reply with the retry instead of appending', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'assistant_delta', text: 'off-topic first attempt' } });
+			emit({ event: { type: 'reply_verifier', verdict: 'fail', retried: true, reason: 'wrong topic' } });
+			emit({ event: { type: 'assistant_delta', text: 'the real answer' } });
+			emit({ done: { reason: 'completed', turns: 2 } });
+			return { reason: 'completed', turns: 2 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('do something');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const assistants = session.messages.get().filter(message => message.role === 'assistant');
+	assert.equal(assistants.length, 1, 'a single reply message — the rejected attempt is gone');
+	assert.equal(assistants[0]!.text, 'the real answer', 'the retry replaced the rejected text, no concatenation');
+
+	// Persistence carries only the surviving reply.
+	const persisted = bridge.appends.filter(call => call.entry.type === 'message' && call.entry.role === 'assistant');
+	assert.equal(persisted.length, 1);
+	assert.equal((persisted[0]!.entry as { text: string }).text, 'the real answer');
+});
+
 test('a run truncated by the output token budget with no text shows a note, not silence', async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;

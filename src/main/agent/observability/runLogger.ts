@@ -129,6 +129,16 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 				case 'loop_guard':
 					agentLog.emit({ ts: now(), ...base, type: 'loop_guard', toolUseId: event.toolUseId, name: event.name, repeatCount: event.repeatCount });
 					break;
+				case 'reply_verifier':
+					agentLog.emit({
+						ts: now(),
+						...base,
+						type: 'reply_verifier',
+						verdict: event.verdict,
+						retried: event.retried,
+						...(event.reason ? { detail: { reason: event.reason } } : {}),
+					});
+					break;
 				case 'stream_retry':
 					agentLog.emit({ ts: now(), ...base, type: 'stream_retry', attempt: event.attempt, maxAttempts: event.maxAttempts, delayMs: event.delayMs });
 					break;

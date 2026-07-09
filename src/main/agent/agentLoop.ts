@@ -6,6 +6,7 @@
 import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IToolUseBlock, ModelStopReason } from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
 import { createLoopGuard } from './loopGuard.js';
+import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 100;
@@ -26,6 +27,25 @@ function withReminder(messages: readonly IAgentMessage[], reminder: string): IAg
 		return [...messages.slice(0, -1), { role: 'user', content: [...last.content, block] }];
 	}
 	return [...messages, { role: 'user', content: [block] }];
+}
+
+/** The question the reply verifier judges against: the latest user text in the transcript. */
+function extractLatestUserText(messages: readonly IAgentMessage[]): string | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i]!;
+		if (message.role !== 'user') {
+			continue;
+		}
+		const text = message.content
+			.filter((block): block is IContentBlock & { type: 'text' } => block.type === 'text')
+			.map(block => block.text)
+			.join('\n')
+			.trim();
+		if (text !== '') {
+			return text;
+		}
+	}
+	return undefined;
 }
 
 const MAX_STREAM_ATTEMPTS = 10;
@@ -78,6 +98,11 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// Fresh per run: a user's explicit "try again" starts a new run, so the
 	// repeated-call counter never fights a deliberate retry.
 	const loopGuard = createLoopGuard(process.env);
+	// Reply verifier state: the question is the latest user text in the initial
+	// transcript; at most one verification (and one retry) per run.
+	const question = extractLatestUserText(initialMessages);
+	const verifierEnabled = isReplyVerifierEnabled(process.env);
+	let verifierFired = false;
 	let turn = 0;
 
 	while (true) {
@@ -165,6 +190,26 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// 'completed' would hide that from logs and the UI.
 		if (toolUses.length === 0) {
 			const reason = stopReason === 'refusal' ? 'refusal' : stopReason === 'max_tokens' ? 'max_output_tokens' : 'completed';
+
+			// Reply verifier: at the moment of a genuine submission, one cheap judge
+			// call checks the reply addresses the question. A 'fail' feeds the
+			// rejection back (hidden user message, CC Stop-hook style) and grants
+			// exactly one retry; 'error' is fail-open. Other stop reasons have
+			// their own handling and are never verified.
+			if (reason === 'completed' && verifierEnabled && !verifierFired && question !== undefined && assistantText.trim() !== '') {
+				verifierFired = true;
+				const verification = await verifyReply({ client: config.modelClient, question, answer: assistantText, signal });
+				if (signal.aborted) {
+					return { reason: 'aborted', turns: turn };
+				}
+				const retried = verification.verdict === 'fail';
+				yield { type: 'reply_verifier', verdict: verification.verdict, retried, ...(verification.reason ? { reason: verification.reason } : {}) };
+				if (retried) {
+					messages.push({ role: 'user', content: [{ type: 'text', text: buildRetryFeedback(question, verification.reason) }] });
+					continue;
+				}
+			}
+
 			return { reason, turns: turn };
 		}
 
