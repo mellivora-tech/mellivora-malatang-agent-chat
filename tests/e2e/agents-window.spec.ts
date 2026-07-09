@@ -1087,7 +1087,8 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await assertSidebarLayout(page);
 	await expect(page.locator('.new-session-watermark')).toBeVisible();
 	await expect(page.locator('.new-session-watermark')).toHaveText('');
-	await expect(page.locator('.new-session-heading')).toHaveText('Morning, how can I help?');
+	// Time-of-day prefix + a randomly picked meme tail — not a fixed string.
+	await expect(page.locator('.new-session-heading')).toHaveText(/^(早上好|中午好|下午好|晚上好|凌晨好)，.+/);
 	// The shell test seeds two projects; the first becomes active by default.
 	await expect(page.locator('.new-session-composer-context')).toContainText('Obsidian');
 	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask Mellivora anything/);

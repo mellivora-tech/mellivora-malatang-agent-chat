@@ -33,7 +33,7 @@ export class NewSessionView extends Disposable {
 
 		const heading = append(content, document.createElement('h1'));
 		heading.className = 'new-session-heading';
-		heading.textContent = 'Morning, how can I help?';
+		heading.textContent = pickGreeting(new Date().getHours());
 
 		const composer = append(content, document.createElement('form')) as HTMLFormElement;
 		composer.className = 'new-session-composer';
@@ -250,4 +250,51 @@ export class NewSessionView extends Disposable {
 
 		this._register(toDisposable(closeMenu));
 	}
+}
+
+const LATE_NIGHT_TAILS: readonly string[] = [
+	'都几点了还不睡，肝是钢做的？',
+	'这个点了，是真爱还是真上头',
+	'别的都睡了，就咱俩醒着，说吧',
+	'熬夜冠军在此，说说肝到几点',
+	'凌晨了，兄弟，命是自己的',
+];
+
+/** The landing heading's time-of-day half, each paired with a pool of tails riffing on what that hour actually feels like — not a generic joke recycled all day. */
+const GREETING_BUCKETS: readonly { readonly maxHour: number; readonly label: string; readonly tails: readonly string[] }[] = [
+	{ maxHour: 5, label: '凌晨好', tails: LATE_NIGHT_TAILS },
+	{
+		maxHour: 11,
+		label: '早上好',
+		tails: [
+			'起来了？人醒了，魂还没归位，说吧',
+			'早八人状态：肉身到岗，灵魂在床上',
+			'闹钟响了八百遍，人来了，说需求',
+			'咖啡还没下肚，先凑合听我说',
+			'打工人集合，说说今天惹了什么活',
+		],
+	},
+	{
+		maxHour: 13,
+		label: '中午好',
+		tails: ['饭点了，先别摸鱼，说说你想干啥', '干饭魂干饭魄，说完事儿再睡午觉', '困是真困，但活是真的要干', '摸鱼一时爽，一直摸一直爽，说吧', '中午了，效率约等于零，但还是听你说'],
+	},
+	{
+		maxHour: 18,
+		label: '下午好',
+		tails: ['困成🐶了，但还是硬扛着听你说', '下午三点魂飞天，说说你想干啥', '下午茶都没喝上，先说说你要干啥', '打工人还有几个小时就解放了，抓紧说', '工位上装忙，其实在等你发需求'],
+	},
+	{
+		maxHour: 23,
+		label: '晚上好',
+		tails: ['别人下班了，我们还在肝，说吧', '晚上好，卷王模式已启动', '下班了？不存在的，继续肝', '夜深了，代码和秃头更配哦', '有事快说，说完我要去摸鱼了'],
+	},
+	{ maxHour: 24, label: '凌晨好', tails: LATE_NIGHT_TAILS },
+];
+
+/** e.g. "下午好，下午三点魂飞天，说说你想干啥" — the greeting for this exact hour, tail picked fresh each time the view mounts. */
+function pickGreeting(hour: number): string {
+	const bucket = GREETING_BUCKETS.find(candidate => hour < candidate.maxHour) ?? GREETING_BUCKETS[GREETING_BUCKETS.length - 1]!;
+	const tail = bucket.tails[Math.floor(Math.random() * bucket.tails.length)]!;
+	return `${bucket.label}，${tail}`;
 }
