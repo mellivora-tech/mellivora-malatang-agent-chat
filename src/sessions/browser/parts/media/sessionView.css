@@ -927,15 +927,22 @@ button.conversation-work-step-row:hover {
 	color: var(--vscode-agents-color-warning);
 }
 
-/* Standalone context-usage indicator (separate from the model picker):
-   the ring fill = share of the selected model's context window this
-   conversation occupies; exact numbers live in the tooltip. Read-only. */
+/* Standalone context-usage indicator (separate from the model picker): the
+   ring fill = share of the selected model's context window this conversation
+   occupies. Hover reveals the exact reading as a two-line popover card —
+   "Context window: / N% used (M% left)". Hidden until a model with a known
+   window is selected. Read-only. */
 .conversation-context-ring {
+	position: relative; /* anchors the hover popover */
 	display: inline-flex;
 	align-items: center;
 	flex: 0 0 auto;
 	margin: 0 var(--vscode-agents-space-2);
 	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-context-ring[hidden] {
+	display: none;
 }
 
 .conversation-context-ring svg {
@@ -955,6 +962,7 @@ button.conversation-work-step-row:hover {
 	stroke: currentColor;
 	stroke-width: 2.5;
 	stroke-linecap: round;
+	transition: stroke-dashoffset 160ms ease-out;
 }
 
 .conversation-context-ring[data-level='warn'] .ring-fill {
@@ -963,6 +971,53 @@ button.conversation-work-step-row:hover {
 
 .conversation-context-ring[data-level='danger'] .ring-fill {
 	stroke: var(--vscode-agents-color-danger);
+}
+
+/* The hover popover: a small rounded card, muted caption on top and the
+   emphasised reading below. Opens upward — the composer toolbar sits at the
+   window bottom, so a downward popover would have no room to grow. */
+.conversation-context-popover {
+	position: absolute;
+	bottom: calc(100% + var(--vscode-agents-space-6, 6px));
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 6;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--vscode-agents-space-2, 2px);
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	white-space: nowrap;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 80ms ease-out 200ms;
+}
+
+.conversation-context-ring:hover .conversation-context-popover {
+	opacity: 1;
+}
+
+.conversation-context-popover-caption {
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-context-popover-value {
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	color: var(--vscode-agents-color-text-primary);
+	font-variant-numeric: tabular-nums;
+}
+
+.conversation-context-ring[data-level='warn'] .conversation-context-popover-value {
+	color: var(--vscode-agents-color-warning);
+}
+
+.conversation-context-ring[data-level='danger'] .conversation-context-popover-value {
+	color: var(--vscode-agents-color-danger);
 }
 
 .conversation-access span:not(.codicon),

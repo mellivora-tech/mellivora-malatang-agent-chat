@@ -668,27 +668,36 @@ export class ConversationView extends Disposable {
 	}
 
 	/**
-	 * The ring next to the model picker shows how much of the selected model's
+	 * The ring beside the model picker shows how much of the selected model's
 	 * context window this conversation roughly occupies (~4 chars per token).
-	 * Exact numbers live in the tooltip.
+	 * Hovering it reveals a two-line popover with the exact reading —
+	 * "Context window: / N% used (M% left)". Hidden until a window size is
+	 * known (there is nothing to be a percentage of otherwise).
 	 */
 	private updateContextRing(): void {
 		const fill = this.contextRing.querySelector<SVGCircleElement>('.ring-fill');
-		if (!fill) {
+		const value = this.contextRing.querySelector<HTMLElement>('.conversation-context-popover-value');
+		if (!fill || !value) {
+			return;
+		}
+
+		const contextLength = this.modelsService?.selectedModel.get()?.contextLength;
+		if (!contextLength) {
+			this.contextRing.hidden = true;
 			return;
 		}
 
 		const messages = this.session?.messages.get() ?? [];
 		const chars = messages.reduce((sum, message) => sum + message.text.length, 0);
 		const tokens = Math.ceil(chars / 4);
-		const contextLength = this.modelsService?.selectedModel.get()?.contextLength;
-		const ratio = contextLength ? Math.min(1, tokens / contextLength) : 0;
+		const ratio = Math.min(1, tokens / contextLength);
+		const usedPct = Math.round(ratio * 100);
 
-		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
+		this.contextRing.hidden = false;
 		this.contextRing.dataset.level = ratio >= 0.95 ? 'danger' : ratio >= 0.8 ? 'warn' : 'ok';
-		this.contextRing.title = contextLength
-			? `Context: ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens used (${Math.round(ratio * 100)}%)`
-			: `Context: ~${formatTokens(tokens)} tokens used (window size unknown)`;
+		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
+		value.textContent = `${usedPct}% used (${100 - usedPct}% left)`;
+		this.contextRing.setAttribute('aria-label', `Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens estimated`);
 	}
 
 	private createWorkingRow(): HTMLElement {
@@ -854,14 +863,22 @@ const RING_RADIUS = 6;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 function createContextRing(): HTMLElement {
+	// A small ring (fill = % of the context window used) that reveals a two-line
+	// popover on hover — "Context window: / N% used (M% left)". Starts hidden;
+	// updateContextRing reveals it once a model with a known window is selected.
 	const ring = document.createElement('span');
 	ring.className = 'conversation-context-ring';
 	ring.dataset.level = 'ok';
+	ring.hidden = true;
 	ring.innerHTML =
 		'<svg viewBox="0 0 16 16" aria-hidden="true">' +
 		`<circle class="ring-track" cx="8" cy="8" r="${RING_RADIUS}"></circle>` +
 		`<circle class="ring-fill" cx="8" cy="8" r="${RING_RADIUS}" transform="rotate(-90 8 8)" stroke-dasharray="${RING_CIRCUMFERENCE}" stroke-dashoffset="${RING_CIRCUMFERENCE}"></circle>` +
-		'</svg>';
+		'</svg>' +
+		'<span class="conversation-context-popover" role="tooltip">' +
+		'<span class="conversation-context-popover-caption">Context window:</span>' +
+		'<span class="conversation-context-popover-value"></span>' +
+		'</span>';
 	return ring;
 }
 
