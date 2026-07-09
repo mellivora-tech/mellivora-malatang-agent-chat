@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -1090,7 +1090,7 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await expect(page.locator('.new-session-heading')).toHaveText('Morning, how can I help?');
 	// The shell test seeds two projects; the first becomes active by default.
 	await expect(page.locator('.new-session-composer-context')).toContainText('Obsidian');
-	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask ZCode anything/);
+	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask Mellivora anything/);
 	await expect(page.locator('.new-session-input')).toBeVisible();
 	await expect(page.locator('.new-session-access')).toContainText('Full access');
 	// No provider is configured in this fixture, so the picker shows the empty label.

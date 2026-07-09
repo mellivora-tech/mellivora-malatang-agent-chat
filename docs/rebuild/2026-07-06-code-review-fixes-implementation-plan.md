@@ -85,7 +85,7 @@ Replace the entire content of `tests/unit/mockSessionsProvider.test.ts` with:
 
 ```ts
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -1093,7 +1093,7 @@ Create `tests/unit/workbenchGrid.test.ts`:
 
 ```ts
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -1356,7 +1356,7 @@ Create `tests/unit/appLifecycle.test.ts`:
 
 ```ts
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -1417,7 +1417,7 @@ Create `src/main/appLifecycle.ts`:
 
 ```ts
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 

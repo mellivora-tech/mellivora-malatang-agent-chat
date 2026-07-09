@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -96,7 +96,7 @@ export class ConversationView extends Disposable {
 		this.input = append(inputWrap, document.createElement('textarea')) as HTMLTextAreaElement;
 		this.input.className = 'conversation-input';
 		this.input.rows = 1;
-		this.input.placeholder = 'Ask Codex';
+		this.input.placeholder = 'Ask Mellivora';
 		this.input.spellcheck = true;
 
 		const toolbar = append(inputWrap, document.createElement('div'));
@@ -911,7 +911,7 @@ export class ConversationView extends Disposable {
 				: 'Working… your next message will be queued'
 			: interactivity === SessionInteractivity.ReadOnly
 				? 'Session is read-only'
-				: 'Ask Codex';
+				: 'Ask Mellivora';
 	}
 
 	/** Send a queued follow-up once the current run has settled. */
@@ -1237,7 +1237,7 @@ function messageLabel(role: ISessionMessage['role']): string {
 		case 'user':
 			return 'You';
 		case 'assistant':
-			return 'Codex';
+			return 'Mellivora';
 		case 'tool':
 		case 'work':
 			return 'Tool';

@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -56,7 +56,7 @@ export class NewSessionView extends Disposable {
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
 		input.rows = 2;
-		input.placeholder = 'Ask ZCode anything, @ for files, folders, or whiteboards, / for commands or agents, $ for skills, # for related conversations';
+		input.placeholder = 'Ask Mellivora anything, @ for files, folders, or whiteboards, / for commands or agents, $ for skills, # for related conversations';
 		input.spellcheck = true;
 
 		const toolbar = append(composer, document.createElement('div'));
