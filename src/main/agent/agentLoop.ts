@@ -7,6 +7,7 @@ import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, ICont
 import { toolSpec } from './agentTools.js';
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
+import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 100;
@@ -103,6 +104,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	const question = extractLatestUserText(initialMessages);
 	const verifierEnabled = isReplyVerifierEnabled(process.env);
 	let verifierFired = false;
+	// Tool-output aging: emit telemetry only when the pruned set grows.
+	const pruneEnabled = isToolPruneEnabled(process.env);
+	let lastPrunedResults = 0;
 	let turn = 0;
 
 	while (true) {
@@ -117,12 +121,19 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// tools so the model can only produce a final answer (deterministic — it does
 		// not rely on the model choosing to stop).
 		const brake = specs.length > 0 && turn >= hardBrakeTurn ? 'hard' : specs.length > 0 && turn >= softBrakeTurn ? 'soft' : 'none';
-		const requestMessages =
-			brake === 'hard'
-				? withReminder(prepareRequestMessages(messages), HARD_BRAKE_REMINDER)
-				: brake === 'soft'
-					? withReminder(prepareRequestMessages(messages), SOFT_BRAKE_REMINDER)
-					: prepareRequestMessages(messages);
+
+		// Tool-output aging shapes the request view only (history keeps full text);
+		// the reminder is appended after so it can never be pruned.
+		let prepared = prepareRequestMessages(messages);
+		if (pruneEnabled) {
+			const pruned = pruneToolOutputs(prepared);
+			prepared = pruned.messages;
+			if (pruned.prunedResults > lastPrunedResults) {
+				lastPrunedResults = pruned.prunedResults;
+				yield { type: 'tool_prune', prunedResults: pruned.prunedResults, prunedChars: pruned.prunedChars };
+			}
+		}
+		const requestMessages = brake === 'hard' ? withReminder(prepared, HARD_BRAKE_REMINDER) : brake === 'soft' ? withReminder(prepared, SOFT_BRAKE_REMINDER) : prepared;
 		const request: IModelRequest = { system: config.system, messages: requestMessages, tools: brake === 'hard' ? [] : specs, signal };
 
 		// Inner streaming generator: accumulate the assistant message and collect

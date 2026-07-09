@@ -155,7 +155,9 @@ export type IAgentEvent =
 	/** The loop guard blocked a repeated identical call — logged so trigger/false-positive rates are measurable; the renderer may ignore it. */
 	| { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number }
 	/** The reply verifier judged the final answer. verdict 'fail' means a single retry follows — the renderer replaces the rejected reply instead of appending. */
-	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string };
+	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
+	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
+	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number };
 
 /** 'max_output_tokens': the reply was cut off by the max_tokens budget — surfaced explicitly so truncation shows up in logs instead of masquerading as 'completed'. */
 export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'max_output_tokens' | 'refusal';

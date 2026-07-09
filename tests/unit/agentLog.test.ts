@@ -180,6 +180,21 @@ test('runLogger maps a reply_verifier event with its verdict; the reason stays u
 	assert.equal((exported as { verdict: string }).verdict, 'fail');
 });
 
+test('runLogger maps a tool_prune event with its counts', () => {
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	const logger = createRunLogger({ runId: 'r5', sessionId: 's5', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 3 });
+	logger.record({ type: 'turn_start', turn: 5 });
+	logger.record({ type: 'tool_prune', prunedResults: 2, prunedChars: 40_000 });
+	logger.end({ reason: 'completed', turns: 5 });
+
+	const prune = collected.events.find((event: AgentLogEvent) => event.type === 'tool_prune') as Extract<AgentLogEvent, { type: 'tool_prune' }>;
+	assert.ok(prune, 'tool_prune event reached the bus');
+	assert.equal(prune.prunedResults, 2);
+	assert.equal(prune.prunedChars, 40_000);
+});
+
 test('runLogger captures reasoning that resumes after the model has already started answering', () => {
 	// The renderer's own step bookkeeping can only close a 'thinking' step once
 	// per turn (on the FIRST visible-text delta); a model that keeps reasoning

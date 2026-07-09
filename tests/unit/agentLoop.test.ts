@@ -368,6 +368,72 @@ test('reply verifier: refusal and truncation terminals are never verified', asyn
 	);
 });
 
+test('tool prune: old outputs age out of the request view while history and events keep full text', async () => {
+	delete process.env['AGENT_CHAT_TOOL_PRUNE'];
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off'; // isolate: no judge call at the end
+	try {
+		const bigTool = defineTool({
+			name: 'probe',
+			description: 'Returns a large payload.',
+			inputSchema: { type: 'object' },
+			isReadOnly: () => true,
+			validateInput: input => ({ ok: true, value: input }),
+			call: async input => ({ content: `r${(input as { i: number }).i}:${'x'.repeat(19_996)}` }),
+		});
+
+		// Five distinct 20K-char results, then a final answer. With the default
+		// budgets (protect 48K, quantum 16K): turn-5 request prunes 1 result,
+		// turn-6 request prunes 2.
+		const requests: IModelRequest[] = [];
+		let call = 0;
+		const client = {
+			async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+				requests.push(request);
+				call += 1;
+				if (call <= 5) {
+					yield { type: 'tool_use', block: { type: 'tool_use', id: `t${call}`, name: 'probe', input: { i: call } } };
+					yield { type: 'message_stop', stopReason: 'tool_use' };
+				} else {
+					yield { type: 'text_delta', text: 'done' };
+					yield { type: 'message_stop', stopReason: 'end_turn' };
+				}
+			},
+		};
+
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('collect the data')], { system: 's', tools: [bigTool], modelClient: client as never, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(terminal.reason, 'completed');
+
+		// Each result is 19,999 chars ("rN:" + 19,996 x's). Turn 5's request is
+		// over-protect by 31,996 → quantized target 16,000, but the oldest whole
+		// result (19,999) does not fit → nothing pruned yet. Turn 6 crosses the
+		// next step (target 48,000) and prunes the two oldest at once.
+		const countStubs = (request: IModelRequest): number => JSON.stringify(request.messages).split('[pruned]').length - 1;
+		assert.equal(countStubs(requests[3]!), 0, 'turn 4: under the first quantum step');
+		assert.equal(countStubs(requests[4]!), 0, 'turn 5: whole-result granularity holds the boundary');
+		assert.equal(countStubs(requests[5]!), 2, 'turn 6: the two oldest results aged out together');
+		assert.ok(JSON.stringify(requests[5]!.messages).includes(`r5:${'x'.repeat(50)}`), 'recent results stay verbatim');
+
+		const pruneEvents = events.filter((event): event is Extract<IAgentEvent, { type: 'tool_prune' }> => event.type === 'tool_prune');
+		assert.deepEqual(
+			pruneEvents.map(event => event.prunedResults),
+			[2],
+			'telemetry fires only when the pruned set grows',
+		);
+		assert.equal(pruneEvents[0]!.prunedChars, 39_998);
+
+		// The loop's history and the renderer-facing events were never pruned.
+		const results = events.filter((event): event is Extract<IAgentEvent, { type: 'tool_result' }> => event.type === 'tool_result');
+		assert.ok(
+			results.every(result => result.content.length === 19_999),
+			'tool_result events always carry the full output',
+		);
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
 test('non-retryable stream errors surface immediately', async () => {
 	const failingClient = {
 		// eslint-disable-next-line require-yield

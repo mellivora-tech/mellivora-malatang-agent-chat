@@ -58,6 +58,8 @@ export type AgentLogEvent =
 	 * stays under detail. Watch fail rates in real logs to tune or disable.
 	 */
 	| (IBaseEvent & { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly detail?: { readonly reason?: string } })
+	/** Tool outputs aged out of the request view. Counts only — the full content stays in the adjacent tool_result events. */
+	| (IBaseEvent & { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number })
 	| (IBaseEvent & {
 			readonly type: 'tool_result';
 			readonly toolUseId: string;

@@ -139,6 +139,9 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 						...(event.reason ? { detail: { reason: event.reason } } : {}),
 					});
 					break;
+				case 'tool_prune':
+					agentLog.emit({ ts: now(), ...base, type: 'tool_prune', prunedResults: event.prunedResults, prunedChars: event.prunedChars });
+					break;
 				case 'stream_retry':
 					agentLog.emit({ ts: now(), ...base, type: 'stream_retry', attempt: event.attempt, maxAttempts: event.maxAttempts, delayMs: event.delayMs });
 					break;
