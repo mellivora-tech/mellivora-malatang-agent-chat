@@ -172,6 +172,21 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 				case 'tool_prune':
 					agentLog.emit({ ts: now(), ...base, type: 'tool_prune', prunedResults: event.prunedResults, prunedChars: event.prunedChars });
 					break;
+				case 'context_breakdown':
+					agentLog.emit({
+						ts: now(),
+						...base,
+						type: 'context_breakdown',
+						turn: event.turn,
+						systemChars: event.systemChars,
+						instructionsChars: event.instructionsChars,
+						skillsChars: event.skillsChars,
+						toolsChars: event.toolsChars,
+						messagesChars: event.messagesChars,
+						compactedChars: event.compactedChars,
+						prunedChars: event.prunedChars,
+					});
+					break;
 				case 'compaction':
 					// Numbers export-safe at the top level; the summary text is
 					// conversation content and stays in the local-only detail.

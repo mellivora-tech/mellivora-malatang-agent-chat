@@ -68,6 +68,18 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'usage'; readonly turn: number; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number })
 	/** A persisted cross-run anchor arrived; watch the rejected rate — it should be ≈0 outside history edits. */
 	| (IBaseEvent & { readonly type: 'compaction_anchor'; readonly covered: number; readonly summaryChars: number; readonly accepted: boolean })
+	/** What this turn's request view is made of, in chars — mirrors the renderer's context panel so log reviews can see the same breakdown without the UI. */
+	| (IBaseEvent & {
+			readonly type: 'context_breakdown';
+			readonly turn: number;
+			readonly systemChars: number;
+			readonly instructionsChars: number;
+			readonly skillsChars: number;
+			readonly toolsChars: number;
+			readonly messagesChars: number;
+			readonly compactedChars: number;
+			readonly prunedChars: number;
+	  })
 	/** Tool outputs aged out of the request view. Counts only — the full content stays in the adjacent tool_result events. */
 	| (IBaseEvent & { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number })
 	/**

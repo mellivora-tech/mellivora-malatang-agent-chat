@@ -195,7 +195,26 @@ export type IAgentEvent =
 			readonly coveredInitial?: number;
 	  }
 	/** A persisted anchor arrived with the run; accepted=false means a validation gate rejected it (fresh preflight follows). Log-only — never streamed to the renderer. */
-	| { readonly type: 'compaction_anchor'; readonly covered: number; readonly summaryChars: number; readonly accepted: boolean };
+	| { readonly type: 'compaction_anchor'; readonly covered: number; readonly summaryChars: number; readonly accepted: boolean }
+	/**
+	 * What the request view is made of, right after this turn's view was
+	 * assembled (compaction → prepareRequestMessages → prune → brake reminder).
+	 * All char counts — the renderer's context panel divides by ~4 for a rough
+	 * token estimate and labels it "estimated"; only the usage event's token
+	 * counts are real. Emitted every turn so a panel open mid-run shows the
+	 * mechanisms working live (tool output aging, compaction folding, etc).
+	 */
+	| {
+			readonly type: 'context_breakdown';
+			readonly turn: number;
+			readonly systemChars: number;
+			readonly instructionsChars: number;
+			readonly skillsChars: number;
+			readonly toolsChars: number;
+			readonly messagesChars: number;
+			readonly compactedChars: number;
+			readonly prunedChars: number;
+	  };
 
 /**
  * A compaction summary persisted across runs. `covered` counts the prefix of
@@ -224,6 +243,12 @@ export interface IAgentRunConfig {
 	readonly permissionGate: IPermissionGate;
 	readonly maxTurns?: number;
 	readonly signal?: AbortSignal;
+	/**
+	 * How `system` is composed, broken into the context panel's rows. The caller
+	 * assembles `system` from these same segments, so the lengths are exact, not
+	 * re-derived. Absent segments (no workspace, no instructions, no skills) are 0.
+	 */
+	readonly systemBreakdown?: { readonly baseChars: number; readonly instructionsChars: number; readonly skillsChars: number };
 	/**
 	 * Point 5 seam: transform the growing transcript into the messages actually
 	 * sent to the model. Identity today; the future home for provider-side

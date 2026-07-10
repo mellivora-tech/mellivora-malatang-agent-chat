@@ -190,16 +190,38 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 			? [{ role: 'user', content: [{ type: 'text', text: formatCompactedBlock(compacted.summary) }] }, ...messages.slice(compacted.boundary)]
 			: messages;
 		let prepared = prepareRequestMessages(view);
+		let prunedCharsThisTurn = 0;
 		if (pruneEnabled) {
 			const pruned = pruneToolOutputs(prepared);
 			prepared = pruned.messages;
+			prunedCharsThisTurn = pruned.prunedChars;
 			if (pruned.prunedResults > lastPrunedResults) {
 				lastPrunedResults = pruned.prunedResults;
 				yield { type: 'tool_prune', prunedResults: pruned.prunedResults, prunedChars: pruned.prunedChars };
 			}
 		}
 		const requestMessages = brake === 'hard' ? withReminder(prepared, HARD_BRAKE_REMINDER) : brake === 'soft' ? withReminder(prepared, SOFT_BRAKE_REMINDER) : prepared;
-		const request: IModelRequest = { system: config.system, messages: requestMessages, tools: brake === 'hard' ? [] : specs, signal };
+		const requestTools = brake === 'hard' ? [] : specs;
+		const request: IModelRequest = { system: config.system, messages: requestMessages, tools: requestTools, signal };
+
+		// Context panel data — what this turn's view is made of. The compacted
+		// summary always lands at requestMessages[0] (compaction places it first
+		// in `view`, and neither prune — which only rewrites tool_result content
+		// in place — nor the reminder — appended to/after the LAST message —
+		// ever touch index 0), so its size is split out from the rest cleanly.
+		const compactedChars = compacted ? JSON.stringify(requestMessages[0]!.content).length : 0;
+		const messagesChars = requestMessages.reduce((sum, message, index) => (index === 0 && compacted ? sum : sum + JSON.stringify(message.content).length), 0);
+		yield {
+			type: 'context_breakdown',
+			turn,
+			systemChars: config.systemBreakdown?.baseChars ?? config.system.length,
+			instructionsChars: config.systemBreakdown?.instructionsChars ?? 0,
+			skillsChars: config.systemBreakdown?.skillsChars ?? 0,
+			toolsChars: JSON.stringify(requestTools).length,
+			messagesChars,
+			compactedChars,
+			prunedChars: prunedCharsThisTurn,
+		};
 
 		// Inner streaming generator: accumulate the assistant message and collect
 		// any tool_use blocks as they arrive. A stream that fails before any text

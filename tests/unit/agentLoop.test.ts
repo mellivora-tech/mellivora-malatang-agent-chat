@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { runAgentLoop } from '../../src/main/agent/agentLoop.js';
-import { allowAllPermissionGate, createApprovalPermissionGate, defineTool } from '../../src/main/agent/agentTools.js';
+import { allowAllPermissionGate, createApprovalPermissionGate, defineTool, toolSpec } from '../../src/main/agent/agentTools.js';
 import { createScriptedModelClient } from '../../src/main/agent/scriptedModelClient.js';
 import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelRequest, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
 
@@ -835,6 +835,130 @@ test('compaction trigger counts cache tokens — a cached prompt is still a full
 		const [compaction] = compactionEvents(events);
 		assert.ok(compaction, 'over-threshold cached prompt triggered a compaction attempt');
 		assert.equal(compaction.beforeTokens, 120_000, 'the trigger base sums input + cache');
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Context breakdown panel (data source)
+// ---------------------------------------------------------------------------
+
+function breakdownEvents(events: readonly IAgentEvent[]): Extract<IAgentEvent, { type: 'context_breakdown' }>[] {
+	return events.filter((event): event is Extract<IAgentEvent, { type: 'context_breakdown' }> => event.type === 'context_breakdown');
+}
+
+test('context_breakdown: system segments come from config verbatim, tools/messages are measured from the actual view', async () => {
+	delete process.env['AGENT_CHAT_TOOL_PRUNE'];
+	const model = createScriptedModelClient([{ emit: [{ type: 'text', text: 'hi' }] }]);
+
+	const { events, terminal } = await drive(
+		runAgentLoop([userMessage('hello')], {
+			system: 'ignored — systemBreakdown wins when present',
+			systemBreakdown: { baseChars: 100, instructionsChars: 20, skillsChars: 10 },
+			tools: [echoTool],
+			modelClient: model,
+			permissionGate: createApprovalPermissionGate(async () => false),
+		}),
+	);
+
+	assert.equal(terminal.reason, 'completed');
+	const [breakdown] = breakdownEvents(events);
+	assert.ok(breakdown, 'expected a context_breakdown event');
+	assert.equal(breakdown.turn, 1);
+	assert.equal(breakdown.systemChars, 100, 'from systemBreakdown.baseChars, not config.system.length');
+	assert.equal(breakdown.instructionsChars, 20);
+	assert.equal(breakdown.skillsChars, 10);
+	assert.equal(breakdown.toolsChars, JSON.stringify([toolSpec(echoTool)]).length, 'measured from the specs actually sent this turn');
+	assert.equal(breakdown.messagesChars, JSON.stringify([{ type: 'text', text: 'hello' }]).length, 'the one user message, measured the same way selectBoundary measures');
+	assert.equal(breakdown.compactedChars, 0, 'no compaction active');
+	assert.equal(breakdown.prunedChars, 0, 'nothing prunable in a one-message view');
+});
+
+test('context_breakdown: without systemBreakdown, systemChars falls back to the full system string length', async () => {
+	const model = createScriptedModelClient([{ emit: [{ type: 'text', text: 'hi' }] }]);
+	const { events } = await drive(
+		runAgentLoop([userMessage('hi')], { system: 'x'.repeat(250), tools: [], modelClient: model, permissionGate: allowAllPermissionGate }),
+	);
+	const [breakdown] = breakdownEvents(events);
+	assert.equal(breakdown!.systemChars, 250);
+	assert.equal(breakdown!.instructionsChars, 0);
+	assert.equal(breakdown!.skillsChars, 0);
+	assert.equal(breakdown!.toolsChars, JSON.stringify([]).length, 'no tools, brake is "none" turn 1');
+});
+
+test('context_breakdown: a hard-brake turn reports zero tools, matching what is actually sent', async () => {
+	// maxTurns=2 → hardBrakeTurn = max(1, floor(2*0.9)) = 1: turn 1 is already hard.
+	const model = createScriptedModelClient([{ emit: [{ type: 'text', text: 'final answer' }] }]);
+	const { events } = await drive(
+		runAgentLoop([userMessage('go')], { system: 's', tools: [echoTool], modelClient: model, permissionGate: allowAllPermissionGate, maxTurns: 2 }),
+	);
+	const [breakdown] = breakdownEvents(events);
+	assert.equal(breakdown!.toolsChars, JSON.stringify([]).length, 'hard brake withholds tools from the request');
+});
+
+test('context_breakdown: compaction splits compactedChars out of messagesChars, and both survive prune', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client } = compactionAwareClient([60_000, 80_000, 100_000], ['## Objective\n- compacted state', '## Objective\n- updated state']);
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('map the repo')], {
+				system: 's',
+				tools: [bigTool],
+				modelClient: client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000 },
+			}),
+		);
+		assert.equal(terminal.reason, 'completed');
+
+		const breakdowns = breakdownEvents(events);
+		// Turn 1 (before any compaction attempt): nothing compacted yet.
+		assert.equal(breakdowns[0]!.compactedChars, 0);
+		// The turn right after the first ok compaction (turn 2, boundary=1): the
+		// summary block is split out, and messagesChars is the tail alone.
+		const compactedTurn = breakdowns.find(event => event.compactedChars > 0);
+		assert.ok(compactedTurn, 'a later turn reports a non-zero compacted block once compaction lands');
+		assert.ok(compactedTurn.messagesChars > 0, 'the verbatim tail is still counted separately');
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
+test('context_breakdown: prunedChars mirrors the tool_prune outcome for the same turn', async () => {
+	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		const bigResultTool = defineTool({
+			name: 'big',
+			description: 'd',
+			inputSchema: { type: 'object' },
+			isReadOnly: () => true,
+			validateInput: input => ({ ok: true, value: input }),
+			call: async input => ({ content: `R${(input as { n: number }).n}_${'y'.repeat(20_000)}` }),
+		});
+		let turnCount = 0;
+		const client = {
+			async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+				turnCount += 1;
+				if (turnCount <= 4) {
+					yield { type: 'tool_use', block: { type: 'tool_use', id: `t${turnCount}`, name: 'big', input: { n: turnCount } } };
+					yield { type: 'message_stop', stopReason: 'tool_use' };
+				} else {
+					yield { type: 'text_delta', text: 'done' };
+					yield { type: 'message_stop', stopReason: 'end_turn' };
+				}
+			},
+		};
+		const { events } = await drive(
+			runAgentLoop([userMessage('go')], { system: 's', tools: [bigResultTool], modelClient: client as never, permissionGate: allowAllPermissionGate }),
+		);
+		const pruneTelemetry = events.filter((event): event is Extract<IAgentEvent, { type: 'tool_prune' }> => event.type === 'tool_prune');
+		const breakdowns = breakdownEvents(events);
+		assert.ok(pruneTelemetry.length > 0, 'enough 20K results accumulated to trigger pruning');
+		const lastPruneChars = pruneTelemetry[pruneTelemetry.length - 1]!.prunedChars;
+		const matchingBreakdown = breakdowns.find(event => event.prunedChars === lastPruneChars && lastPruneChars > 0);
+		assert.ok(matchingBreakdown, `expected a context_breakdown with prunedChars=${lastPruneChars}, got [${breakdowns.map(b => b.prunedChars).join(',')}]`);
 	} finally {
 		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
 	}

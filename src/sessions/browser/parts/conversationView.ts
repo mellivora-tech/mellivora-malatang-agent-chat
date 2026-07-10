@@ -914,7 +914,8 @@ export class ConversationView extends Disposable {
 	private updateContextRing(): void {
 		const fill = this.contextRing.querySelector<SVGCircleElement>('.ring-fill');
 		const value = this.contextRing.querySelector<HTMLElement>('.conversation-context-popover-value');
-		if (!fill || !value) {
+		const breakdownList = this.contextRing.querySelector<HTMLElement>('.conversation-context-breakdown');
+		if (!fill || !value || !breakdownList) {
 			return;
 		}
 
@@ -944,6 +945,23 @@ export class ConversationView extends Disposable {
 			'aria-label',
 			`Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${usage ? '' : ' (estimated)'}`,
 		);
+
+		// Per-category rows are always char/4 estimates (labeled so in the
+		// footnote); Free reuses the SAME `tokens` the ring itself is drawn from,
+		// so the header percentage and "how much is left" never disagree.
+		breakdownList.replaceChildren();
+		const breakdown = usage?.breakdown;
+		if (breakdown) {
+			breakdownList.append(createBreakdownRow('System prompt', formatBreakdownEntry(breakdown.systemChars, contextLength)));
+			breakdownList.append(createBreakdownRow('Project instructions', formatBreakdownEntry(breakdown.instructionsChars, contextLength)));
+			breakdownList.append(createBreakdownRow('Skills', formatBreakdownEntry(breakdown.skillsChars, contextLength)));
+			breakdownList.append(createBreakdownRow('Tools', formatBreakdownEntry(breakdown.toolsChars, contextLength)));
+			if (breakdown.compactedChars > 0) {
+				breakdownList.append(createBreakdownRow('Compacted summary', formatBreakdownEntry(breakdown.compactedChars, contextLength)));
+			}
+			breakdownList.append(createBreakdownRow('Messages', formatBreakdownEntry(breakdown.messagesChars, contextLength)));
+			breakdownList.append(createBreakdownRow('Free', formatTokensWithPct(Math.max(0, contextLength - tokens), contextLength)));
+		}
 	}
 
 	private createWorkingRow(): HTMLElement {
@@ -1128,9 +1146,11 @@ const RING_RADIUS = 6;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 function createContextRing(): HTMLElement {
-	// A small ring (fill = % of the context window used) that reveals a two-line
-	// popover on hover — "Context window: / N% used (M% left)". Starts hidden;
-	// updateContextRing reveals it once a model with a known window is selected.
+	// A small ring (fill = % of the context window used) that reveals a hover
+	// popover: the exact reading up top ("Context window: / N% used (M% left)"),
+	// then a per-category breakdown of what the next request would send.
+	// Starts hidden; updateContextRing reveals it once a model with a known
+	// window is selected.
 	const ring = document.createElement('span');
 	ring.className = 'conversation-context-ring';
 	ring.dataset.level = 'ok';
@@ -1141,10 +1161,39 @@ function createContextRing(): HTMLElement {
 		`<circle class="ring-fill" cx="8" cy="8" r="${RING_RADIUS}" transform="rotate(-90 8 8)" stroke-dasharray="${RING_CIRCUMFERENCE}" stroke-dashoffset="${RING_CIRCUMFERENCE}"></circle>` +
 		'</svg>' +
 		'<span class="conversation-context-popover" role="tooltip">' +
+		'<span class="conversation-context-popover-header">' +
 		'<span class="conversation-context-popover-caption">Context window:</span>' +
 		'<span class="conversation-context-popover-value"></span>' +
+		'</span>' +
+		'<span class="conversation-context-breakdown"></span>' +
+		'<span class="conversation-context-popover-footnote">Estimated by category · total is real</span>' +
 		'</span>';
 	return ring;
+}
+
+/** One row of the breakdown popover: a muted label and a right-aligned value. */
+function createBreakdownRow(label: string, value: string): HTMLElement {
+	const row = document.createElement('span');
+	row.className = 'conversation-context-breakdown-row';
+	const labelEl = document.createElement('span');
+	labelEl.className = 'conversation-context-breakdown-label';
+	labelEl.textContent = label;
+	const valueEl = document.createElement('span');
+	valueEl.className = 'conversation-context-breakdown-value';
+	valueEl.textContent = value;
+	row.append(labelEl, valueEl);
+	return row;
+}
+
+/** `~4.1K tokens (0.4%)` — one decimal, `<0.1` below that. Shared by every row (category estimates AND the real Free count) so the popover reads consistently. */
+function formatTokensWithPct(tokens: number, contextLength: number): string {
+	const pct = contextLength > 0 ? (tokens / contextLength) * 100 : 0;
+	return `~${formatTokens(tokens)} tokens (${pct < 0.1 && pct > 0 ? '<0.1' : pct.toFixed(1)}%)`;
+}
+
+/** A category row's estimate: chars/4, then formatted the same way as every other row. */
+function formatBreakdownEntry(chars: number, contextLength: number): string {
+	return formatTokensWithPct(Math.round(chars / 4), contextLength);
 }
 
 function formatTokens(tokens: number): string {

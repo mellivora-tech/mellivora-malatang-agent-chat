@@ -246,6 +246,40 @@ test('runLogger maps a tool_prune event with its counts', () => {
 	assert.equal(prune.prunedChars, 40_000);
 });
 
+test('runLogger maps a context_breakdown event with all its char counts, no detail field', () => {
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	const logger = createRunLogger({ runId: 'r7', sessionId: 's7', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 2 });
+	logger.record({ type: 'turn_start', turn: 3 });
+	logger.record({
+		type: 'context_breakdown',
+		turn: 3,
+		systemChars: 1200,
+		instructionsChars: 300,
+		skillsChars: 80,
+		toolsChars: 2100,
+		messagesChars: 7400,
+		compactedChars: 500,
+		prunedChars: 900,
+	});
+	logger.end({ reason: 'completed', turns: 3 });
+
+	const breakdown = collected.events.find((event: AgentLogEvent) => event.type === 'context_breakdown') as Extract<AgentLogEvent, { type: 'context_breakdown' }>;
+	assert.ok(breakdown, 'context_breakdown event reached the bus');
+	assert.equal(breakdown.turn, 3);
+	assert.equal(breakdown.systemChars, 1200);
+	assert.equal(breakdown.instructionsChars, 300);
+	assert.equal(breakdown.skillsChars, 80);
+	assert.equal(breakdown.toolsChars, 2100);
+	assert.equal(breakdown.messagesChars, 7400);
+	assert.equal(breakdown.compactedChars, 500);
+	assert.equal(breakdown.prunedChars, 900);
+	// Purely numeric — nothing to strip for the PII boundary, no detail at all.
+	assert.equal('detail' in breakdown, false);
+	assert.equal(toExportable(breakdown), breakdown);
+});
+
 test('runLogger captures reasoning that resumes after the model has already started answering', () => {
 	// The renderer's own step bookkeeping can only close a 'thinking' step once
 	// per turn (on the FIRST visible-text delta); a model that keeps reasoning

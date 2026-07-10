@@ -760,8 +760,33 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// The provider's real prompt size for the request just completed —
 				// the conversation view prefers this over its char-count estimate.
 				// Cache hits are part of the prompt (Anthropic wire semantics keeps
-				// them out of input_tokens), so the meter sums all three.
-				session.contextUsage.set({ inputTokens: event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0) });
+				// them out of input_tokens), so the meter sums all three. The last
+				// breakdown (from the SAME turn's context_breakdown, which always
+				// precedes usage — it describes the request, usage its response)
+				// rides along so the total updates without blanking the panel.
+				const previousUsage = session.contextUsage.get();
+				session.contextUsage.set({
+					inputTokens: event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0),
+					...(previousUsage?.breakdown ? { breakdown: previousUsage.breakdown } : {}),
+				});
+			} else if (event?.type === 'context_breakdown') {
+				// Emitted before the request goes out, every turn — the panel can
+				// show the mechanisms working live even before the model replies.
+				// The real total (inputTokens) carries over from the last usage
+				// reading until a fresh one supersedes it.
+				const previousBreakdown = session.contextUsage.get();
+				session.contextUsage.set({
+					inputTokens: previousBreakdown?.inputTokens ?? 0,
+					breakdown: {
+						systemChars: event.systemChars,
+						instructionsChars: event.instructionsChars,
+						skillsChars: event.skillsChars,
+						toolsChars: event.toolsChars,
+						messagesChars: event.messagesChars,
+						compactedChars: event.compactedChars,
+						prunedChars: event.prunedChars,
+					},
+				});
 			} else if (event?.type === 'compaction') {
 				// An ok compaction becomes the session's cross-run anchor: the same
 				// head is summarized once per session instead of once per run. The

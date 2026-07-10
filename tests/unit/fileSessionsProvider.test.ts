@@ -952,3 +952,110 @@ test('renameSession updates the observable, persists a title entry, and survives
 	await rehydrated.initialize();
 	assert.equal(rehydrated.getSessions().find(candidate => candidate.sessionId === session.sessionId)?.title.get(), '自定义名字');
 });
+
+test('context_breakdown and usage events merge into contextUsage without clobbering each other', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			// Breakdown arrives BEFORE usage (it describes the outgoing request;
+			// usage describes the response to that same request).
+			emit({
+				event: {
+					type: 'context_breakdown',
+					turn: 1,
+					systemChars: 400,
+					instructionsChars: 0,
+					skillsChars: 0,
+					toolsChars: 800,
+					messagesChars: 200,
+					compactedChars: 0,
+					prunedChars: 0,
+				},
+			});
+			emit({ event: { type: 'usage', inputTokens: 1000, cacheReadTokens: 500 } });
+			emit({ event: { type: 'assistant_delta', text: 'ok' } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('question');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	const usage = session.contextUsage.get();
+	assert.ok(usage, 'contextUsage populated');
+	assert.equal(usage.inputTokens, 1500, 'input + cacheRead, the same sum the meter has always used');
+	assert.ok(usage.breakdown, 'the breakdown that arrived before usage was not clobbered by it');
+	assert.equal(usage.breakdown.systemChars, 400);
+	assert.equal(usage.breakdown.toolsChars, 800);
+});
+
+test('context_breakdown keeps the previous real usage total instead of resetting it to zero', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	let runCount = 0;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			runCount += 1;
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			if (runCount === 1) {
+				emit({ event: { type: 'usage', inputTokens: 5000 } });
+				emit({ event: { type: 'assistant_delta', text: 'first' } });
+			} else {
+				// Turn 2 of run 2: breakdown fires before any usage for THIS run
+				// arrives — the panel should still show the last known real total.
+				emit({
+					event: {
+						type: 'context_breakdown',
+						turn: 1,
+						systemChars: 10,
+						instructionsChars: 0,
+						skillsChars: 0,
+						toolsChars: 0,
+						messagesChars: 10,
+						compactedChars: 0,
+						prunedChars: 0,
+					},
+				});
+				emit({ event: { type: 'assistant_delta', text: 'second' } });
+			}
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('q1');
+	await new Promise(resolve => setTimeout(resolve, 15));
+	assert.equal(session.contextUsage.get()?.inputTokens, 5000);
+
+	await provider.sendMessage(session.sessionId, 'q2');
+	await new Promise(resolve => setTimeout(resolve, 15));
+	assert.equal(session.contextUsage.get()?.inputTokens, 5000, 'the real total survives a breakdown-only update');
+	assert.equal(session.contextUsage.get()?.breakdown?.systemChars, 10, 'the breakdown itself did update');
+});

@@ -973,9 +973,10 @@ button.conversation-work-step-row:hover {
 	stroke: var(--vscode-agents-color-danger);
 }
 
-/* The hover popover: a small rounded card, muted caption on top and the
-   emphasised reading below. Opens upward — the composer toolbar sits at the
-   window bottom, so a downward popover would have no room to grow. */
+/* The hover popover: a small rounded card. Header (muted caption + emphasised
+   reading) up top, an optional per-category breakdown below it, a footnote
+   at the bottom. Opens upward — the composer toolbar sits at the window
+   bottom, so a downward popover would have no room to grow. */
 .conversation-context-popover {
 	position: absolute;
 	bottom: calc(100% + var(--vscode-agents-space-6, 6px));
@@ -984,13 +985,13 @@ button.conversation-work-step-row:hover {
 	z-index: 6;
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	gap: var(--vscode-agents-space-2, 2px);
-	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-10);
+	align-items: stretch;
+	gap: var(--vscode-agents-space-4, 4px);
+	min-width: 15rem;
+	padding: var(--vscode-agents-space-8, 8px) var(--vscode-agents-space-10);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	white-space: nowrap;
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity 80ms ease-out 200ms;
@@ -998,6 +999,14 @@ button.conversation-work-step-row:hover {
 
 .conversation-context-ring:hover .conversation-context-popover {
 	opacity: 1;
+}
+
+.conversation-context-popover-header {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--vscode-agents-space-2, 2px);
+	white-space: nowrap;
 }
 
 .conversation-context-popover-caption {
@@ -1010,6 +1019,51 @@ button.conversation-work-step-row:hover {
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 	color: var(--vscode-agents-color-text-primary);
 	font-variant-numeric: tabular-nums;
+}
+
+/* The breakdown: hidden (empty, zero height) until updateContextRing populates
+   it — a run with no breakdown event yet (or a model with no window) shows
+   just the header, same as before this panel existed. */
+.conversation-context-breakdown {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-2, 2px);
+	padding-top: var(--vscode-agents-space-4, 4px);
+	border-top: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+}
+
+.conversation-context-breakdown:empty {
+	display: none;
+}
+
+.conversation-context-breakdown-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--vscode-agents-space-10, 10px);
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	white-space: nowrap;
+}
+
+.conversation-context-breakdown-label {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-context-breakdown-value {
+	color: var(--vscode-agents-color-text-primary);
+	font-variant-numeric: tabular-nums;
+}
+
+.conversation-context-popover-footnote {
+	font-size: 10px;
+	color: var(--vscode-agents-color-text-secondary);
+	text-align: center;
+	opacity: 0.75;
+	white-space: nowrap;
+}
+
+.conversation-context-breakdown:empty + .conversation-context-popover-footnote {
+	display: none;
 }
 
 .conversation-context-ring[data-level='warn'] .conversation-context-popover-value {

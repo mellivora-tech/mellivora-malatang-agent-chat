@@ -79,9 +79,26 @@ export interface ISessionReconnect {
 	readonly maxAttempts: number;
 }
 
+/**
+ * What the most recent request's view was made of, in chars. All rows are
+ * char/4 estimates the panel labels as such — only the sibling
+ * {@link ISessionContextUsage.inputTokens} (the total) is a real provider count.
+ */
+export interface ISessionContextBreakdown {
+	readonly systemChars: number;
+	readonly instructionsChars: number;
+	readonly skillsChars: number;
+	readonly toolsChars: number;
+	readonly messagesChars: number;
+	readonly compactedChars: number;
+	readonly prunedChars: number;
+}
+
 /** Real token count from the most recent request — ground truth for the context-window meter. */
 export interface ISessionContextUsage {
 	readonly inputTokens: number;
+	/** Absent for models/turns that never emitted a context_breakdown event (e.g. a text-only run with no workspace). */
+	readonly breakdown?: ISessionContextBreakdown;
 }
 
 /** A tool call paused on the user's allow / deny. */

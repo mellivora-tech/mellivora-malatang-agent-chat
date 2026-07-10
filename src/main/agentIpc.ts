@@ -189,8 +189,14 @@ export function registerAgentIpc(dataRoot: string): void {
 		});
 
 		try {
-			const baseSystem = cwd ? workspaceSystemPrompt(cwd, mode) + (instructions ? `\n\n${formatInstructionsBlock(instructions)}` : '') : DEFAULT_SYSTEM;
-			const system = skillBlocks.length > 0 ? `${baseSystem}\n\n${skillBlocks.join('\n\n')}` : baseSystem;
+			const workspacePrompt = cwd ? workspaceSystemPrompt(cwd, mode) : DEFAULT_SYSTEM;
+			const instructionsBlock = instructions ? formatInstructionsBlock(instructions) : undefined;
+			const baseSystem = instructionsBlock ? `${workspacePrompt}\n\n${instructionsBlock}` : workspacePrompt;
+			const skillsBlock = skillBlocks.length > 0 ? skillBlocks.join('\n\n') : undefined;
+			const system = skillsBlock ? `${baseSystem}\n\n${skillsBlock}` : baseSystem;
+			// The breakdown panel's system-side rows: each segment's own length, not
+			// the concatenation — the loop attributes it per-category, never guesses.
+			const systemBreakdown = { baseChars: workspacePrompt.length, instructionsChars: instructionsBlock?.length ?? 0, skillsChars: skillsBlock?.length ?? 0 };
 			const messages = config.params?.vision === false ? stripImageBlocks(payload.messages) : payload.messages;
 			// The persisted anchor is validated against the messages ACTUALLY sent
 			// (post image-stripping): three fail-closed gates in restoreAnchor —
@@ -207,6 +213,7 @@ export function registerAgentIpc(dataRoot: string): void {
 			}
 			const loop = runAgentLoop(messages, {
 				system,
+				systemBreakdown,
 				tools,
 				modelClient: createModelClient(config),
 				permissionGate: createGateForMode(mode, requestApproval),
