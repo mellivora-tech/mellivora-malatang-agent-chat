@@ -47,6 +47,59 @@ test('read_file returns contents and pages with offset/limit', async () => {
 	assert.equal(paged.content, 'second line');
 });
 
+test('read_file dedup: an unchanged identical re-read returns a stub, not a second copy', async () => {
+	delete process.env['AGENT_CHAT_READ_DEDUP'];
+	const cwd = await fixture();
+	const tools = byName(createWorkspaceTools(cwd));
+
+	const first = await run(tools.read_file!, { path: 'README.md' });
+	assert.match(first.content, /hello world/, 'first read serves full content');
+
+	const second = await run(tools.read_file!, { path: 'README.md' });
+	assert.match(second.content, /unchanged since last read/, 'identical re-read is deduped');
+	assert.doesNotMatch(second.content, /hello world/);
+	assert.equal(second.isError, false, 'the stub is a normal result, not an error');
+
+	// A different range is a different key — full content again.
+	const ranged = await run(tools.read_file!, { path: 'README.md', offset: 1, limit: 1 });
+	assert.match(ranged.content, /^hello world/);
+});
+
+test('read_file dedup: a changed file busts the stub and reads fresh', async () => {
+	delete process.env['AGENT_CHAT_READ_DEDUP'];
+	const cwd = await fixture();
+	const tools = byName(createWorkspaceTools(cwd));
+
+	await run(tools.read_file!, { path: 'README.md' });
+	// A content-length change guarantees invalidation even when two writes land
+	// on the same millisecond and mtime alone cannot tell them apart.
+	await writeFile(join(cwd, 'README.md'), 'rewritten with a different length\n');
+
+	const after = await run(tools.read_file!, { path: 'README.md' });
+	assert.match(after.content, /rewritten/, 'changed file is served fresh');
+});
+
+test('read_file dedup: scoped to one tool instance, disabled by the kill switch', async () => {
+	const cwd = await fixture();
+
+	// Fresh instances (= a new run) never stub the first read.
+	delete process.env['AGENT_CHAT_READ_DEDUP'];
+	await run(byName(createWorkspaceTools(cwd)).read_file!, { path: 'README.md' });
+	const freshInstance = await run(byName(createWorkspaceTools(cwd)).read_file!, { path: 'README.md' });
+	assert.match(freshInstance.content, /hello world/, 'a new run starts with a clean dedup slate');
+
+	// Kill switch: repeats keep serving full content.
+	process.env['AGENT_CHAT_READ_DEDUP'] = 'off';
+	try {
+		const tools = byName(createWorkspaceTools(cwd));
+		await run(tools.read_file!, { path: 'README.md' });
+		const repeat = await run(tools.read_file!, { path: 'README.md' });
+		assert.match(repeat.content, /hello world/);
+	} finally {
+		delete process.env['AGENT_CHAT_READ_DEDUP'];
+	}
+});
+
 test('list_dir lists entries with a trailing slash on directories', async () => {
 	const cwd = await fixture();
 	const tools = byName(createWorkspaceTools(cwd));
