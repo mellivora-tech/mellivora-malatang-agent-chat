@@ -41,7 +41,7 @@ export interface ISessionHeader {
 
 /** One step inside a work block: a thinking stretch or a tool call. */
 export interface ISessionWorkStepData {
-	readonly kind: 'thinking' | 'tool';
+	readonly kind: 'thinking' | 'tool' | 'narration';
 	readonly label: string;
 	readonly durationMs: number;
 	readonly detail?: string;

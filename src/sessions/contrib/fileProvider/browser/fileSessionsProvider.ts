@@ -617,6 +617,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// Reasoning text streamed since the last step boundary; becomes the
 		// closing thinking step's expandable detail.
 		let thinkingBuffer = '';
+		// Visible text streamed within the CURRENT turn. If the turn goes on to
+		// call tools, this was narration ("我来梳理一下…"), not the answer — it
+		// relocates into the work block so it neither squats in the answer
+		// bubble for the whole run nor gets concatenated with the real reply.
+		// Only a terminal turn's text (no tools after it) stays as the answer.
+		let turnText = '';
 		// Cross-run anchor capture: the transcript as sent (for the integrity
 		// measure) and the newest ok compaction of this run.
 		let sentTranscript: readonly IAgentMessage[] = [];
@@ -665,6 +671,38 @@ export class FileSessionsProvider implements ISessionsProvider {
 				session.messages.set(messages.map(message => (message.id === assistantId ? { ...message, text } : message)));
 			}
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		};
+
+		// A turn that streamed text and THEN called tools was narrating, not
+		// answering — move that text out of the answer bubble into a work step.
+		// Runs at the turn's first tool_use; the loop's event order (deltas,
+		// then tool_use blocks at stream end) makes that the earliest moment
+		// the disposition is knowable, so the text still streams live until
+		// then and simply relocates the instant the turn declares itself.
+		const relocateTurnNarration = (): void => {
+			if (turnText === '') {
+				return;
+			}
+			const narration = turnText.trim();
+			text = text.slice(0, text.length - turnText.length);
+			turnText = '';
+			if (narration !== '') {
+				steps.push({
+					kind: 'narration',
+					label: narration.length > 200 ? `${narration.slice(0, 200)}…` : narration,
+					durationMs: 0,
+					...(narration.length > 200 ? { detail: narration } : {}),
+				});
+			}
+			if (created && text === '') {
+				// The bubble held nothing but narration — remove it entirely
+				// (same replace-not-append discipline as the reply verifier).
+				created = false;
+				session.messages.set(session.messages.get().filter(message => message.id !== assistantId));
+				this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+			} else if (created) {
+				updateAssistant();
+			}
 		};
 
 		const finalize = (reason?: string): void => {
@@ -759,17 +797,24 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// Any other event means the stream recovered.
 				session.reconnect.set(undefined);
 			}
-			if (event?.type === 'assistant_delta') {
+			if (event?.type === 'turn_start') {
+				// Stale turn text must never leak into a later turn's narration —
+				// e.g. the reply verifier's rejected answer (its bubble is cleared,
+				// but turnText would still hold the text) relocating as a step.
+				turnText = '';
+			} else if (event?.type === 'assistant_delta') {
 				// First text after thinking closes the stretch; text after a tool
 				// result belongs to the next thinking stretch, so only close once.
 				if (text === '' && openToolLabel === undefined) {
 					closeStep('thinking', 'Thought');
 					updateWork();
 				}
+				turnText += event.text;
 				text += event.text;
 				updateAssistant();
 			} else if (event?.type === 'tool_use') {
 				closeThinkingOrSkip();
+				relocateTurnNarration();
 				openToolLabel = describeWorkTool(event.name, event.input);
 				updateWork();
 			} else if (event?.type === 'tool_result') {

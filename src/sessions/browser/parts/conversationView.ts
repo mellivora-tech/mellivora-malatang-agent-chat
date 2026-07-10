@@ -855,13 +855,17 @@ export class ConversationView extends Disposable {
 		}
 
 		const icon = append(row, document.createElement('span'));
-		icon.className = `codicon ${step.kind === 'thinking' ? 'codicon-history' : 'codicon-tools'}`;
+		icon.className = `codicon ${step.kind === 'thinking' ? 'codicon-history' : step.kind === 'narration' ? 'codicon-comment' : 'codicon-tools'}`;
 		icon.setAttribute('aria-hidden', 'true');
 
 		const label = append(row, document.createElement('span'));
 		label.className = 'conversation-work-step-label';
 		if (step.kind === 'thinking') {
 			label.textContent = `Thought for ${thinkingDurationText(step.durationMs)}`;
+		} else if (step.kind === 'narration') {
+			// The model's own words, verbatim — an announcement, not a timed
+			// activity, so no duration chip.
+			label.textContent = step.label;
 		} else {
 			label.textContent = step.label;
 			const duration = append(row, document.createElement('span'));

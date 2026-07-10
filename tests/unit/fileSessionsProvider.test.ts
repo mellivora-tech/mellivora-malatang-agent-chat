@@ -1228,3 +1228,106 @@ test('a restored total carries through the next run\'s first breakdown without d
 	assert.equal(usage.inputTokens, 30_000, 'the restored number carries forward');
 	assert.equal(usage.breakdown?.systemChars, 10, 'the live breakdown still updates');
 });
+
+test('pre-tool narration relocates into the work block; only the terminal turn\'s text is the answer', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			// The reported shape: turn 1 announces intent in visible text, then
+			// calls tools; the real answer only arrives in the terminal turn.
+			emit({ event: { type: 'turn_start', turn: 1 } });
+			emit({ event: { type: 'thinking_delta', text: 'planning the sweep' } });
+			emit({ event: { type: 'assistant_delta', text: '我来梳理一下这个项目。' } });
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'list_dir', input: { path: '.' } } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'src/', isError: false } });
+			emit({ event: { type: 'turn_start', turn: 2 } });
+			emit({ event: { type: 'assistant_delta', text: '项目结构如下：…' } });
+			emit({ done: { reason: 'completed', turns: 2 } });
+			return { reason: 'completed', turns: 2 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('梳理下项目');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	// The answer bubble carries ONLY the terminal turn's text — no preamble,
+	// no concatenation.
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.ok(assistant, 'assistant reply exists');
+	assert.equal(assistant.text, '项目结构如下：…');
+
+	// The narration became a work step, positioned before the tool step.
+	const work = session.messages.get().find(message => message.role === 'work');
+	assert.ok(work, 'work block exists');
+	const kinds = (work.steps ?? []).map(step => step.kind);
+	const narrationIndex = kinds.indexOf('narration');
+	const toolIndex = kinds.indexOf('tool');
+	assert.ok(narrationIndex !== -1, `expected a narration step, got kinds=${JSON.stringify(kinds)}`);
+	assert.ok(toolIndex !== -1 && narrationIndex < toolIndex, 'narration precedes the tool it announced');
+	assert.equal((work.steps ?? [])[narrationIndex]!.label, '我来梳理一下这个项目。');
+
+	// Persistence matches what the UI shows: the assistant entry is the final
+	// text only, and the work entry carries the narration step.
+	const persistedAssistant = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
+	assert.ok(persistedAssistant, 'assistant message persisted');
+	assert.equal((persistedAssistant.entry as { text: string }).text, '项目结构如下：…');
+	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
+	assert.ok(persistedWork, 'work entry persisted');
+	assert.ok(((persistedWork.entry as { steps?: readonly { kind: string }[] }).steps ?? []).some(step => step.kind === 'narration'), 'narration step persisted');
+});
+
+test('a rejected reply never resurfaces as narration in the retry turn', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'turn_start', turn: 1 } });
+			emit({ event: { type: 'assistant_delta', text: '答非所问的回复' } });
+			// The verifier rejects it; the loop grants one retry turn that uses a tool.
+			emit({ event: { type: 'reply_verifier', verdict: 'fail', retried: true } });
+			emit({ event: { type: 'turn_start', turn: 2 } });
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'grep', input: { pattern: 'x' } } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'hit', isError: false } });
+			emit({ event: { type: 'turn_start', turn: 3 } });
+			emit({ event: { type: 'assistant_delta', text: '正确的回复' } });
+			emit({ done: { reason: 'completed', turns: 3 } });
+			return { reason: 'completed', turns: 3 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('问题');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.equal(assistant?.text, '正确的回复');
+	const work = session.messages.get().find(message => message.role === 'work');
+	const narrations = (work?.steps ?? []).filter(step => step.kind === 'narration');
+	assert.equal(narrations.length, 0, `the rejected reply must not reappear as narration: ${JSON.stringify(narrations)}`);
+});
