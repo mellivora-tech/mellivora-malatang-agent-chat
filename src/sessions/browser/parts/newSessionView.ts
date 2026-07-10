@@ -9,6 +9,7 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ISessionAttachment } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments } from './composerImages.js';
 import { installFileMentions } from './composerMentions.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
@@ -70,7 +71,7 @@ export class NewSessionView extends Disposable {
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
 		input.rows = 2;
-		input.placeholder = 'Ask Mellivora anything, @ for files or folders, paste or drop images';
+		input.placeholder = 'Ask Mellivora anything, @ for files or folders, / for commands, paste or drop images';
 		input.spellcheck = true;
 
 		// Installed before the Enter-to-send handler below — an Enter that picks
@@ -157,6 +158,17 @@ export class NewSessionView extends Disposable {
 		const sendIcon = append(sendButton, document.createElement('span'));
 		sendIcon.className = 'codicon codicon-arrow-up';
 		sendIcon.setAttribute('aria-hidden', 'true');
+
+		// Registered after the pickers exist (their triggers back the action
+		// commands) but before the Enter-to-send handler below, so a
+		// command-picking Enter never also submits.
+		const commands: IComposerCommand[] = [
+			{ name: 'model', kind: 'action', description: 'Pick the model', run: () => model.click() },
+			{ name: 'permission', kind: 'action', description: 'Pick the approval mode', run: () => access.click() },
+			{ name: 'project', kind: 'action', description: 'Pick the project', run: () => context.click() },
+			...TEMPLATE_COMMANDS,
+		];
+		this._register(installSlashCommands({ host: content, input, getCommands: () => commands }));
 
 		composer.addEventListener('submit', event => {
 			event.preventDefault();

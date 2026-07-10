@@ -59,6 +59,15 @@
 	font-size: 0.9em;
 }
 
+/* Command descriptions — muted like -dir, but left-to-right (no path-style rtl). */
+.composer-mention-item-desc {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 55%, transparent);
+	font-size: 0.9em;
+}
+
 .composer-mention-empty {
 	padding: var(--vscode-agents-space-8);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 60%, transparent);

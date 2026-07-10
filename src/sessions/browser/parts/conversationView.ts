@@ -10,6 +10,7 @@ import type { IProjectsService } from '../../services/projects/browser/projectsS
 import type { IActiveSession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments, type IImageController } from './composerImages.js';
 import { installFileMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
@@ -214,6 +215,29 @@ export class ConversationView extends Disposable {
 		this.sendError.className = 'conversation-send-error';
 		this.sendError.setAttribute('role', 'alert');
 		this.sendError.hidden = true;
+
+		// Registered after the pickers exist (their triggers back the action
+		// commands) but before _registerEventListeners, so a command-picking
+		// Enter never also sends. Availability is evaluated at open time.
+		this._register(
+			installSlashCommands({
+				host: this.element,
+				input: this.input,
+				getCommands: (): IComposerCommand[] => {
+					const session = this.session;
+					const lastMessage = session?.messages.get().at(-1);
+					return [
+						{ name: 'model', kind: 'action', description: 'Pick the model', run: () => model.click() },
+						{ name: 'permission', kind: 'action', description: 'Pick the approval mode', run: () => access.click() },
+						...(session && lastMessage && this.messageSender?.forkSession
+							? [{ name: 'fork', kind: 'action' as const, description: 'Fork this conversation from its latest message', run: () => void this.messageSender!.forkSession!(session.sessionId, lastMessage.id) }]
+							: []),
+						...(session?.status.get() === SessionStatus.InProgress ? [{ name: 'stop', kind: 'action' as const, description: 'Stop the current run', run: () => void this.stop() }] : []),
+						...TEMPLATE_COMMANDS,
+					];
+				},
+			}),
+		);
 
 		this._registerEventListeners();
 		this.render();
@@ -946,7 +970,7 @@ export class ConversationView extends Disposable {
 				: 'Working… your next message will be queued'
 			: interactivity === SessionInteractivity.ReadOnly
 				? 'Session is read-only'
-				: 'Ask Mellivora';
+				: 'Ask Mellivora, @ for files, / for commands';
 	}
 
 	/** Send a queued follow-up once the current run has settled. */
