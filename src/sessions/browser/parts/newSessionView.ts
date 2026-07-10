@@ -33,7 +33,17 @@ export class NewSessionView extends Disposable {
 
 		const heading = append(content, document.createElement('h1'));
 		heading.className = 'new-session-heading';
+		let headingBucket = greetingBucket(new Date().getHours());
 		heading.textContent = pickGreeting(new Date().getHours());
+		// Follow the clock: re-greet only when the hour crosses into a new bucket, so the tail doesn't churn within a time-of-day.
+		const greetingTimer = setInterval(() => {
+			const bucket = greetingBucket(new Date().getHours());
+			if (bucket !== headingBucket) {
+				headingBucket = bucket;
+				heading.textContent = pickGreeting(new Date().getHours());
+			}
+		}, 60_000);
+		this._register(toDisposable(() => clearInterval(greetingTimer)));
 
 		const composer = append(content, document.createElement('form')) as HTMLFormElement;
 		composer.className = 'new-session-composer';
@@ -292,9 +302,13 @@ const GREETING_BUCKETS: readonly { readonly maxHour: number; readonly label: str
 	{ maxHour: 24, label: '凌晨好', tails: LATE_NIGHT_TAILS },
 ];
 
-/** e.g. "下午好，下午三点魂飞天，说说你想干啥" — the greeting for this exact hour, tail picked fresh each time the view mounts. */
+function greetingBucket(hour: number): (typeof GREETING_BUCKETS)[number] {
+	return GREETING_BUCKETS.find(candidate => hour < candidate.maxHour) ?? GREETING_BUCKETS[GREETING_BUCKETS.length - 1]!;
+}
+
+/** e.g. "下午好，下午三点魂飞天，说说你想干啥" — the greeting for this exact hour, tail picked fresh each time the view mounts or the clock enters a new bucket. */
 function pickGreeting(hour: number): string {
-	const bucket = GREETING_BUCKETS.find(candidate => hour < candidate.maxHour) ?? GREETING_BUCKETS[GREETING_BUCKETS.length - 1]!;
+	const bucket = greetingBucket(hour);
 	const tail = bucket.tails[Math.floor(Math.random() * bucket.tails.length)]!;
 	return `${bucket.label}，${tail}`;
 }
