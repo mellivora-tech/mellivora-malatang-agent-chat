@@ -50,6 +50,8 @@ export class ConversationView extends Disposable {
 	private readonly reconnectStatus: HTMLElement;
 	private readonly reconnectLabel: HTMLElement;
 	private readonly contextRing: HTMLElement;
+	// Portaled to <body> — see the comment on createContextRing for why.
+	private readonly contextPopover: HTMLElement;
 	private readonly header = this._register(new ConversationContext());
 	private readonly sessionDisposables = this._register(new DisposableStore());
 	private session: IActiveSession | undefined;
@@ -194,6 +196,14 @@ export class ConversationView extends Disposable {
 		// A standalone read-only indicator — deliberately not part of the
 		// model button, which is an interactive picker.
 		this.contextRing = append(rightControls, createContextRing());
+		// NOT appended to <body> yet: this constructor runs as part of Workbench's
+		// field initializers, BEFORE Workbench.startup() calls
+		// `container.replaceChildren(this.root)` — appending here would be wiped
+		// out the moment that runs. showContextPopover() mounts it lazily, on
+		// first use, well after startup() has finished.
+		this.contextPopover = createContextPopover();
+		this.contextRing.addEventListener('mouseenter', () => this.showContextPopover());
+		this.contextRing.addEventListener('mouseleave', () => this.hideContextPopover());
 
 		const model = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		model.className = 'conversation-model';
@@ -899,6 +909,9 @@ export class ConversationView extends Disposable {
 			clearInterval(this.workTicker);
 			this.workTicker = undefined;
 		}
+		// Portaled to <body>, outside `this.element` — removing the view's own
+		// root would never take this with it.
+		this.contextPopover.remove();
 		super.dispose();
 	}
 
@@ -913,9 +926,9 @@ export class ConversationView extends Disposable {
 	 */
 	private updateContextRing(): void {
 		const fill = this.contextRing.querySelector<SVGCircleElement>('.ring-fill');
-		const value = this.contextRing.querySelector<HTMLElement>('.conversation-context-popover-value');
-		const breakdownList = this.contextRing.querySelector<HTMLElement>('.conversation-context-breakdown');
-		const footnote = this.contextRing.querySelector<HTMLElement>('.conversation-context-popover-footnote');
+		const value = this.contextPopover.querySelector<HTMLElement>('.conversation-context-popover-value');
+		const breakdownList = this.contextPopover.querySelector<HTMLElement>('.conversation-context-breakdown');
+		const footnote = this.contextPopover.querySelector<HTMLElement>('.conversation-context-popover-footnote');
 		if (!fill || !value || !breakdownList || !footnote) {
 			return;
 		}
@@ -923,6 +936,7 @@ export class ConversationView extends Disposable {
 		const contextLength = this.modelsService?.selectedModel.get()?.contextLength;
 		if (!contextLength) {
 			this.contextRing.hidden = true;
+			this.hideContextPopover();
 			return;
 		}
 
@@ -972,6 +986,58 @@ export class ConversationView extends Disposable {
 			breakdownList.append(createBreakdownRow('Free', formatTokensWithPct(Math.max(0, contextLength - tokens), contextLength)));
 		}
 		footnote.textContent = isRealTotal ? 'Estimated by category · total is real' : 'All figures estimated — waiting for the model’s real count';
+
+		// Content just changed height (e.g. rows appeared mid-hover as a live run
+		// streams in) — reposition so it stays flipped/clamped correctly rather
+		// than drifting off whatever position it was shown at.
+		if (this.contextPopover.classList.contains('is-visible')) {
+			this.positionContextPopover();
+		}
+	}
+
+	private showContextPopover(): void {
+		if (this.contextRing.hidden) {
+			return;
+		}
+		if (!this.contextPopover.isConnected) {
+			// First real use, well after Workbench.startup()'s one-time
+			// `replaceChildren` — safe to mount now (see the constructor comment).
+			document.body.append(this.contextPopover);
+		}
+		this.positionContextPopover();
+		this.contextPopover.classList.add('is-visible');
+	}
+
+	private hideContextPopover(): void {
+		this.contextPopover.classList.remove('is-visible');
+	}
+
+	/**
+	 * Positions the portaled popover in viewport (fixed) coordinates from the
+	 * ring's own rect — the only way to guarantee it isn't silently clipped by
+	 * `.session-view`'s `overflow: hidden` now that the breakdown can run to
+	 * 7+ rows. Opens above the ring by default (the composer sits at the
+	 * window bottom); flips below when there truly isn't room above, and
+	 * clamps horizontally so it never runs off either edge.
+	 */
+	private positionContextPopover(): void {
+		const ringRect = this.contextRing.getBoundingClientRect();
+		const gap = 6;
+		// Measure the popover's OWN height with real content already rendered —
+		// display is never 'none' (opacity-only), so offsetHeight is accurate
+		// even before `is-visible` makes it visible to the eye.
+		const popoverHeight = this.contextPopover.offsetHeight;
+		const popoverWidth = this.contextPopover.offsetWidth;
+
+		const roomAbove = ringRect.top - gap;
+		const opensAbove = roomAbove >= popoverHeight || roomAbove >= window.innerHeight - ringRect.bottom - gap;
+		const top = opensAbove ? Math.max(8, ringRect.top - gap - popoverHeight) : ringRect.bottom + gap;
+
+		const desiredLeft = ringRect.left + ringRect.width / 2 - popoverWidth / 2;
+		const left = Math.max(8, Math.min(desiredLeft, window.innerWidth - popoverWidth - 8));
+
+		this.contextPopover.style.top = `${top}px`;
+		this.contextPopover.style.left = `${left}px`;
 	}
 
 	private createWorkingRow(): HTMLElement {
@@ -1156,9 +1222,11 @@ const RING_RADIUS = 6;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 function createContextRing(): HTMLElement {
-	// A small ring (fill = % of the context window used) that reveals a hover
-	// popover: the exact reading up top ("Context window: / N% used (M% left)"),
-	// then a per-category breakdown of what the next request would send.
+	// A small ring (fill = % of the context window used). The hover popover
+	// used to nest here as an absolutely-positioned child, but the breakdown
+	// panel can run to 7+ rows — tall enough that `.session-view`'s
+	// `overflow: hidden` silently clipped it. The popover is now a separate
+	// element (see createContextPopover), portaled to <body> by the caller.
 	// Starts hidden; updateContextRing reveals it once a model with a known
 	// window is selected.
 	const ring = document.createElement('span');
@@ -1169,16 +1237,29 @@ function createContextRing(): HTMLElement {
 		'<svg viewBox="0 0 16 16" aria-hidden="true">' +
 		`<circle class="ring-track" cx="8" cy="8" r="${RING_RADIUS}"></circle>` +
 		`<circle class="ring-fill" cx="8" cy="8" r="${RING_RADIUS}" transform="rotate(-90 8 8)" stroke-dasharray="${RING_CIRCUMFERENCE}" stroke-dashoffset="${RING_CIRCUMFERENCE}"></circle>` +
-		'</svg>' +
-		'<span class="conversation-context-popover" role="tooltip">' +
+		'</svg>';
+	return ring;
+}
+
+/**
+ * The ring's hover popover — created separately so the caller can portal it
+ * to `document.body` (see the class comment on {@link createContextRing}).
+ * `position: fixed`, positioned and shown/hidden by positionContextPopover /
+ * showContextPopover / hideContextPopover, not CSS `:hover` (the popover is
+ * no longer a DOM descendant of the ring once portaled).
+ */
+function createContextPopover(): HTMLElement {
+	const popover = document.createElement('span');
+	popover.className = 'conversation-context-popover';
+	popover.setAttribute('role', 'tooltip');
+	popover.innerHTML =
 		'<span class="conversation-context-popover-header">' +
 		'<span class="conversation-context-popover-caption">Context window:</span>' +
 		'<span class="conversation-context-popover-value"></span>' +
 		'</span>' +
 		'<span class="conversation-context-breakdown"></span>' +
-		'<span class="conversation-context-popover-footnote">Estimated by category · total is real</span>' +
-		'</span>';
-	return ring;
+		'<span class="conversation-context-popover-footnote">Estimated by category · total is real</span>';
+	return popover;
 }
 
 /** One row of the breakdown popover: a muted label and a right-aligned value. */

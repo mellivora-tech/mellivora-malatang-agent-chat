@@ -933,7 +933,6 @@ button.conversation-work-step-row:hover {
    "Context window: / N% used (M% left)". Hidden until a model with a known
    window is selected. Read-only. */
 .conversation-context-ring {
-	position: relative; /* anchors the hover popover */
 	display: inline-flex;
 	align-items: center;
 	flex: 0 0 auto;
@@ -975,30 +974,36 @@ button.conversation-work-step-row:hover {
 
 /* The hover popover: a small rounded card. Header (muted caption + emphasised
    reading) up top, an optional per-category breakdown below it, a footnote
-   at the bottom. Opens upward — the composer toolbar sits at the window
-   bottom, so a downward popover would have no room to grow. */
+   at the bottom. Appended to <body> (a portal) instead of nested under the
+   ring — the breakdown can run to 7+ rows, tall enough that `.session-view`'s
+   `overflow: hidden` would silently clip it if it stayed in that subtree.
+   `position: fixed` with top/left computed in JS (positionContextPopover)
+   escapes that clipping entirely and can flip to open downward when there
+   isn't room above. Visibility is a class the ring's mouseenter/mouseleave
+   toggle, not `:hover` — the popover is no longer a CSS descendant of the ring. */
 .conversation-context-popover {
-	position: absolute;
-	bottom: calc(100% + var(--vscode-agents-space-6, 6px));
-	left: 50%;
-	transform: translateX(-50%);
-	z-index: 6;
+	position: fixed;
+	z-index: 100;
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
 	gap: var(--vscode-agents-space-4, 4px);
-	min-width: 15rem;
+	width: 15rem;
+	max-height: calc(100vh - 2rem);
+	overflow-y: auto;
 	padding: var(--vscode-agents-space-8, 8px) var(--vscode-agents-space-10);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 80ms ease-out 200ms;
+	transition: opacity 80ms ease-out;
 }
 
-.conversation-context-ring:hover .conversation-context-popover {
+.conversation-context-popover.is-visible {
 	opacity: 1;
+	transition-delay: 200ms;
 }
 
 .conversation-context-popover-header {
