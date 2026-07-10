@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
-import { clearNode } from '../../../base/browser/dom.js';
+import { append, clearNode } from '../../../base/browser/dom.js';
 import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChanges, type ISearchPaletteTask } from '../../search/browser/searchPalette.js';
 import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
 import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
 import { SkillSettingsView } from '../../../browser/parts/skillSettingsView.js';
+import { EnvironmentsConfigView } from '../../../browser/parts/environmentsConfigView.js';
 import { settingsDropdown, settingsRow, settingsSection, settingsToggle } from '../../../browser/parts/settingsControls.js';
 import { readPreferences, updatePreferences } from '../../../browser/parts/settingsPrefs.js';
 import type { ThemeId } from '../../../platform/theme/theme.js';
@@ -19,6 +20,7 @@ import type { IProjectsService } from '../../../services/projects/browser/projec
 import type { ISessionsPartService, WorkbenchMode } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import type { ISkillsService } from '../../../services/skills/browser/skillsService.js';
+import type { IEnvironmentsService } from '../../../services/environments/browser/environmentsService.js';
 
 export interface ISessionsListOptions {
 	readonly sessionsService?: ISessionsService;
@@ -26,6 +28,7 @@ export interface ISessionsListOptions {
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
 	readonly skillsService?: ISkillsService;
+	readonly environmentsService?: IEnvironmentsService;
 	readonly onToggleSidebar?: () => void;
 }
 
@@ -392,6 +395,22 @@ export class SessionsList extends Disposable {
 		addIcon.setAttribute('aria-hidden', 'true');
 		addTask.appendChild(addIcon);
 
+		// Overflow menu: project-level actions (configure environments, reveal…).
+		const more = document.createElement('button');
+		more.className = 'sessions-project-more';
+		more.type = 'button';
+		more.title = `${project.name} actions`;
+		more.setAttribute('aria-label', `${project.name} actions`);
+		const moreIcon = document.createElement('span');
+		moreIcon.className = 'codicon codicon-ellipsis';
+		moreIcon.setAttribute('aria-hidden', 'true');
+		more.appendChild(moreIcon);
+		more.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			this.openProjectMenu(more, project.id, project.name);
+		});
+
 		const rows = document.createElement('div');
 		rows.className = 'sessions-project-session-list';
 		rows.hidden = !project.expanded;
@@ -412,13 +431,106 @@ export class SessionsList extends Disposable {
 			rows.hidden = !expanded;
 		});
 
-		// The + is a sibling of the toggle (a button cannot nest in a button).
+		// The + and ⋯ are siblings of the toggle (a button cannot nest in a button).
 		const header = document.createElement('div');
 		header.className = 'sessions-project-header';
-		header.append(toggle, addTask);
+		header.append(toggle, addTask, more);
 
 		group.append(header, rows);
 		return group;
+	}
+
+	/** Small anchored menu for a project group: configure environments, reveal in the OS file manager. */
+	private openProjectMenu(anchor: HTMLElement, projectId: string, projectName: string): void {
+		document.querySelector('.sessions-project-menu')?.remove();
+
+		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
+		const menu = document.createElement('div');
+		menu.className = 'sessions-project-menu';
+		menu.setAttribute('role', 'menu');
+
+		const close = (): void => {
+			menu.remove();
+			document.removeEventListener('mousedown', onOutside, true);
+		};
+		const onOutside = (event: MouseEvent): void => {
+			if (event.target instanceof Node && !menu.contains(event.target) && event.target !== anchor) {
+				close();
+			}
+		};
+
+		const addItem = (icon: string, label: string, run: () => void): void => {
+			const item = append(menu, document.createElement('button')) as HTMLButtonElement;
+			item.className = 'sessions-project-menu-item';
+			item.type = 'button';
+			item.setAttribute('role', 'menuitem');
+			const glyph = append(item, document.createElement('span'));
+			glyph.className = `codicon ${icon}`;
+			glyph.setAttribute('aria-hidden', 'true');
+			append(item, document.createElement('span')).textContent = label;
+			item.addEventListener('click', () => {
+				close();
+				run();
+			});
+		};
+
+		addItem('codicon-server-environment', 'Configure environments', () => this.openEnvironmentsDialog(projectId, projectName));
+		if (this.options.projectsService?.revealInFolder) {
+			addItem('codicon-folder-opened', 'Reveal in Finder', () => void this.options.projectsService!.revealInFolder!(projectId));
+		}
+
+		host.appendChild(menu);
+		const hostRect = host.getBoundingClientRect();
+		const anchorRect = anchor.getBoundingClientRect();
+		menu.style.top = `${anchorRect.bottom - hostRect.top + 4}px`;
+		menu.style.left = `${Math.min(anchorRect.left - hostRect.left, host.clientWidth - menu.offsetWidth - 8)}px`;
+		document.addEventListener('mousedown', onOutside, true);
+	}
+
+	/** Open the per-project environments & data-sources editor in a modal dialog. */
+	private openEnvironmentsDialog(projectId: string, projectName: string): void {
+		const service = this.options.environmentsService;
+		if (!service || document.querySelector('.sessions-env-dialog-backdrop')) {
+			return;
+		}
+		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
+
+		const backdrop = document.createElement('div');
+		backdrop.className = 'sessions-env-dialog-backdrop';
+		const dialog = append(backdrop, document.createElement('div'));
+		dialog.className = 'sessions-env-dialog';
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-label', `Environments for ${projectName}`);
+
+		const header = append(dialog, document.createElement('div'));
+		header.className = 'sessions-env-dialog-header';
+		const title = append(header, document.createElement('span'));
+		title.className = 'sessions-env-dialog-title';
+		title.textContent = projectName;
+		const closeButton = append(header, document.createElement('button')) as HTMLButtonElement;
+		closeButton.className = 'sessions-settings-close';
+		closeButton.type = 'button';
+		closeButton.title = 'Close';
+		closeButton.setAttribute('aria-label', 'Close');
+		append(closeButton, document.createElement('span')).className = 'codicon codicon-close';
+
+		const view = new EnvironmentsConfigView(projectId, service);
+		const body = append(dialog, document.createElement('div'));
+		body.className = 'sessions-env-dialog-body';
+		body.appendChild(view.element);
+
+		const close = (): void => {
+			view.dispose();
+			backdrop.remove();
+		};
+		closeButton.addEventListener('click', close);
+		backdrop.addEventListener('mousedown', event => {
+			if (event.target === backdrop) {
+				close();
+			}
+		});
+		host.appendChild(backdrop);
 	}
 
 	private renderSidebarTreeSection(container: HTMLElement, id: SidebarTreeSectionId, title: string, contentElement: HTMLElement): void {

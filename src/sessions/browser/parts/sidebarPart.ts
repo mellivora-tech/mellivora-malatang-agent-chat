@@ -10,6 +10,7 @@ import type { IProjectsService } from '../../services/projects/browser/projectsS
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
+import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
 import { Part } from '../part.js';
 
 export interface ISidebarPartOptions {
@@ -18,6 +19,7 @@ export interface ISidebarPartOptions {
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
 	readonly skillsService?: ISkillsService;
+	readonly environmentsService?: IEnvironmentsService;
 	readonly onToggleSidebar?: () => void;
 }
 
@@ -39,6 +41,7 @@ export class SidebarPart extends Part {
 				...(this.options.projectsService ? { projectsService: this.options.projectsService } : {}),
 				...(this.options.modelsService ? { modelsService: this.options.modelsService } : {}),
 				...(this.options.skillsService ? { skillsService: this.options.skillsService } : {}),
+				...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),
 				...(this.options.onToggleSidebar ? { onToggleSidebar: this.options.onToggleSidebar } : {}),
 			}),
 		);

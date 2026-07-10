@@ -1763,11 +1763,11 @@
 	min-width: 0;
 }
 
-/* While the + is revealed, the name must truncate BEFORE it — reserve the
-   button's slot (plus a gap) so the ellipsis never touches the icon. */
+/* On hover BOTH the ⋯ and + are revealed over the row's right edge — reserve
+   their combined width so the name truncates before them, not under them. */
 .sessions-project-header:hover .sessions-project-toggle,
 .sessions-project-header:focus-within .sessions-project-toggle {
-	padding-right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-22) + var(--vscode-agents-space-8));
+	padding-right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-24) + var(--vscode-agents-space-22) + var(--vscode-agents-space-8));
 }
 
 .sessions-project-add-task {
@@ -1805,4 +1805,212 @@
 .sessions-project-header:hover .sessions-project-count,
 .sessions-project-header:focus-within .sessions-project-count {
 	visibility: hidden;
+}
+
+/* Project overflow (⋯) button — mirrors the quick new-task (+) reveal behavior. */
+.sessions-project-more {
+	position: absolute;
+	top: 50%;
+	right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-24));
+	transform: translateY(-50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--vscode-agents-space-22);
+	height: var(--vscode-agents-space-22);
+	padding: 0;
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	cursor: default;
+	opacity: 0;
+	visibility: hidden;
+}
+
+.sessions-project-header:hover .sessions-project-more,
+.sessions-project-header:focus-within .sessions-project-more {
+	opacity: 1;
+	visibility: visible;
+}
+
+.sessions-project-more:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 12%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+/* Give the ⋯ its own reserved slot so the + doesn't overlap it on hover. */
+.sessions-project-header:hover .sessions-project-add-task,
+.sessions-project-header:focus-within .sessions-project-add-task {
+	right: var(--vscode-agents-space-6);
+}
+
+/* Anchored project actions menu. */
+.sessions-project-menu {
+	position: absolute;
+	z-index: 40;
+	display: flex;
+	flex-direction: column;
+	min-width: 200px;
+	padding: var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	color: var(--vscode-agents-color-text-primary);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+}
+
+.sessions-project-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: default;
+}
+
+.sessions-project-menu-item:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
+}
+
+/* Environments dialog — a larger centered modal hosting the config editor. */
+.sessions-env-dialog-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--vscode-agents-color-shadow) 35%, transparent);
+}
+
+.sessions-env-dialog {
+	display: flex;
+	flex-direction: column;
+	width: 560px;
+	max-width: calc(100vw - var(--vscode-agents-space-32));
+	max-height: calc(100vh - var(--vscode-agents-space-44));
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	color: var(--vscode-agents-color-text-primary);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+	overflow: hidden;
+}
+
+.sessions-env-dialog-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
+	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+}
+
+.sessions-env-dialog-title {
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-env-dialog-body {
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--vscode-agents-space-12);
+}
+
+/* Config editor internals. */
+.sessions-env-head {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8);
+}
+
+.sessions-env-name {
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-env-role {
+	padding: 0 var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control);
+	font-size: 0.8em;
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.sessions-env-role.role-target {
+	background: color-mix(in srgb, #f14c4c 22%, transparent);
+	color: inherit;
+}
+
+.sessions-env-head-actions,
+.sessions-env-ds-actions {
+	display: flex;
+	gap: var(--vscode-agents-space-4);
+	margin-left: auto;
+}
+
+.sessions-env-ds-row {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border-top: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+}
+
+.sessions-env-ds-main {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.sessions-env-ds-coords {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sessions-env-ds-badges {
+	display: flex;
+	gap: var(--vscode-agents-space-4);
+}
+
+.sessions-env-badge {
+	padding: 0 var(--vscode-agents-space-5);
+	border-radius: var(--vscode-agents-radius-control);
+	font-size: 0.75em;
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.sessions-env-badge.cred-missing {
+	color: #f14c4c;
+}
+
+.sessions-env-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-3);
+}
+
+.sessions-env-field-label {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: 0.85em;
+}
+
+.sessions-env-cred-heading {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: 0.9em;
+}
+
+.sessions-env-empty {
+	padding: var(--vscode-agents-space-8);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 60%, transparent);
 }

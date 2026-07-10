@@ -29,6 +29,8 @@ import { ISessionsProvidersService, SessionsProvidersService } from '../services
 import { ISessionsService, SessionsService } from '../services/sessions/browser/sessionsService.js';
 import { SkillsService } from '../services/skills/browser/skillsService.js';
 import type { ISkillsBridge } from '../services/skills/common/skills.js';
+import { EnvironmentsService } from '../services/environments/browser/environmentsService.js';
+import type { IEnvironmentsBridge } from '../services/environments/common/environments.js';
 
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
@@ -40,6 +42,7 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly models?: IModelsBridge;
 		readonly agent?: IAgentBridge;
 		readonly skills?: ISkillsBridge;
+		readonly environments?: IEnvironmentsBridge;
 	};
 };
 
@@ -49,6 +52,7 @@ export class Workbench {
 	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects, (globalThis as AgentWindowGlobals).agentWindow?.appState);
 	private readonly modelsService = new ModelsService((globalThis as AgentWindowGlobals).agentWindow?.models);
 	private readonly skillsService = new SkillsService((globalThis as AgentWindowGlobals).agentWindow?.skills);
+	private readonly environmentsService = new EnvironmentsService((globalThis as AgentWindowGlobals).agentWindow?.environments);
 	private readonly providersService = new SessionsProvidersService();
 	private readonly managementService = new SessionsManagementService(this.providersService);
 	private readonly sessionsPartService = new SessionsPartService();
@@ -64,6 +68,7 @@ export class Workbench {
 		projectsService: this.projectsService,
 		modelsService: this.modelsService,
 		skillsService: this.skillsService,
+		environmentsService: this.environmentsService,
 		onToggleSidebar: () => this.toggleSidebar(),
 	});
 	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService, this.modelsService, this.skillsService);

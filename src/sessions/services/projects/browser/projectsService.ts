@@ -18,6 +18,8 @@ export interface IProjectsService {
 	addProjectViaDialog(): Promise<IProject | undefined>;
 	/** Workspace-relative file paths under the project root, for the composer's @-mention picker. Empty when unsupported. */
 	listProjectFiles(projectId: string): Promise<readonly string[]>;
+	/** Open the project directory in the OS file manager. */
+	revealInFolder?(projectId: string): Promise<boolean>;
 }
 
 export class ProjectsService implements IProjectsService {
@@ -60,6 +62,10 @@ export class ProjectsService implements IProjectsService {
 			console.warn(`Listing files failed for project ${projectId}:`, error);
 			return [];
 		}
+	}
+
+	async revealInFolder(projectId: string): Promise<boolean> {
+		return (await this.bridge?.revealInFolder(projectId)) ?? false;
 	}
 
 	async addProjectViaDialog(): Promise<IProject | undefined> {

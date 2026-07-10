@@ -10,3 +10,6 @@ test-results/
 public/
 .superpowers/
 docs/superpowers/
+
+# Per-workspace project config written by the app when this repo is opened as a project
+.mellivora/
