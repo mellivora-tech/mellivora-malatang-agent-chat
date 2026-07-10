@@ -582,6 +582,14 @@
 	opacity: 0;
 }
 
+/* The three hover actions (rename / delete / archive) are absolutely positioned
+   over the row's right edge; reserve their combined width on the main button so
+   the title truncates BEFORE them instead of sliding underneath. */
+.sessions-project-task-row.has-action:hover .sessions-project-task-main,
+.sessions-project-task-row.has-action:focus-within .sessions-project-task-main {
+	padding-right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-24) * 2 + var(--vscode-agents-space-22) + var(--vscode-agents-space-6));
+}
+
 .sessions-project-task-tooltip {
 	position: absolute;
 	top: calc(100% + var(--vscode-agents-space-4));
