@@ -34,6 +34,10 @@ export interface IAgentBridge {
 	 *  `permissionMode` picks the gate for mutating tools (default 'ask'). */
 	run(sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode): Promise<IAgentTerminal>;
 	stop(sessionId: string): Promise<void>;
+	/** One-shot session title from the first user message — a plain model call, no agent loop.
+	 *  Resolves to undefined when no model is configured or the reply is unusable; rejects on model errors.
+	 *  Optional so test doubles that only exercise `run` stay valid. */
+	generateTitle?(query: string, modelId?: string): Promise<string | undefined>;
 	/** Subscribe to streamed events; returns an unsubscribe function. */
 	onEvent(listener: (payload: IAgentEventPayload) => void): () => void;
 	/** Subscribe to approval requests from the permission gate; returns an unsubscribe function. */

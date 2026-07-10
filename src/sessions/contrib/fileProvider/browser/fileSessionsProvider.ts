@@ -220,7 +220,32 @@ export class FileSessionsProvider implements ISessionsProvider {
 		this.onDidChangeSessionsEmitter.fire({ added: [session], removed: [], changed: [] });
 		void this.refreshChangesSummary(session);
 		this.generateReply(session);
+		void this.generateTitle(session, query);
 		return session;
+	}
+
+	/**
+	 * Swap the first-message placeholder title for a model-generated one,
+	 * concurrently with the first reply. Best-effort: any failure leaves the
+	 * placeholder, and a title that is no longer the placeholder (rename, fork)
+	 * is never overwritten.
+	 */
+	private async generateTitle(session: IMutableSession, query: string): Promise<void> {
+		if (!this.agent?.generateTitle) {
+			return;
+		}
+		try {
+			const modelId = this.modelsService?.selectedModel.get()?.id;
+			const title = await this.agent.generateTitle(query, modelId);
+			if (!title || title === query || session.title.get() !== query || !this.sessions.includes(session)) {
+				return;
+			}
+			session.title.set(title);
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+			await this.enqueueWrite(() => this.bridge.append(this.getRef(session.sessionId), { type: 'state', timestamp: new Date().toISOString(), title }));
+		} catch (error) {
+			console.warn(`Title generation failed for ${session.sessionId}:`, error);
+		}
 	}
 
 	async sendMessage(sessionId: string, query: string): Promise<ISession> {

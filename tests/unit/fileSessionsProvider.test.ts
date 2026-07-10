@@ -617,3 +617,86 @@ test('toTranscript drops empty and non-conversational messages (400 guard)', () 
 	// No message with empty content survives — that is exactly what the API rejects.
 	assert.ok(transcript.every(m => (m.content[0] as { text: string }).text.trim() !== ''));
 });
+
+/** Agent stub whose run completes immediately; generateTitle is supplied per test. */
+function createTitleAgent(generateTitle: (query: string, modelId?: string) => Promise<string | undefined>): IAgentBridge {
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	return {
+		run: async sessionId => {
+			listener?.({ sessionId, event: { type: 'assistant_delta', text: 'ok' } } as never);
+			listener?.({ sessionId, done: { reason: 'completed', turns: 1 } } as never);
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle,
+	};
+}
+
+const titleModelsService = {
+	registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+	selectedModel: { get: () => ({ id: 'model-1' }) },
+} as never;
+
+test('a generated title replaces the first-message placeholder and is persisted', async () => {
+	const bridge = createFakeBridge();
+	// A tick of latency so the placeholder is observable before the title lands.
+	const agent = createTitleAgent(async () => {
+		await new Promise(resolve => setTimeout(resolve, 5));
+		return '项目结构梳理';
+	});
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('梳理下当前项目，重点是模块之间的依赖');
+	assert.equal(session.title.get(), '梳理下当前项目，重点是模块之间的依赖', 'the placeholder is the verbatim first message');
+
+	await new Promise(resolve => setTimeout(resolve, 10));
+	assert.equal(session.title.get(), '项目结构梳理', 'the generated title lands on the session');
+
+	const titles = bridge.appends.filter(call => call.entry.type === 'state').flatMap(call => ('title' in call.entry && call.entry.title !== undefined ? [call.entry.title] : []));
+	assert.equal(titles.at(-1), '项目结构梳理', 'the new title is persisted as the last title-bearing state entry');
+});
+
+test('a failed title call keeps the placeholder silently', async (t) => {
+	const warnSpy = t.mock.method(console, 'warn', () => undefined);
+	const bridge = createFakeBridge();
+	const agent = createTitleAgent(async () => {
+		throw new Error('provider down');
+	});
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('do something');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	assert.equal(session.title.get(), 'do something', 'the placeholder survives the failure');
+	assert.ok(warnSpy.mock.callCount() >= 1, 'the failure is logged, not thrown');
+	const titleAppends = bridge.appends.filter(call => call.entry.type === 'state' && 'title' in call.entry && call.entry.title !== undefined);
+	assert.equal(titleAppends.length, 1, 'only the creation-time title entry exists');
+});
+
+test('a title that arrives after the user renamed the session does not overwrite it', async () => {
+	let resolveTitle!: (title: string | undefined) => void;
+	const bridge = createFakeBridge();
+	const agent = createTitleAgent(() => new Promise(resolve => {
+		resolveTitle = resolve;
+	}));
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('do something');
+	// Simulate a rename racing the title call: the title observable moves off the placeholder.
+	(session.title as unknown as { set(value: string): void }).set('my custom name');
+	resolveTitle('generated title');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	assert.equal(session.title.get(), 'my custom name', 'a non-placeholder title is never overwritten');
+});

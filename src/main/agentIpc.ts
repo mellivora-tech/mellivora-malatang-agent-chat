@@ -13,6 +13,7 @@ import { asPermissionMode, createGateForMode, describeToolCall, type PermissionM
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createModelClient } from './agent/createModelClient.js';
+import { generateSessionTitle } from './agent/sessionTitle.js';
 import { getProject } from './projectsStorage.js';
 import { resolveModelConfig } from './modelConfigStorage.js';
 
@@ -53,6 +54,15 @@ interface IApprovalResponsePayload {
 	readonly requestId: string;
 	readonly approved: boolean;
 }
+
+interface IAgentTitlePayload {
+	readonly query: string;
+	readonly modelId?: string;
+}
+
+// A title is a handful of tokens; the budget only needs to absorb a chatty model.
+const TITLE_MAX_TOKENS = 256;
+const TITLE_TIMEOUT_MS = 20_000;
 
 /**
  * Drives the agent loop in the main process and streams its events to the
@@ -175,6 +185,24 @@ export function registerAgentIpc(dataRoot: string): void {
 			abortControllers.delete(payload.sessionId);
 			settleApprovals(payload.sessionId);
 			agentLog.flush();
+		}
+	});
+
+	// One-shot title generation — a plain model call, not an agent run: no tools,
+	// thinking off, tiny budget. Failures reject; the renderer keeps its placeholder.
+	ipcMain.handle('agent:title', async (_event, payload: IAgentTitlePayload): Promise<string | undefined> => {
+		const config = await resolveModelConfig(dataRoot, payload.modelId ?? '');
+		if (!config) {
+			return undefined;
+		}
+
+		const client = createModelClient({ ...config, params: { maxTokens: TITLE_MAX_TOKENS } });
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), TITLE_TIMEOUT_MS);
+		try {
+			return await generateSessionTitle(client, payload.query, controller.signal);
+		} finally {
+			clearTimeout(timeout);
 		}
 	});
 

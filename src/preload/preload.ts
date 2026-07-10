@@ -62,6 +62,7 @@ const agent: IAgentBridge = {
 	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode) =>
 		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode }),
 	stop: (sessionId: string) => ipcRenderer.invoke('agent:stop', sessionId),
+	generateTitle: (query: string, modelId?: string) => ipcRenderer.invoke('agent:title', { query, modelId }),
 	onEvent: (listener: (payload: IAgentEventPayload) => void) => {
 		const handler = (_event: unknown, payload: IAgentEventPayload): void => listener(payload);
 		ipcRenderer.on('agent:event', handler);
