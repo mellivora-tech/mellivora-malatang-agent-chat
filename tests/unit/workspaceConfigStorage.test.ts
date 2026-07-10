@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { effectiveAccess, isReadOnlyForced, type IWorkspaceConfig } from '../../src/sessions/services/environments/common/environments.js';
-import { normalizeConfig, readWorkspaceConfig, workspaceConfigPath, writeWorkspaceConfig } from '../../src/main/workspaceConfigStorage.js';
+import { normalizeConfig, readWorkspaceConfig, removeDataSource, removeEnvironment, upsertDataSource, upsertEnvironment, workspaceConfigPath, writeWorkspaceConfig } from '../../src/main/workspaceConfigStorage.js';
 
 async function tempWorkspace(): Promise<string> {
 	return mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
@@ -75,4 +75,38 @@ test('read-only is forced for target (prod) environments regardless of stored ac
 	assert.equal(isReadOnlyForced('baseline'), false);
 	assert.equal(effectiveAccess('read-write', 'target'), 'read-only', 'prod write intent is overridden to read-only');
 	assert.equal(effectiveAccess('read-write', 'baseline'), 'read-write');
+});
+
+test('upsertEnvironment creates then updates by id', () => {
+	const created = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', role: 'baseline' });
+	assert.match(created.id, /^env-/);
+	assert.equal(created.config.environments.length, 1);
+	const updated = upsertEnvironment(created.config, { id: created.id, name: 'dev2', role: 'other' });
+	assert.equal(updated.config.environments.length, 1, 'same id updates in place');
+	assert.equal(updated.config.environments[0]!.name, 'dev2');
+});
+
+test('upsertDataSource rejects an unknown environment', () => {
+	assert.throws(
+		() => upsertDataSource({ version: 1, environments: [], dataSources: [] }, { environmentId: 'nope', label: 'x', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } }),
+		/Unknown environment/,
+	);
+});
+
+test('removeEnvironment cascades to its data sources', () => {
+	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', role: 'baseline' });
+	const envId = cfg.id;
+	const ds = upsertDataSource(cfg.config, { environmentId: envId, label: '库', access: 'read-only', coordinates: { driver: 'postgres', host: 'h', port: 5432, database: 'd' } });
+	assert.equal(ds.config.dataSources.length, 1);
+	const after = removeEnvironment(ds.config, envId);
+	assert.equal(after.environments.length, 0);
+	assert.equal(after.dataSources.length, 0, 'data sources of a removed environment are dropped');
+});
+
+test('removeDataSource removes only the target', () => {
+	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', role: 'baseline' });
+	const a = upsertDataSource(cfg.config, { environmentId: cfg.id, label: 'a', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
+	const b = upsertDataSource(a.config, { environmentId: cfg.id, label: 'b', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
+	const after = removeDataSource(b.config, a.id);
+	assert.deepEqual(after.dataSources.map(d => d.id), [b.id]);
 });

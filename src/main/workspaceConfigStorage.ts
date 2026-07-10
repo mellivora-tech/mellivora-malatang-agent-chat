@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
@@ -12,7 +13,9 @@ import {
 	type EnvironmentRole,
 	type IDatabaseCoordinates,
 	type IDataSource,
+	type IDataSourceInput,
 	type IEnvironment,
+	type IEnvironmentInput,
 	type IWorkspaceConfig,
 } from '../sessions/services/environments/common/environments.js';
 
@@ -117,6 +120,45 @@ function parseDatabaseCoordinates(value: unknown): IDatabaseCoordinates | undefi
 
 function asRole(value: unknown): EnvironmentRole {
 	return value === 'baseline' || value === 'target' || value === 'other' ? value : 'other';
+}
+
+// --- Pure mutators (unit-tested; IPC = read → mutate → write) --------------------
+
+/** Insert or update an environment; a new one gets a fresh id. Returns [config, id]. */
+export function upsertEnvironment(config: IWorkspaceConfig, input: IEnvironmentInput): { readonly config: IWorkspaceConfig; readonly id: string } {
+	const id = input.id ?? `env-${randomUUID().slice(0, 8)}`;
+	const entry: IEnvironment = { id, name: input.name.trim() || 'environment', role: input.role };
+	const exists = config.environments.some(environment => environment.id === id);
+	const environments = exists ? config.environments.map(environment => (environment.id === id ? entry : environment)) : [...config.environments, entry];
+	return { config: normalizeConfig({ ...config, environments }), id };
+}
+
+/** Remove an environment and (via normalizeConfig) any data sources orphaned by it. */
+export function removeEnvironment(config: IWorkspaceConfig, environmentId: string): IWorkspaceConfig {
+	return normalizeConfig({ ...config, environments: config.environments.filter(environment => environment.id !== environmentId) });
+}
+
+/** Insert or update a database data source; a new one gets a fresh id. Returns [config, id]. Throws if the target environment is unknown. */
+export function upsertDataSource(config: IWorkspaceConfig, input: IDataSourceInput): { readonly config: IWorkspaceConfig; readonly id: string } {
+	if (!config.environments.some(environment => environment.id === input.environmentId)) {
+		throw new Error(`Unknown environment: ${input.environmentId}`);
+	}
+	const id = input.id ?? `ds-${randomUUID().slice(0, 8)}`;
+	const entry: IDataSource = {
+		id,
+		environmentId: input.environmentId,
+		kind: 'database',
+		label: input.label.trim() || 'data source',
+		access: input.access === 'read-write' ? 'read-write' : 'read-only',
+		coordinates: input.coordinates,
+	};
+	const exists = config.dataSources.some(dataSource => dataSource.id === id);
+	const dataSources = exists ? config.dataSources.map(dataSource => (dataSource.id === id ? entry : dataSource)) : [...config.dataSources, entry];
+	return { config: normalizeConfig({ ...config, dataSources }), id };
+}
+
+export function removeDataSource(config: IWorkspaceConfig, dataSourceId: string): IWorkspaceConfig {
+	return normalizeConfig({ ...config, dataSources: config.dataSources.filter(dataSource => dataSource.id !== dataSourceId) });
 }
 
 // Re-export for callers building configs (kept here so the storage module is the one import site).

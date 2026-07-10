@@ -108,7 +108,29 @@ async function readProject(root: string, id: string): Promise<IProject | undefin
 		return undefined;
 	}
 
-	return { id: parsed.id, name: parsed.name, path: parsed.path, createdAt: parsed.createdAt };
+	const candidate = parsed as IProject & Record<string, unknown>;
+	// Only surface the new fields when the file actually carries them. Legacy
+	// single-folder projects stay byte-identical (path is the implicit workspace);
+	// consumers fall back with `workspacePath ?? path` (see projectCodeRoots).
+	const workspacePath = typeof candidate.workspacePath === 'string' && candidate.workspacePath.length > 0 ? candidate.workspacePath : undefined;
+	const codeRoots = Array.isArray(candidate.codeRoots) ? candidate.codeRoots.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0) : undefined;
+	return {
+		id: parsed.id,
+		name: parsed.name,
+		path: parsed.path,
+		createdAt: parsed.createdAt,
+		...(workspacePath ? { workspacePath } : {}),
+		...(codeRoots && codeRoots.length > 0 ? { codeRoots } : {}),
+	};
+}
+
+/** The paths the agent's file tools should scope to: explicit codeRoots, or the workspace/path as the implicit single root. */
+export function projectCodeRoots(project: IProject): readonly string[] {
+	if (project.codeRoots && project.codeRoots.length > 0) {
+		return project.codeRoots;
+	}
+	const fallback = project.workspacePath ?? project.path;
+	return fallback ? [fallback] : [];
 }
 
 function isProject(value: unknown): value is IProject {

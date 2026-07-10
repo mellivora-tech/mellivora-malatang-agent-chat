@@ -76,6 +76,43 @@ export interface IDataSourceView extends IDataSource {
 	readonly hasCredential: boolean;
 }
 
+/** The redacted project config the renderer sees (data sources carry hasCredential, never secrets). */
+export interface IWorkspaceConfigView {
+	readonly environments: readonly IEnvironment[];
+	readonly dataSources: readonly IDataSourceView[];
+}
+
+/** Upsert payload for an environment; absent id ⇒ create. */
+export interface IEnvironmentInput {
+	readonly id?: string;
+	readonly name: string;
+	readonly role: EnvironmentRole;
+}
+
+/** Upsert payload for a data source (kind fixed to 'database' in the MVP); absent id ⇒ create. Credentials go via {@link IDataSourceSecret}, never here. */
+export interface IDataSourceInput {
+	readonly id?: string;
+	readonly environmentId: string;
+	readonly label: string;
+	readonly access: DataSourceAccess;
+	readonly coordinates: IDatabaseCoordinates;
+}
+
+/**
+ * The shape exposed on `agentWindow.environments` by the preload script. All
+ * calls are scoped by projectId (the main process resolves its workspacePath).
+ * Returns redacted views; secrets only travel renderer→main via setDataSourceCredential.
+ */
+export interface IEnvironmentsBridge {
+	get(projectId: string): Promise<IWorkspaceConfigView>;
+	upsertEnvironment(projectId: string, input: IEnvironmentInput): Promise<IWorkspaceConfigView>;
+	removeEnvironment(projectId: string, environmentId: string): Promise<IWorkspaceConfigView>;
+	upsertDataSource(projectId: string, input: IDataSourceInput): Promise<IWorkspaceConfigView>;
+	removeDataSource(projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView>;
+	/** Set or clear (all-empty ⇒ clear) a data source's credential. Returns the refreshed view (hasCredential updated). */
+	setDataSourceCredential(projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView>;
+}
+
 /**
  * Target/prod is read-only, no exceptions from the renderer: a write there must
  * be a deliberate, separately-gated action. 'other'/baseline may allow writes.

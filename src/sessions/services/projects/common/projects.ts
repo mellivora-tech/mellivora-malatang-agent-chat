@@ -6,8 +6,13 @@
 export interface IProject {
 	readonly id: string;
 	readonly name: string;
+	/** Legacy single folder — retained as the back-compat alias of {@link workspacePath}; existing consumers still read it. */
 	readonly path: string;
 	readonly createdAt: string;
+	/** The project's home dir: holds the workspace config (.mellivora/) and may hold code. Defaults to {@link path} for projects created before the system-project model. */
+	readonly workspacePath?: string;
+	/** Code locations the agent's file tools operate on; each may be inside the workspace or an external absolute path. Empty ⇒ fall back to the workspace/path. */
+	readonly codeRoots?: readonly string[];
 }
 
 export interface IProjectInput {

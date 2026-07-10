@@ -18,6 +18,7 @@ import type { IGitBridge } from '../sessions/services/git/common/git.js';
 import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
+import type { IDataSourceInput, IDataSourceSecret, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['AGENT_CHAT_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -62,6 +63,15 @@ const skills: ISkillsBridge = {
 	delete: (id: string) => ipcRenderer.invoke('skills:delete', id),
 };
 
+const environments: IEnvironmentsBridge = {
+	get: (projectId: string) => ipcRenderer.invoke('environments:get', projectId),
+	upsertEnvironment: (projectId: string, input: IEnvironmentInput) => ipcRenderer.invoke('environments:upsertEnvironment', projectId, input),
+	removeEnvironment: (projectId: string, environmentId: string) => ipcRenderer.invoke('environments:removeEnvironment', projectId, environmentId),
+	upsertDataSource: (projectId: string, input: IDataSourceInput) => ipcRenderer.invoke('environments:upsertDataSource', projectId, input),
+	removeDataSource: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:removeDataSource', projectId, dataSourceId),
+	setDataSourceCredential: (projectId: string, dataSourceId: string, secret: IDataSourceSecret) => ipcRenderer.invoke('environments:setDataSourceCredential', projectId, dataSourceId, secret),
+};
+
 const git: IGitBridge = {
 	branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId),
 	checkout: (projectId: string, branch: string) => ipcRenderer.invoke('git:checkout', projectId, branch),
@@ -95,5 +105,6 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	agent,
 	git,
 	skills,
+	environments,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });
