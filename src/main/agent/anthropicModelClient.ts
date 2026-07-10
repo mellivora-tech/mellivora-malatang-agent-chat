@@ -34,7 +34,14 @@ interface IAnthropicStreamEvent {
 	readonly type: string;
 	readonly index?: number;
 	readonly content_block?: IAnthropicContentBlock;
-	readonly delta?: { readonly type?: string; readonly text?: string; readonly thinking?: string; readonly partial_json?: string; readonly stop_reason?: string };
+	readonly delta?: {
+		readonly type?: string;
+		readonly text?: string;
+		readonly thinking?: string;
+		readonly partial_json?: string;
+		readonly signature?: string;
+		readonly stop_reason?: string;
+	};
 	/** message_start carries the prompt's usage; message_delta updates output_tokens as it grows. */
 	readonly message?: { readonly usage?: IAnthropicUsage };
 	readonly usage?: IAnthropicUsage;
@@ -43,7 +50,8 @@ interface IAnthropicStreamEvent {
 type AnthropicWireBlock =
 	| { readonly type: 'text'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly id: string; readonly name: string; readonly input: unknown }
-	| { readonly type: 'tool_result'; readonly tool_use_id: string; readonly content: string; readonly is_error: boolean };
+	| { readonly type: 'tool_result'; readonly tool_use_id: string; readonly content: string; readonly is_error: boolean }
+	| { readonly type: 'thinking'; readonly thinking: string; readonly signature?: string };
 
 interface IAnthropicMessage {
 	readonly role: 'user' | 'assistant';
@@ -61,6 +69,11 @@ export function toAnthropicMessages(messages: readonly IAgentMessage[]): IAnthro
 			}
 			if (block.type === 'tool_use') {
 				return { type: 'tool_use', id: block.id, name: block.name, input: block.input };
+			}
+			if (block.type === 'thinking') {
+				// Passed back verbatim (signature included) — required by the API in
+				// tool-use loops whenever extended thinking is enabled.
+				return { type: 'thinking', thinking: block.thinking, ...(block.signature !== undefined ? { signature: block.signature } : {}) };
 			}
 			return { type: 'tool_result', tool_use_id: block.toolUseId, content: block.content, is_error: block.isError };
 		}),
@@ -87,6 +100,7 @@ export function buildAnthropicRequestBody(config: IModelClientConfig, request: I
 /** Folds Anthropic stream events into text deltas (now) and tool_use blocks (at the end). */
 export class AnthropicStreamAccumulator {
 	private readonly blocks = new Map<number, { id: string; name: string; json: string }>();
+	private readonly thinking = new Map<number, { text: string; signature?: string }>();
 	private readonly order: number[] = [];
 	private stopReason: string | undefined;
 	private inputTokens: number | undefined;
@@ -113,12 +127,30 @@ export class AnthropicStreamAccumulator {
 			return [];
 		}
 
+		if (wire.type === 'content_block_start' && wire.content_block?.type === 'thinking') {
+			this.thinking.set(index, { text: '' });
+			this.order.push(index);
+			return [];
+		}
+
 		if (wire.type === 'content_block_delta') {
 			if (wire.delta?.type === 'text_delta' && typeof wire.delta.text === 'string' && wire.delta.text.length > 0) {
 				return [{ type: 'text_delta', text: wire.delta.text }];
 			}
 			if (wire.delta?.type === 'thinking_delta' && typeof wire.delta.thinking === 'string' && wire.delta.thinking.length > 0) {
+				// The block accumulates for the transcript; the delta streams to the UI.
+				const block = this.thinking.get(index);
+				if (block) {
+					block.text += wire.delta.thinking;
+				}
 				return [{ type: 'thinking_delta', text: wire.delta.thinking }];
+			}
+			if (wire.delta?.type === 'signature_delta' && typeof wire.delta.signature === 'string') {
+				const block = this.thinking.get(index);
+				if (block) {
+					block.signature = (block.signature ?? '') + wire.delta.signature;
+				}
+				return [];
 			}
 			if (wire.delta?.type === 'input_json_delta' && typeof wire.delta.partial_json === 'string') {
 				const block = this.blocks.get(index);
@@ -144,7 +176,14 @@ export class AnthropicStreamAccumulator {
 
 	finish(): IModelStreamEvent[] {
 		const events: IModelStreamEvent[] = [];
+		// Stream order preserved across kinds so the transcript can replay the
+		// blocks exactly as the model produced them.
 		for (const index of this.order) {
+			const thought = this.thinking.get(index);
+			if (thought && thought.text.length > 0) {
+				events.push({ type: 'thinking_block', block: { type: 'thinking', thinking: thought.text, ...(thought.signature !== undefined ? { signature: thought.signature } : {}) } });
+				continue;
+			}
 			const block = this.blocks.get(index);
 			if (block) {
 				events.push({ type: 'tool_use', block: { type: 'tool_use', id: block.id, name: block.name, input: safeJsonParse(block.json) } });
@@ -162,7 +201,9 @@ export class AnthropicStreamAccumulator {
 	}
 
 	private mapStop(): ModelStopReason {
-		if (this.order.length > 0 || this.stopReason === 'tool_use') {
+		// `order` interleaves thinking and tool blocks — only actual tool calls
+		// make this a tool_use stop (a thinking-only turn is a normal end_turn).
+		if (this.blocks.size > 0 || this.stopReason === 'tool_use') {
 			return 'tool_use';
 		}
 		if (this.stopReason === 'max_tokens') {

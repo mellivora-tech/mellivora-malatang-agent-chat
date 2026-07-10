@@ -434,6 +434,46 @@ test('tool prune: old outputs age out of the request view while history and even
 	}
 });
 
+test('thinking blocks are preserved in the transcript and passed back on the next request', async () => {
+	delete process.env['AGENT_CHAT_TOOL_PRUNE'];
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		const requests: IModelRequest[] = [];
+		let call = 0;
+		const client = {
+			async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+				requests.push(request);
+				call += 1;
+				if (call === 1) {
+					yield { type: 'thinking_delta', text: 'reasoning…' };
+					yield { type: 'thinking_block', block: { type: 'thinking', thinking: 'reasoning…', signature: 'sig-77' } };
+					yield { type: 'tool_use', block: { type: 'tool_use', id: 't1', name: 'echo', input: { text: 'hi' } } };
+					yield { type: 'message_stop', stopReason: 'tool_use' };
+				} else {
+					yield { type: 'text_delta', text: 'done' };
+					yield { type: 'message_stop', stopReason: 'end_turn' };
+				}
+			},
+		};
+
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('go')], { system: 's', tools: [echoTool], modelClient: client as never, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(terminal.reason, 'completed');
+
+		// The second request's assistant message leads with the signed thinking block.
+		const assistant = requests[1]!.messages.find(message => message.role === 'assistant');
+		assert.ok(assistant);
+		assert.deepEqual(assistant.content[0], { type: 'thinking', thinking: 'reasoning…', signature: 'sig-77' });
+		assert.equal(assistant.content[1]?.type, 'tool_use', 'canonical order: thinking before tool_use');
+
+		// UI stream unchanged: deltas flowed, but no new renderer-facing event kind.
+		assert.ok(events.some(event => event.type === 'thinking_delta'));
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
 test('non-retryable stream errors surface immediately', async () => {
 	const failingClient = {
 		// eslint-disable-next-line require-yield

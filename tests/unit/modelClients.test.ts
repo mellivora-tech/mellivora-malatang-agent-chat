@@ -156,6 +156,67 @@ test('Anthropic accumulator streams text and folds input_json_delta into one too
 	assert.equal(usage.outputTokens, 12);
 });
 
+test('Anthropic accumulator preserves thinking blocks with their signatures', () => {
+	const events = runAnthropic([
+		{ type: 'message_start' },
+		{ type: 'content_block_start', index: 0, content_block: { type: 'thinking' } },
+		{ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'let me ' } },
+		{ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'reason' } },
+		{ type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig-abc' } },
+		{ type: 'content_block_stop', index: 0 },
+		{ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'toolu_9', name: 'echo' } },
+		{ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{}' } },
+		{ type: 'content_block_stop', index: 1 },
+		{ type: 'message_delta', delta: { stop_reason: 'tool_use' } },
+		{ type: 'message_stop' },
+	]);
+
+	const thinkingBlock = events.find((event): event is Extract<IModelStreamEvent, { type: 'thinking_block' }> => event.type === 'thinking_block');
+	assert.ok(thinkingBlock, 'a complete thinking block is emitted');
+	assert.equal(thinkingBlock.block.thinking, 'let me reason');
+	assert.equal(thinkingBlock.block.signature, 'sig-abc');
+	// The block precedes the tool_use, mirroring stream order.
+	assert.ok(events.findIndex(e => e.type === 'thinking_block') < events.findIndex(e => e.type === 'tool_use'));
+	// UI streaming still gets the deltas.
+	assert.equal(events.filter(e => e.type === 'thinking_delta').length, 2);
+});
+
+test('a thinking-only turn is an end_turn, not a tool_use stop', () => {
+	const events = runAnthropic([
+		{ type: 'message_start' },
+		{ type: 'content_block_start', index: 0, content_block: { type: 'thinking' } },
+		{ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'hmm' } },
+		{ type: 'content_block_start', index: 1, content_block: { type: 'text' } },
+		{ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'answer' } },
+		{ type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+		{ type: 'message_stop' },
+	]);
+	assert.equal(stopReason(events), 'end_turn');
+});
+
+test('toAnthropicMessages passes thinking blocks back verbatim; toOpenAIMessages drops them', () => {
+	const withThinking: readonly IAgentMessage[] = [
+		{ role: 'user', content: [{ type: 'text', text: 'q' }] },
+		{
+			role: 'assistant',
+			content: [
+				{ type: 'thinking', thinking: 'private reasoning', signature: 'sig-1' },
+				{ type: 'tool_use', id: 't1', name: 'echo', input: {} },
+			],
+		},
+	];
+
+	const anthropic = toAnthropicMessages(withThinking);
+	assert.deepEqual(anthropic[1]?.content[0], { type: 'thinking', thinking: 'private reasoning', signature: 'sig-1' });
+
+	// A signature-less block (some compatible providers omit it) round-trips without the field.
+	const noSig = toAnthropicMessages([{ role: 'assistant', content: [{ type: 'thinking', thinking: 'x' }] }]);
+	assert.deepEqual(noSig[0]?.content[0], { type: 'thinking', thinking: 'x' });
+
+	const openai = toOpenAIMessages('SYS', withThinking);
+	assert.equal(JSON.stringify(openai).includes('private reasoning'), false, 'OpenAI wire has no thinking concept');
+});
+
 test('Anthropic accumulator omits usage when message_start carries none', () => {
 	const events = runAnthropic([{ type: 'message_start' }, { type: 'message_delta', delta: { stop_reason: 'end_turn' } }, { type: 'message_stop' }]);
 	assert.equal(findUsage(events), undefined, 'no input_tokens → no usage event, renderer falls back to its estimate');

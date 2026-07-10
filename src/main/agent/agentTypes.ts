@@ -37,7 +37,21 @@ export interface IToolResultBlock {
 	readonly isError: boolean;
 }
 
-export type IContentBlock = ITextBlock | IToolUseBlock | IToolResultBlock;
+/**
+ * An extended-thinking block, preserved verbatim (with its signature) so it can
+ * be passed back in tool-use loops — the Anthropic API requires this whenever
+ * thinking is enabled; dropping the blocks 400s against real Claude models and
+ * measurably shallows Kimi's final syntheses. Signature is optional because
+ * some Anthropic-compatible providers omit it. (`redacted_thinking` is a known
+ * remaining gap — rare, safety-triggered, not emitted by Kimi.)
+ */
+export interface IThinkingBlock {
+	readonly type: 'thinking';
+	readonly thinking: string;
+	readonly signature?: string;
+}
+
+export type IContentBlock = ITextBlock | IToolUseBlock | IToolResultBlock | IThinkingBlock;
 
 export interface IAgentMessage {
 	readonly role: 'user' | 'assistant';
@@ -55,6 +69,8 @@ export type IModelStreamEvent =
 	| { readonly type: 'text_delta'; readonly text: string }
 	| { readonly type: 'thinking_delta'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly block: IToolUseBlock }
+	/** A complete thinking block (text + signature), emitted at stream end so the loop can preserve it in the transcript. UI streaming stays on thinking_delta. */
+	| { readonly type: 'thinking_block'; readonly block: IThinkingBlock }
 	/** The provider's own token count for this turn — ground truth for context-window occupancy. */
 	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number }
 	| { readonly type: 'message_stop'; readonly stopReason: ModelStopReason };

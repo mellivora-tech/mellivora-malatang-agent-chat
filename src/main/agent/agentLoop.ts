@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IToolUseBlock, ModelStopReason } from './agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IThinkingBlock, IToolUseBlock, ModelStopReason } from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
@@ -142,11 +142,13 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// would duplicate output, so those errors surface instead).
 		let assistantText: string;
 		let toolUses: IToolUseBlock[];
+		let thinkingBlocks: IThinkingBlock[];
 		let stopReason: ModelStopReason;
 
 		for (let attempt = 1; ; attempt++) {
 			assistantText = '';
 			toolUses = [];
+			thinkingBlocks = [];
 			stopReason = 'end_turn';
 			try {
 				for await (const event of config.modelClient.stream(request)) {
@@ -161,6 +163,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 							break;
 						case 'thinking_delta':
 							yield { type: 'thinking_delta', text: event.text };
+							break;
+						case 'thinking_block':
+							thinkingBlocks.push(event.block);
 							break;
 						case 'tool_use':
 							toolUses.push(event.block);
@@ -187,7 +192,10 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 			}
 		}
 
-		const assistantBlocks: IContentBlock[] = [];
+		// Canonical Anthropic layout: thinking first, then text, then tool_use.
+		// Preserving the thinking blocks (with signatures) is required by the API
+		// whenever extended thinking is enabled with tool use.
+		const assistantBlocks: IContentBlock[] = [...thinkingBlocks];
 		if (assistantText.length > 0) {
 			assistantBlocks.push({ type: 'text', text: assistantText });
 			yield { type: 'assistant_message', text: assistantText };
