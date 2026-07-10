@@ -157,7 +157,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 						});
 						compacted = { boundary, summary };
 						yield { type: 'compaction', trigger, beforeTokens, boundaryIndex: boundary, summaryChars: summary.length, outcome: 'ok', summary };
-					} catch (error) {
+					} catch {
 						if (signal.aborted) {
 							return { reason: 'aborted', turns: turn };
 						}
