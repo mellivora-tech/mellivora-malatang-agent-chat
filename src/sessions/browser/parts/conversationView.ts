@@ -940,7 +940,13 @@ export class ConversationView extends Disposable {
 		this.contextRing.hidden = false;
 		this.contextRing.dataset.level = ratio >= 0.95 ? 'danger' : ratio >= 0.8 ? 'warn' : 'ok';
 		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
-		value.textContent = `${usedPct}% used (${100 - usedPct}% left)`;
+		// `usage` never survives a restart (it lives only in the in-memory
+		// session, not the persisted snapshot) — until this process runs a
+		// fresh turn, this is the char/4 fallback wearing a real-looking number.
+		// The aria-label always said so; say it where sighted users can see it
+		// too, otherwise a plausible percentage with no breakdown below it
+		// reads as broken rather than as "no fresh data yet".
+		value.textContent = `${usedPct}% used (${100 - usedPct}% left)${usage ? '' : ' (estimated)'}`;
 		this.contextRing.setAttribute(
 			'aria-label',
 			`Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${usage ? '' : ' (estimated)'}`,
@@ -948,7 +954,9 @@ export class ConversationView extends Disposable {
 
 		// Per-category rows are always char/4 estimates (labeled so in the
 		// footnote); Free reuses the SAME `tokens` the ring itself is drawn from,
-		// so the header percentage and "how much is left" never disagree.
+		// so the header percentage and "how much is left" never disagree. No
+		// breakdown exists until a turn actually runs in THIS process — an
+		// `(estimated)` header with nothing below it is that state, not a bug.
 		breakdownList.replaceChildren();
 		const breakdown = usage?.breakdown;
 		if (breakdown) {
