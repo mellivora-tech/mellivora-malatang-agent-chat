@@ -179,7 +179,7 @@ test('a usage stream event forwards as an IAgentEvent for the renderer to read',
 });
 
 test('loop guard: the third identical consecutive call is blocked and fed back as an error result', async () => {
-	delete process.env['AGENT_CHAT_LOOP_GUARD'];
+	delete process.env['MELLIVORA_LOOP_GUARD'];
 	let executions = 0;
 	const countingTool = defineTool({
 		name: 'probe',
@@ -217,7 +217,7 @@ test('loop guard: the third identical consecutive call is blocked and fed back a
 });
 
 test('loop guard: three identical calls within a single batched turn — the third is blocked', async () => {
-	delete process.env['AGENT_CHAT_LOOP_GUARD'];
+	delete process.env['MELLIVORA_LOOP_GUARD'];
 	let executions = 0;
 	const countingTool = defineTool({
 		name: 'probe',
@@ -282,7 +282,7 @@ function sequenceClient(outputs: readonly string[]): { client: IModelRequestCapt
 type IModelRequestCapturingClient = { stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> };
 
 test('reply verifier: a failed judgment feeds back and grants exactly one retry', async () => {
-	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	// call1 = off-topic answer; call2 = judge says NO; call3 = retry answer.
 	// A 4th call would be a second judgment — the once-per-run cap forbids it.
 	const { client, requests } = sequenceClient(['The weather is nice today.', 'NO\ntalks about weather, not the question', 'The answer is 42.']);
@@ -313,7 +313,7 @@ test('reply verifier: a failed judgment feeds back and grants exactly one retry'
 });
 
 test('reply verifier: a passing judgment changes nothing', async () => {
-	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	const { client, requests } = sequenceClient(['42.', 'YES\ndirect answer']);
 
 	const { events, terminal } = await drive(
@@ -329,7 +329,7 @@ test('reply verifier: a passing judgment changes nothing', async () => {
 });
 
 test('reply verifier: an unparseable judge is fail-open — no retry', async () => {
-	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	const { client, requests } = sequenceClient(['some answer', 'MAYBE, who can say']);
 
 	const { events, terminal } = await drive(
@@ -343,8 +343,8 @@ test('reply verifier: an unparseable judge is fail-open — no retry', async () 
 	assert.equal(verifier?.retried, false);
 });
 
-test('reply verifier: AGENT_CHAT_REPLY_VERIFIER=off skips the judge entirely', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+test('reply verifier: MELLIVORA_REPLY_VERIFIER=off skips the judge entirely', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		const { client, requests } = sequenceClient(['some answer']);
 		const { events } = await drive(runAgentLoop([userMessage('question?')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate }));
@@ -354,12 +354,12 @@ test('reply verifier: AGENT_CHAT_REPLY_VERIFIER=off skips the judge entirely', a
 			false,
 		);
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('reply verifier: refusal and truncation terminals are never verified', async () => {
-	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	const refusing = {
 		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
 			yield { type: 'text_delta', text: 'cannot help with that' };
@@ -377,8 +377,8 @@ test('reply verifier: refusal and truncation terminals are never verified', asyn
 });
 
 test('tool prune: old outputs age out of the request view while history and events keep full text', async () => {
-	delete process.env['AGENT_CHAT_TOOL_PRUNE'];
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off'; // isolate: no judge call at the end
+	delete process.env['MELLIVORA_TOOL_PRUNE'];
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off'; // isolate: no judge call at the end
 	try {
 		const bigTool = defineTool({
 			name: 'probe',
@@ -438,13 +438,13 @@ test('tool prune: old outputs age out of the request view while history and even
 			'tool_result events always carry the full output',
 		);
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('thinking blocks are preserved in the transcript and passed back on the next request', async () => {
-	delete process.env['AGENT_CHAT_TOOL_PRUNE'];
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	delete process.env['MELLIVORA_TOOL_PRUNE'];
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		const requests: IModelRequest[] = [];
 		let call = 0;
@@ -478,7 +478,7 @@ test('thinking blocks are preserved in the transcript and passed back on the nex
 		// UI stream unchanged: deltas flowed, but no new renderer-facing event kind.
 		assert.ok(events.some(event => event.type === 'thinking_delta'));
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
@@ -604,7 +604,7 @@ function compactionEvents(events: readonly IAgentEvent[]): Extract<IAgentEvent, 
 }
 
 test('compaction: usage over threshold folds the head into an anchored summary, incrementally', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		// threshold = 100000 − 32000 − 16000 = 52000; usage crosses it on turn 1.
 		const { client, mainRequests, summaryRequests } = compactionAwareClient(
@@ -649,12 +649,12 @@ test('compaction: usage over threshold folds the head into an anchored summary, 
 		const final = mainRequests[3]!;
 		assert.match(text(final.messages[0]!), /- updated state/, 'view carries the updated anchor');
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('compaction: preflight folds an oversized initial transcript before the first request', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		const big = 'h'.repeat(120_000);
 		const initial: IAgentMessage[] = [
@@ -683,12 +683,12 @@ test('compaction: preflight folds an oversized initial transcript before the fir
 		assert.match(text(mainRequests[0]!.messages[0]!), /- from preflight/);
 		assert.equal(mainRequests[0]!.messages.length, 3, 'summary + last assistant + last user');
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('compaction: fail-open on summary errors, off without a window, off via kill switch', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		// Summary reply comes back empty → generateSummary throws → error outcome,
 		// and the request goes out uncompacted.
@@ -730,7 +730,7 @@ test('compaction: fail-open on summary errors, off without a window, off via kil
 		assert.equal(off.summaryRequests.length, 0);
 
 		// Kill switch.
-		process.env['AGENT_CHAT_COMPACTION'] = 'off';
+		process.env['MELLIVORA_COMPACTION'] = 'off';
 		try {
 			const killed = compactionAwareClient([60_000, 80_000], []);
 			const killedRun = await drive(
@@ -745,15 +745,15 @@ test('compaction: fail-open on summary errors, off without a window, off via kil
 			assert.equal(compactionEvents(killedRun.events).length, 0);
 			assert.equal(killed.summaryRequests.length, 0);
 		} finally {
-			delete process.env['AGENT_CHAT_COMPACTION'];
+			delete process.env['MELLIVORA_COMPACTION'];
 		}
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('compaction: a restored anchor pre-seeds the view with ZERO summary calls, then updates incrementally', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		// The covered assistant reply is bulky (15K) so that by turn 2 the 32K
 		// tail budget (20K tool result + this reply) forces the boundary PAST it.
@@ -796,12 +796,12 @@ test('compaction: a restored anchor pre-seeds the view with ZERO summary calls, 
 		assert.doesNotMatch(text(summaryRequests[0]!.messages[0]!), /old question/, 'already-covered history is not re-serialized');
 		assert.match(text(mainRequests[1]!.messages[0]!), /- topped up/, 'the view carries the updated anchor');
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('compaction trigger counts cache tokens — a cached prompt is still a full prompt', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		// input_tokens alone (4K) is far under the 52K threshold; with the 116K
 		// cache-read the true prompt is 120K — the trigger must fire.
@@ -836,7 +836,7 @@ test('compaction trigger counts cache tokens — a cached prompt is still a full
 		assert.ok(compaction, 'over-threshold cached prompt triggered a compaction attempt');
 		assert.equal(compaction.beforeTokens, 120_000, 'the trigger base sums input + cache');
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
@@ -849,7 +849,7 @@ function breakdownEvents(events: readonly IAgentEvent[]): Extract<IAgentEvent, {
 }
 
 test('context_breakdown: system segments come from config verbatim, tools/messages are measured from the actual view', async () => {
-	delete process.env['AGENT_CHAT_TOOL_PRUNE'];
+	delete process.env['MELLIVORA_TOOL_PRUNE'];
 	const model = createScriptedModelClient([{ emit: [{ type: 'text', text: 'hi' }] }]);
 
 	const { events, terminal } = await drive(
@@ -898,7 +898,7 @@ test('context_breakdown: a hard-brake turn reports zero tools, matching what is 
 });
 
 test('context_breakdown: compaction splits compactedChars out of messagesChars, and both survive prune', async () => {
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		const { client } = compactionAwareClient([60_000, 80_000, 100_000], ['## Objective\n- compacted state', '## Objective\n- updated state']);
 		const { events, terminal } = await drive(
@@ -921,13 +921,13 @@ test('context_breakdown: compaction splits compactedChars out of messagesChars, 
 		assert.ok(compactedTurn, 'a later turn reports a non-zero compacted block once compaction lands');
 		assert.ok(compactedTurn.messagesChars > 0, 'the verbatim tail is still counted separately');
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
 
 test('context_breakdown: prunedChars mirrors the tool_prune outcome for the same turn', async () => {
-	delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
-	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		const bigResultTool = defineTool({
 			name: 'big',
@@ -960,6 +960,6 @@ test('context_breakdown: prunedChars mirrors the tool_prune outcome for the same
 		const matchingBreakdown = breakdowns.find(event => event.prunedChars === lastPruneChars && lastPruneChars > 0);
 		assert.ok(matchingBreakdown, `expected a context_breakdown with prunedChars=${lastPruneChars}, got [${breakdowns.map(b => b.prunedChars).join(',')}]`);
 	} finally {
-		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });

@@ -11,8 +11,8 @@ import type { IProject, IProjectInput } from '../sessions/services/projects/comm
 export type { IProject, IProjectInput } from '../sessions/services/projects/common/projects.js';
 
 export function resolveDataRoot(env: NodeJS.ProcessEnv, homedir: string): string {
-	const override = env['AGENT_CHAT_DATA_DIR'];
-	return override ? override : join(homedir, '.agent-chat');
+	const override = env['MELLIVORA_DATA_DIR'];
+	return override ? override : join(homedir, '.mellivora');
 }
 
 export async function ensureProjectsRoot(root: string): Promise<void> {

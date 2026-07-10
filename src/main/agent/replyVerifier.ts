@@ -36,9 +36,9 @@ export interface IReplyVerification {
 	readonly reason: string;
 }
 
-/** Kill switch: AGENT_CHAT_REPLY_VERIFIER=off (same pattern as the loop guard). */
+/** Kill switch: MELLIVORA_REPLY_VERIFIER=off (same pattern as the loop guard). */
 export function isReplyVerifierEnabled(env: NodeJS.ProcessEnv): boolean {
-	return env['AGENT_CHAT_REPLY_VERIFIER'] !== 'off';
+	return env['MELLIVORA_REPLY_VERIFIER'] !== 'off';
 }
 
 /** One cheap, tool-less judge call through the same model client. */

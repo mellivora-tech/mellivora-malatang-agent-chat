@@ -41,9 +41,9 @@ export interface IPruneOutcome {
 	readonly prunedChars: number;
 }
 
-/** Kill switch: AGENT_CHAT_TOOL_PRUNE=off (same pattern as the other guards). */
+/** Kill switch: MELLIVORA_TOOL_PRUNE=off (same pattern as the other guards). */
 export function isToolPruneEnabled(env: NodeJS.ProcessEnv): boolean {
-	return env['AGENT_CHAT_TOOL_PRUNE'] !== 'off';
+	return env['MELLIVORA_TOOL_PRUNE'] !== 'off';
 }
 
 export function pruneToolOutputs(messages: readonly IAgentMessage[], options: IPruneOptions = {}): IPruneOutcome {

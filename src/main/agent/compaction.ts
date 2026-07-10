@@ -20,7 +20,7 @@ import type { IAgentMessage, ICompactionAnchor, IModelClient } from './agentType
  * the whole mechanism stays off — no guessing (opencode: unknown limit
  * disables overflow detection entirely).
  *
- * Kill switch: AGENT_CHAT_COMPACTION=off.
+ * Kill switch: MELLIVORA_COMPACTION=off.
  */
 
 /** Left free for the reply plus one turn of usage-signal lag (usage arrives one request behind). */
@@ -40,7 +40,7 @@ const MIN_HEAD_MESSAGES = 2;
 const CHARS_PER_TOKEN = 4;
 
 export function isCompactionEnabled(env: NodeJS.ProcessEnv): boolean {
-	return env['AGENT_CHAT_COMPACTION'] !== 'off';
+	return env['MELLIVORA_COMPACTION'] !== 'off';
 }
 
 /** Tokens at which compaction fires; <= 0 means the window is too small to govern. */

@@ -62,8 +62,8 @@ test('oversized instructions are truncated at 40K chars with a marker', async ()
 	assert.ok(instructions.text.length < 40_100);
 });
 
-test('kill switch: AGENT_CHAT_PROJECT_INSTRUCTIONS=off disables, anything else enables', () => {
-	assert.equal(isProjectInstructionsEnabled({ AGENT_CHAT_PROJECT_INSTRUCTIONS: 'off' }), false);
+test('kill switch: MELLIVORA_PROJECT_INSTRUCTIONS=off disables, anything else enables', () => {
+	assert.equal(isProjectInstructionsEnabled({ MELLIVORA_PROJECT_INSTRUCTIONS: 'off' }), false);
 	assert.equal(isProjectInstructionsEnabled({}), true);
 });
 

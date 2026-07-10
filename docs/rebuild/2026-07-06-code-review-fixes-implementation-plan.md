@@ -4,7 +4,7 @@
 
 **Goal:** Fix the 10 CONFIRMED correctness findings from the 2026-07-06 high-effort code review: permanently-stuck InProgress sessions blocking follow-up sends, inert Stop button, orphaned ChangesView/FilesView, missing macOS activate handler, message loss on failed sends, absurd mock timestamps, colliding session IDs, grid ignoring visibility state and minimum-width contracts, and Enter not submitting on the new-session landing.
 
-**Architecture:** The mock provider gains a real session lifecycle (InProgress → scheduled mock reply → NeedsInput, cancellable via a new `stopSession`), plumbed through `SessionsManagementService` → `SessionsService` → `ConversationView`. The reply delay is injectable via the `AGENT_CHAT_MOCK_DELAY_MS` env var (preload → `agentWindow` global) so Playwright can freeze or accelerate the lifecycle. The grid's existing-but-dead minimum-width machinery becomes the real layout path.
+**Architecture:** The mock provider gains a real session lifecycle (InProgress → scheduled mock reply → NeedsInput, cancellable via a new `stopSession`), plumbed through `SessionsManagementService` → `SessionsService` → `ConversationView`. The reply delay is injectable via the `MELLIVORA_MOCK_DELAY_MS` env var (preload → `agentWindow` global) so Playwright can freeze or accelerate the lifecycle. The grid's existing-but-dead minimum-width machinery becomes the real layout path.
 
 **Tech Stack:** Electron 42.5.0, TypeScript ESM (NodeNext), native DOM Part/View classes, `node:test` unit tests (run compiled from `dist/`), Playwright Electron e2e.
 
@@ -539,7 +539,7 @@ git commit -m "feat: plumb stopSession through provider, management, and session
 
 ### Task 3: Injectable mock reply delay (env → preload → workbench)
 
-Test hook required by Tasks 4-6 e2e: `AGENT_CHAT_MOCK_DELAY_MS=120000` freezes the running state; small values accelerate replies. No user-visible behavior change when unset.
+Test hook required by Tasks 4-6 e2e: `MELLIVORA_MOCK_DELAY_MS=120000` freezes the running state; small values accelerate replies. No user-visible behavior change when unset.
 
 **Files:**
 
@@ -549,14 +549,14 @@ Test hook required by Tasks 4-6 e2e: `AGENT_CHAT_MOCK_DELAY_MS=120000` freezes t
 **Interfaces:**
 
 - Consumes: `registerMockSessionsProvider(providersService, options)` from Task 1.
-- Produces: `window.agentWindow.mockResponseDelayMs?: number` global, honored at workbench startup. E2e tests set it via `electron.launch({ env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '...' } })`.
+- Produces: `window.agentWindow.mockResponseDelayMs?: number` global, honored at workbench startup. E2e tests set it via `electron.launch({ env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '...' } })`.
 
 - [ ] **Step 1: Expose the env var in preload**
 
 Replace the `exposeInMainWorld` call in `src/preload/preload.ts` with:
 
 ```ts
-const mockResponseDelayMs = Number.parseInt(process.env['AGENT_CHAT_MOCK_DELAY_MS'] ?? '', 10);
+const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
 contextBridge.exposeInMainWorld('agentWindow', {
 	platform: process.platform,
@@ -593,7 +593,7 @@ Expected: clean.
 
 ```bash
 git add src/preload/preload.ts src/sessions/browser/workbench.ts
-git commit -m "feat: allow overriding mock reply delay via AGENT_CHAT_MOCK_DELAY_MS"
+git commit -m "feat: allow overriding mock reply delay via MELLIVORA_MOCK_DELAY_MS"
 ```
 
 ---
@@ -624,7 +624,7 @@ For each test that afterwards fills `.new-session-input` and clicks/submits (at 
 ```ts
 app = await electron.launch({
 	args: ['dist/main/main.js'],
-	env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+	env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000' },
 });
 ```
 
@@ -644,7 +644,7 @@ test('conversation supports stop and follow-up turns', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500' },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '500' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -684,7 +684,7 @@ test('stop button ends the running state', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -882,7 +882,7 @@ test('enter starts a session from the new session landing', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000' },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000' },
 		});
 		const page = await app.firstWindow();
 		await page.setViewportSize({ width: 1600, height: 997 });

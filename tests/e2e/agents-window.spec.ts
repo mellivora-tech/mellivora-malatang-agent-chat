@@ -118,7 +118,7 @@ test('agents window shell renders at desktop sizes', async () => {
 		await writeSessionFixture(dataDir, COMPLETED_FIXTURE);
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -159,7 +159,7 @@ test('starting a conversation creates a running session shell', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000', MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -210,7 +210,7 @@ test('project picker threads the seeded project into a new session', async () =>
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000', MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -255,7 +255,7 @@ test('first launch creates the projects root and shows the empty picker state', 
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -285,7 +285,7 @@ test('sessions persist across app relaunch', async () => {
 	const launch = async () => {
 		const app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500', AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '500', MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -357,7 +357,7 @@ test('project sessions land under the project directory', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500', AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '500', MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -400,7 +400,7 @@ test('pin and archive survive an app relaunch', async () => {
 	const launch = async () => {
 		const app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -459,7 +459,7 @@ test('deleting a session removes its transcript', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -501,7 +501,7 @@ test('the active project is restored after relaunch', async () => {
 	const launch = async () => {
 		const app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('pageerror', error => rendererErrors.push(error.message));
@@ -549,7 +549,7 @@ test('enter starts a session from the new session landing', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000', MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -583,7 +583,7 @@ test('conversation supports stop and follow-up turns', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '500', AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '500', MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -627,7 +627,7 @@ test('stop button ends the running state', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000', MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -665,7 +665,7 @@ test('starting multiple conversations keeps a single active conversation page', 
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_MOCK_DELAY_MS: '120000', AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_MOCK_DELAY_MS: '120000', MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -711,7 +711,7 @@ test('historical conversation messages align by role', async () => {
 		await writeSessionFixture(dataDir, IN_PROGRESS_FIXTURE);
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -748,7 +748,7 @@ test('completed conversation shows read-only idle message state', async () => {
 		await writeSessionFixture(dataDir, COMPLETED_FIXTURE);
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: dataDir },
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -793,7 +793,7 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		page.on('console', message => {
@@ -826,7 +826,7 @@ test('model settings manage providers and their models', async () => {
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		await page.waitForSelector('.sessions-sidebar');
@@ -997,7 +997,7 @@ test('a configured model streams a real reply into the conversation', async () =
 	try {
 		app = await electron.launch({
 			args: ['dist/main/main.js'],
-			env: { ...process.env, AGENT_CHAT_DATA_DIR: await createDataDir() },
+			env: { ...process.env, MELLIVORA_DATA_DIR: await createDataDir() },
 		});
 		const page = await app.firstWindow();
 		await page.waitForSelector('.sessions-sidebar');

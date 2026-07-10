@@ -21,8 +21,8 @@ test('the profile allows writes only under the workspace and scratch dirs', () =
 	assert.doesNotMatch(profile, /\(subpath "\/etc"\)/);
 });
 
-test('sandboxedShellCommand can be disabled with AGENT_CHAT_BASH_SANDBOX=off', () => {
-	const off = sandboxedShellCommand('echo hi', '/repo', { AGENT_CHAT_BASH_SANDBOX: 'off' });
+test('sandboxedShellCommand can be disabled with MELLIVORA_BASH_SANDBOX=off', () => {
+	const off = sandboxedShellCommand('echo hi', '/repo', { MELLIVORA_BASH_SANDBOX: 'off' });
 	assert.equal(off.sandboxed, false);
 	assert.equal(off.file, '/bin/sh');
 	assert.deepEqual(off.args, ['-c', 'echo hi']);

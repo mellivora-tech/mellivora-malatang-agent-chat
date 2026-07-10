@@ -111,7 +111,7 @@ test('messages without tool results pass through untouched', () => {
 	assert.equal(outcome.prunedResults, 0);
 });
 
-test('kill switch: AGENT_CHAT_TOOL_PRUNE=off disables, anything else enables', () => {
-	assert.equal(isToolPruneEnabled({ AGENT_CHAT_TOOL_PRUNE: 'off' }), false);
+test('kill switch: MELLIVORA_TOOL_PRUNE=off disables, anything else enables', () => {
+	assert.equal(isToolPruneEnabled({ MELLIVORA_TOOL_PRUNE: 'off' }), false);
 	assert.equal(isToolPruneEnabled({}), true);
 });

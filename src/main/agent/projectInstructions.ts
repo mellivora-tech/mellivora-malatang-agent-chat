@@ -26,9 +26,9 @@ export interface IProjectInstructions {
 	readonly truncated: boolean;
 }
 
-/** Kill switch: AGENT_CHAT_PROJECT_INSTRUCTIONS=off (same pattern as the guards). */
+/** Kill switch: MELLIVORA_PROJECT_INSTRUCTIONS=off (same pattern as the guards). */
 export function isProjectInstructionsEnabled(env: NodeJS.ProcessEnv): boolean {
-	return env['AGENT_CHAT_PROJECT_INSTRUCTIONS'] !== 'off';
+	return env['MELLIVORA_PROJECT_INSTRUCTIONS'] !== 'off';
 }
 
 /** The first readable, non-empty candidate at the workspace root; undefined when none. */

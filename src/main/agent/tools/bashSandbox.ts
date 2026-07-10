@@ -55,11 +55,11 @@ export interface ISandboxedCommand {
 
 /**
  * Wrap a shell command in the OS sandbox when available. macOS uses
- * `sandbox-exec`; elsewhere (or when disabled via AGENT_CHAT_BASH_SANDBOX=off,
+ * `sandbox-exec`; elsewhere (or when disabled via MELLIVORA_BASH_SANDBOX=off,
  * or sandbox-exec is missing) it runs unsandboxed and reports so.
  */
 export function sandboxedShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv): ISandboxedCommand {
-	const disabled = env['AGENT_CHAT_BASH_SANDBOX'] === 'off';
+	const disabled = env['MELLIVORA_BASH_SANDBOX'] === 'off';
 	if (disabled || process.platform !== 'darwin' || !existsSync(SANDBOX_EXEC)) {
 		return { file: '/bin/sh', args: ['-c', command], sandboxed: false };
 	}

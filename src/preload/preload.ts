@@ -20,7 +20,7 @@ import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
 import type { IDataSourceInput, IDataSourceSecret, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
 
-const mockResponseDelayMs = Number.parseInt(process.env['AGENT_CHAT_MOCK_DELAY_MS'] ?? '', 10);
+const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
 const projects: IProjectsBridge = {
 	list: () => ipcRenderer.invoke('projects:list'),

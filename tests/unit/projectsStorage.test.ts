@@ -15,16 +15,16 @@ async function createTempRoot(): Promise<string> {
 	return mkdtemp(join(tmpdir(), 'agent-chat-projects-'));
 }
 
-test('resolveDataRoot honors AGENT_CHAT_DATA_DIR override', () => {
-	assert.equal(resolveDataRoot({ AGENT_CHAT_DATA_DIR: '/custom/data' }, '/home/user'), '/custom/data');
+test('resolveDataRoot honors MELLIVORA_DATA_DIR override', () => {
+	assert.equal(resolveDataRoot({ MELLIVORA_DATA_DIR: '/custom/data' }, '/home/user'), '/custom/data');
 });
 
-test('resolveDataRoot defaults to ~/.agent-chat', () => {
-	assert.equal(resolveDataRoot({}, '/home/user'), join('/home/user', '.agent-chat'));
+test('resolveDataRoot defaults to ~/.mellivora', () => {
+	assert.equal(resolveDataRoot({}, '/home/user'), join('/home/user', '.mellivora'));
 });
 
 test('resolveDataRoot ignores an empty override', () => {
-	assert.equal(resolveDataRoot({ AGENT_CHAT_DATA_DIR: '' }, '/home/user'), join('/home/user', '.agent-chat'));
+	assert.equal(resolveDataRoot({ MELLIVORA_DATA_DIR: '' }, '/home/user'), join('/home/user', '.mellivora'));
 });
 
 test('listProjects returns empty for a missing root', async () => {

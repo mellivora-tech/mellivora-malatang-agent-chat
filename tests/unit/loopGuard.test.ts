@@ -57,8 +57,8 @@ test('key order does not defeat the guard: {a,b} and {b,a} are the same input', 
 	assert.ok(verdict, 'key-order variation still counted as identical');
 });
 
-test('AGENT_CHAT_LOOP_GUARD=off disables the guard entirely', () => {
-	const guard = createLoopGuard({ AGENT_CHAT_LOOP_GUARD: 'off' });
+test('MELLIVORA_LOOP_GUARD=off disables the guard entirely', () => {
+	const guard = createLoopGuard({ MELLIVORA_LOOP_GUARD: 'off' });
 	for (let i = 0; i < 6; i++) {
 		assert.equal(guard.check(use('grep', { pattern: 'x' })), undefined);
 	}

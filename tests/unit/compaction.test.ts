@@ -44,7 +44,7 @@ test('compaction threshold math and the kill switch', () => {
 	assert.ok(compactionThreshold(40_000) <= 0);
 
 	assert.equal(isCompactionEnabled({}), true);
-	assert.equal(isCompactionEnabled({ AGENT_CHAT_COMPACTION: 'off' }), false);
+	assert.equal(isCompactionEnabled({ MELLIVORA_COMPACTION: 'off' }), false);
 });
 
 test('selectBoundary lands on an assistant message and never splits a tool pair', () => {

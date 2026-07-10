@@ -54,15 +54,15 @@ export function createJsonlFileSink(logsDir: string, options?: { readonly immedi
 
 /**
  * Attach the local file sink when logging is enabled. Off by default; enable
- * with AGENT_CHAT_DEBUG (or point AGENT_CHAT_LOG_DIR somewhere). Returns the log
+ * with MELLIVORA_DEBUG (or point MELLIVORA_LOG_DIR somewhere). Returns the log
  * file path when attached so startup can print where to tail.
  */
 export function resolveAgentLogsDir(dataRoot: string, env: NodeJS.ProcessEnv): string | undefined {
-	const explicit = env['AGENT_CHAT_LOG_DIR'];
+	const explicit = env['MELLIVORA_LOG_DIR'];
 	if (explicit) {
 		return explicit;
 	}
-	const enabled = env['AGENT_CHAT_DEBUG'];
+	const enabled = env['MELLIVORA_DEBUG'];
 	if (enabled && enabled !== '0' && enabled.toLowerCase() !== 'false') {
 		return join(dataRoot, 'logs');
 	}

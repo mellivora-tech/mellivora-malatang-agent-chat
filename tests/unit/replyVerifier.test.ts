@@ -47,10 +47,10 @@ test('verifyReply: a throwing judge is fail-open (verdict error, never fail)', a
 	assert.match(result.reason, /unavailable/);
 });
 
-test('kill switch: AGENT_CHAT_REPLY_VERIFIER=off disables, anything else enables', () => {
-	assert.equal(isReplyVerifierEnabled({ AGENT_CHAT_REPLY_VERIFIER: 'off' }), false);
+test('kill switch: MELLIVORA_REPLY_VERIFIER=off disables, anything else enables', () => {
+	assert.equal(isReplyVerifierEnabled({ MELLIVORA_REPLY_VERIFIER: 'off' }), false);
 	assert.equal(isReplyVerifierEnabled({}), true);
-	assert.equal(isReplyVerifierEnabled({ AGENT_CHAT_REPLY_VERIFIER: 'on' }), true);
+	assert.equal(isReplyVerifierEnabled({ MELLIVORA_REPLY_VERIFIER: 'on' }), true);
 });
 
 test('buildRetryFeedback quotes the question and the reviewer note', () => {
