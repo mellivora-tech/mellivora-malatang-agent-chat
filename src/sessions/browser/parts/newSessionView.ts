@@ -263,41 +263,41 @@ export class NewSessionView extends Disposable {
 }
 
 const LATE_NIGHT_TAILS: readonly string[] = [
-	'都几点了还不睡，肝是钢做的？',
-	'这个点了，是真爱还是真上头',
-	'别的都睡了，就咱俩醒着，说吧',
-	'熬夜冠军在此，说说肝到几点',
-	'凌晨了，兄弟，命是自己的',
+	'凌晨的班加了，凌晨的钱一分没见',
+	'你在拉磨，老板在睡觉，这就是分工',
+	'猝死名单在排队，你这是在插队',
+	'这个点干活，图啥？图老板换新车吗',
+	'命是自己的，磨是老板的，掂量掂量',
 ];
 
-/** The landing heading's time-of-day half, each paired with a pool of tails riffing on what that hour actually feels like — not a generic joke recycled all day. */
+/** The landing heading's time-of-day half, each paired with a pool of 牛马 tails — bitter about the system, never about the user; dark humor keeps the floor. */
 const GREETING_BUCKETS: readonly { readonly maxHour: number; readonly label: string; readonly tails: readonly string[] }[] = [
 	{ maxHour: 5, label: '凌晨好', tails: LATE_NIGHT_TAILS },
 	{
 		maxHour: 11,
 		label: '早上好',
 		tails: [
-			'起来了？人醒了，魂还没归位，说吧',
-			'早八人状态：肉身到岗，灵魂在床上',
-			'闹钟响了八百遍，人来了，说需求',
-			'咖啡还没下肚，先凑合听我说',
-			'打工人集合，说说今天惹了什么活',
+			'打卡机不认人，只认牛马',
+			'又是替老板圆梦的一天',
+			'通勤两小时，上班如上坟，说吧',
+			'晨会画的饼，够你饿一天',
+			'太阳照常升起，工资照常不涨',
 		],
 	},
 	{
 		maxHour: 13,
 		label: '中午好',
-		tails: ['饭点了，先别摸鱼，说说你想干啥', '干饭魂干饭魄，说完事儿再睡午觉', '困是真困，但活是真的要干', '摸鱼一时爽，一直摸一直爽，说吧', '中午了，效率约等于零，但还是听你说'],
+		tails: ['吃快点，磨不等牛', '午饭是成本，你也是成本', '这顿外卖，是你今天唯一的福利', '午休二十分钟，资本家已经觉得亏了', '嚼着预制菜，干着预制的人生'],
 	},
 	{
 		maxHour: 18,
 		label: '下午好',
-		tails: ['困成🐶了，但还是硬扛着听你说', '下午三点魂飞天，说说你想干啥', '下午茶都没喝上，先说说你要干啥', '打工人还有几个小时就解放了，抓紧说', '工位上装忙，其实在等你发需求'],
+		tails: ['下午三点，灵魂已死，肉体营业', 'KPI 不会疼你，我也只能听你说说', '你困不困老板不管，磨停没停他真管', '咖啡续不动命了，那就续需求吧', '再撑三小时，回棚吃草'],
 	},
 	{
 		maxHour: 23,
 		label: '晚上好',
-		tails: ['别人下班了，我们还在肝，说吧', '晚上好，卷王模式已启动', '下班了？不存在的，继续肝', '夜深了，代码和秃头更配哦', '有事快说，说完我要去摸鱼了'],
+		tails: ['下班是违章行为，加班是企业文化', '你加的每一个班，都是老板游艇的一块板', '晚上十点，灯火通明，全是不敢走的', '工资是月抛的，健康是一次性的', '这个点还在干，明天老板夸你两句，就两句'],
 	},
 	{ maxHour: 24, label: '凌晨好', tails: LATE_NIGHT_TAILS },
 ];
