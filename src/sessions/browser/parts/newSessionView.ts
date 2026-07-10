@@ -9,15 +9,17 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ISessionAttachment } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments } from './composerImages.js';
-import { installFileMentions } from './composerMentions.js';
+import { installFileMentions, installSkillMentions } from './composerMentions.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface INewSessionViewOptions {
 	readonly onStartSession?: (query: string, attachments?: readonly ISessionAttachment[], images?: readonly IPendingImage[]) => Promise<unknown>;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
+	readonly skillsService?: ISkillsService;
 }
 
 export class NewSessionView extends Disposable {
@@ -87,6 +89,13 @@ export class NewSessionView extends Disposable {
 			}),
 		);
 		const images = this._register(installImageAttachments({ input, dropTarget: composer }));
+		const skills = this._register(
+			installSkillMentions({
+				host: content,
+				input,
+				getSkills: () => this.options.skillsService?.skills.get() ?? [],
+			}),
+		);
 
 		const toolbar = append(composer, document.createElement('div'));
 		toolbar.className = 'new-session-composer-toolbar';
@@ -178,10 +187,11 @@ export class NewSessionView extends Disposable {
 				return;
 			}
 
-			const attachments = mentions.collectAttachments(query);
+			const attachments = [...mentions.collectAttachments(query), ...skills.collectAttachments(query)];
 			const pendingImages = images.getImages();
 			input.value = '';
 			mentions.reset();
+			skills.reset();
 			images.reset();
 			void this.options.onStartSession?.(query, attachments.length > 0 ? attachments : undefined, pendingImages.length > 0 ? pendingImages : undefined);
 		});

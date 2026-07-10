@@ -162,3 +162,47 @@
 	object-fit: contain;
 	display: block;
 }
+
+/* Settings › Skills inline editor. */
+
+.sessions-skills-editor {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-8);
+}
+
+.sessions-skills-input,
+.sessions-skills-body {
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+}
+
+.sessions-skills-body {
+	resize: vertical;
+	min-height: 120px;
+}
+
+.sessions-skills-actions {
+	display: flex;
+	gap: var(--vscode-agents-space-6);
+	margin-top: var(--vscode-agents-space-6);
+}
+
+.sessions-skills-empty {
+	padding: var(--vscode-agents-space-8);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 60%, transparent);
+}
+
+.sessions-skills-error {
+	color: var(--vscode-agents-color-error, #f14c4c);
+}
+
+.sessions-settings-page-intro {
+	margin: 0 0 var(--vscode-agents-space-8);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 65%, transparent);
+}

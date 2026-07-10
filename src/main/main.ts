@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { registerAgentIpc } from './agentIpc.js';
 import { agentLog } from './agent/observability/agentLog.js';
 import { registerGitIpc } from './gitIpc.js';
+import { registerSkillsIpc } from './skillsIpc.js';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
 import { registerAppStateIpc } from './appStateIpc.js';
 import { registerModelConfigIpc } from './modelConfigIpc.js';
@@ -77,6 +78,7 @@ app.whenReady().then(async () => {
 	registerModelConfigIpc(dataRoot);
 	registerAgentIpc(dataRoot);
 	registerGitIpc(dataRoot);
+	registerSkillsIpc(dataRoot);
 	await createWindow();
 });
 // Flush any buffered agent logs before the process exits.

@@ -50,3 +50,10 @@ test('collectMentionAttachments keeps only mentions still present in the text', 
 	const attachments = collectMentionAttachments('please read @src/a.ts thanks', recorded);
 	assert.deepEqual(attachments, [{ kind: 'file', path: 'src/a.ts' }], 'the deleted folder mention is dropped');
 });
+
+test('findMentionQuery supports a custom trigger char ($ for skills)', () => {
+	assert.deepEqual(findMentionQuery('$com', 4, '$'), { start: 0, query: 'com' });
+	assert.deepEqual(findMentionQuery('use $rev now', 8, '$'), { start: 4, query: 'rev' });
+	assert.equal(findMentionQuery('price$5', 7, '$'), undefined, 'mid-word $ is not a mention');
+	assert.equal(findMentionQuery('$com', 4), undefined, 'the default trigger stays @');
+});

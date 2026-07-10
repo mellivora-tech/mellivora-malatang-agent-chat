@@ -27,11 +27,11 @@ export interface IMentionEntry {
 
 const MAX_MENU_ITEMS = 50;
 
-/** The active @-token at the caret: `@` at start/whitespace boundary, no whitespace between it and the caret. */
-export function findMentionQuery(text: string, caret: number): { readonly start: number; readonly query: string } | undefined {
+/** The active trigger-token at the caret: the trigger char (`@`, `$`) at a start/whitespace boundary, no whitespace between it and the caret. */
+export function findMentionQuery(text: string, caret: number, trigger: string = '@'): { readonly start: number; readonly query: string } | undefined {
 	for (let index = caret - 1; index >= 0; index--) {
 		const char = text[index]!;
-		if (char === '@') {
+		if (char === trigger) {
 			if (index > 0 && !/\s/.test(text[index - 1]!)) {
 				return undefined;
 			}
@@ -128,6 +128,192 @@ export interface IMentionController extends IDisposable {
 	collectAttachments(text: string): ISessionAttachment[];
 	/** Forget recorded mentions (call after a successful send). */
 	reset(): void;
+}
+
+export interface ISkillMentionEntry {
+	readonly id: string;
+	readonly name: string;
+	readonly description: string;
+}
+
+export interface ISkillMentionInstallOptions {
+	readonly host: HTMLElement;
+	readonly input: HTMLTextAreaElement;
+	/** Evaluated at open time; empty list renders a "no skills" hint. */
+	readonly getSkills: () => readonly ISkillMentionEntry[];
+}
+
+/**
+ * `$`-mentions over the user's skills — same interaction contract as the file
+ * mentions below (same install-order requirement, same collect-if-still-present
+ * semantics), but over a small synchronous list. Picking inserts `$<id> ` and
+ * records a `skill` attachment.
+ */
+export function installSkillMentions(options: ISkillMentionInstallOptions): IMentionController {
+	const { host, input } = options;
+	const recorded = new Map<string, ISessionAttachment>();
+
+	let menu: HTMLElement | undefined;
+	let items: ISkillMentionEntry[] = [];
+	let activeIndex = 0;
+	let tokenStart = -1;
+
+	const closeMenu = (): void => {
+		menu?.remove();
+		menu = undefined;
+		items = [];
+		activeIndex = 0;
+		tokenStart = -1;
+		document.removeEventListener('mousedown', onOutsideMouseDown, true);
+	};
+
+	const onOutsideMouseDown = (event: MouseEvent): void => {
+		if (menu && event.target instanceof Node && !menu.contains(event.target) && event.target !== input) {
+			closeMenu();
+		}
+	};
+
+	const renderMenu = (): void => {
+		if (!menu) {
+			menu = append(host, document.createElement('div'));
+			menu.className = 'composer-mention-menu';
+			menu.setAttribute('role', 'listbox');
+			document.addEventListener('mousedown', onOutsideMouseDown, true);
+		}
+		const hostRect = host.getBoundingClientRect();
+		const inputRect = input.getBoundingClientRect();
+		menu.style.left = `${inputRect.left - hostRect.left}px`;
+		menu.style.width = `${inputRect.width}px`;
+		menu.style.bottom = `${hostRect.bottom - inputRect.top + 6}px`;
+
+		menu.replaceChildren();
+		if (items.length === 0) {
+			const empty = append(menu, document.createElement('div'));
+			empty.className = 'composer-mention-empty';
+			empty.textContent = 'No matching skills — add some in Settings › Skills';
+			return;
+		}
+		items.forEach((skill, index) => {
+			const item = append(menu!, document.createElement('button')) as HTMLButtonElement;
+			item.className = `composer-mention-item${index === activeIndex ? ' active' : ''}`;
+			item.type = 'button';
+			item.setAttribute('role', 'option');
+			item.setAttribute('aria-selected', String(index === activeIndex));
+			const icon = append(item, document.createElement('span'));
+			icon.className = 'codicon codicon-lightbulb';
+			icon.setAttribute('aria-hidden', 'true');
+			const name = append(item, document.createElement('span'));
+			name.className = 'composer-mention-item-name';
+			name.textContent = skill.name;
+			if (skill.description) {
+				const description = append(item, document.createElement('span'));
+				description.className = 'composer-mention-item-desc';
+				description.textContent = skill.description;
+			}
+			item.addEventListener('mousedown', event => {
+				event.preventDefault();
+				pick(skill);
+			});
+			item.addEventListener('mouseenter', () => {
+				activeIndex = index;
+				renderMenu();
+			});
+		});
+		menu.querySelector('.composer-mention-item.active')?.scrollIntoView({ block: 'nearest' });
+	};
+
+	const pick = (skill: ISkillMentionEntry): void => {
+		const inline = `$${skill.id}`;
+		const caret = input.selectionStart ?? input.value.length;
+		if (tokenStart >= 0 && tokenStart <= caret) {
+			input.setRangeText(`${inline} `, tokenStart, caret, 'end');
+			recorded.set(inline, { kind: 'skill', path: skill.id });
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+		closeMenu();
+		input.focus();
+	};
+
+	const refresh = (): void => {
+		const caret = input.selectionStart ?? input.value.length;
+		const token = findMentionQuery(input.value, caret, '$');
+		if (!token) {
+			closeMenu();
+			return;
+		}
+		tokenStart = token.start;
+		const needle = token.query.toLowerCase();
+		items = options.getSkills().filter(skill => needle === '' || skill.id.includes(needle) || skill.name.toLowerCase().includes(needle) || skill.description.toLowerCase().includes(needle));
+		activeIndex = Math.min(activeIndex, Math.max(0, items.length - 1));
+		renderMenu();
+	};
+
+	const onKeydown = (event: KeyboardEvent): void => {
+		if (!menu || event.isComposing) {
+			return;
+		}
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			const delta = event.key === 'ArrowDown' ? 1 : -1;
+			activeIndex = items.length === 0 ? 0 : (activeIndex + delta + items.length) % items.length;
+			renderMenu();
+		} else if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+			const skill = items[activeIndex];
+			if (skill) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				pick(skill);
+			} else {
+				closeMenu();
+			}
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			closeMenu();
+		}
+	};
+
+	const onInput = (): void => refresh();
+	const onCaretMove = (): void => {
+		if (menu) {
+			refresh();
+		}
+	};
+
+	input.addEventListener('keydown', onKeydown);
+	input.addEventListener('input', onInput);
+	input.addEventListener('click', onCaretMove);
+	input.addEventListener('keyup', onCaretMove);
+	input.addEventListener('blur', () => {
+		setTimeout(() => {
+			if (menu && document.activeElement !== input) {
+				closeMenu();
+			}
+		}, 100);
+	});
+
+	const disposable = toDisposable(() => {
+		closeMenu();
+		input.removeEventListener('keydown', onKeydown);
+		input.removeEventListener('input', onInput);
+		input.removeEventListener('click', onCaretMove);
+		input.removeEventListener('keyup', onCaretMove);
+	});
+
+	return {
+		collectAttachments: text => {
+			const attachments: ISessionAttachment[] = [];
+			for (const [inline, attachment] of recorded) {
+				if (text.includes(inline)) {
+					attachments.push(attachment);
+				}
+			}
+			return attachments;
+		},
+		reset: () => recorded.clear(),
+		dispose: () => disposable.dispose(),
+	};
 }
 
 export function installFileMentions(options: IMentionInstallOptions): IMentionController {

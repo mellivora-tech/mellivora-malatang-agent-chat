@@ -17,6 +17,7 @@ import type {
 import type { IGitBridge } from '../sessions/services/git/common/git.js';
 import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
+import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['AGENT_CHAT_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -55,6 +56,12 @@ const models: IModelsBridge = {
 	verifyProvider: (request: IProviderVerificationRequest) => ipcRenderer.invoke('models:verifyProvider', request),
 };
 
+const skills: ISkillsBridge = {
+	list: () => ipcRenderer.invoke('skills:list'),
+	upsert: (input: ISkillInput) => ipcRenderer.invoke('skills:upsert', input),
+	delete: (id: string) => ipcRenderer.invoke('skills:delete', id),
+};
+
 const git: IGitBridge = {
 	branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId),
 	checkout: (projectId: string, branch: string) => ipcRenderer.invoke('git:checkout', projectId, branch),
@@ -62,8 +69,8 @@ const git: IGitBridge = {
 };
 
 const agent: IAgentBridge = {
-	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode) =>
-		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode }),
+	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[]) =>
+		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode, skillIds }),
 	stop: (sessionId: string) => ipcRenderer.invoke('agent:stop', sessionId),
 	generateTitle: (query: string, modelId?: string) => ipcRenderer.invoke('agent:title', { query, modelId }),
 	onEvent: (listener: (payload: IAgentEventPayload) => void) => {
@@ -87,5 +94,6 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	models,
 	agent,
 	git,
+	skills,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });

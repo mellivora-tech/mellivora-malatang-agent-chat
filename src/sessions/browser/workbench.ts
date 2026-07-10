@@ -27,6 +27,8 @@ import { ISessionsManagementService, SessionsManagementService } from '../servic
 import { ISessionsPartService, SessionsPartService } from '../services/sessions/browser/sessionsPartService.js';
 import { ISessionsProvidersService, SessionsProvidersService } from '../services/sessions/browser/sessionsProvidersService.js';
 import { ISessionsService, SessionsService } from '../services/sessions/browser/sessionsService.js';
+import { SkillsService } from '../services/skills/browser/skillsService.js';
+import type { ISkillsBridge } from '../services/skills/common/skills.js';
 
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
@@ -37,6 +39,7 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly appState?: IAppStateBridge;
 		readonly models?: IModelsBridge;
 		readonly agent?: IAgentBridge;
+		readonly skills?: ISkillsBridge;
 	};
 };
 
@@ -45,6 +48,7 @@ export class Workbench {
 	private readonly services = new ServiceCollection();
 	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects, (globalThis as AgentWindowGlobals).agentWindow?.appState);
 	private readonly modelsService = new ModelsService((globalThis as AgentWindowGlobals).agentWindow?.models);
+	private readonly skillsService = new SkillsService((globalThis as AgentWindowGlobals).agentWindow?.skills);
 	private readonly providersService = new SessionsProvidersService();
 	private readonly managementService = new SessionsManagementService(this.providersService);
 	private readonly sessionsPartService = new SessionsPartService();
@@ -59,9 +63,10 @@ export class Workbench {
 		sessionsPartService: this.sessionsPartService,
 		projectsService: this.projectsService,
 		modelsService: this.modelsService,
+		skillsService: this.skillsService,
 		onToggleSidebar: () => this.toggleSidebar(),
 	});
-	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService, this.modelsService);
+	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService, this.modelsService, this.skillsService);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
@@ -107,6 +112,7 @@ export class Workbench {
 		this.services.set(ISessionsProvidersService, this.providersService);
 		void this.projectsService.initialize();
 		void this.modelsService.initialize();
+		void this.skillsService.initialize();
 		this.services.set(ISessionsManagementService, this.managementService);
 		this.services.set(ISessionsService, this.sessionsService);
 		this.services.set(ISessionsPartService, this.sessionsPartService);

@@ -746,7 +746,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		});
 
 		void this.buildTranscript(session)
-			.then(transcript => agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get()))
+			.then(transcript => agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get())))
 			.catch(error => {
 				text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
 				updateAssistant();
@@ -828,7 +828,7 @@ function normalizeAttachments(attachments: readonly ISessionAttachment[] | undef
 	const seen = new Set<string>();
 	const normalized: ISessionAttachment[] = [];
 	for (const attachment of attachments) {
-		if ((attachment.kind !== 'file' && attachment.kind !== 'folder' && attachment.kind !== 'image') || typeof attachment.path !== 'string' || attachment.path === '') {
+		if ((attachment.kind !== 'file' && attachment.kind !== 'folder' && attachment.kind !== 'image' && attachment.kind !== 'skill') || typeof attachment.path !== 'string' || attachment.path === '') {
 			continue;
 		}
 		const key = `${attachment.kind}:${attachment.path}`;
@@ -844,6 +844,26 @@ function normalizeAttachments(attachments: readonly ISessionAttachment[] | undef
 function formatAttachmentsBlock(attachments: readonly ISessionAttachment[]): string {
 	const lines = attachments.map(attachment => (attachment.kind === 'folder' ? `${attachment.path}/ (folder)` : attachment.path));
 	return `<user-attached-paths>\nThe user attached these workspace-relative paths. Read the relevant ones with your tools before answering.\n${lines.join('\n')}\n</user-attached-paths>`;
+}
+
+/**
+ * Skill ids $-attached anywhere in the conversation, in first-mention order.
+ * A skill is sticky: once attached it applies to every later run of the
+ * session (its body rides the system prompt, which is rebuilt per run).
+ */
+export function collectSkillIds(messages: readonly ISessionMessage[]): string[] {
+	const ids: string[] = [];
+	for (const message of messages) {
+		if (message.role !== 'user') {
+			continue;
+		}
+		for (const attachment of message.attachments ?? []) {
+			if (attachment.kind === 'skill' && !ids.includes(attachment.path)) {
+				ids.push(attachment.path);
+			}
+		}
+	}
+	return ids;
 }
 
 const MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
@@ -875,7 +895,8 @@ export function toTranscript(messages: readonly ISessionMessage[], images?: Read
 			continue;
 		}
 		const attachments = message.role === 'user' ? (normalizeAttachments(message.attachments) ?? []) : [];
-		const pathAttachments = attachments.filter(attachment => attachment.kind !== 'image');
+		// Skills ride the run's system prompt (see collectSkillIds), not the message.
+		const pathAttachments = attachments.filter(attachment => attachment.kind === 'file' || attachment.kind === 'folder');
 		const imageBlocks: IAgentMessage['content'][number][] = [];
 		for (const attachment of attachments) {
 			if (attachment.kind !== 'image') {

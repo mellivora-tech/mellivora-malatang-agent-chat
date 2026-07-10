@@ -9,6 +9,7 @@ import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChan
 import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
 import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
+import { SkillSettingsView } from '../../../browser/parts/skillSettingsView.js';
 import { settingsDropdown, settingsRow, settingsSection, settingsToggle } from '../../../browser/parts/settingsControls.js';
 import { readPreferences, updatePreferences } from '../../../browser/parts/settingsPrefs.js';
 import type { ThemeId } from '../../../platform/theme/theme.js';
@@ -17,12 +18,14 @@ import { SessionStatus, type IActiveSession, type ISession, type ISessionChanges
 import type { IProjectsService } from '../../../services/projects/browser/projectsService.js';
 import type { ISessionsPartService, WorkbenchMode } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
+import type { ISkillsService } from '../../../services/skills/browser/skillsService.js';
 
 export interface ISessionsListOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
+	readonly skillsService?: ISkillsService;
 	readonly onToggleSidebar?: () => void;
 }
 
@@ -77,6 +80,7 @@ export class SessionsList extends Disposable {
 	private settingsNavElement: HTMLElement | undefined;
 	private settingsMainElement: HTMLElement | undefined;
 	private modelSettingsView: ModelSettingsView | undefined;
+	private skillSettingsView: SkillSettingsView | undefined;
 	private readonly searchPalette: SearchPalette;
 
 	constructor(
@@ -234,7 +238,7 @@ export class SessionsList extends Disposable {
 				label: 'Skills',
 				icon: 'codicon-wand',
 				class: 'sessions-sidebar-menu-action',
-				run: () => {},
+				run: () => this.openSettingsDialog('skills'),
 			},
 		];
 	}
@@ -571,15 +575,19 @@ export class SessionsList extends Disposable {
 		container.appendChild(footer);
 	}
 
-	private openSettingsDialog(): void {
+	private openSettingsDialog(section: string = 'general'): void {
 		const existing = document.querySelector<HTMLElement>('.sessions-settings-dialog-backdrop');
 		if (existing) {
 			existing.hidden = false;
+			if (section !== this.settingsSection) {
+				this.settingsSection = section;
+				this.refreshSettingsBody();
+			}
 			return;
 		}
 
-		// Each fresh open lands on General.
-		this.settingsSection = 'general';
+		// Each fresh open lands on the requested section (General by default).
+		this.settingsSection = section;
 		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
 		host.appendChild(this.renderSettingsDialog());
 	}
@@ -664,7 +672,7 @@ export class SessionsList extends Disposable {
 			{ id: 'appearance', icon: 'codicon-color-mode', label: 'Appearance', group: 1 },
 			{ id: 'models', icon: 'codicon-server-environment', label: 'Models', group: 2 },
 			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', group: 3, placeholder: true },
-			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', group: 3, placeholder: true },
+			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', group: 3 },
 			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', group: 3, placeholder: true },
 			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', group: 3, placeholder: true },
 		];
@@ -710,6 +718,8 @@ export class SessionsList extends Disposable {
 				return this.renderAppearanceSettings();
 			case 'models':
 				return this.getModelSettingsView();
+			case 'skills':
+				return this.getSkillSettingsView();
 			default:
 				return this.renderComingSoon(section);
 		}
@@ -767,6 +777,21 @@ export class SessionsList extends Disposable {
 		}
 
 		return this.modelSettingsView.element;
+	}
+
+	private getSkillSettingsView(): HTMLElement {
+		if (!this.options.skillsService) {
+			const placeholder = document.createElement('div');
+			placeholder.className = 'sessions-settings-main-content';
+			placeholder.textContent = 'Skill management is unavailable.';
+			return placeholder;
+		}
+
+		if (!this.skillSettingsView) {
+			this.skillSettingsView = this._register(new SkillSettingsView(this.options.skillsService));
+		}
+
+		return this.skillSettingsView.element;
 	}
 
 	private renderComingSoon(section: string): HTMLElement {

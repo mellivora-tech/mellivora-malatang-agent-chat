@@ -47,9 +47,9 @@ export interface ISessionWorkStepData {
 	readonly detail?: string;
 }
 
-/** A structured reference attached to a user message (@-mentioned file/folder, or a stored image). */
+/** A structured reference attached to a user message (@-mentioned file/folder, a stored image, or a $-mentioned skill). */
 export interface ISessionAttachmentData {
-	readonly kind: 'file' | 'folder' | 'image';
+	readonly kind: 'file' | 'folder' | 'image' | 'skill';
 	readonly path: string;
 	/** Images only: e.g. 'image/png'. */
 	readonly mediaType?: string;

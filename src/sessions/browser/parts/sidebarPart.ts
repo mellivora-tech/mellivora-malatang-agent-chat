@@ -9,6 +9,7 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
+import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { Part } from '../part.js';
 
 export interface ISidebarPartOptions {
@@ -16,6 +17,7 @@ export interface ISidebarPartOptions {
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
+	readonly skillsService?: ISkillsService;
 	readonly onToggleSidebar?: () => void;
 }
 
@@ -36,6 +38,7 @@ export class SidebarPart extends Part {
 				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 				...(this.options.projectsService ? { projectsService: this.options.projectsService } : {}),
 				...(this.options.modelsService ? { modelsService: this.options.modelsService } : {}),
+				...(this.options.skillsService ? { skillsService: this.options.skillsService } : {}),
 				...(this.options.onToggleSidebar ? { onToggleSidebar: this.options.onToggleSidebar } : {}),
 			}),
 		);

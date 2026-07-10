@@ -16,6 +16,7 @@ import { createModelClient } from './agent/createModelClient.js';
 import { generateSessionTitle } from './agent/sessionTitle.js';
 import { getProject } from './projectsStorage.js';
 import { resolveModelConfig } from './modelConfigStorage.js';
+import { formatSkillBlock, getSkill } from './skillsStorage.js';
 
 const DEFAULT_SYSTEM = 'You are a helpful coding agent.';
 
@@ -48,6 +49,8 @@ interface IAgentRunPayload {
 	readonly modelId?: string;
 	readonly projectId?: string;
 	readonly permissionMode?: string;
+	/** $-attached skills; bodies are resolved here (main side) and ride the system prompt. */
+	readonly skillIds?: readonly string[];
 }
 
 interface IApprovalResponsePayload {
@@ -116,6 +119,16 @@ export function registerAgentIpc(dataRoot: string): void {
 		// prompt deterministically instead of hoping the model reads them.
 		const instructions = cwd && isProjectInstructionsEnabled(process.env) ? await loadProjectInstructions(cwd) : undefined;
 
+		// $-attached skills: ids resolve to bodies here — a deleted skill silently
+		// drops out rather than failing the run.
+		const skillBlocks: string[] = [];
+		for (const skillId of payload.skillIds ?? []) {
+			const skill = await getSkill(dataRoot, skillId);
+			if (skill) {
+				skillBlocks.push(formatSkillBlock(skill));
+			}
+		}
+
 		const controller = new AbortController();
 		abortControllers.set(payload.sessionId, controller);
 		const sender = event.sender;
@@ -160,7 +173,8 @@ export function registerAgentIpc(dataRoot: string): void {
 		});
 
 		try {
-			const system = cwd ? workspaceSystemPrompt(cwd, mode) + (instructions ? `\n\n${formatInstructionsBlock(instructions)}` : '') : DEFAULT_SYSTEM;
+			const baseSystem = cwd ? workspaceSystemPrompt(cwd, mode) + (instructions ? `\n\n${formatInstructionsBlock(instructions)}` : '') : DEFAULT_SYSTEM;
+			const system = skillBlocks.length > 0 ? `${baseSystem}\n\n${skillBlocks.join('\n\n')}` : baseSystem;
 			const messages = config.params?.vision === false ? stripImageBlocks(payload.messages) : payload.messages;
 			const loop = runAgentLoop(messages, {
 				system,

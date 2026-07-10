@@ -776,3 +776,41 @@ test('an image-only message survives toTranscript without an empty text block', 
 	assert.equal(transcript.length, 1);
 	assert.deepEqual(transcript[0]?.content, [{ type: 'image', mediaType: 'image/png', data: 'Q0ND' }]);
 });
+
+test('skill attachments are collected across turns and passed to agent.run, not the path block', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const skillIdsSeen: (readonly string[] | undefined)[] = [];
+	const agent: IAgentBridge = {
+		run: async (sessionId, _messages, _modelId, _projectId, _permissionMode, skillIds) => {
+			skillIdsSeen.push(skillIds);
+			listener?.({ sessionId, event: { type: 'assistant_delta', text: 'ok' } } as never);
+			listener?.({ sessionId, done: { reason: 'completed', turns: 1 } } as never);
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('do it $commit-style', { attachments: [{ kind: 'skill', path: 'commit-style' }] });
+	await new Promise(resolve => setTimeout(resolve, 15));
+	await provider.sendMessage(session.sessionId, 'and again with $review', { attachments: [{ kind: 'skill', path: 'review' }] });
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	assert.deepEqual(skillIdsSeen[0], ['commit-style'], 'first run carries the first skill');
+	assert.deepEqual(skillIdsSeen[1], ['commit-style', 'review'], 'skills are sticky: later runs carry every skill mentioned so far');
+
+	// The path-hint block is for files/folders only — the skill must not appear in it.
+	const transcript = toTranscript(session.messages.get());
+	assert.ok(transcript.every(turn => !(turn.content[0] as { text?: string }).text?.includes('<user-attached-paths>')), 'no path block from skill-only attachments');
+});

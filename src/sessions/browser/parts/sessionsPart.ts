@@ -9,6 +9,7 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
+import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { Part } from '../part.js';
 import { NewSessionView } from './newSessionView.js';
@@ -31,6 +32,7 @@ export class SessionsPart extends Part {
 		private readonly sessionsService?: ISessionsService,
 		private readonly projectsService?: IProjectsService,
 		modelsService?: IModelsService,
+		skillsService?: ISkillsService,
 	) {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
@@ -39,9 +41,10 @@ export class SessionsPart extends Part {
 					this.sessionsService?.startSession(query, { ...this.getStartSessionOptions(), ...(attachments ? { attachments } : {}), ...(images ? { images } : {}) }) ?? Promise.resolve(),
 				...(this.projectsService ? { projectsService: this.projectsService } : {}),
 				...(modelsService ? { modelsService } : {}),
+				...(skillsService ? { skillsService } : {}),
 			}),
 		);
-		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService));
+		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService, skillsService));
 	}
 
 	private getStartSessionOptions(): { workspace: { label: string; description: string }; projectId: string } | undefined {

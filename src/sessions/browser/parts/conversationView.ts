@@ -10,9 +10,10 @@ import type { IProjectsService } from '../../services/projects/browser/projectsS
 import type { IActiveSession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments, type IImageController } from './composerImages.js';
-import { installFileMentions, type IMentionController } from './composerMentions.js';
+import { installFileMentions, installSkillMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
 import { renderMarkdown } from './markdownRenderer.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
@@ -73,12 +74,14 @@ export class ConversationView extends Disposable {
 	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage }>();
 
 	private readonly mentions: IMentionController;
+	private readonly skillMentions: IMentionController;
 	private readonly images: IImageController;
 
 	constructor(
 		private readonly messageSender?: ISessionMessageSender,
 		private readonly modelsService?: IModelsService,
 		private readonly projectsService?: IProjectsService,
+		private readonly skillsService?: ISkillsService,
 	) {
 		super();
 
@@ -120,6 +123,13 @@ export class ConversationView extends Disposable {
 					const projectId = this.session?.projectId;
 					return projectId && this.projectsService ? this.projectsService.listProjectFiles(projectId) : undefined;
 				},
+			}),
+		);
+		this.skillMentions = this._register(
+			installSkillMentions({
+				host: this.element,
+				input: this.input,
+				getSkills: () => this.skillsService?.skills.get() ?? [],
 			}),
 		);
 		this.images = this._register(installImageAttachments({ input: this.input, dropTarget: this.composer, onDidChange: () => this.updateComposerState() }));
@@ -260,6 +270,7 @@ export class ConversationView extends Disposable {
 		this.queuedFollowUp = undefined;
 		// Mentions and pending images belong to the session they were staged in.
 		this.mentions.reset();
+		this.skillMentions.reset();
 		this.images.reset();
 		// A freshly opened conversation starts at its latest message.
 		this.scrollToBottomOnRender = true;
@@ -1007,7 +1018,7 @@ export class ConversationView extends Disposable {
 		this.scrollToBottomOnRender = true;
 
 		try {
-			const attachments = this.mentions.collectAttachments(query);
+			const attachments = [...this.mentions.collectAttachments(query), ...this.skillMentions.collectAttachments(query)];
 			const images = this.images.getImages();
 			await this.messageSender?.sendMessage(session.sessionId, query, {
 				...(attachments.length > 0 ? { attachments } : {}),
@@ -1015,6 +1026,7 @@ export class ConversationView extends Disposable {
 			});
 			this.input.value = '';
 			this.mentions.reset();
+			this.skillMentions.reset();
 			this.images.reset();
 		} catch {
 			this.setSendError('Message failed to send. Your draft was kept — try again.');
@@ -1185,10 +1197,10 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions, r
 				chip.className = 'conversation-message-attachment';
 				chip.title = attachment.path;
 				const icon = append(chip, document.createElement('span'));
-				icon.className = `codicon ${attachment.kind === 'folder' ? 'codicon-folder' : 'codicon-file'}`;
+				icon.className = `codicon ${attachment.kind === 'folder' ? 'codicon-folder' : attachment.kind === 'skill' ? 'codicon-lightbulb' : 'codicon-file'}`;
 				icon.setAttribute('aria-hidden', 'true');
 				const name = append(chip, document.createElement('span'));
-				name.textContent = attachment.path.split('/').pop()! + (attachment.kind === 'folder' ? '/' : '');
+				name.textContent = attachment.kind === 'skill' ? `$${attachment.path}` : attachment.path.split('/').pop()! + (attachment.kind === 'folder' ? '/' : '');
 			}
 		}
 	} else if (message.role === 'assistant') {

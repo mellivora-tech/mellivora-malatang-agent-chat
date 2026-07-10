@@ -49,7 +49,8 @@ export interface ISessionWorkStep {
  * disk beside the transcript, never inlined here.
  */
 export interface ISessionAttachment {
-	readonly kind: 'file' | 'folder' | 'image';
+	readonly kind: 'file' | 'folder' | 'image' | 'skill';
+	/** file/folder: workspace-relative path; image: session-media path; skill: the skill id. */
 	readonly path: string;
 	/** Images only: e.g. 'image/png'. */
 	readonly mediaType?: string;
