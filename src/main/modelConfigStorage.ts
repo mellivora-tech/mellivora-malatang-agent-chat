@@ -53,6 +53,8 @@ export interface IStoredModelConfig {
 	readonly provider: ModelProvider;
 	readonly baseURL: string;
 	readonly model: string;
+	/** Model context window in tokens — shared by the UI meter and auto-compaction. */
+	readonly contextLength?: number;
 	readonly params?: IModelParams;
 	readonly apiKey?: string;
 }
@@ -399,6 +401,7 @@ export async function resolveModelConfig(root: string, modelId: string | undefin
 		provider: target.provider.type,
 		baseURL: target.provider.baseURL,
 		model: target.model.model,
+		...(target.model.contextLength ? { contextLength: target.model.contextLength } : {}),
 		...(target.model.params ? { params: target.model.params } : {}),
 		...(target.provider.apiKey ? { apiKey: target.provider.apiKey } : {}),
 	};

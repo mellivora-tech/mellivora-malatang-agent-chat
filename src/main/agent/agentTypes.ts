@@ -173,7 +173,17 @@ export type IAgentEvent =
 	/** The reply verifier judged the final answer. verdict 'fail' means a single retry follows — the renderer replaces the rejected reply instead of appending. */
 	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
 	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
-	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number };
+	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number }
+	/** The transcript head was folded into an anchored summary (request view only; history intact). `summary` feeds the local log's detail; the renderer may ignore it. */
+	| {
+			readonly type: 'compaction';
+			readonly trigger: 'preflight' | 'auto';
+			readonly beforeTokens: number;
+			readonly boundaryIndex: number;
+			readonly summaryChars: number;
+			readonly outcome: 'ok' | 'error' | 'insufficient';
+			readonly summary?: string;
+	  };
 
 /** 'max_output_tokens': the reply was cut off by the max_tokens budget — surfaced explicitly so truncation shows up in logs instead of masquerading as 'completed'. */
 export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'max_output_tokens' | 'refusal';
@@ -192,8 +202,14 @@ export interface IAgentRunConfig {
 	readonly signal?: AbortSignal;
 	/**
 	 * Point 5 seam: transform the growing transcript into the messages actually
-	 * sent to the model. Identity today; the future home for compaction / context
-	 * editing (or a pass-through to the provider's server-side compaction).
+	 * sent to the model. Identity today; the future home for provider-side
+	 * context editing. Compaction runs before this seam and feeds it the
+	 * already-compacted view.
 	 */
 	readonly prepareRequestMessages?: (messages: readonly IAgentMessage[]) => readonly IAgentMessage[];
+	/**
+	 * Enables auto-compaction. Absent (model has no configured context window)
+	 * means the mechanism stays off — the threshold is never guessed.
+	 */
+	readonly compaction?: { readonly contextWindow: number; readonly outputBudget?: number };
 }

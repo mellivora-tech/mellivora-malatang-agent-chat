@@ -26,6 +26,14 @@ function userMessage(text: string): IAgentMessage {
 	return { role: 'user', content: [{ type: 'text', text }] };
 }
 
+/** All text-block content of one message, joined. */
+function text(message: IAgentMessage): string {
+	return message.content
+		.filter((block): block is Extract<IAgentMessage['content'][number], { type: 'text' }> => block.type === 'text')
+		.map(block => block.text)
+		.join('\n');
+}
+
 function findToolResult(events: readonly IAgentEvent[]): Extract<IAgentEvent, { type: 'tool_result' }> {
 	const result = events.find((event): event is Extract<IAgentEvent, { type: 'tool_result' }> => event.type === 'tool_result');
 	assert.ok(result, 'expected a tool_result event');
@@ -533,4 +541,213 @@ test('convergence brake: soft reminder, then the hard phase withholds tools to f
 	const hardCall = calls.find(call => call.hard);
 	assert.ok(hardCall, 'hard reminder injected');
 	assert.equal(hardCall.tools, 0, 'tools withheld in the hard phase');
+});
+
+// ---------------------------------------------------------------------------
+// Auto-compaction (3.1)
+// ---------------------------------------------------------------------------
+
+/** 20K chars per result so the 32K tail budget holds exactly one exchange. */
+const bigTool = defineTool({
+	name: 'big',
+	description: 'Return a large payload.',
+	inputSchema: { type: 'object' },
+	isReadOnly: () => true,
+	validateInput: input => ({ ok: true, value: input }),
+	call: async input => ({ content: `RESULT${(input as { n: number }).n}_${'x'.repeat(20_000)}` }),
+});
+
+/**
+ * A client that plays a main conversation (tool turns with growing usage, then
+ * a final text) and answers compaction summary requests separately.
+ */
+function compactionAwareClient(usagePerTurn: readonly number[], summaries: readonly string[]): {
+	client: { stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> };
+	mainRequests: IModelRequest[];
+	summaryRequests: IModelRequest[];
+} {
+	const mainRequests: IModelRequest[] = [];
+	const summaryRequests: IModelRequest[] = [];
+	let summaryCount = 0;
+	return {
+		mainRequests,
+		summaryRequests,
+		client: {
+			async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+				if (request.system.includes('anchored summary')) {
+					summaryRequests.push(request);
+					const text = summaries[summaryCount] ?? '';
+					summaryCount += 1;
+					if (text !== '') {
+						yield { type: 'text_delta', text };
+					}
+					yield { type: 'message_stop', stopReason: 'end_turn' };
+					return;
+				}
+				mainRequests.push(request);
+				const index = mainRequests.length - 1;
+				if (index < usagePerTurn.length) {
+					yield { type: 'tool_use', block: { type: 'tool_use', id: `t${index + 1}`, name: 'big', input: { n: index + 1 } } };
+					yield { type: 'usage', inputTokens: usagePerTurn[index]! };
+					yield { type: 'message_stop', stopReason: 'tool_use' };
+				} else {
+					yield { type: 'text_delta', text: 'done' };
+					yield { type: 'message_stop', stopReason: 'end_turn' };
+				}
+			},
+		},
+	};
+}
+
+function compactionEvents(events: readonly IAgentEvent[]): Extract<IAgentEvent, { type: 'compaction' }>[] {
+	return events.filter((event): event is Extract<IAgentEvent, { type: 'compaction' }> => event.type === 'compaction');
+}
+
+test('compaction: usage over threshold folds the head into an anchored summary, incrementally', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		// threshold = 100000 − 32000 − 16000 = 52000; usage crosses it on turn 1.
+		const { client, mainRequests, summaryRequests } = compactionAwareClient(
+			[60_000, 80_000, 100_000],
+			['## Objective\n- compacted state', '## Objective\n- updated state'],
+		);
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('map the repo')], {
+				system: 'test system',
+				tools: [bigTool],
+				modelClient: client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000 },
+			}),
+		);
+
+		assert.equal(terminal.reason, 'completed');
+		const compactions = compactionEvents(events);
+		assert.deepEqual(
+			compactions.map(event => event.outcome),
+			['insufficient', 'ok', 'ok'],
+			'turn 2 head too small; turn 3 creates the anchor; turn 4 updates it',
+		);
+		assert.ok(compactions.every(event => event.trigger === 'auto'));
+
+		// First summary request: creation, serialized head, no previous anchor.
+		assert.match(text(summaryRequests[0]!.messages[0]!), /Create a new anchored summary/);
+		assert.match(text(summaryRequests[0]!.messages[0]!), /\[User\]:\nmap the repo/);
+		// Second: anchored update fed the previous summary and ONLY the delta.
+		const update = text(summaryRequests[1]!.messages[0]!);
+		assert.match(update, /<previous-summary>\n## Objective\n- compacted state/);
+		assert.match(update, /RESULT2/, 'delta contains the turn-2 result');
+		assert.doesNotMatch(update, /RESULT1/, 'already-anchored content is not re-serialized');
+		assert.doesNotMatch(update, /RESULT3/, 'tail content stays out of the summary');
+
+		// The compacted view: summary user message first, then an intact tail pair.
+		const compactedRequest = mainRequests[2]!;
+		assert.match(text(compactedRequest.messages[0]!), /^\[Context compacted\]/);
+		assert.match(text(compactedRequest.messages[0]!), /- compacted state/);
+		assert.equal(compactedRequest.messages[1]!.role, 'assistant', 'tail starts on an assistant message');
+		assert.doesNotMatch(JSON.stringify(compactedRequest.messages), /RESULT1/, 'summarized head is gone from the wire');
+		const final = mainRequests[3]!;
+		assert.match(text(final.messages[0]!), /- updated state/, 'view carries the updated anchor');
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
+test('compaction: preflight folds an oversized initial transcript before the first request', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		const big = 'h'.repeat(120_000);
+		const initial: IAgentMessage[] = [
+			userMessage(`first question ${big}`),
+			{ role: 'assistant', content: [{ type: 'text', text: `first answer ${big}` }] },
+			userMessage('second question'),
+			{ role: 'assistant', content: [{ type: 'text', text: `second answer ${big}` }] },
+			userMessage('third question'),
+		];
+		const { client, mainRequests } = compactionAwareClient([], ['## Objective\n- from preflight']);
+		const { events, terminal } = await drive(
+			runAgentLoop(initial, {
+				system: 'test system',
+				tools: [bigTool],
+				modelClient: client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000 },
+			}),
+		);
+
+		assert.equal(terminal.reason, 'completed');
+		const [compaction] = compactionEvents(events);
+		assert.ok(compaction, 'preflight compaction fired');
+		assert.equal(compaction.trigger, 'preflight');
+		assert.equal(compaction.outcome, 'ok');
+		assert.match(text(mainRequests[0]!.messages[0]!), /- from preflight/);
+		assert.equal(mainRequests[0]!.messages.length, 3, 'summary + last assistant + last user');
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});
+
+test('compaction: fail-open on summary errors, off without a window, off via kill switch', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		// Summary reply comes back empty → generateSummary throws → error outcome,
+		// and the request goes out uncompacted.
+		const failing = compactionAwareClient([60_000], ['']);
+		const failed = await drive(
+			runAgentLoop([userMessage('q')], {
+				system: 's',
+				tools: [bigTool],
+				modelClient: failing.client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000 },
+			}),
+		);
+		assert.equal(failed.terminal.reason, 'completed');
+		// Turn-2 attempt: boundary exists? messages [u, a1, r1] → head too small → insufficient.
+		// So drive one more turn to reach a real error: use two tool turns instead.
+		const failing2 = compactionAwareClient([60_000, 80_000], ['']);
+		const failed2 = await drive(
+			runAgentLoop([userMessage('q')], {
+				system: 's',
+				tools: [bigTool],
+				modelClient: failing2.client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000 },
+			}),
+		);
+		const outcomes = compactionEvents(failed2.events).map(event => event.outcome);
+		assert.ok(outcomes.includes('error'), `expected a fail-open error outcome, got ${outcomes.join(',')}`);
+		assert.equal(failed2.terminal.reason, 'completed', 'the run survives the failed summary');
+		const last = failing2.mainRequests[failing2.mainRequests.length - 1]!;
+		assert.doesNotMatch(text(last.messages[0]!), /\[Context compacted\]/, 'view stayed uncompacted');
+
+		// No compaction config → mechanism off even with huge usage.
+		const off = compactionAwareClient([60_000, 80_000], []);
+		const offRun = await drive(
+			runAgentLoop([userMessage('q')], { system: 's', tools: [bigTool], modelClient: off.client as never, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(compactionEvents(offRun.events).length, 0);
+		assert.equal(off.summaryRequests.length, 0);
+
+		// Kill switch.
+		process.env['AGENT_CHAT_COMPACTION'] = 'off';
+		try {
+			const killed = compactionAwareClient([60_000, 80_000], []);
+			const killedRun = await drive(
+				runAgentLoop([userMessage('q')], {
+					system: 's',
+					tools: [bigTool],
+					modelClient: killed.client as never,
+					permissionGate: allowAllPermissionGate,
+					compaction: { contextWindow: 100_000 },
+				}),
+			);
+			assert.equal(compactionEvents(killedRun.events).length, 0);
+			assert.equal(killed.summaryRequests.length, 0);
+		} finally {
+			delete process.env['AGENT_CHAT_COMPACTION'];
+		}
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
 });

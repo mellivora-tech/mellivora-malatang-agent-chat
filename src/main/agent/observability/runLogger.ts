@@ -17,6 +17,8 @@ export interface IRunLoggerContext {
 	readonly projectId?: string;
 	/** Project instructions injected into the system prompt (AGENTS.md/CLAUDE.md), when present. */
 	readonly instructions?: { readonly file: string; readonly chars: number; readonly truncated: boolean };
+	/** Model context window in tokens; absent means auto-compaction is disabled for the run. */
+	readonly contextWindow?: number;
 }
 
 export interface IRunLogger {
@@ -78,6 +80,7 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 		mode: context.mode,
 		hasWorkspace: context.hasWorkspace,
 		toolCount: context.toolCount,
+		...(context.contextWindow !== undefined ? { contextWindow: context.contextWindow } : {}),
 		...(context.cwd
 			? {
 					detail: {
@@ -151,6 +154,21 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 					break;
 				case 'tool_prune':
 					agentLog.emit({ ts: now(), ...base, type: 'tool_prune', prunedResults: event.prunedResults, prunedChars: event.prunedChars });
+					break;
+				case 'compaction':
+					// Numbers export-safe at the top level; the summary text is
+					// conversation content and stays in the local-only detail.
+					agentLog.emit({
+						ts: now(),
+						...base,
+						type: 'compaction',
+						trigger: event.trigger,
+						beforeTokens: event.beforeTokens,
+						boundaryIndex: event.boundaryIndex,
+						summaryChars: event.summaryChars,
+						outcome: event.outcome,
+						...(event.summary ? { detail: { summary: event.summary } } : {}),
+					});
 					break;
 				case 'stream_retry':
 					agentLog.emit({ ts: now(), ...base, type: 'stream_retry', attempt: event.attempt, maxAttempts: event.maxAttempts, delayMs: event.delayMs });

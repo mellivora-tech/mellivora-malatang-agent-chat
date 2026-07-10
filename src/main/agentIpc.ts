@@ -148,6 +148,7 @@ export function registerAgentIpc(dataRoot: string): void {
 			...(cwd ? { cwd } : {}),
 			...(payload.projectId ? { projectId: payload.projectId } : {}),
 			...(instructions ? { instructions: { file: instructions.file, chars: instructions.text.length, truncated: instructions.truncated } } : {}),
+			...(config.contextLength !== undefined ? { contextWindow: config.contextLength } : {}),
 		});
 
 		try {
@@ -158,6 +159,10 @@ export function registerAgentIpc(dataRoot: string): void {
 				modelClient: createModelClient(config),
 				permissionGate: createGateForMode(mode, requestApproval),
 				signal: controller.signal,
+				// No configured context window → compaction stays off (never guessed).
+				...(config.contextLength
+					? { compaction: { contextWindow: config.contextLength, ...(config.params?.maxTokens !== undefined ? { outputBudget: config.params.maxTokens } : {}) } }
+					: {}),
 			});
 
 			let step = await loop.next();

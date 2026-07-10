@@ -27,6 +27,8 @@ export type AgentLogEvent =
 			readonly mode: string;
 			readonly hasWorkspace: boolean;
 			readonly toolCount: number;
+			/** Absent = auto-compaction disabled for this run (no configured window). */
+			readonly contextWindow?: number;
 			readonly detail?: {
 				readonly cwd?: string;
 				readonly projectId?: string;
@@ -64,6 +66,19 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly detail?: { readonly reason?: string } })
 	/** Tool outputs aged out of the request view. Counts only — the full content stays in the adjacent tool_result events. */
 	| (IBaseEvent & { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number })
+	/**
+	 * The transcript head was folded into an anchored summary. Trigger math and
+	 * sizes are export-safe; the summary text (conversation content) is detail.
+	 */
+	| (IBaseEvent & {
+			readonly type: 'compaction';
+			readonly trigger: 'preflight' | 'auto';
+			readonly beforeTokens: number;
+			readonly boundaryIndex: number;
+			readonly summaryChars: number;
+			readonly outcome: 'ok' | 'error' | 'insufficient';
+			readonly detail?: { readonly summary: string };
+	  })
 	| (IBaseEvent & {
 			readonly type: 'tool_result';
 			readonly toolUseId: string;

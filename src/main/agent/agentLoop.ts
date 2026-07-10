@@ -5,6 +5,7 @@
 
 import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IThinkingBlock, IToolUseBlock, ModelStopReason } from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
+import { RETRY_GROWTH_TOKENS, compactionThreshold, estimateTokens, formatCompactedBlock, generateSummary, isCompactionEnabled, selectBoundary, serializeForSummary } from './compaction.js';
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
@@ -107,6 +108,14 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
+	// Auto-compaction: enabled only when the model's context window is known.
+	// The trigger reads real usage (one request behind — the safety buffer in the
+	// threshold absorbs that lag); turn 1 uses a rough estimate as preflight.
+	const compactThreshold = config.compaction ? compactionThreshold(config.compaction.contextWindow, config.compaction.outputBudget) : 0;
+	const compactionOn = compactThreshold > 0 && isCompactionEnabled(process.env);
+	let compacted: { boundary: number; summary: string } | undefined;
+	let lastUsageTokens = 0;
+	let lastCompactionAttemptTokens = 0;
 	let turn = 0;
 
 	while (true) {
@@ -122,9 +131,51 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// not rely on the model choosing to stop).
 		const brake = specs.length > 0 && turn >= hardBrakeTurn ? 'hard' : specs.length > 0 && turn >= softBrakeTurn ? 'soft' : 'none';
 
-		// Tool-output aging shapes the request view only (history keeps full text);
-		// the reminder is appended after so it can never be pruned.
-		let prepared = prepareRequestMessages(messages);
+		// Compaction check — before the view is assembled. Fires on real usage from
+		// the previous turn (turn 1: rough preflight estimate); the incremental
+		// breaker retries only after usage grew another quantum, so a failed or
+		// insufficient attempt cannot re-fire every turn.
+		if (compactionOn) {
+			const trigger = turn === 1 ? 'preflight' : 'auto';
+			const beforeTokens = turn === 1 ? estimateTokens(messages) : lastUsageTokens;
+			const due = beforeTokens >= compactThreshold && (lastCompactionAttemptTokens === 0 || beforeTokens >= lastCompactionAttemptTokens + RETRY_GROWTH_TOKENS);
+			if (due) {
+				lastCompactionAttemptTokens = beforeTokens;
+				const boundary = selectBoundary(messages);
+				if (boundary === undefined || (compacted !== undefined && boundary <= compacted.boundary)) {
+					// Nothing (new) to fold — the honest signal, not a silent loop.
+					yield { type: 'compaction', trigger, beforeTokens, boundaryIndex: boundary ?? -1, summaryChars: compacted?.summary.length ?? 0, outcome: 'insufficient' };
+				} else {
+					try {
+						// Incremental anchor: summarize only the delta since the last
+						// boundary and fold it into the previous summary.
+						const summary = await generateSummary({
+							client: config.modelClient,
+							serializedHead: serializeForSummary(messages.slice(compacted?.boundary ?? 0, boundary)),
+							...(compacted !== undefined ? { previousSummary: compacted.summary } : {}),
+							signal,
+						});
+						compacted = { boundary, summary };
+						yield { type: 'compaction', trigger, beforeTokens, boundaryIndex: boundary, summaryChars: summary.length, outcome: 'ok', summary };
+					} catch (error) {
+						if (signal.aborted) {
+							return { reason: 'aborted', turns: turn };
+						}
+						// Fail-open: keep sending uncompacted — a few more turns usually
+						// still fit, and the provider's own error stays the backstop.
+						yield { type: 'compaction', trigger, beforeTokens, boundaryIndex: boundary, summaryChars: 0, outcome: 'error' };
+					}
+				}
+			}
+		}
+
+		// The request view: compaction first (summary replaces the head), then the
+		// point-5 seam, then tool-output aging shapes what remains (history keeps
+		// full text); the reminder is appended last so it can never be pruned.
+		const view: readonly IAgentMessage[] = compacted
+			? [{ role: 'user', content: [{ type: 'text', text: formatCompactedBlock(compacted.summary) }] }, ...messages.slice(compacted.boundary)]
+			: messages;
+		let prepared = prepareRequestMessages(view);
 		if (pruneEnabled) {
 			const pruned = pruneToolOutputs(prepared);
 			prepared = pruned.messages;
@@ -171,6 +222,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 							toolUses.push(event.block);
 							break;
 						case 'usage':
+							// input + output: the next request carries this turn's output
+							// too, so their sum is the true base for the threshold check.
+							lastUsageTokens = event.inputTokens + (event.outputTokens ?? 0);
 							yield { type: 'usage', inputTokens: event.inputTokens, ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}) };
 							break;
 						case 'message_stop':
