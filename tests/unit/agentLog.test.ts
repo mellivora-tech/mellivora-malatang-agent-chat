@@ -144,6 +144,35 @@ test('runLogger maps a loop event stream into structured events with timings', (
 	assert.ok(typeof ttft.ttftMs === 'number' && ttft.ttftMs >= 0);
 });
 
+test('runLogger maps usage and compaction events (summary text under detail only)', () => {
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	const logger = createRunLogger({ runId: 'r6', sessionId: 's6', model: 'kimi', mode: 'ask', hasWorkspace: true, toolCount: 1, contextWindow: 256_000 });
+	logger.record({ type: 'turn_start', turn: 2 });
+	logger.record({ type: 'usage', inputTokens: 208_984, outputTokens: 512 });
+	logger.record({ type: 'compaction', trigger: 'preflight', beforeTokens: 208_984, boundaryIndex: 3, summaryChars: 12, outcome: 'ok', summary: '## Objective' });
+	logger.end({ reason: 'completed', turns: 2 });
+
+	const runStart = collected.events[0] as Extract<AgentLogEvent, { type: 'run_start' }>;
+	assert.equal(runStart.contextWindow, 256_000);
+
+	const usage = collected.events.find((event: AgentLogEvent) => event.type === 'usage') as Extract<AgentLogEvent, { type: 'usage' }>;
+	assert.ok(usage, 'usage reached the bus — logs can now answer estimate-vs-actual');
+	assert.equal(usage.turn, 2);
+	assert.equal(usage.inputTokens, 208_984);
+	assert.equal(usage.outputTokens, 512);
+
+	const compaction = collected.events.find((event: AgentLogEvent) => event.type === 'compaction') as Extract<AgentLogEvent, { type: 'compaction' }>;
+	assert.equal(compaction.outcome, 'ok');
+	assert.equal(compaction.beforeTokens, 208_984);
+	assert.equal(compaction.detail?.summary, '## Objective');
+	// The PII boundary strips the summary text from any off-machine export.
+	const exported = toExportable(compaction);
+	assert.equal((exported as { detail?: unknown }).detail, undefined);
+	assert.equal((exported as { summaryChars: number }).summaryChars, 12);
+});
+
 test('runLogger maps a loop_guard event onto the log bus with its repeat count', () => {
 	const collected = collectingSink();
 	agentLog.attach(collected.sink);

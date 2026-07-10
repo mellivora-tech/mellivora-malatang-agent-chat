@@ -102,6 +102,9 @@ function clip(text: string): string {
  * has no tool-pairing or thinking-passback constraints, so the summary call
  * itself can never 400 on structure (opencode v2's serialization approach).
  * Thinking blocks are dropped — they narrate the work the other blocks show.
+ * Images become a placeholder line: dropping them silently taught the
+ * summarizer to assert "no image was provided" while the image's analysis sat
+ * right there in the tail — a false fact anchored into every later summary.
  */
 export function serializeForSummary(messages: readonly IAgentMessage[]): string {
 	const lines: string[] = [];
@@ -113,6 +116,10 @@ export function serializeForSummary(messages: readonly IAgentMessage[]): string 
 				lines.push(`[Assistant tool call ${block.name}]:\n${clip(JSON.stringify(block.input))}`);
 			} else if (block.type === 'tool_result') {
 				lines.push(`[Tool result${block.isError ? ' (error)' : ''}]:\n${clip(block.content)}`);
+			} else if (block.type === 'image') {
+				// base64 → ~3/4 raw bytes; enough for the summarizer to know an
+				// image existed and was handled in-conversation.
+				lines.push(`[User attached an image (${block.mediaType}, ~${Math.max(1, Math.round((block.data.length * 3) / 4 / 1024))}KB) — it was shown to the assistant in this conversation]`);
 			}
 		}
 	}

@@ -152,6 +152,11 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 						...(event.reason ? { detail: { reason: event.reason } } : {}),
 					});
 					break;
+				case 'usage':
+					// Without this, real token counts reach only the UI meter — logs
+					// could never answer "estimate vs actual" questions.
+					agentLog.emit({ ts: now(), ...base, type: 'usage', turn, inputTokens: event.inputTokens, ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}) });
+					break;
 				case 'tool_prune':
 					agentLog.emit({ ts: now(), ...base, type: 'tool_prune', prunedResults: event.prunedResults, prunedChars: event.prunedChars });
 					break;

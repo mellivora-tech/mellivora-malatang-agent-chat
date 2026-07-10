@@ -94,6 +94,19 @@ test('serializeForSummary labels roles, truncates blocks, and drops thinking', (
 	assert.doesNotMatch(serialized, /secret chain of thought/, 'thinking never reaches the summarizer');
 });
 
+test('serializeForSummary turns images into a placeholder instead of dropping them', () => {
+	// A silently-dropped image taught the summarizer to anchor the false fact
+	// "no image was provided" (seen live, 2026-07-10 session cd63ef17).
+	const base64 = 'A'.repeat(80_000); // ~60KB raw
+	const messages: IAgentMessage[] = [
+		{ role: 'user', content: [{ type: 'text', text: '梳理下这个图片' }, { type: 'image', mediaType: 'image/png', data: base64 }] },
+	];
+
+	const serialized = serializeForSummary(messages);
+	assert.match(serialized, /\[User attached an image \(image\/png, ~59KB\) — it was shown to the assistant in this conversation\]/);
+	assert.doesNotMatch(serialized, /AAAA/, 'base64 payload never reaches the summarizer');
+});
+
 test('summary request: create vs anchored update', () => {
 	const create = buildSummaryRequestText('[User]:\nhi');
 	assert.match(create, /Create a new anchored summary/);
