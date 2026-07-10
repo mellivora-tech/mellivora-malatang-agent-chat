@@ -19,7 +19,7 @@ import type {
 	ISessionWorkStep,
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
-import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
+import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionCompactionAnchorData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
 import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
@@ -767,16 +767,23 @@ export class FileSessionsProvider implements ISessionsProvider {
 				const previousUsage = session.contextUsage.get();
 				session.contextUsage.set({
 					inputTokens: event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0),
+					isRealTotal: true,
 					...(previousUsage?.breakdown ? { breakdown: previousUsage.breakdown } : {}),
 				});
 			} else if (event?.type === 'context_breakdown') {
 				// Emitted before the request goes out, every turn — the panel can
 				// show the mechanisms working live even before the model replies.
-				// The real total (inputTokens) carries over from the last usage
-				// reading until a fresh one supersedes it.
-				const previousBreakdown = session.contextUsage.get();
+				// A real total carries forward until a fresh one supersedes it;
+				// with none yet (this run's FIRST turn in this process — e.g. a
+				// reopened session run for the first time since restart), fall
+				// back to the SAME char/4 estimate the ring itself would show,
+				// rather than inventing a fake "real" 0 that would otherwise flash
+				// the meter to 0% until usage lands a moment later.
+				const previousUsage = session.contextUsage.get();
+				const inputTokens = previousUsage?.isRealTotal ? previousUsage.inputTokens : estimateSessionTokens(session.messages.get());
 				session.contextUsage.set({
-					inputTokens: previousBreakdown?.inputTokens ?? 0,
+					inputTokens,
+					isRealTotal: previousUsage?.isRealTotal ?? false,
 					breakdown: {
 						systemChars: event.systemChars,
 						instructionsChars: event.instructionsChars,

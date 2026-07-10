@@ -999,6 +999,7 @@ test('context_breakdown and usage events merge into contextUsage without clobber
 	const usage = session.contextUsage.get();
 	assert.ok(usage, 'contextUsage populated');
 	assert.equal(usage.inputTokens, 1500, 'input + cacheRead, the same sum the meter has always used');
+	assert.equal(usage.isRealTotal, true, 'usage landed, so the total is now real');
 	assert.ok(usage.breakdown, 'the breakdown that arrived before usage was not clobbered by it');
 	assert.equal(usage.breakdown.systemChars, 400);
 	assert.equal(usage.breakdown.toolsChars, 800);
@@ -1053,9 +1054,67 @@ test('context_breakdown keeps the previous real usage total instead of resetting
 	const session = await provider.startSession('q1');
 	await new Promise(resolve => setTimeout(resolve, 15));
 	assert.equal(session.contextUsage.get()?.inputTokens, 5000);
+	assert.equal(session.contextUsage.get()?.isRealTotal, true);
 
 	await provider.sendMessage(session.sessionId, 'q2');
 	await new Promise(resolve => setTimeout(resolve, 15));
 	assert.equal(session.contextUsage.get()?.inputTokens, 5000, 'the real total survives a breakdown-only update');
+	assert.equal(session.contextUsage.get()?.isRealTotal, true, 'still real — a later breakdown-only turn does not demote it');
 	assert.equal(session.contextUsage.get()?.breakdown?.systemChars, 10, 'the breakdown itself did update');
+});
+
+test('a fresh run\'s FIRST context_breakdown does not invent a fake real 0 — it estimates from session text instead', async () => {
+	// Regression: reported live — a reopened session (contextUsage undefined
+	// since restart) sent a new message; the ring briefly showed a confident
+	// "0% used" the instant the run started, before usage() corrected it a
+	// moment later. The fix: the FIRST context_breakdown of a process falls
+	// back to the same char/4 estimate the ring itself would show, and is
+	// marked NOT real, instead of forcing inputTokens to 0.
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			// No usage event at all this turn — mid-run, before the model replies.
+			emit({
+				event: {
+					type: 'context_breakdown',
+					turn: 1,
+					systemChars: 100,
+					instructionsChars: 0,
+					skillsChars: 0,
+					toolsChars: 100,
+					messagesChars: 100,
+					compactedChars: 0,
+					prunedChars: 0,
+				},
+			});
+			emit({ done: { reason: 'aborted', turns: 1 } });
+			return { reason: 'aborted', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	// A long first message so the char/4 estimate is unambiguously non-zero —
+	// the old bug would have forced this down to a "real" 0 regardless.
+	const longQuestion = 'x'.repeat(4000);
+	const session = await provider.startSession(longQuestion);
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	const usage = session.contextUsage.get();
+	assert.ok(usage, 'contextUsage populated by the context_breakdown event');
+	assert.equal(usage.isRealTotal, false, 'no usage event landed yet — must not claim a real total');
+	assert.ok(usage.inputTokens > 500, `expected a real char/4 estimate over the long message, got ${usage.inputTokens}`);
+	assert.ok(usage.breakdown, 'the live breakdown still shows while waiting for the real count');
 });

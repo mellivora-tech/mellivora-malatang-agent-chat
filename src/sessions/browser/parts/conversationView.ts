@@ -8,7 +8,7 @@ import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { IActiveSession, ISession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
-import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
+import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
@@ -915,7 +915,8 @@ export class ConversationView extends Disposable {
 		const fill = this.contextRing.querySelector<SVGCircleElement>('.ring-fill');
 		const value = this.contextRing.querySelector<HTMLElement>('.conversation-context-popover-value');
 		const breakdownList = this.contextRing.querySelector<HTMLElement>('.conversation-context-breakdown');
-		if (!fill || !value || !breakdownList) {
+		const footnote = this.contextRing.querySelector<HTMLElement>('.conversation-context-popover-footnote');
+		if (!fill || !value || !breakdownList || !footnote) {
 			return;
 		}
 
@@ -926,37 +927,37 @@ export class ConversationView extends Disposable {
 		}
 
 		const usage = this.session?.contextUsage.get();
-		let tokens: number;
-		if (usage) {
-			tokens = usage.inputTokens;
-		} else {
-			const messages = this.session?.messages.get() ?? [];
-			const chars = messages.reduce((sum, message) => sum + message.text.length, 0);
-			tokens = Math.ceil(chars / 4);
-		}
+		// `usage.inputTokens` is already the best number the provider has — a
+		// char/4 estimate before the first real reading lands in this process,
+		// the real total after. `isRealTotal` is the ONLY thing that changes;
+		// when contextUsage hasn't been touched at all yet, fall back the same
+		// way the provider itself would (same formula, so the two never drift).
+		const tokens = usage ? usage.inputTokens : estimateSessionTokens(this.session?.messages.get() ?? []);
+		const isRealTotal = usage?.isRealTotal ?? false;
 		const ratio = Math.min(1, tokens / contextLength);
 		const usedPct = Math.round(ratio * 100);
 
 		this.contextRing.hidden = false;
 		this.contextRing.dataset.level = ratio >= 0.95 ? 'danger' : ratio >= 0.8 ? 'warn' : 'ok';
 		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
-		// `usage` never survives a restart (it lives only in the in-memory
-		// session, not the persisted snapshot) — until this process runs a
-		// fresh turn, this is the char/4 fallback wearing a real-looking number.
-		// The aria-label always said so; say it where sighted users can see it
-		// too, otherwise a plausible percentage with no breakdown below it
-		// reads as broken rather than as "no fresh data yet".
-		value.textContent = `${usedPct}% used (${100 - usedPct}% left)${usage ? '' : ' (estimated)'}`;
+		// A char/4 reading never survives a restart, and a run's first turn
+		// reports one too (its context_breakdown event arrives before the model
+		// has replied — there is no real count yet to show). The aria-label
+		// always disclosed this; say it where sighted users can see it too,
+		// otherwise a plausible percentage with no breakdown below it reads as
+		// broken rather than as "no fresh data yet".
+		value.textContent = `${usedPct}% used (${100 - usedPct}% left)${isRealTotal ? '' : ' (estimated)'}`;
 		this.contextRing.setAttribute(
 			'aria-label',
-			`Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${usage ? '' : ' (estimated)'}`,
+			`Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${isRealTotal ? '' : ' (estimated)'}`,
 		);
 
-		// Per-category rows are always char/4 estimates (labeled so in the
-		// footnote); Free reuses the SAME `tokens` the ring itself is drawn from,
-		// so the header percentage and "how much is left" never disagree. No
-		// breakdown exists until a turn actually runs in THIS process — an
-		// `(estimated)` header with nothing below it is that state, not a bug.
+		// The breakdown can populate BEFORE the total is real — a run's first
+		// context_breakdown event fires ahead of its usage event, so the panel
+		// shows the mechanisms working live even before the model has replied.
+		// Free reuses the SAME `tokens` the ring itself is drawn from, so the
+		// header percentage and "how much is left" never disagree with each
+		// other — true whether that shared number is real or still an estimate.
 		breakdownList.replaceChildren();
 		const breakdown = usage?.breakdown;
 		if (breakdown) {
@@ -970,6 +971,7 @@ export class ConversationView extends Disposable {
 			breakdownList.append(createBreakdownRow('Messages', formatBreakdownEntry(breakdown.messagesChars, contextLength)));
 			breakdownList.append(createBreakdownRow('Free', formatTokensWithPct(Math.max(0, contextLength - tokens), contextLength)));
 		}
+		footnote.textContent = isRealTotal ? 'Estimated by category · total is real' : 'All figures estimated — waiting for the model’s real count';
 	}
 
 	private createWorkingRow(): HTMLElement {

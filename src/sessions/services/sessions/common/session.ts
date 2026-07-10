@@ -97,8 +97,23 @@ export interface ISessionContextBreakdown {
 /** Real token count from the most recent request — ground truth for the context-window meter. */
 export interface ISessionContextUsage {
 	readonly inputTokens: number;
+	/**
+	 * True once the provider's own usage reading has landed at least once in
+	 * this process. False means `inputTokens` is still the char/4 estimate —
+	 * e.g. a run's FIRST context_breakdown event arrives before the model has
+	 * replied, so there is no real count yet to carry forward. The UI must
+	 * label the reading "(estimated)" whenever this is false, exactly as it
+	 * already does when `contextUsage` itself is entirely undefined.
+	 */
+	readonly isRealTotal: boolean;
 	/** Absent for models/turns that never emitted a context_breakdown event (e.g. a text-only run with no workspace). */
 	readonly breakdown?: ISessionContextBreakdown;
+}
+
+/** char/4 estimate over a session's persisted text — the fallback used whenever no real usage reading exists yet for this process. Centralized so the ring and the provider's interim (pre-first-usage) reading never drift apart. */
+export function estimateSessionTokens(messages: readonly { readonly text: string }[]): number {
+	const chars = messages.reduce((sum, message) => sum + message.text.length, 0);
+	return Math.ceil(chars / 4);
 }
 
 /** A tool call paused on the user's allow / deny. */
