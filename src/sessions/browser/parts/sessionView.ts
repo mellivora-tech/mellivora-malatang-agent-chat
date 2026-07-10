@@ -6,6 +6,7 @@
 import { append, size } from '../../base/browser/dom.js';
 import { Disposable } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
+import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { ConversationView, type ISessionMessageSender } from './conversationView.js';
 
@@ -16,7 +17,7 @@ export class SessionView extends Disposable {
 	private readonly conversationView: ConversationView;
 	private session: IActiveSession | undefined;
 
-	constructor(messageSender?: ISessionMessageSender, modelsService?: IModelsService) {
+	constructor(messageSender?: ISessionMessageSender, modelsService?: IModelsService, projectsService?: IProjectsService) {
 		super();
 
 		this.element = document.createElement('div');
@@ -26,7 +27,7 @@ export class SessionView extends Disposable {
 		this.content = append(this.element, document.createElement('div'));
 		this.content.className = 'session-view-content';
 
-		this.conversationView = this._register(new ConversationView(messageSender, modelsService));
+		this.conversationView = this._register(new ConversationView(messageSender, modelsService, projectsService));
 		this.content.appendChild(this.conversationView.element);
 
 		this.openSession(undefined);

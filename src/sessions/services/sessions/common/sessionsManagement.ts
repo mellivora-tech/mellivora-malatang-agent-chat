@@ -6,14 +6,14 @@
 import type { Event } from '../../../base/common/event.js';
 import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession } from './session.js';
-import type { ISessionChangeEvent, IStartSessionOptions } from './sessionsProvider.js';
+import type { ISendMessageOptions, ISessionChangeEvent, IStartSessionOptions } from './sessionsProvider.js';
 
 export interface ISessionsManagementService {
 	getSessions(): readonly ISession[];
 	getSession(sessionId: string): ISession | undefined;
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
 	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
-	sendMessage(sessionId: string, query: string): Promise<ISession>;
+	sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;

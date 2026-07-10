@@ -700,3 +700,41 @@ test('a title that arrives after the user renamed the session does not overwrite
 
 	assert.equal(session.title.get(), 'my custom name', 'a non-placeholder title is never overwritten');
 });
+
+test('attachments persist on the user message and ride toTranscript as a path hint', async () => {
+	const bridge = createFakeBridge();
+	const agent = createTitleAgent(async () => undefined);
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('review @src/a.ts please', {
+		attachments: [
+			{ kind: 'file', path: 'src/a.ts' },
+			{ kind: 'file', path: 'src/a.ts' }, // duplicate — dropped
+			{ kind: 'folder', path: 'src/parts' },
+		],
+	});
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const userMessage = session.messages.get().find(message => message.role === 'user');
+	assert.deepEqual(userMessage?.attachments, [
+		{ kind: 'file', path: 'src/a.ts' },
+		{ kind: 'folder', path: 'src/parts' },
+	]);
+
+	const persisted = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'user');
+	assert.ok(persisted && persisted.entry.type === 'message');
+	assert.equal(persisted.entry.attachments?.length, 2, 'deduped attachments are persisted on the entry');
+
+	const transcript = toTranscript(session.messages.get());
+	const userTurn = transcript.find(turn => turn.role === 'user');
+	const text = (userTurn?.content[0] as { text: string }).text;
+	assert.match(text, /<user-attached-paths>/);
+	assert.match(text, /src\/a\.ts/);
+	assert.match(text, /src\/parts\/ \(folder\)/);
+});
+
+test('a message without attachments gains no hint block', () => {
+	const transcript = toTranscript([{ id: 'u1', role: 'user', text: 'hello' }]);
+	assert.equal((transcript[0]?.content[0] as { text: string }).text, 'hello');
+});

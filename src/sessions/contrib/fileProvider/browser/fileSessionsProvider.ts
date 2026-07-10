@@ -10,6 +10,7 @@ import type { IGitBridge } from '../../../services/git/common/git.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type {
 	ISession,
+	ISessionAttachment,
 	ISessionChangesSummary,
 	ISessionContextUsage,
 	ISessionMessage,
@@ -21,7 +22,7 @@ import type {
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
-import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
+import type { ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
 export interface IFileSessionsProviderOptions {
@@ -173,7 +174,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const ref: ISessionRef = { sessionId, ...(options?.projectId ? { projectId: options.projectId } : {}) };
 		const now = new Date();
 		const initialMode = permissionMode.get();
-		const userMessage: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now };
+		const attachments = normalizeAttachments(options?.attachments);
+		const userMessage: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now, ...(attachments ? { attachments } : {}) };
 
 		await this.enqueueWrite(async () => {
 			await this.bridge.create({
@@ -187,7 +189,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(options?.projectId ? { projectId: options.projectId } : {}),
 				...(options?.workspace ? { workspace: options.workspace } : {}),
 			});
-			await this.bridge.append(ref, { type: 'message', id: userMessage.id, role: 'user', text: query, timestamp: now.toISOString() });
+			await this.bridge.append(ref, { type: 'message', id: userMessage.id, role: 'user', text: query, timestamp: now.toISOString(), ...(attachments ? { attachments } : {}) });
 			await this.bridge.append(ref, {
 				type: 'state',
 				timestamp: now.toISOString(),
@@ -248,14 +250,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 		}
 	}
 
-	async sendMessage(sessionId: string, query: string): Promise<ISession> {
+	async sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession> {
 		const session = this.getMutableSession(sessionId);
 		const ref = this.getRef(sessionId);
 		const now = new Date();
-		const message: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now };
+		const attachments = normalizeAttachments(options?.attachments);
+		const message: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now, ...(attachments ? { attachments } : {}) };
 
 		await this.enqueueWrite(async () => {
-			await this.bridge.append(ref, { type: 'message', id: message.id, role: 'user', text: query, timestamp: now.toISOString() });
+			await this.bridge.append(ref, { type: 'message', id: message.id, role: 'user', text: query, timestamp: now.toISOString(), ...(attachments ? { attachments } : {}) });
 			await this.bridge.append(ref, { type: 'state', timestamp: now.toISOString(), status: SessionStatus.InProgress, isRead: false });
 		});
 
@@ -358,6 +361,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					role: message.role,
 					text: message.text,
 					timestamp: now.toISOString(),
+					...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
 					...(message.detail !== undefined ? { detail: message.detail } : {}),
 					...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 					...(message.steps !== undefined ? { steps: message.steps } : {}),
@@ -426,6 +430,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				id: message.id,
 				role: message.role,
 				text: message.text,
+				...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
 				...(message.detail !== undefined ? { detail: message.detail } : {}),
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
@@ -751,12 +756,39 @@ function describeWorkTool(name: string, input: unknown): string {
 	return typeof arg === 'string' ? `${name} ${arg}` : name;
 }
 
+/** Drop malformed entries and duplicates; undefined when nothing survives, so callers can omit the field entirely. */
+function normalizeAttachments(attachments: readonly ISessionAttachment[] | undefined): readonly ISessionAttachment[] | undefined {
+	if (!attachments || attachments.length === 0) {
+		return undefined;
+	}
+	const seen = new Set<string>();
+	const normalized: ISessionAttachment[] = [];
+	for (const attachment of attachments) {
+		if ((attachment.kind !== 'file' && attachment.kind !== 'folder') || typeof attachment.path !== 'string' || attachment.path === '') {
+			continue;
+		}
+		const key = `${attachment.kind}:${attachment.path}`;
+		if (!seen.has(key)) {
+			seen.add(key);
+			normalized.push({ kind: attachment.kind, path: attachment.path });
+		}
+	}
+	return normalized.length > 0 ? normalized : undefined;
+}
+
+/** The attachment hint that rides a user turn: point the agent at the mentioned paths without inlining their content. */
+function formatAttachmentsBlock(attachments: readonly ISessionAttachment[]): string {
+	const lines = attachments.map(attachment => (attachment.kind === 'folder' ? `${attachment.path}/ (folder)` : attachment.path));
+	return `<user-attached-paths>\nThe user attached these workspace-relative paths. Read the relevant ones with your tools before answering.\n${lines.join('\n')}\n</user-attached-paths>`;
+}
+
 /**
  * Build the message list sent to the model from the session history. Only
  * user/assistant turns cross the wire (work/tool blocks are UI-only), and
  * empty-text turns are dropped — the model APIs reject a request that contains
  * an empty-content message ("assistant message must not be empty", HTTP 400),
  * which a stray blank reply would otherwise poison every later run with.
+ * Attachments become a path-hint block on the user turn — never inlined content.
  */
 export function toTranscript(messages: readonly ISessionMessage[]): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
@@ -767,7 +799,9 @@ export function toTranscript(messages: readonly ISessionMessage[]): IAgentMessag
 		if (message.text.trim() === '') {
 			continue;
 		}
-		transcript.push({ role: message.role, content: [{ type: 'text', text: message.text }] });
+		const attachments = message.role === 'user' ? normalizeAttachments(message.attachments) : undefined;
+		const text = attachments ? `${message.text}\n\n${formatAttachmentsBlock(attachments)}` : message.text;
+		transcript.push({ role: message.role, content: [{ type: 'text', text }] });
 	}
 
 	return transcript;

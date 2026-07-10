@@ -9,7 +9,7 @@ import { createDecorator } from '../../../platform/instantiation/instantiation.j
 import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService as ISessionsManagementServiceContract } from '../common/sessionsManagement.js';
-import type { ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../common/sessionsProvider.js';
+import type { ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../common/sessionsProvider.js';
 import type { ISessionsProvidersChangeEvent, ISessionsProvidersService } from './sessionsProvidersService.js';
 
 export const ISessionsManagementService = createDecorator<ISessionsManagementServiceContract>('sessionsManagementService');
@@ -47,8 +47,8 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return provider.startSession(query, options);
 	}
 
-	async sendMessage(sessionId: string, query: string): Promise<ISession> {
-		return this.getOwningProvider(sessionId).sendMessage(sessionId, query);
+	async sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession> {
+		return this.getOwningProvider(sessionId).sendMessage(sessionId, query, options);
 	}
 
 	async stopSession(sessionId: string): Promise<ISession> {

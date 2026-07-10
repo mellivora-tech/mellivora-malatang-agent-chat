@@ -47,12 +47,19 @@ export interface ISessionWorkStepData {
 	readonly detail?: string;
 }
 
+/** A structured reference attached to a user message (@-mentioned file/folder). */
+export interface ISessionAttachmentData {
+	readonly kind: 'file' | 'folder';
+	readonly path: string;
+}
+
 export interface ISessionMessageEntry {
 	readonly type: 'message';
 	readonly id: string;
 	/** 'work' entries summarize one agent run: total duration plus its steps. */
 	readonly role: 'user' | 'assistant' | 'tool' | 'work';
 	readonly text: string;
+	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
 	readonly timestamp: string;
 	readonly durationMs?: number;
@@ -86,6 +93,7 @@ export interface ISessionSnapshotMessage {
 	readonly id: string;
 	readonly role: 'user' | 'assistant' | 'tool' | 'work';
 	readonly text: string;
+	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStepData[];

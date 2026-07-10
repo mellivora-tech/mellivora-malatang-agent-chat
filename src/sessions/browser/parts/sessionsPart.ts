@@ -35,12 +35,13 @@ export class SessionsPart extends Part {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
 			new NewSessionView({
-				onStartSession: query => this.sessionsService?.startSession(query, this.getStartSessionOptions()) ?? Promise.resolve(),
+				onStartSession: (query, attachments) =>
+					this.sessionsService?.startSession(query, { ...this.getStartSessionOptions(), ...(attachments ? { attachments } : {}) }) ?? Promise.resolve(),
 				...(this.projectsService ? { projectsService: this.projectsService } : {}),
 				...(modelsService ? { modelsService } : {}),
 			}),
 		);
-		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService));
+		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService));
 	}
 
 	private getStartSessionOptions(): { workspace: { label: string; description: string }; projectId: string } | undefined {

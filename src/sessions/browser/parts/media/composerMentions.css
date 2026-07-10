@@ -1,0 +1,90 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* @-mention picker — shared by the new-session and conversation composers. */
+
+.composer-mention-menu {
+	position: absolute;
+	z-index: 4;
+	display: flex;
+	flex-direction: column;
+	max-height: 320px;
+	overflow-y: auto;
+	padding: var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+}
+
+.composer-mention-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font-size: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.composer-mention-item.active {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
+}
+
+.composer-mention-item .codicon {
+	flex: none;
+	opacity: 0.75;
+}
+
+.composer-mention-item-name {
+	flex: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.composer-mention-item-dir {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: rtl;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 55%, transparent);
+	font-size: 0.9em;
+}
+
+.composer-mention-empty {
+	padding: var(--vscode-agents-space-8);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 60%, transparent);
+}
+
+/* Attachment chips under a sent user bubble. */
+
+.conversation-message-attachments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--vscode-agents-space-4);
+	margin-top: var(--vscode-agents-space-4);
+	justify-content: flex-end;
+}
+
+.conversation-message-attachment {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-3);
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-6);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 75%, transparent);
+	font-size: 0.85em;
+}
+
+.conversation-message-attachment .codicon {
+	font-size: inherit;
+}

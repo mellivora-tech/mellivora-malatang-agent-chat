@@ -7,10 +7,12 @@ import { append } from '../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
+import type { ISessionAttachment } from '../../services/sessions/common/session.js';
+import { installFileMentions } from './composerMentions.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface INewSessionViewOptions {
-	readonly onStartSession?: (query: string) => Promise<unknown>;
+	readonly onStartSession?: (query: string, attachments?: readonly ISessionAttachment[]) => Promise<unknown>;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
 }
@@ -66,8 +68,21 @@ export class NewSessionView extends Disposable {
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
 		input.rows = 2;
-		input.placeholder = 'Ask Mellivora anything, @ for files, folders, or whiteboards, / for commands or agents, $ for skills, # for related conversations';
+		input.placeholder = 'Ask Mellivora anything, @ for files or folders';
 		input.spellcheck = true;
+
+		// Installed before the Enter-to-send handler below — an Enter that picks
+		// a mention must not also submit (at-target listeners run in order).
+		const mentions = this._register(
+			installFileMentions({
+				host: content,
+				input,
+				loadPaths: () => {
+					const project = this.options.projectsService?.activeProject.get();
+					return project ? this.options.projectsService!.listProjectFiles(project.id) : undefined;
+				},
+			}),
+		);
 
 		const toolbar = append(composer, document.createElement('div'));
 		toolbar.className = 'new-session-composer-toolbar';
@@ -147,8 +162,10 @@ export class NewSessionView extends Disposable {
 				return;
 			}
 
+			const attachments = mentions.collectAttachments(query);
 			input.value = '';
-			void this.options.onStartSession?.(query);
+			mentions.reset();
+			void this.options.onStartSession?.(query, attachments.length > 0 ? attachments : undefined);
 		});
 
 		input.addEventListener('keydown', event => {

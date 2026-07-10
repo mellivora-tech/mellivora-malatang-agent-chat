@@ -6,8 +6,10 @@
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
-import type { IActiveSession, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
+import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
+import type { IActiveSession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
+import { installFileMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
 import { renderMarkdown } from './markdownRenderer.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
@@ -16,7 +18,7 @@ import type { PermissionMode } from '../../services/agent/common/agent.js';
 import { toDisposable } from '../../base/common/lifecycle.js';
 
 export interface ISessionMessageSender {
-	sendMessage(sessionId: string, query: string): Promise<unknown>;
+	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[] }): Promise<unknown>;
 	stopSession(sessionId: string): Promise<unknown>;
 	setSessionPermissionMode?(sessionId: string, mode: PermissionMode): Promise<unknown>;
 	setMessageFeedback?(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<unknown>;
@@ -65,9 +67,12 @@ export class ConversationView extends Disposable {
 	// the message action bar's fade-in) on unrelated, unchanged messages too.
 	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage }>();
 
+	private readonly mentions: IMentionController;
+
 	constructor(
 		private readonly messageSender?: ISessionMessageSender,
 		private readonly modelsService?: IModelsService,
+		private readonly projectsService?: IProjectsService,
 	) {
 		super();
 
@@ -98,6 +103,19 @@ export class ConversationView extends Disposable {
 		this.input.rows = 1;
 		this.input.placeholder = 'Ask Mellivora';
 		this.input.spellcheck = true;
+
+		// Installed before _registerEventListeners so a mention-picking Enter
+		// runs ahead of (and suppresses) the Enter-to-send handler.
+		this.mentions = this._register(
+			installFileMentions({
+				host: this.element,
+				input: this.input,
+				loadPaths: () => {
+					const projectId = this.session?.projectId;
+					return projectId && this.projectsService ? this.projectsService.listProjectFiles(projectId) : undefined;
+				},
+			}),
+		);
 
 		const toolbar = append(inputWrap, document.createElement('div'));
 		toolbar.className = 'conversation-composer-toolbar';
@@ -210,6 +228,8 @@ export class ConversationView extends Disposable {
 		this.header.openSession(session);
 		this.setSendError(undefined);
 		this.queuedFollowUp = undefined;
+		// Mentions recorded against another session's project must not leak here.
+		this.mentions.reset();
 		// A freshly opened conversation starts at its latest message.
 		this.scrollToBottomOnRender = true;
 
@@ -948,8 +968,10 @@ export class ConversationView extends Disposable {
 		this.scrollToBottomOnRender = true;
 
 		try {
-			await this.messageSender?.sendMessage(session.sessionId, query);
+			const attachments = this.mentions.collectAttachments(query);
+			await this.messageSender?.sendMessage(session.sessionId, query, attachments.length > 0 ? { attachments } : undefined);
 			this.input.value = '';
+			this.mentions.reset();
 		} catch {
 			this.setSendError('Message failed to send. Your draft was kept — try again.');
 		} finally {
@@ -1094,6 +1116,20 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions): 
 		const bubble = append(body, document.createElement('div'));
 		bubble.className = 'conversation-message-bubble';
 		bubble.textContent = message.text;
+		if (message.attachments && message.attachments.length > 0) {
+			const chips = append(body, document.createElement('div'));
+			chips.className = 'conversation-message-attachments';
+			for (const attachment of message.attachments) {
+				const chip = append(chips, document.createElement('span'));
+				chip.className = 'conversation-message-attachment';
+				chip.title = attachment.path;
+				const icon = append(chip, document.createElement('span'));
+				icon.className = `codicon ${attachment.kind === 'folder' ? 'codicon-folder' : 'codicon-file'}`;
+				icon.setAttribute('aria-hidden', 'true');
+				const name = append(chip, document.createElement('span'));
+				name.textContent = attachment.path.split('/').pop()! + (attachment.kind === 'folder' ? '/' : '');
+			}
+		}
 	} else if (message.role === 'assistant') {
 		const text = append(body, document.createElement('div'));
 		text.className = 'conversation-message-text conversation-markdown';

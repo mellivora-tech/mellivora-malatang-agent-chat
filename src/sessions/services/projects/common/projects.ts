@@ -25,4 +25,6 @@ export interface IProjectsBridge {
 	pickAndCreate(): Promise<IProject | undefined>;
 	/** Open the project directory in the OS file manager. */
 	revealInFolder(projectId: string): Promise<boolean>;
+	/** Workspace-relative file paths under the project root (capped), for the composer's @-mention picker. */
+	listFiles?(projectId: string): Promise<readonly string[]>;
 }

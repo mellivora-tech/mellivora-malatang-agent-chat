@@ -41,11 +41,23 @@ export interface ISessionWorkStep {
 	readonly detail?: string;
 }
 
+/**
+ * A structured reference the user attached to a message (an @-mention today;
+ * images, sessions, and skills are future kinds). File/folder paths are
+ * workspace-relative — the agent reads them through its tools, the content is
+ * never inlined here.
+ */
+export interface ISessionAttachment {
+	readonly kind: 'file' | 'folder';
+	readonly path: string;
+}
+
 export interface ISessionMessage {
 	readonly id: string;
 	/** 'work' messages summarize one agent run: total duration plus its steps. */
 	readonly role: 'user' | 'assistant' | 'tool' | 'work';
 	readonly text: string;
+	readonly attachments?: readonly ISessionAttachment[];
 	readonly detail?: string;
 	/** Total run duration; unset while the run is still in progress. */
 	readonly durationMs?: number;

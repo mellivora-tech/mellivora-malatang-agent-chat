@@ -116,6 +116,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 				id: entry.id,
 				role: entry.role,
 				text: entry.text,
+				...(entry.attachments !== undefined ? { attachments: entry.attachments } : {}),
 				...(entry.detail !== undefined ? { detail: entry.detail } : {}),
 				...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
 				...(entry.steps !== undefined ? { steps: entry.steps } : {}),

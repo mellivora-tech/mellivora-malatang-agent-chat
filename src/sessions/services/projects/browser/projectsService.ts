@@ -16,6 +16,8 @@ export interface IProjectsService {
 	initialize(): Promise<void>;
 	setActiveProject(projectId: string): void;
 	addProjectViaDialog(): Promise<IProject | undefined>;
+	/** Workspace-relative file paths under the project root, for the composer's @-mention picker. Empty when unsupported. */
+	listProjectFiles(projectId: string): Promise<readonly string[]>;
 }
 
 export class ProjectsService implements IProjectsService {
@@ -45,6 +47,18 @@ export class ProjectsService implements IProjectsService {
 		if (project) {
 			this.activeProjectValue.set(project);
 			void this.appState?.set({ activeProjectId: project.id }).catch(error => console.error('Failed to persist the active project:', error));
+		}
+	}
+
+	async listProjectFiles(projectId: string): Promise<readonly string[]> {
+		if (!this.bridge?.listFiles) {
+			return [];
+		}
+		try {
+			return await this.bridge.listFiles(projectId);
+		} catch (error) {
+			console.warn(`Listing files failed for project ${projectId}:`, error);
+			return [];
 		}
 	}
 

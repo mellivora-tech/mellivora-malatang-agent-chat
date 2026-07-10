@@ -5,7 +5,7 @@
 
 import type { Event } from '../../../base/common/event.js';
 import type { PermissionMode } from '../../agent/common/agent.js';
-import type { ISession, ISessionWorkspace } from './session.js';
+import type { ISession, ISessionAttachment, ISessionWorkspace } from './session.js';
 
 export interface ISessionChangeEvent {
 	readonly added: readonly ISession[];
@@ -16,6 +16,11 @@ export interface ISessionChangeEvent {
 export interface IStartSessionOptions {
 	readonly workspace?: ISessionWorkspace;
 	readonly projectId?: string;
+	readonly attachments?: readonly ISessionAttachment[];
+}
+
+export interface ISendMessageOptions {
+	readonly attachments?: readonly ISessionAttachment[];
 }
 
 export interface ISessionsProvider {
@@ -26,7 +31,7 @@ export interface ISessionsProvider {
 	getSessions(): readonly ISession[];
 	readonly onDidChangeSessions: Event<ISessionChangeEvent>;
 	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
-	sendMessage(sessionId: string, query: string): Promise<ISession>;
+	sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;

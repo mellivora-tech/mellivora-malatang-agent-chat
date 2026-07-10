@@ -8,7 +8,7 @@ import { createDecorator } from '../../../platform/instantiation/instantiation.j
 import type { PermissionMode } from '../../agent/common/agent.js';
 import type { ISession } from '../common/session.js';
 import type { ISessionsManagementService } from '../common/sessionsManagement.js';
-import type { IStartSessionOptions } from '../common/sessionsProvider.js';
+import type { ISendMessageOptions, IStartSessionOptions } from '../common/sessionsProvider.js';
 import { VisibleSessions } from './visibleSessions.js';
 import type { ISessionsPartService } from './sessionsPartService.js';
 
@@ -22,7 +22,7 @@ export interface ISessionsService {
 	openSession(sessionId: string): void;
 	setActive(sessionId: string): void;
 	closeSession(sessionId: string): void;
-	sendMessage(sessionId: string, query: string): Promise<ISession>;
+	sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
@@ -87,8 +87,8 @@ export class SessionsService extends Disposable implements ISessionsService {
 		this.visibleSessionsModel.closeSession(sessionId);
 	}
 
-	async sendMessage(sessionId: string, query: string): Promise<ISession> {
-		const session = await this.managementService.sendMessage(sessionId, query);
+	async sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession> {
+		const session = await this.managementService.sendMessage(sessionId, query, options);
 		this.visibleSessionsModel.setSessions(this.managementService.getSessions());
 		this.visibleSessionsModel.setActive(session);
 		this.sessionsPartService.showConversation();
