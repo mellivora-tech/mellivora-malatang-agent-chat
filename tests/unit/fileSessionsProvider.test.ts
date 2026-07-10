@@ -999,7 +999,7 @@ test('context_breakdown and usage events merge into contextUsage without clobber
 	const usage = session.contextUsage.get();
 	assert.ok(usage, 'contextUsage populated');
 	assert.equal(usage.inputTokens, 1500, 'input + cacheRead, the same sum the meter has always used');
-	assert.equal(usage.isRealTotal, true, 'usage landed, so the total is now real');
+	assert.equal(usage.totalSource, 'real', 'usage landed, so the total is now real');
 	assert.ok(usage.breakdown, 'the breakdown that arrived before usage was not clobbered by it');
 	assert.equal(usage.breakdown.systemChars, 400);
 	assert.equal(usage.breakdown.toolsChars, 800);
@@ -1054,12 +1054,12 @@ test('context_breakdown keeps the previous real usage total instead of resetting
 	const session = await provider.startSession('q1');
 	await new Promise(resolve => setTimeout(resolve, 15));
 	assert.equal(session.contextUsage.get()?.inputTokens, 5000);
-	assert.equal(session.contextUsage.get()?.isRealTotal, true);
+	assert.equal(session.contextUsage.get()?.totalSource, 'real');
 
 	await provider.sendMessage(session.sessionId, 'q2');
 	await new Promise(resolve => setTimeout(resolve, 15));
 	assert.equal(session.contextUsage.get()?.inputTokens, 5000, 'the real total survives a breakdown-only update');
-	assert.equal(session.contextUsage.get()?.isRealTotal, true, 'still real — a later breakdown-only turn does not demote it');
+	assert.equal(session.contextUsage.get()?.totalSource, 'real', 'still real — a later breakdown-only turn does not demote it');
 	assert.equal(session.contextUsage.get()?.breakdown?.systemChars, 10, 'the breakdown itself did update');
 });
 
@@ -1114,7 +1114,117 @@ test('a fresh run\'s FIRST context_breakdown does not invent a fake real 0 — i
 
 	const usage = session.contextUsage.get();
 	assert.ok(usage, 'contextUsage populated by the context_breakdown event');
-	assert.equal(usage.isRealTotal, false, 'no usage event landed yet — must not claim a real total');
+	assert.equal(usage.totalSource, 'estimate', 'no usage event landed yet — must not claim a real total');
 	assert.ok(usage.inputTokens > 500, `expected a real char/4 estimate over the long message, got ${usage.inputTokens}`);
 	assert.ok(usage.breakdown, 'the live breakdown still shows while waiting for the real count');
+});
+
+test('the context meter reading persists at finalize and rehydrates as "restored"', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({
+				event: {
+					type: 'context_breakdown',
+					turn: 1,
+					systemChars: 400,
+					instructionsChars: 40,
+					skillsChars: 0,
+					toolsChars: 800,
+					messagesChars: 200,
+					compactedChars: 0,
+					prunedChars: 0,
+				},
+			});
+			emit({ event: { type: 'usage', inputTokens: 12_345 } });
+			emit({ event: { type: 'assistant_delta', text: 'ok' } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('question');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	// Persisted on the finalize state entry, real total + the live breakdown.
+	const stateWithUsage = bridge.appends.find(call => call.entry.type === 'state' && (call.entry as { contextUsage?: unknown }).contextUsage !== undefined);
+	assert.ok(stateWithUsage, 'contextUsage persisted on a state entry');
+	const persisted = (stateWithUsage.entry as { contextUsage: { inputTokens: number; breakdown?: { systemChars: number } } }).contextUsage;
+	assert.equal(persisted.inputTokens, 12_345);
+	assert.equal(persisted.breakdown?.systemChars, 400);
+
+	// A second provider folding the same store hydrates it as a restored bill.
+	const snapshot = createSnapshot(session.sessionId, { contextUsage: { inputTokens: 12_345, breakdown: { systemChars: 400, instructionsChars: 40, skillsChars: 0, toolsChars: 800, messagesChars: 200, compactedChars: 0, prunedChars: 0 } } });
+	const rehydrated = new FileSessionsProvider(createFakeBridge([snapshot]), { responseDelayMs: 1 });
+	await rehydrated.initialize();
+	const restored = rehydrated.getSessions()[0]!.contextUsage.get();
+	assert.ok(restored, 'restored reading present before any run in this process');
+	assert.equal(restored.totalSource, 'restored');
+	assert.equal(restored.inputTokens, 12_345);
+	assert.equal(restored.breakdown?.systemChars, 400);
+});
+
+test('a restored total carries through the next run\'s first breakdown without demotion to estimate', async () => {
+	const snapshot = createSnapshot('s-restored', { contextUsage: { inputTokens: 30_000 } });
+	const bridge = createFakeBridge([snapshot]);
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			// Breakdown only — no usage yet (mid-run shape).
+			emit({
+				event: {
+					type: 'context_breakdown',
+					turn: 1,
+					systemChars: 10,
+					instructionsChars: 0,
+					skillsChars: 0,
+					toolsChars: 0,
+					messagesChars: 10,
+					compactedChars: 0,
+					prunedChars: 0,
+				},
+			});
+			emit({ done: { reason: 'aborted', turns: 1 } });
+			return { reason: 'aborted', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = provider.getSessions()[0]!;
+	assert.equal(session.contextUsage.get()?.totalSource, 'restored');
+
+	await provider.sendMessage(session.sessionId, 'follow-up');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	const usage = session.contextUsage.get();
+	assert.ok(usage);
+	assert.equal(usage.totalSource, 'restored', 'the last run\'s real bill beats a fresh estimate');
+	assert.equal(usage.inputTokens, 30_000, 'the restored number carries forward');
+	assert.equal(usage.breakdown?.systemChars, 10, 'the live breakdown still updates');
 });

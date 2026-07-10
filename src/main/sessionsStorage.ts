@@ -137,6 +137,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let isPinned = false;
 	let permissionMode: string | undefined;
 	let compactionAnchor: ISessionStateEntry['compactionAnchor'];
+	let contextUsage: ISessionStateEntry['contextUsage'];
 	const feedback = new Map<string, 'like' | 'dislike'>();
 
 	for (const line of lines.slice(1)) {
@@ -199,6 +200,9 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		if (entry.compactionAnchor !== undefined) {
 			compactionAnchor = entry.compactionAnchor;
 		}
+		if (entry.contextUsage !== undefined) {
+			contextUsage = entry.contextUsage;
+		}
 	}
 
 	return {
@@ -222,6 +226,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		...(description !== undefined ? { description } : {}),
 		...(summary !== undefined ? { changesSummary: summary } : {}),
 		...(compactionAnchor !== undefined ? { compactionAnchor } : {}),
+		...(contextUsage !== undefined ? { contextUsage } : {}),
 	};
 }
 

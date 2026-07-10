@@ -77,6 +77,7 @@ function createSession(options: {
 	isPinned?: boolean;
 	permissionMode?: PermissionMode;
 	compactionAnchor?: ISessionCompactionAnchorData;
+	contextUsage?: ISessionContextUsage;
 }): IMutableSession {
 	return {
 		sessionId: options.sessionId,
@@ -99,7 +100,7 @@ function createSession(options: {
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 		permissionMode: observableValue<PermissionMode>(options.permissionMode ?? 'ask'),
-		contextUsage: observableValue<ISessionContextUsage | undefined>(undefined),
+		contextUsage: observableValue<ISessionContextUsage | undefined>(options.contextUsage),
 		...(options.compactionAnchor ? { compactionAnchor: options.compactionAnchor } : {}),
 	};
 }
@@ -471,6 +472,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 			...(snapshot.workspace !== undefined ? { workspace: snapshot.workspace } : {}),
 			...(snapshot.changesSummary !== undefined ? { changesSummary: snapshot.changesSummary } : {}),
 			...(snapshot.compactionAnchor !== undefined ? { compactionAnchor: snapshot.compactionAnchor } : {}),
+			// A persisted reading is a real bill from a previous run — restored
+			// as 'restored' so the UI labels it "(last run)" until this process
+			// produces a fresh one.
+			...(snapshot.contextUsage !== undefined
+				? {
+						contextUsage: {
+							inputTokens: snapshot.contextUsage.inputTokens,
+							totalSource: 'restored' as const,
+							...(snapshot.contextUsage.breakdown ? { breakdown: snapshot.contextUsage.breakdown } : {}),
+						},
+					}
+				: {}),
 		});
 	}
 
@@ -694,6 +707,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 				session.compactionAnchor = pendingAnchor;
 			}
 			const anchorToPersist = pendingAnchor;
+			// The meter's last reading survives restarts (rehydrated as "last
+			// run"). Estimates are never persisted — restoring a guess as if it
+			// were a bill would defeat the labeling.
+			const usageAtEnd = session.contextUsage.get();
+			const usageToPersist =
+				usageAtEnd && usageAtEnd.totalSource !== 'estimate'
+					? { inputTokens: usageAtEnd.inputTokens, ...(usageAtEnd.breakdown ? { breakdown: usageAtEnd.breakdown } : {}) }
+					: undefined;
 			const now = new Date();
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
@@ -707,6 +728,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					status: SessionStatus.NeedsInput,
 					isRead: false,
 					...(anchorToPersist ? { compactionAnchor: anchorToPersist } : {}),
+					...(usageToPersist ? { contextUsage: usageToPersist } : {}),
 				});
 			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
 
@@ -767,23 +789,23 @@ export class FileSessionsProvider implements ISessionsProvider {
 				const previousUsage = session.contextUsage.get();
 				session.contextUsage.set({
 					inputTokens: event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0),
-					isRealTotal: true,
+					totalSource: 'real',
 					...(previousUsage?.breakdown ? { breakdown: previousUsage.breakdown } : {}),
 				});
 			} else if (event?.type === 'context_breakdown') {
 				// Emitted before the request goes out, every turn — the panel can
 				// show the mechanisms working live even before the model replies.
-				// A real total carries forward until a fresh one supersedes it;
-				// with none yet (this run's FIRST turn in this process — e.g. a
-				// reopened session run for the first time since restart), fall
-				// back to the SAME char/4 estimate the ring itself would show,
-				// rather than inventing a fake "real" 0 that would otherwise flash
-				// the meter to 0% until usage lands a moment later.
+				// The best known total carries forward: a real one from this
+				// process, or a restored one from the last run's persisted state.
+				// With neither (a genuinely fresh session), fall back to the SAME
+				// char/4 estimate the ring itself would show, rather than inventing
+				// a fake "real" 0 that would flash the meter to 0% until usage
+				// lands a moment later.
 				const previousUsage = session.contextUsage.get();
-				const inputTokens = previousUsage?.isRealTotal ? previousUsage.inputTokens : estimateSessionTokens(session.messages.get());
+				const carryTotal = previousUsage !== undefined && previousUsage.totalSource !== 'estimate';
 				session.contextUsage.set({
-					inputTokens,
-					isRealTotal: previousUsage?.isRealTotal ?? false,
+					inputTokens: carryTotal ? previousUsage.inputTokens : estimateSessionTokens(session.messages.get()),
+					totalSource: carryTotal ? previousUsage.totalSource : 'estimate',
 					breakdown: {
 						systemChars: event.systemChars,
 						instructionsChars: event.instructionsChars,

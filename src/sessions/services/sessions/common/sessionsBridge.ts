@@ -89,6 +89,25 @@ export interface ISessionCompactionAnchorData {
 	readonly prefixChars: number;
 }
 
+/**
+ * The context meter's last known reading, persisted so a reopened session
+ * shows the previous run's real bill (labeled "last run") instead of a blank
+ * estimate. `inputTokens` is a real provider count; the breakdown chars are
+ * the char/4-estimated category rows from the same moment.
+ */
+export interface ISessionContextUsageData {
+	readonly inputTokens: number;
+	readonly breakdown?: {
+		readonly systemChars: number;
+		readonly instructionsChars: number;
+		readonly skillsChars: number;
+		readonly toolsChars: number;
+		readonly messagesChars: number;
+		readonly compactedChars: number;
+		readonly prunedChars: number;
+	};
+}
+
 export interface ISessionStateEntry {
 	readonly type: 'state';
 	readonly timestamp: string;
@@ -101,6 +120,7 @@ export interface ISessionStateEntry {
 	readonly isPinned?: boolean;
 	readonly permissionMode?: string;
 	readonly compactionAnchor?: ISessionCompactionAnchorData;
+	readonly contextUsage?: ISessionContextUsageData;
 }
 
 export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry;
@@ -136,6 +156,7 @@ export interface ISessionSnapshot {
 	readonly isPinned: boolean;
 	readonly permissionMode?: string;
 	readonly compactionAnchor?: ISessionCompactionAnchorData;
+	readonly contextUsage?: ISessionContextUsageData;
 	readonly messages: readonly ISessionSnapshotMessage[];
 }
 

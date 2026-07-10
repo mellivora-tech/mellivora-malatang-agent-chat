@@ -94,18 +94,22 @@ export interface ISessionContextBreakdown {
 	readonly prunedChars: number;
 }
 
+/**
+ * Where the meter's total came from — the UI labels each state honestly:
+ * - 'real': the provider's own usage reading, produced in THIS process (no label).
+ * - 'restored': a real reading persisted by a previous run and rehydrated —
+ *   a true bill, just possibly stale (model/window may have changed since).
+ *   Labeled "(last run)".
+ * - 'estimate': the char/4 fallback — no real reading exists yet (a run's
+ *   FIRST context_breakdown fires before the model has replied). Labeled
+ *   "(estimated)", exactly like a wholly-absent contextUsage.
+ */
+export type SessionContextTotalSource = 'real' | 'restored' | 'estimate';
+
 /** Real token count from the most recent request — ground truth for the context-window meter. */
 export interface ISessionContextUsage {
 	readonly inputTokens: number;
-	/**
-	 * True once the provider's own usage reading has landed at least once in
-	 * this process. False means `inputTokens` is still the char/4 estimate —
-	 * e.g. a run's FIRST context_breakdown event arrives before the model has
-	 * replied, so there is no real count yet to carry forward. The UI must
-	 * label the reading "(estimated)" whenever this is false, exactly as it
-	 * already does when `contextUsage` itself is entirely undefined.
-	 */
-	readonly isRealTotal: boolean;
+	readonly totalSource: SessionContextTotalSource;
 	/** Absent for models/turns that never emitted a context_breakdown event (e.g. a text-only run with no workspace). */
 	readonly breakdown?: ISessionContextBreakdown;
 }

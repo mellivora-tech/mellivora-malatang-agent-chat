@@ -942,39 +942,39 @@ export class ConversationView extends Disposable {
 
 		const usage = this.session?.contextUsage.get();
 		// `usage.inputTokens` is already the best number the provider has — a
-		// char/4 estimate before the first real reading lands in this process,
-		// the real total after. `isRealTotal` is the ONLY thing that changes;
-		// when contextUsage hasn't been touched at all yet, fall back the same
-		// way the provider itself would (same formula, so the two never drift).
+		// real bill from this process, a restored bill from the last run, or a
+		// char/4 estimate. `totalSource` says which; when contextUsage hasn't
+		// been touched at all yet, fall back the same way the provider itself
+		// would (same formula, so the two never drift).
 		const tokens = usage ? usage.inputTokens : estimateSessionTokens(this.session?.messages.get() ?? []);
-		const isRealTotal = usage?.isRealTotal ?? false;
+		const totalSource = usage?.totalSource ?? 'estimate';
 		const ratio = Math.min(1, tokens / contextLength);
 		const usedPct = Math.round(ratio * 100);
 
 		this.contextRing.hidden = false;
 		this.contextRing.dataset.level = ratio >= 0.95 ? 'danger' : ratio >= 0.8 ? 'warn' : 'ok';
 		fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - ratio));
-		// A char/4 reading never survives a restart, and a run's first turn
-		// reports one too (its context_breakdown event arrives before the model
-		// has replied — there is no real count yet to show). The aria-label
-		// always disclosed this; say it where sighted users can see it too,
-		// otherwise a plausible percentage with no breakdown below it reads as
-		// broken rather than as "no fresh data yet".
-		value.textContent = `${usedPct}% used (${100 - usedPct}% left)${isRealTotal ? '' : ' (estimated)'}`;
-		this.contextRing.setAttribute(
-			'aria-label',
-			`Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${isRealTotal ? '' : ' (estimated)'}`,
-		);
+		// Three honestly-labeled states: a fresh real reading needs no caveat; a
+		// restored one is a true bill that may be stale ("last run"); an estimate
+		// says so. The aria-label always disclosed the estimate case; the visible
+		// text carries the same tags so a plausible number is never mistaken for
+		// a fresh measurement.
+		const totalSuffix = totalSource === 'real' ? '' : totalSource === 'restored' ? ' (last run)' : ' (estimated)';
+		value.textContent = `${usedPct}% used (${100 - usedPct}% left)${totalSuffix}`;
+		this.contextRing.setAttribute('aria-label', `Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${totalSuffix}`);
 
 		// The breakdown can populate BEFORE the total is real — a run's first
 		// context_breakdown event fires ahead of its usage event, so the panel
 		// shows the mechanisms working live even before the model has replied.
-		// Free reuses the SAME `tokens` the ring itself is drawn from, so the
-		// header percentage and "how much is left" never disagree with each
-		// other — true whether that shared number is real or still an estimate.
+		// Free closes the CATEGORY ledger (window − Σrows), so the rows always
+		// sum to 100% among themselves; the header stays on the real/restored
+		// total. The two speak different clocks by design — rows describe the
+		// NEXT request, the total bills the last one — and the footnote says so.
 		breakdownList.replaceChildren();
 		const breakdown = usage?.breakdown;
 		if (breakdown) {
+			const categoryChars =
+				breakdown.systemChars + breakdown.instructionsChars + breakdown.skillsChars + breakdown.toolsChars + breakdown.compactedChars + breakdown.messagesChars;
 			breakdownList.append(createBreakdownRow('System prompt', formatBreakdownEntry(breakdown.systemChars, contextLength)));
 			breakdownList.append(createBreakdownRow('Project instructions', formatBreakdownEntry(breakdown.instructionsChars, contextLength)));
 			breakdownList.append(createBreakdownRow('Skills', formatBreakdownEntry(breakdown.skillsChars, contextLength)));
@@ -983,9 +983,14 @@ export class ConversationView extends Disposable {
 				breakdownList.append(createBreakdownRow('Compacted summary', formatBreakdownEntry(breakdown.compactedChars, contextLength)));
 			}
 			breakdownList.append(createBreakdownRow('Messages', formatBreakdownEntry(breakdown.messagesChars, contextLength)));
-			breakdownList.append(createBreakdownRow('Free', formatTokensWithPct(Math.max(0, contextLength - tokens), contextLength)));
+			breakdownList.append(createBreakdownRow('Free', formatTokensWithPct(Math.max(0, contextLength - Math.round(categoryChars / 4)), contextLength)));
 		}
-		footnote.textContent = isRealTotal ? 'Estimated by category · total is real' : 'All figures estimated — waiting for the model’s real count';
+		footnote.textContent =
+			totalSource === 'real'
+				? 'Rows estimate the next request · total is real'
+				: totalSource === 'restored'
+					? 'From the last run · rows estimated'
+					: 'All figures estimated — waiting for the model’s real count';
 
 		// Content just changed height (e.g. rows appeared mid-hover as a live run
 		// streams in) — reposition so it stays flipped/clamped correctly rather
