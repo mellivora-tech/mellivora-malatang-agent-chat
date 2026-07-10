@@ -890,3 +890,42 @@ test('a #session attachment injects the referenced context block; an unresolvabl
 	const second = (transcript[1]?.content[0] as { text: string }).text;
 	assert.equal(second, 'and #gone too', 'a deleted referenced session adds nothing');
 });
+
+test('answer-writing time is not mislabeled as a trailing "Thought" step', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'thinking_delta', text: 'weighing the answer' } });
+			emit({ event: { type: 'assistant_delta', text: 'the reply' } });
+			// The writing period: >1s so the pre-fix phantom step would pass the
+			// noise gate (duration >= 1000 with no content) and show up.
+			await new Promise(resolve => setTimeout(resolve, 1100));
+			emit({ event: { type: 'assistant_delta', text: ' continues' } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('question');
+	await new Promise(resolve => setTimeout(resolve, 1300));
+
+	const work = session.messages.get().find(message => message.role === 'work');
+	assert.ok(work, 'work block exists');
+	const thinkingSteps = (work.steps ?? []).filter(step => step.kind === 'thinking');
+	assert.equal(thinkingSteps.length, 1, `exactly one Thought step (the real one), got ${JSON.stringify(work.steps)}`);
+	assert.ok(thinkingSteps[0]!.detail?.includes('weighing the answer'), 'the surviving Thought step carries the reasoning text');
+});

@@ -605,6 +605,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 			stepStart = Date.now();
 		};
 
+		// A segment with no buffered reasoning after visible text has begun is
+		// answer-writing (or verifier) time, not thought — don't let it masquerade
+		// as a "Thought for Xs" step. The clock still resets so the elapsed time
+		// can't leak into the next step. (`text === ''` keeps honest time-only
+		// Thought steps for models that reason without streaming it.)
+		const closeThinkingOrSkip = (): void => {
+			if (text === '' || thinkingBuffer.trim() !== '') {
+				closeStep('thinking', 'Thought');
+			} else {
+				stepStart = Date.now();
+			}
+		};
+
 		const updateWork = (durationMs?: number): void => {
 			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: [...steps], ...(durationMs === undefined ? {} : { durationMs }) };
 			const messages = session.messages.get();
@@ -637,7 +650,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				closeStep('tool', openToolLabel);
 				openToolLabel = undefined;
 			} else {
-				closeStep('thinking', 'Thought');
+				closeThinkingOrSkip();
 			}
 			const workDuration = Date.now() - workStart;
 			updateWork(workDuration);
@@ -717,7 +730,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				text += event.text;
 				updateAssistant();
 			} else if (event?.type === 'tool_use') {
-				closeStep('thinking', 'Thought');
+				closeThinkingOrSkip();
 				openToolLabel = describeWorkTool(event.name, event.input);
 				updateWork();
 			} else if (event?.type === 'tool_result') {
