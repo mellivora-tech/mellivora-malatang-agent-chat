@@ -1002,7 +1002,15 @@ export class ConversationView extends Disposable {
 		if (!this.contextPopover.isConnected) {
 			// First real use, well after Workbench.startup()'s one-time
 			// `replaceChildren` — safe to mount now (see the constructor comment).
-			document.body.append(this.contextPopover);
+			// Mount inside the WORKBENCH ROOT, not document.body: the theme's
+			// custom properties are inline styles on that root
+			// (applyThemeTokens), so outside its subtree every
+			// var(--vscode-agents-*) fails to resolve — a transparent, unthemed
+			// card (seen live: bare black text in dark theme). The root carries
+			// no transform/filter, so position: fixed still anchors to the
+			// viewport and escapes the root's own overflow: hidden.
+			const host = this.contextRing.closest('.monaco-workbench') ?? document.body;
+			host.append(this.contextPopover);
 		}
 		this.positionContextPopover();
 		this.contextPopover.classList.add('is-visible');
