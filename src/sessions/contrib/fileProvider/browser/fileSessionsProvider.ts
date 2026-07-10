@@ -529,6 +529,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 	private async buildTranscript(session: IMutableSession): Promise<IAgentMessage[]> {
 		const messages = session.messages.get();
 		const images = new Map<string, { mediaType: string; data: string }>();
+		const sessionContexts = new Map<string, string>();
 		for (const message of messages) {
 			for (const attachment of message.attachments ?? []) {
 				if (attachment.kind === 'image' && !images.has(attachment.path)) {
@@ -536,10 +537,17 @@ export class FileSessionsProvider implements ISessionsProvider {
 					if (data) {
 						images.set(attachment.path, { mediaType: attachment.mediaType ?? mediaTypeFromPath(attachment.path), data });
 					}
+				} else if (attachment.kind === 'session' && !sessionContexts.has(attachment.path)) {
+					// Resolved live from the in-memory session list: the referenced
+					// conversation may have grown since it was attached — recent turns win.
+					const referenced = this.sessions.find(candidate => candidate.sessionId === attachment.path);
+					if (referenced && referenced.sessionId !== session.sessionId) {
+						sessionContexts.set(attachment.path, formatSessionContext(referenced.title.get(), referenced.messages.get()));
+					}
 				}
 			}
 		}
-		return toTranscript(messages, images);
+		return toTranscript(messages, images, sessionContexts);
 	}
 
 	private generateReply(session: IMutableSession): void {
@@ -862,13 +870,22 @@ function normalizeAttachments(attachments: readonly ISessionAttachment[] | undef
 	const seen = new Set<string>();
 	const normalized: ISessionAttachment[] = [];
 	for (const attachment of attachments) {
-		if ((attachment.kind !== 'file' && attachment.kind !== 'folder' && attachment.kind !== 'image' && attachment.kind !== 'skill') || typeof attachment.path !== 'string' || attachment.path === '') {
+		if (
+			(attachment.kind !== 'file' && attachment.kind !== 'folder' && attachment.kind !== 'image' && attachment.kind !== 'skill' && attachment.kind !== 'session') ||
+			typeof attachment.path !== 'string' ||
+			attachment.path === ''
+		) {
 			continue;
 		}
 		const key = `${attachment.kind}:${attachment.path}`;
 		if (!seen.has(key)) {
 			seen.add(key);
-			normalized.push({ kind: attachment.kind, path: attachment.path, ...(attachment.mediaType !== undefined ? { mediaType: attachment.mediaType } : {}) });
+			normalized.push({
+				kind: attachment.kind,
+				path: attachment.path,
+				...(attachment.mediaType !== undefined ? { mediaType: attachment.mediaType } : {}),
+				...(attachment.label !== undefined ? { label: attachment.label } : {}),
+			});
 		}
 	}
 	return normalized.length > 0 ? normalized : undefined;
@@ -900,6 +917,33 @@ export function collectSkillIds(messages: readonly ISessionMessage[]): string[] 
 	return ids;
 }
 
+// #-referenced sessions are compressed, not replayed: recent turns only, hard char cap.
+const SESSION_CONTEXT_MAX_TURNS = 6;
+const SESSION_CONTEXT_MAX_CHARS = 4000;
+const SESSION_CONTEXT_TURN_CHARS = 1000;
+
+/**
+ * A referenced conversation rendered as a compact context block: the title
+ * plus the last few user/assistant turns, each truncated, the whole block
+ * capped. Poor-man's cross-session memory — enough to ground "like we did in
+ * #that-session" without replaying its full transcript.
+ */
+export function formatSessionContext(title: string, messages: readonly ISessionMessage[]): string {
+	const turns = messages.filter(message => (message.role === 'user' || message.role === 'assistant') && message.text.trim() !== '').slice(-SESSION_CONTEXT_MAX_TURNS);
+	const lines: string[] = [];
+	let used = 0;
+	for (const turn of turns) {
+		const text = turn.text.length > SESSION_CONTEXT_TURN_CHARS ? `${turn.text.slice(0, SESSION_CONTEXT_TURN_CHARS)}…` : turn.text;
+		const line = `${turn.role}: ${text}`;
+		if (used + line.length > SESSION_CONTEXT_MAX_CHARS) {
+			break;
+		}
+		used += line.length;
+		lines.push(line);
+	}
+	return `<referenced-session title="${title.replace(/"/g, "'")}">\nThe user referenced another conversation. Its recent turns, for context:\n${lines.join('\n')}\n</referenced-session>`;
+}
+
 const MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
 	png: 'image/png',
 	jpg: 'image/jpeg',
@@ -922,7 +966,11 @@ function mediaTypeFromPath(path: string): string {
  * content); image attachments become image blocks from `images` (path →
  * bytes), placed before the text per the Messages API convention.
  */
-export function toTranscript(messages: readonly ISessionMessage[], images?: ReadonlyMap<string, { readonly mediaType: string; readonly data: string }>): IAgentMessage[] {
+export function toTranscript(
+	messages: readonly ISessionMessage[],
+	images?: ReadonlyMap<string, { readonly mediaType: string; readonly data: string }>,
+	sessionContexts?: ReadonlyMap<string, string>,
+): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
 	for (const message of messages) {
 		if (message.role !== 'user' && message.role !== 'assistant') {
@@ -932,16 +980,25 @@ export function toTranscript(messages: readonly ISessionMessage[], images?: Read
 		// Skills ride the run's system prompt (see collectSkillIds), not the message.
 		const pathAttachments = attachments.filter(attachment => attachment.kind === 'file' || attachment.kind === 'folder');
 		const imageBlocks: IAgentMessage['content'][number][] = [];
+		const contextBlocks: string[] = [];
 		for (const attachment of attachments) {
-			if (attachment.kind !== 'image') {
-				continue;
-			}
-			const image = images?.get(attachment.path);
-			if (image) {
-				imageBlocks.push({ type: 'image', mediaType: image.mediaType, data: image.data });
+			if (attachment.kind === 'image') {
+				const image = images?.get(attachment.path);
+				if (image) {
+					imageBlocks.push({ type: 'image', mediaType: image.mediaType, data: image.data });
+				}
+			} else if (attachment.kind === 'session') {
+				// A deleted or unresolvable referenced session degrades silently.
+				const context = sessionContexts?.get(attachment.path);
+				if (context) {
+					contextBlocks.push(context);
+				}
 			}
 		}
-		const text = pathAttachments.length > 0 ? `${message.text}\n\n${formatAttachmentsBlock(pathAttachments)}` : message.text;
+		let text = pathAttachments.length > 0 ? `${message.text}\n\n${formatAttachmentsBlock(pathAttachments)}` : message.text;
+		if (contextBlocks.length > 0) {
+			text = `${text}\n\n${contextBlocks.join('\n\n')}`;
+		}
 		if (text.trim() === '' && imageBlocks.length === 0) {
 			continue;
 		}

@@ -57,3 +57,8 @@ test('findMentionQuery supports a custom trigger char ($ for skills)', () => {
 	assert.equal(findMentionQuery('price$5', 7, '$'), undefined, 'mid-word $ is not a mention');
 	assert.equal(findMentionQuery('$com', 4), undefined, 'the default trigger stays @');
 });
+
+test('findMentionQuery works with the # trigger for session references', () => {
+	assert.deepEqual(findMentionQuery('#proj', 5, '#'), { start: 0, query: 'proj' });
+	assert.equal(findMentionQuery('issue#42', 8, '#'), undefined, 'mid-word # is not a mention');
+});

@@ -7,13 +7,13 @@ import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
-import type { IActiveSession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
+import type { IActiveSession, ISession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments, type IImageController } from './composerImages.js';
-import { installFileMentions, installSkillMentions, type IMentionController } from './composerMentions.js';
+import { installFileMentions, installSessionMentions, installSkillMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
 import { renderMarkdown } from './markdownRenderer.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
@@ -29,6 +29,8 @@ export interface ISessionMessageSender {
 	forkSession?(sessionId: string, messageId: string): Promise<unknown>;
 	/** Data URL for a stored image attachment, for thumbnails in the transcript. */
 	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
+	/** All sessions, for the #-mention picker (sessionsService satisfies this structurally). */
+	getSessions?(): readonly ISession[];
 }
 
 export class ConversationView extends Disposable {
@@ -75,6 +77,7 @@ export class ConversationView extends Disposable {
 
 	private readonly mentions: IMentionController;
 	private readonly skillMentions: IMentionController;
+	private readonly sessionMentions: IMentionController;
 	private readonly images: IImageController;
 
 	constructor(
@@ -130,6 +133,13 @@ export class ConversationView extends Disposable {
 				host: this.element,
 				input: this.input,
 				getSkills: () => this.skillsService?.skills.get() ?? [],
+			}),
+		);
+		this.sessionMentions = this._register(
+			installSessionMentions({
+				host: this.element,
+				input: this.input,
+				getSessions: () => listReferencableSessions(this.messageSender?.getSessions?.() ?? [], this.session?.sessionId),
 			}),
 		);
 		this.images = this._register(installImageAttachments({ input: this.input, dropTarget: this.composer, onDidChange: () => this.updateComposerState() }));
@@ -271,6 +281,7 @@ export class ConversationView extends Disposable {
 		// Mentions and pending images belong to the session they were staged in.
 		this.mentions.reset();
 		this.skillMentions.reset();
+		this.sessionMentions.reset();
 		this.images.reset();
 		// A freshly opened conversation starts at its latest message.
 		this.scrollToBottomOnRender = true;
@@ -981,7 +992,7 @@ export class ConversationView extends Disposable {
 				: 'Working… your next message will be queued'
 			: interactivity === SessionInteractivity.ReadOnly
 				? 'Session is read-only'
-				: 'Ask Mellivora, @ for files, / for commands';
+				: 'Ask Mellivora, @ for files, / for commands, $ for skills, # for conversations';
 	}
 
 	/** Send a queued follow-up once the current run has settled. */
@@ -1018,7 +1029,7 @@ export class ConversationView extends Disposable {
 		this.scrollToBottomOnRender = true;
 
 		try {
-			const attachments = [...this.mentions.collectAttachments(query), ...this.skillMentions.collectAttachments(query)];
+			const attachments = [...this.mentions.collectAttachments(query), ...this.skillMentions.collectAttachments(query), ...this.sessionMentions.collectAttachments(query)];
 			const images = this.images.getImages();
 			await this.messageSender?.sendMessage(session.sessionId, query, {
 				...(attachments.length > 0 ? { attachments } : {}),
@@ -1027,6 +1038,7 @@ export class ConversationView extends Disposable {
 			this.input.value = '';
 			this.mentions.reset();
 			this.skillMentions.reset();
+			this.sessionMentions.reset();
 			this.images.reset();
 		} catch {
 			this.setSendError('Message failed to send. Your draft was kept — try again.');
@@ -1094,6 +1106,15 @@ function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 	deny.addEventListener('click', () => approval.respond(false));
 
 	return card;
+}
+
+/** The #-picker's entries: other sessions, newest first, capped. */
+export function listReferencableSessions(sessions: readonly ISession[], currentSessionId: string | undefined, limit: number = 50): { id: string; name: string; description: string }[] {
+	return sessions
+		.filter(session => session.sessionId !== currentSessionId && !session.isArchived.get())
+		.sort((a, b) => b.updatedAt.get().getTime() - a.updatedAt.get().getTime())
+		.slice(0, limit)
+		.map(session => ({ id: session.sessionId, name: session.title.get(), description: session.updatedAt.get().toLocaleDateString() }));
 }
 
 function appendCodicon(parent: HTMLElement, codicon: string): HTMLElement {
@@ -1197,10 +1218,15 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions, r
 				chip.className = 'conversation-message-attachment';
 				chip.title = attachment.path;
 				const icon = append(chip, document.createElement('span'));
-				icon.className = `codicon ${attachment.kind === 'folder' ? 'codicon-folder' : attachment.kind === 'skill' ? 'codicon-lightbulb' : 'codicon-file'}`;
+				icon.className = `codicon ${attachment.kind === 'folder' ? 'codicon-folder' : attachment.kind === 'skill' ? 'codicon-lightbulb' : attachment.kind === 'session' ? 'codicon-comment-discussion' : 'codicon-file'}`;
 				icon.setAttribute('aria-hidden', 'true');
 				const name = append(chip, document.createElement('span'));
-				name.textContent = attachment.kind === 'skill' ? `$${attachment.path}` : attachment.path.split('/').pop()! + (attachment.kind === 'folder' ? '/' : '');
+				name.textContent =
+					attachment.kind === 'skill'
+						? `$${attachment.path}`
+						: attachment.kind === 'session'
+							? (attachment.label ?? attachment.path)
+							: attachment.path.split('/').pop()! + (attachment.kind === 'folder' ? '/' : '');
 			}
 		}
 	} else if (message.role === 'assistant') {

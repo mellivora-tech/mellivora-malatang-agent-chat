@@ -49,11 +49,13 @@ export interface ISessionWorkStep {
  * disk beside the transcript, never inlined here.
  */
 export interface ISessionAttachment {
-	readonly kind: 'file' | 'folder' | 'image' | 'skill';
-	/** file/folder: workspace-relative path; image: session-media path; skill: the skill id. */
+	readonly kind: 'file' | 'folder' | 'image' | 'skill' | 'session';
+	/** file/folder: workspace-relative path; image: session-media path; skill: the skill id; session: the referenced sessionId. */
 	readonly path: string;
 	/** Images only: e.g. 'image/png'. */
 	readonly mediaType?: string;
+	/** Human-readable name for chips (session title at attach time). */
+	readonly label?: string;
 }
 
 export interface ISessionMessage {

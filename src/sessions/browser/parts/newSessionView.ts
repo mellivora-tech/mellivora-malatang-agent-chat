@@ -12,7 +12,7 @@ import type { IPendingImage } from '../../services/sessions/common/sessionsProvi
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments } from './composerImages.js';
-import { installFileMentions, installSkillMentions } from './composerMentions.js';
+import { installFileMentions, installSessionMentions, installSkillMentions, type IEntityMentionEntry } from './composerMentions.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface INewSessionViewOptions {
@@ -20,6 +20,8 @@ export interface INewSessionViewOptions {
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
 	readonly skillsService?: ISkillsService;
+	/** Sessions offered by the #-mention picker, newest first. */
+	readonly listSessions?: () => readonly IEntityMentionEntry[];
 }
 
 export class NewSessionView extends Disposable {
@@ -73,7 +75,7 @@ export class NewSessionView extends Disposable {
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
 		input.rows = 2;
-		input.placeholder = 'Ask Mellivora anything, @ for files or folders, / for commands, paste or drop images';
+		input.placeholder = 'Ask Mellivora anything, @ for files, / for commands, $ for skills, # for related conversations, paste or drop images';
 		input.spellcheck = true;
 
 		// Installed before the Enter-to-send handler below — an Enter that picks
@@ -94,6 +96,13 @@ export class NewSessionView extends Disposable {
 				host: content,
 				input,
 				getSkills: () => this.options.skillsService?.skills.get() ?? [],
+			}),
+		);
+		const sessionRefs = this._register(
+			installSessionMentions({
+				host: content,
+				input,
+				getSessions: () => this.options.listSessions?.() ?? [],
 			}),
 		);
 
@@ -187,11 +196,12 @@ export class NewSessionView extends Disposable {
 				return;
 			}
 
-			const attachments = [...mentions.collectAttachments(query), ...skills.collectAttachments(query)];
+			const attachments = [...mentions.collectAttachments(query), ...skills.collectAttachments(query), ...sessionRefs.collectAttachments(query)];
 			const pendingImages = images.getImages();
 			input.value = '';
 			mentions.reset();
 			skills.reset();
+			sessionRefs.reset();
 			images.reset();
 			void this.options.onStartSession?.(query, attachments.length > 0 ? attachments : undefined, pendingImages.length > 0 ? pendingImages : undefined);
 		});

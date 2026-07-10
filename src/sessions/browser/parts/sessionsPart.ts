@@ -12,6 +12,7 @@ import type { ISessionsService } from '../../services/sessions/browser/sessionsS
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { Part } from '../part.js';
+import { listReferencableSessions } from './conversationView.js';
 import { NewSessionView } from './newSessionView.js';
 import { SessionView } from './sessionView.js';
 
@@ -42,6 +43,7 @@ export class SessionsPart extends Part {
 				...(this.projectsService ? { projectsService: this.projectsService } : {}),
 				...(modelsService ? { modelsService } : {}),
 				...(skillsService ? { skillsService } : {}),
+				listSessions: () => listReferencableSessions(this.sessionsService?.getSessions() ?? [], undefined),
 			}),
 		);
 		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService, skillsService));

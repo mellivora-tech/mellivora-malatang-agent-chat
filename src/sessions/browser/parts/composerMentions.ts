@@ -130,31 +130,79 @@ export interface IMentionController extends IDisposable {
 	reset(): void;
 }
 
-export interface ISkillMentionEntry {
+/** A pickable entity for the generic trigger menu ($ skills, # sessions). */
+export interface IEntityMentionEntry {
 	readonly id: string;
 	readonly name: string;
 	readonly description: string;
+}
+
+interface IEntityMentionConfig {
+	readonly host: HTMLElement;
+	readonly input: HTMLTextAreaElement;
+	readonly trigger: string;
+	readonly icon: string;
+	readonly emptyText: string;
+	/** Evaluated at open time, so the list tracks live state. */
+	readonly getEntries: () => readonly IEntityMentionEntry[];
+	/** The text inserted inline (must be whitespace-free so deletion detection works). */
+	readonly makeInline: (entry: IEntityMentionEntry) => string;
+	readonly makeAttachment: (entry: IEntityMentionEntry) => ISessionAttachment;
 }
 
 export interface ISkillMentionInstallOptions {
 	readonly host: HTMLElement;
 	readonly input: HTMLTextAreaElement;
 	/** Evaluated at open time; empty list renders a "no skills" hint. */
-	readonly getSkills: () => readonly ISkillMentionEntry[];
+	readonly getSkills: () => readonly IEntityMentionEntry[];
+}
+
+/** `$`-mentions over the user's skills: inserts `$<id> `, records a `skill` attachment. */
+export function installSkillMentions(options: ISkillMentionInstallOptions): IMentionController {
+	return installEntityMentions({
+		host: options.host,
+		input: options.input,
+		trigger: '$',
+		icon: 'codicon-lightbulb',
+		emptyText: 'No matching skills — add some in Settings › Skills',
+		getEntries: options.getSkills,
+		makeInline: entry => `$${entry.id}`,
+		makeAttachment: entry => ({ kind: 'skill', path: entry.id }),
+	});
+}
+
+export interface ISessionMentionInstallOptions {
+	readonly host: HTMLElement;
+	readonly input: HTMLTextAreaElement;
+	/** Sessions offered by the picker (already excluding the current one), newest first. */
+	readonly getSessions: () => readonly IEntityMentionEntry[];
+}
+
+/** `#`-mentions over other conversations: inserts `#<sessionId> `, records a `session` attachment carrying the title as label. */
+export function installSessionMentions(options: ISessionMentionInstallOptions): IMentionController {
+	return installEntityMentions({
+		host: options.host,
+		input: options.input,
+		trigger: '#',
+		icon: 'codicon-comment-discussion',
+		emptyText: 'No matching conversations',
+		getEntries: options.getSessions,
+		makeInline: entry => `#${entry.id}`,
+		makeAttachment: entry => ({ kind: 'session', path: entry.id, label: entry.name }),
+	});
 }
 
 /**
- * `$`-mentions over the user's skills — same interaction contract as the file
- * mentions below (same install-order requirement, same collect-if-still-present
- * semantics), but over a small synchronous list. Picking inserts `$<id> ` and
- * records a `skill` attachment.
+ * Trigger-mentions over a small synchronous list — same interaction contract
+ * as the file mentions below (same install-order requirement, same
+ * collect-if-still-present semantics).
  */
-export function installSkillMentions(options: ISkillMentionInstallOptions): IMentionController {
+function installEntityMentions(options: IEntityMentionConfig): IMentionController {
 	const { host, input } = options;
 	const recorded = new Map<string, ISessionAttachment>();
 
 	let menu: HTMLElement | undefined;
-	let items: ISkillMentionEntry[] = [];
+	let items: IEntityMentionEntry[] = [];
 	let activeIndex = 0;
 	let tokenStart = -1;
 
@@ -190,29 +238,29 @@ export function installSkillMentions(options: ISkillMentionInstallOptions): IMen
 		if (items.length === 0) {
 			const empty = append(menu, document.createElement('div'));
 			empty.className = 'composer-mention-empty';
-			empty.textContent = 'No matching skills — add some in Settings › Skills';
+			empty.textContent = options.emptyText;
 			return;
 		}
-		items.forEach((skill, index) => {
+		items.forEach((entry, index) => {
 			const item = append(menu!, document.createElement('button')) as HTMLButtonElement;
 			item.className = `composer-mention-item${index === activeIndex ? ' active' : ''}`;
 			item.type = 'button';
 			item.setAttribute('role', 'option');
 			item.setAttribute('aria-selected', String(index === activeIndex));
 			const icon = append(item, document.createElement('span'));
-			icon.className = 'codicon codicon-lightbulb';
+			icon.className = `codicon ${options.icon}`;
 			icon.setAttribute('aria-hidden', 'true');
 			const name = append(item, document.createElement('span'));
 			name.className = 'composer-mention-item-name';
-			name.textContent = skill.name;
-			if (skill.description) {
+			name.textContent = entry.name;
+			if (entry.description) {
 				const description = append(item, document.createElement('span'));
 				description.className = 'composer-mention-item-desc';
-				description.textContent = skill.description;
+				description.textContent = entry.description;
 			}
 			item.addEventListener('mousedown', event => {
 				event.preventDefault();
-				pick(skill);
+				pick(entry);
 			});
 			item.addEventListener('mouseenter', () => {
 				activeIndex = index;
@@ -222,12 +270,12 @@ export function installSkillMentions(options: ISkillMentionInstallOptions): IMen
 		menu.querySelector('.composer-mention-item.active')?.scrollIntoView({ block: 'nearest' });
 	};
 
-	const pick = (skill: ISkillMentionEntry): void => {
-		const inline = `$${skill.id}`;
+	const pick = (entry: IEntityMentionEntry): void => {
+		const inline = options.makeInline(entry);
 		const caret = input.selectionStart ?? input.value.length;
 		if (tokenStart >= 0 && tokenStart <= caret) {
 			input.setRangeText(`${inline} `, tokenStart, caret, 'end');
-			recorded.set(inline, { kind: 'skill', path: skill.id });
+			recorded.set(inline, options.makeAttachment(entry));
 			input.dispatchEvent(new Event('input', { bubbles: true }));
 		}
 		closeMenu();
@@ -236,14 +284,14 @@ export function installSkillMentions(options: ISkillMentionInstallOptions): IMen
 
 	const refresh = (): void => {
 		const caret = input.selectionStart ?? input.value.length;
-		const token = findMentionQuery(input.value, caret, '$');
+		const token = findMentionQuery(input.value, caret, options.trigger);
 		if (!token) {
 			closeMenu();
 			return;
 		}
 		tokenStart = token.start;
 		const needle = token.query.toLowerCase();
-		items = options.getSkills().filter(skill => needle === '' || skill.id.includes(needle) || skill.name.toLowerCase().includes(needle) || skill.description.toLowerCase().includes(needle));
+		items = options.getEntries().filter(entry => needle === '' || entry.id.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(needle) || entry.description.toLowerCase().includes(needle));
 		activeIndex = Math.min(activeIndex, Math.max(0, items.length - 1));
 		renderMenu();
 	};
@@ -259,11 +307,11 @@ export function installSkillMentions(options: ISkillMentionInstallOptions): IMen
 			activeIndex = items.length === 0 ? 0 : (activeIndex + delta + items.length) % items.length;
 			renderMenu();
 		} else if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
-			const skill = items[activeIndex];
-			if (skill) {
+			const entry = items[activeIndex];
+			if (entry) {
 				event.preventDefault();
 				event.stopImmediatePropagation();
-				pick(skill);
+				pick(entry);
 			} else {
 				closeMenu();
 			}

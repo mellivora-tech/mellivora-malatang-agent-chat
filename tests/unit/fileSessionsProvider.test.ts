@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { FileSessionsProvider, toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
+import { FileSessionsProvider, formatSessionContext, toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
 import type { ISessionMessage } from '../../src/sessions/services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../src/sessions/services/sessions/common/session.js';
 import type { IAgentBridge, IAgentEventPayload } from '../../src/sessions/services/agent/common/agent.js';
@@ -861,4 +861,32 @@ test('a compaction ok event becomes the persisted cross-run anchor and rides the
 	const stateWithAnchor = bridge.appends.find(call => call.entry.type === 'state' && (call.entry as { compactionAnchor?: unknown }).compactionAnchor !== undefined);
 	assert.ok(stateWithAnchor, 'anchor persisted on a state entry');
 	assert.deepEqual((stateWithAnchor.entry as { compactionAnchor?: unknown }).compactionAnchor, expectedAnchor);
+});
+
+test('formatSessionContext keeps recent turns, truncates long ones, and caps the block', () => {
+	const messages: ISessionMessage[] = [
+		{ id: 'u0', role: 'user', text: 'ancient question' },
+		{ id: 'w1', role: 'work', text: '' },
+		...Array.from({ length: 8 }, (_, index) => ({ id: `m${index}`, role: index % 2 === 0 ? ('user' as const) : ('assistant' as const), text: `turn ${index} ${'x'.repeat(index === 7 ? 2000 : 10)}` })),
+	];
+	const block = formatSessionContext('梳理下项目', messages);
+	assert.match(block, /^<referenced-session title="梳理下项目">/);
+	assert.ok(!block.includes('ancient question'), 'only the last turns survive');
+	assert.ok(!block.includes('w1'), 'work rows are not conversation turns');
+	assert.ok(block.includes('turn 2'), 'recent turns are kept');
+	assert.ok(block.length < 5000, 'the whole block stays capped');
+	assert.match(block, /…/, 'an oversized turn is truncated');
+});
+
+test('a #session attachment injects the referenced context block; an unresolvable one degrades silently', () => {
+	const messages: ISessionMessage[] = [
+		{ id: 'u1', role: 'user', text: 'like we did in #other', attachments: [{ kind: 'session', path: 'other', label: '梳理下项目' }] },
+		{ id: 'u2', role: 'user', text: 'and #gone too', attachments: [{ kind: 'session', path: 'gone' }] },
+	];
+	const contexts = new Map([['other', '<referenced-session title="梳理下项目">\nuser: hi\n</referenced-session>']]);
+	const transcript = toTranscript(messages, undefined, contexts);
+	const first = (transcript[0]?.content[0] as { text: string }).text;
+	assert.match(first, /<referenced-session title="梳理下项目">/);
+	const second = (transcript[1]?.content[0] as { text: string }).text;
+	assert.equal(second, 'and #gone too', 'a deleted referenced session adds nothing');
 });

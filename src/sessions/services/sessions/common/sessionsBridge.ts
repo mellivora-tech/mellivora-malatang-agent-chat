@@ -49,10 +49,12 @@ export interface ISessionWorkStepData {
 
 /** A structured reference attached to a user message (@-mentioned file/folder, a stored image, or a $-mentioned skill). */
 export interface ISessionAttachmentData {
-	readonly kind: 'file' | 'folder' | 'image' | 'skill';
+	readonly kind: 'file' | 'folder' | 'image' | 'skill' | 'session';
 	readonly path: string;
 	/** Images only: e.g. 'image/png'. */
 	readonly mediaType?: string;
+	/** Human-readable name for chips (session title at attach time). */
+	readonly label?: string;
 }
 
 export interface ISessionMessageEntry {
