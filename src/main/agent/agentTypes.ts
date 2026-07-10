@@ -182,7 +182,7 @@ export type IAgentEvent =
 	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
 	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
 	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number }
-	/** The transcript head was folded into an anchored summary (request view only; history intact). `summary` feeds the local log's detail; the renderer may ignore it. */
+	/** The transcript head was folded into an anchored summary (request view only; history intact). `summary` feeds the local log's detail; the renderer persists `summary`+`coveredInitial` as the cross-run anchor. */
 	| {
 			readonly type: 'compaction';
 			readonly trigger: 'preflight' | 'auto';
@@ -191,7 +191,23 @@ export type IAgentEvent =
 			readonly summaryChars: number;
 			readonly outcome: 'ok' | 'error' | 'insufficient';
 			readonly summary?: string;
-	  };
+			/** How many of the run's INITIAL messages the summary covers — the cross-run persistence contract (in-run indices don't survive the run). */
+			readonly coveredInitial?: number;
+	  }
+	/** A persisted anchor arrived with the run; accepted=false means a validation gate rejected it (fresh preflight follows). Log-only — never streamed to the renderer. */
+	| { readonly type: 'compaction_anchor'; readonly covered: number; readonly summaryChars: number; readonly accepted: boolean };
+
+/**
+ * A compaction summary persisted across runs. `covered` counts the prefix of
+ * the NEXT run's initial transcript the summary stands in for; `prefixChars`
+ * is that prefix's content size when the anchor was made — a cheap integrity
+ * check that drops the anchor whenever the covered history changed.
+ */
+export interface ICompactionAnchor {
+	readonly summary: string;
+	readonly covered: number;
+	readonly prefixChars: number;
+}
 
 /** 'max_output_tokens': the reply was cut off by the max_tokens budget — surfaced explicitly so truncation shows up in logs instead of masquerading as 'completed'. */
 export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'max_output_tokens' | 'refusal';
@@ -218,6 +234,8 @@ export interface IAgentRunConfig {
 	/**
 	 * Enables auto-compaction. Absent (model has no configured context window)
 	 * means the mechanism stays off — the threshold is never guessed.
+	 * `anchor` (validated by the caller via restoreAnchor) pre-seeds the run
+	 * with a persisted summary so the same head is never re-summarized.
 	 */
-	readonly compaction?: { readonly contextWindow: number; readonly outputBudget?: number };
+	readonly compaction?: { readonly contextWindow: number; readonly outputBudget?: number; readonly anchor?: ICompactionAnchor };
 }

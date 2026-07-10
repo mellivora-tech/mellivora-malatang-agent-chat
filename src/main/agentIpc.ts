@@ -5,7 +5,8 @@
 
 import { ipcMain } from 'electron';
 import { runAgentLoop } from './agent/agentLoop.js';
-import type { IAgentMessage, IAgentTerminal, IAgentTool } from './agent/agentTypes.js';
+import type { IAgentMessage, IAgentTerminal, IAgentTool, ICompactionAnchor } from './agent/agentTypes.js';
+import { restoreAnchor } from './agent/compaction.js';
 import { agentLog } from './agent/observability/agentLog.js';
 import { createJsonlFileSink, resolveAgentLogsDir } from './agent/observability/jsonlFileSink.js';
 import { createRunLogger } from './agent/observability/runLogger.js';
@@ -51,6 +52,21 @@ interface IAgentRunPayload {
 	readonly permissionMode?: string;
 	/** $-attached skills; bodies are resolved here (main side) and ride the system prompt. */
 	readonly skillIds?: readonly string[];
+	/** The session's persisted compaction anchor; untrusted — shape-checked and validated against the transcript before use. */
+	readonly anchor?: unknown;
+}
+
+/** Renderer input is untrusted: anything but the exact anchor shape is discarded. */
+function asAnchorShape(value: unknown): ICompactionAnchor | undefined {
+	if (typeof value !== 'object' || value === null) {
+		return undefined;
+	}
+	const candidate = value as Record<string, unknown>;
+	const { summary, covered, prefixChars } = candidate;
+	if (typeof summary !== 'string' || typeof covered !== 'number' || typeof prefixChars !== 'number') {
+		return undefined;
+	}
+	return { summary, covered, prefixChars };
 }
 
 interface IApprovalResponsePayload {
@@ -176,6 +192,19 @@ export function registerAgentIpc(dataRoot: string): void {
 			const baseSystem = cwd ? workspaceSystemPrompt(cwd, mode) + (instructions ? `\n\n${formatInstructionsBlock(instructions)}` : '') : DEFAULT_SYSTEM;
 			const system = skillBlocks.length > 0 ? `${baseSystem}\n\n${skillBlocks.join('\n\n')}` : baseSystem;
 			const messages = config.params?.vision === false ? stripImageBlocks(payload.messages) : payload.messages;
+			// The persisted anchor is validated against the messages ACTUALLY sent
+			// (post image-stripping): three fail-closed gates in restoreAnchor —
+			// a rejected anchor just means one fresh preflight summary.
+			const anchorShape = asAnchorShape(payload.anchor);
+			const anchor = anchorShape ? restoreAnchor(messages, anchorShape) : undefined;
+			if (anchorShape) {
+				runLogger.record({
+					type: 'compaction_anchor',
+					covered: anchorShape.covered,
+					summaryChars: anchorShape.summary.length,
+					accepted: anchor !== undefined,
+				});
+			}
 			const loop = runAgentLoop(messages, {
 				system,
 				tools,
@@ -184,7 +213,13 @@ export function registerAgentIpc(dataRoot: string): void {
 				signal: controller.signal,
 				// No configured context window → compaction stays off (never guessed).
 				...(config.contextLength
-					? { compaction: { contextWindow: config.contextLength, ...(config.params?.maxTokens !== undefined ? { outputBudget: config.params.maxTokens } : {}) } }
+					? {
+							compaction: {
+								contextWindow: config.contextLength,
+								...(config.params?.maxTokens !== undefined ? { outputBudget: config.params.maxTokens } : {}),
+								...(anchor ? { anchor: { summary: anchor.summary, covered: anchor.boundary, prefixChars: anchorShape!.prefixChars } } : {}),
+							},
+						}
 					: {}),
 			});
 

@@ -6,10 +6,10 @@
 // The harness message/event contracts are the single source of truth (main
 // process). These are type-only re-exports — erased at runtime, so the renderer
 // gains no runtime dependency on the main bundle.
-import type { IAgentEvent, IAgentMessage, IAgentTerminal } from '../../../../main/agent/agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentTerminal, ICompactionAnchor } from '../../../../main/agent/agentTypes.js';
 import type { PermissionMode } from '../../../../main/agent/permission.js';
 
-export type { IAgentEvent, IAgentMessage, IAgentTerminal, PermissionMode };
+export type { IAgentEvent, IAgentMessage, IAgentTerminal, ICompactionAnchor, PermissionMode };
 
 export interface IAgentEventPayload {
 	readonly sessionId: string;
@@ -32,8 +32,9 @@ export interface IAgentBridge {
 	/** Run one agent turn for `sessionId` against `messages`, streaming events; resolves with the terminal.
 	 *  `projectId` binds the run's file tools to that project's directory (omit → text-only);
 	 *  `permissionMode` picks the gate for mutating tools (default 'ask');
-	 *  `skillIds` are $-attached skills whose bodies ride the system prompt. */
-	run(sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[]): Promise<IAgentTerminal>;
+	 *  `skillIds` are $-attached skills whose bodies ride the system prompt;
+	 *  `anchor` is the session's persisted compaction summary — validated main-side, silently dropped on mismatch. */
+	run(sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[], anchor?: ICompactionAnchor): Promise<IAgentTerminal>;
 	stop(sessionId: string): Promise<void>;
 	/** One-shot session title from the first user message — a plain model call, no agent loop.
 	 *  Resolves to undefined when no model is configured or the reply is unusable; rejects on model errors.

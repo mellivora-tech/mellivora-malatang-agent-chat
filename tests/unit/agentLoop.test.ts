@@ -751,3 +751,51 @@ test('compaction: fail-open on summary errors, off without a window, off via kil
 		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
 	}
 });
+
+test('compaction: a restored anchor pre-seeds the view with ZERO summary calls, then updates incrementally', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		// The covered assistant reply is bulky (15K) so that by turn 2 the 32K
+		// tail budget (20K tool result + this reply) forces the boundary PAST it.
+		const initial: IAgentMessage[] = [
+			userMessage('old question'),
+			{ role: 'assistant', content: [{ type: 'text', text: `old answer ${'x'.repeat(15_000)}` }] },
+			userMessage('follow-up'),
+		];
+		// One tool turn with over-threshold usage so the anchor gets an
+		// incremental top-up on turn 2; then a final text turn.
+		const { client, mainRequests, summaryRequests } = compactionAwareClient([120_000], ['## Objective\n- topped up']);
+		const { events, terminal } = await drive(
+			runAgentLoop(initial, {
+				system: 'test system',
+				tools: [bigTool],
+				modelClient: client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000, anchor: { summary: '## Objective\n- restored anchor', covered: 1, prefixChars: 0 } },
+			}),
+		);
+
+		assert.equal(terminal.reason, 'completed');
+
+		// Request 1: the view is compacted from the very first request, and no
+		// summary call preceded it — the whole point of persistence.
+		const first = mainRequests[0]!;
+		assert.match(text(first.messages[0]!), /^\[Context compacted\]/);
+		assert.match(text(first.messages[0]!), /- restored anchor/);
+		assert.equal(first.messages[1]!.role, 'assistant', 'tail starts at the covered boundary');
+		assert.doesNotMatch(JSON.stringify(first.messages), /old question/, 'covered head is off the wire');
+
+		// Across the whole run exactly ONE summary call happened — the turn-2
+		// incremental top-up. Restoring the anchor itself cost zero calls (the
+		// first request already carried the persisted text, asserted above).
+		const compactions = compactionEvents(events);
+		assert.equal(compactions.length, 1);
+		assert.equal(compactions[0]!.outcome, 'ok');
+		assert.equal(summaryRequests.length, 1);
+		assert.match(text(summaryRequests[0]!.messages[0]!), /<previous-summary>\n## Objective\n- restored anchor/, 'the persisted anchor is the update base');
+		assert.doesNotMatch(text(summaryRequests[0]!.messages[0]!), /old question/, 'already-covered history is not re-serialized');
+		assert.match(text(mainRequests[1]!.messages[0]!), /- topped up/, 'the view carries the updated anchor');
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});

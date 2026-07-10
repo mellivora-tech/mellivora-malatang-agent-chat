@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { IAgentBridge, IAgentEventPayload, IAgentMessage, IApprovalRequestPayload, PermissionMode } from '../sessions/services/agent/common/agent.js';
+import type { IAgentBridge, IAgentEventPayload, IAgentMessage, IApprovalRequestPayload, ICompactionAnchor, PermissionMode } from '../sessions/services/agent/common/agent.js';
 import type { IAppState, IAppStateBridge } from '../sessions/services/appState/common/appState.js';
 import type {
 	IModelEntryInput,
@@ -69,8 +69,8 @@ const git: IGitBridge = {
 };
 
 const agent: IAgentBridge = {
-	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[]) =>
-		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode, skillIds }),
+	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[], anchor?: ICompactionAnchor) =>
+		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode, skillIds, anchor }),
 	stop: (sessionId: string) => ipcRenderer.invoke('agent:stop', sessionId),
 	generateTitle: (query: string, modelId?: string) => ipcRenderer.invoke('agent:title', { query, modelId }),
 	onEvent: (listener: (payload: IAgentEventPayload) => void) => {

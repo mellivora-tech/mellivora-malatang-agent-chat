@@ -814,3 +814,51 @@ test('skill attachments are collected across turns and passed to agent.run, not 
 	const transcript = toTranscript(session.messages.get());
 	assert.ok(transcript.every(turn => !(turn.content[0] as { text?: string }).text?.includes('<user-attached-paths>')), 'no path block from skill-only attachments');
 });
+
+test('a compaction ok event becomes the persisted cross-run anchor and rides the next run', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const anchorsSeen: unknown[] = [];
+	let runs = 0;
+	const agent: IAgentBridge = {
+		run: async (sessionId, _messages, _modelId, _projectId, _permissionMode, _skillIds, anchor) => {
+			anchorsSeen.push(anchor);
+			runs += 1;
+			if (runs === 1) {
+				// The harness folded the head: summary + covered-initial arrive here.
+				listener?.({ sessionId, event: { type: 'compaction', trigger: 'preflight', beforeTokens: 210_000, boundaryIndex: 1, summaryChars: 12, outcome: 'ok', summary: '## anchor v1', coveredInitial: 1 } } as never);
+			}
+			listener?.({ sessionId, event: { type: 'assistant_delta', text: `answer ${runs}` } } as never);
+			listener?.({ sessionId, done: { reason: 'completed', turns: 1 } } as never);
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('question one');
+	await new Promise(resolve => setTimeout(resolve, 15));
+	await provider.sendMessage(session.sessionId, 'question two');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	// prefixChars mirrors the harness measure over the transcript AS SENT.
+	const expectedPrefixChars = JSON.stringify([{ type: 'text', text: 'question one' }]).length;
+	const expectedAnchor = { summary: '## anchor v1', covered: 1, prefixChars: expectedPrefixChars };
+
+	assert.equal(anchorsSeen[0], undefined, 'first run has no anchor yet');
+	assert.deepEqual(anchorsSeen[1], expectedAnchor, 'second run carries the persisted anchor');
+
+	const stateWithAnchor = bridge.appends.find(call => call.entry.type === 'state' && (call.entry as { compactionAnchor?: unknown }).compactionAnchor !== undefined);
+	assert.ok(stateWithAnchor, 'anchor persisted on a state entry');
+	assert.deepEqual((stateWithAnchor.entry as { compactionAnchor?: unknown }).compactionAnchor, expectedAnchor);
+});

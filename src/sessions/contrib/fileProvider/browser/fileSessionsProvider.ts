@@ -21,7 +21,7 @@ import type {
 } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
-import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
+import type { ISessionCompactionAnchorData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
 import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
@@ -55,6 +55,8 @@ interface IMutableSession extends ISession {
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
 	readonly permissionMode: ObservableValue<PermissionMode>;
 	readonly contextUsage: ObservableValue<ISessionContextUsage | undefined>;
+	/** Cross-run compaction anchor — internal harness state, never rendered, hence no observable. */
+	compactionAnchor?: ISessionCompactionAnchorData;
 }
 
 function createSession(options: {
@@ -74,6 +76,7 @@ function createSession(options: {
 	isRead?: boolean;
 	isPinned?: boolean;
 	permissionMode?: PermissionMode;
+	compactionAnchor?: ISessionCompactionAnchorData;
 }): IMutableSession {
 	return {
 		sessionId: options.sessionId,
@@ -97,6 +100,7 @@ function createSession(options: {
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 		permissionMode: observableValue<PermissionMode>(options.permissionMode ?? 'ask'),
 		contextUsage: observableValue<ISessionContextUsage | undefined>(undefined),
+		...(options.compactionAnchor ? { compactionAnchor: options.compactionAnchor } : {}),
 	};
 }
 
@@ -449,6 +453,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			...(snapshot.description !== undefined ? { description: snapshot.description } : {}),
 			...(snapshot.workspace !== undefined ? { workspace: snapshot.workspace } : {}),
 			...(snapshot.changesSummary !== undefined ? { changesSummary: snapshot.changesSummary } : {}),
+			...(snapshot.compactionAnchor !== undefined ? { compactionAnchor: snapshot.compactionAnchor } : {}),
 		});
 	}
 
@@ -574,6 +579,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// Reasoning text streamed since the last step boundary; becomes the
 		// closing thinking step's expandable detail.
 		let thinkingBuffer = '';
+		// Cross-run anchor capture: the transcript as sent (for the integrity
+		// measure) and the newest ok compaction of this run.
+		let sentTranscript: readonly IAgentMessage[] = [];
+		let pendingAnchor: ISessionCompactionAnchorData | undefined;
 
 		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string): void => {
 			const durationMs = Date.now() - stepStart;
@@ -643,6 +652,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 				updateAssistant();
 			}
 
+			if (pendingAnchor) {
+				session.compactionAnchor = pendingAnchor;
+			}
+			const anchorToPersist = pendingAnchor;
 			const now = new Date();
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
@@ -650,7 +663,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 				if (hasReply) {
 					await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
 				}
-				await this.bridge.append(ref, { type: 'state', timestamp: now.toISOString(), status: SessionStatus.NeedsInput, isRead: false });
+				await this.bridge.append(ref, {
+					type: 'state',
+					timestamp: now.toISOString(),
+					status: SessionStatus.NeedsInput,
+					isRead: false,
+					...(anchorToPersist ? { compactionAnchor: anchorToPersist } : {}),
+				});
 			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
 
 			session.status.set(SessionStatus.NeedsInput);
@@ -703,6 +722,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// The provider's real prompt size for the request just completed —
 				// the conversation view prefers this over its char-count estimate.
 				session.contextUsage.set({ inputTokens: event.inputTokens });
+			} else if (event?.type === 'compaction') {
+				// An ok compaction becomes the session's cross-run anchor: the same
+				// head is summarized once per session instead of once per run. The
+				// prefix measure must mirror the harness's measurePrefixChars — it is
+				// the integrity gate that invalidates the anchor if history changes.
+				if (event.outcome === 'ok' && event.summary !== undefined && typeof event.coveredInitial === 'number' && event.coveredInitial >= 1 && event.coveredInitial <= sentTranscript.length) {
+					let prefixChars = 0;
+					for (let i = 0; i < event.coveredInitial; i++) {
+						prefixChars += JSON.stringify(sentTranscript[i]!.content).length;
+					}
+					pendingAnchor = { summary: event.summary, covered: event.coveredInitial, prefixChars };
+				}
 			} else if (event?.type === 'reply_verifier') {
 				if (event.verdict === 'fail') {
 					// The rejected reply is REPLACED by the retry, not appended to —
@@ -746,7 +777,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		});
 
 		void this.buildTranscript(session)
-			.then(transcript => agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get())))
+			.then(transcript => {
+				sentTranscript = transcript;
+				return agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get()), session.compactionAnchor);
+			})
 			.catch(error => {
 				text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
 				updateAssistant();

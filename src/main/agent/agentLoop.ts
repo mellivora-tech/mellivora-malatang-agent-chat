@@ -113,7 +113,10 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// threshold absorbs that lag); turn 1 uses a rough estimate as preflight.
 	const compactThreshold = config.compaction ? compactionThreshold(config.compaction.contextWindow, config.compaction.outputBudget) : 0;
 	const compactionOn = compactThreshold > 0 && isCompactionEnabled(process.env);
-	let compacted: { boundary: number; summary: string } | undefined;
+	// A persisted anchor (validated by the caller via restoreAnchor) pre-seeds
+	// the view: the same head costs one summary call per SESSION, not per run.
+	let compacted: { boundary: number; summary: string } | undefined =
+		compactionOn && config.compaction?.anchor ? { boundary: config.compaction.anchor.covered, summary: config.compaction.anchor.summary } : undefined;
 	let lastUsageTokens = 0;
 	let lastCompactionAttemptTokens = 0;
 	let turn = 0;
@@ -156,7 +159,18 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 							signal,
 						});
 						compacted = { boundary, summary };
-						yield { type: 'compaction', trigger, beforeTokens, boundaryIndex: boundary, summaryChars: summary.length, outcome: 'ok', summary };
+						// coveredInitial maps the boundary into the renderer's coordinate
+						// system (in-run indices don't survive the run).
+						yield {
+							type: 'compaction',
+							trigger,
+							beforeTokens,
+							boundaryIndex: boundary,
+							summaryChars: summary.length,
+							outcome: 'ok',
+							summary,
+							coveredInitial: Math.min(boundary, initialMessages.length),
+						};
 					} catch {
 						if (signal.aborted) {
 							return { reason: 'aborted', turns: turn };

@@ -76,6 +76,17 @@ export interface ISessionFeedbackEntry {
 	readonly timestamp: string;
 }
 
+/**
+ * A compaction summary persisted with the session. `covered` counts the prefix
+ * of the transcript (as toTranscript builds it) the summary stands in for;
+ * `prefixChars` is that prefix's content size for the main-side integrity gate.
+ */
+export interface ISessionCompactionAnchorData {
+	readonly summary: string;
+	readonly covered: number;
+	readonly prefixChars: number;
+}
+
 export interface ISessionStateEntry {
 	readonly type: 'state';
 	readonly timestamp: string;
@@ -87,6 +98,7 @@ export interface ISessionStateEntry {
 	readonly isRead?: boolean;
 	readonly isPinned?: boolean;
 	readonly permissionMode?: string;
+	readonly compactionAnchor?: ISessionCompactionAnchorData;
 }
 
 export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry;
@@ -121,6 +133,7 @@ export interface ISessionSnapshot {
 	readonly isRead: boolean;
 	readonly isPinned: boolean;
 	readonly permissionMode?: string;
+	readonly compactionAnchor?: ISessionCompactionAnchorData;
 	readonly messages: readonly ISessionSnapshotMessage[];
 }
 

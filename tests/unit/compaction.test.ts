@@ -13,6 +13,8 @@ import {
 	formatCompactedBlock,
 	generateSummary,
 	isCompactionEnabled,
+	measurePrefixChars,
+	restoreAnchor,
 	selectBoundary,
 	serializeForSummary,
 } from '../../src/main/agent/compaction.js';
@@ -147,6 +149,35 @@ test('formatCompactedBlock wraps the summary for the request view', () => {
 	const block = formatCompactedBlock('## Objective\n- x');
 	assert.match(block, /^\[Context compacted\]/);
 	assert.match(block, /<summary>\n## Objective\n- x\n<\/summary>/);
+});
+
+test('restoreAnchor: three fail-closed gates, and acceptance on the exact match', () => {
+	const messages: IAgentMessage[] = [
+		user('q1'),
+		{ role: 'assistant', content: [{ type: 'text', text: 'a1' }] },
+		user('q2'),
+		{ role: 'assistant', content: [{ type: 'text', text: 'a2' }] },
+		user('q3'),
+	];
+	const prefixChars = measurePrefixChars(messages, 3);
+
+	// Accepted: strict prefix, tail starts on an assistant, integrity matches.
+	const ok = restoreAnchor(messages, { summary: '## Objective\n- x', covered: 3, prefixChars });
+	assert.deepEqual(ok, { boundary: 3, summary: '## Objective\n- x' });
+
+	// Gate 1 — range: zero, past-the-end, whole-transcript, non-integer.
+	assert.equal(restoreAnchor(messages, { summary: 's', covered: 0, prefixChars: 0 }), undefined);
+	assert.equal(restoreAnchor(messages, { summary: 's', covered: 5, prefixChars }), undefined);
+	assert.equal(restoreAnchor(messages, { summary: 's', covered: 2.5, prefixChars }), undefined);
+
+	// Gate 2 — role: tail starting on a user message would put two user
+	// messages back to back (the anchor block is a user message).
+	assert.equal(restoreAnchor(messages, { summary: 's', covered: 2, prefixChars: measurePrefixChars(messages, 2) }), undefined);
+
+	// Gate 3 — integrity: covered history changed since the anchor was made.
+	assert.equal(restoreAnchor(messages, { summary: 's', covered: 3, prefixChars: prefixChars + 1 }), undefined);
+	// …and a blank summary is never restorable.
+	assert.equal(restoreAnchor(messages, { summary: '  ', covered: 3, prefixChars }), undefined);
 });
 
 test('estimateTokens is the char/4 heuristic over the serialized transcript', () => {

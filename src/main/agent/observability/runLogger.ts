@@ -152,6 +152,9 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 						...(event.reason ? { detail: { reason: event.reason } } : {}),
 					});
 					break;
+				case 'compaction_anchor':
+					agentLog.emit({ ts: now(), ...base, type: 'compaction_anchor', covered: event.covered, summaryChars: event.summaryChars, accepted: event.accepted });
+					break;
 				case 'usage':
 					// Without this, real token counts reach only the UI meter — logs
 					// could never answer "estimate vs actual" questions.

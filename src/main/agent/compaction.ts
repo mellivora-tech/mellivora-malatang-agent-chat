@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IAgentMessage, IModelClient } from './agentTypes.js';
+import type { IAgentMessage, ICompactionAnchor, IModelClient } from './agentTypes.js';
 
 /**
  * Auto-compaction — the lossy top tier of context governance (3.1).
@@ -91,6 +91,39 @@ export function selectBoundary(messages: readonly IAgentMessage[], tailBudgetCha
 	}
 
 	return cut < MIN_HEAD_MESSAGES ? undefined : cut;
+}
+
+/** The prefix-size measure the anchor integrity check uses — same ruler as selectBoundary. */
+export function measurePrefixChars(messages: readonly IAgentMessage[], count: number): number {
+	let total = 0;
+	for (let i = 0; i < count && i < messages.length; i++) {
+		total += JSON.stringify(messages[i]!.content).length;
+	}
+	return total;
+}
+
+/**
+ * Validate a persisted anchor against this run's initial transcript. Three
+ * gates, all fail-closed to "no anchor" (a fresh preflight costs one summary
+ * call; a mismatched anchor feeds the model a summary of history it isn't
+ * looking at):
+ *  1. range — the anchor must cover a non-empty strict prefix,
+ *  2. role — the tail must start on an assistant message (a user-role start
+ *     would put two user messages back to back, which the API rejects),
+ *  3. integrity — the covered prefix must have the exact content size it had
+ *     when the anchor was made.
+ */
+export function restoreAnchor(initialMessages: readonly IAgentMessage[], anchor: ICompactionAnchor): { boundary: number; summary: string } | undefined {
+	if (!Number.isInteger(anchor.covered) || anchor.covered < 1 || anchor.covered >= initialMessages.length) {
+		return undefined;
+	}
+	if (initialMessages[anchor.covered]!.role !== 'assistant') {
+		return undefined;
+	}
+	if (anchor.summary.trim() === '' || measurePrefixChars(initialMessages, anchor.covered) !== anchor.prefixChars) {
+		return undefined;
+	}
+	return { boundary: anchor.covered, summary: anchor.summary };
 }
 
 function clip(text: string): string {
