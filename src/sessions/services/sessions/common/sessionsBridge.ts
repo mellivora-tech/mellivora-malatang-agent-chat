@@ -47,10 +47,12 @@ export interface ISessionWorkStepData {
 	readonly detail?: string;
 }
 
-/** A structured reference attached to a user message (@-mentioned file/folder). */
+/** A structured reference attached to a user message (@-mentioned file/folder, or a stored image). */
 export interface ISessionAttachmentData {
-	readonly kind: 'file' | 'folder';
+	readonly kind: 'file' | 'folder' | 'image';
 	readonly path: string;
+	/** Images only: e.g. 'image/png'. */
+	readonly mediaType?: string;
 }
 
 export interface ISessionMessageEntry {
@@ -128,4 +130,8 @@ export interface ISessionsBridge {
 	create(header: ISessionHeader): Promise<void>;
 	append(ref: ISessionRef, entry: ISessionEntry): Promise<void>;
 	delete(ref: ISessionRef): Promise<void>;
+	/** Store one attached image (raw base64); returns the entry path (`media/<sessionId>/<hash>.<ext>`). Optional for older preloads/test doubles. */
+	storeMedia?(ref: ISessionRef, base64: string, mediaType: string): Promise<string>;
+	/** Read a stored image back as raw base64; undefined when missing. */
+	readMedia?(ref: ISessionRef, entryPath: string): Promise<string | undefined>;
 }

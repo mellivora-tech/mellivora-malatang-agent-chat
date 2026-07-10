@@ -159,6 +159,7 @@ function parseParams(value: unknown): IModelParams | undefined {
 		...(typeof candidate['maxTokens'] === 'number' ? { maxTokens: candidate['maxTokens'] } : {}),
 		...(typeof candidate['thinking'] === 'boolean' ? { thinking: candidate['thinking'] } : {}),
 		...(isEffort(candidate['effort']) ? { effort: candidate['effort'] } : {}),
+		...(typeof candidate['vision'] === 'boolean' ? { vision: candidate['vision'] } : {}),
 	};
 	return Object.keys(params).length > 0 ? params : undefined;
 }

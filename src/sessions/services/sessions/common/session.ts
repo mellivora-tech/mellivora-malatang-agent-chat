@@ -42,14 +42,17 @@ export interface ISessionWorkStep {
 }
 
 /**
- * A structured reference the user attached to a message (an @-mention today;
- * images, sessions, and skills are future kinds). File/folder paths are
- * workspace-relative — the agent reads them through its tools, the content is
- * never inlined here.
+ * A structured reference the user attached to a message (@-mentions and pasted
+ * images today; sessions and skills are future kinds). File/folder paths are
+ * workspace-relative — the agent reads them through its tools. Image paths are
+ * session-media-relative (`media/<sessionId>/<hash>.png`); the bytes live on
+ * disk beside the transcript, never inlined here.
  */
 export interface ISessionAttachment {
-	readonly kind: 'file' | 'folder';
+	readonly kind: 'file' | 'folder' | 'image';
 	readonly path: string;
+	/** Images only: e.g. 'image/png'. */
+	readonly mediaType?: string;
 }
 
 export interface ISessionMessage {

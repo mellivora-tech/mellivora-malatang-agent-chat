@@ -253,3 +253,22 @@ test('openai request enables parallel_tool_calls when tools are present (batchin
 	const noTools = buildOpenAIRequestBody(config, { system: 's', messages: [], tools: [], signal });
 	assert.equal('parallel_tool_calls' in noTools, false, 'no tools → no parallel flag');
 });
+
+test('toAnthropicMessages maps image blocks to base64 sources', () => {
+	const wire = toAnthropicMessages([{ role: 'user', content: [{ type: 'image', mediaType: 'image/png', data: 'AAAA' }, { type: 'text', text: 'what is this?' }] }]);
+	assert.deepEqual(wire[0]!.content[0], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } });
+	assert.deepEqual(wire[0]!.content[1], { type: 'text', text: 'what is this?' });
+});
+
+test('toOpenAIMessages maps an image-bearing user turn to a content array with a data URL', () => {
+	const wire = toOpenAIMessages('SYS', [{ role: 'user', content: [{ type: 'image', mediaType: 'image/jpeg', data: 'BBBB' }, { type: 'text', text: 'describe' }] }]);
+	const user = wire.find(message => message.role === 'user');
+	assert.ok(Array.isArray(user?.content), 'images force the array content shape');
+	assert.deepEqual(user.content[0], { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,BBBB' } });
+	assert.deepEqual(user.content[1], { type: 'text', text: 'describe' });
+});
+
+test('toOpenAIMessages keeps plain-string content for text-only user turns', () => {
+	const wire = toOpenAIMessages('SYS', [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
+	assert.equal(wire.find(message => message.role === 'user')?.content, 'hello');
+});

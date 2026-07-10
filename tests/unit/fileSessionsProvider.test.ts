@@ -738,3 +738,41 @@ test('a message without attachments gains no hint block', () => {
 	const transcript = toTranscript([{ id: 'u1', role: 'user', text: 'hello' }]);
 	assert.equal((transcript[0]?.content[0] as { text: string }).text, 'hello');
 });
+
+test('pending images are stored as media, attached to the message, and ride the transcript as image blocks', async () => {
+	const bridge = createFakeBridge();
+	const stored: { base64: string; mediaType: string }[] = [];
+	bridge.storeMedia = async (ref, base64, mediaType) => {
+		stored.push({ base64, mediaType });
+		return `media/${ref.sessionId}/hash${stored.length}.png`;
+	};
+	const agent = createTitleAgent(async () => undefined);
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('look at this screenshot', { images: [{ data: 'QUFB', mediaType: 'image/png' }] });
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	assert.equal(stored.length, 1, 'the image bytes were written to session media');
+	const userMessage = session.messages.get().find(message => message.role === 'user');
+	assert.deepEqual(userMessage?.attachments, [{ kind: 'image', path: `media/${session.sessionId}/hash1.png`, mediaType: 'image/png' }]);
+
+	const images = new Map([[`media/${session.sessionId}/hash1.png`, { mediaType: 'image/png', data: 'QUFB' }]]);
+	const transcript = toTranscript(session.messages.get(), images);
+	const userTurn = transcript.find(turn => turn.role === 'user');
+	assert.deepEqual(userTurn?.content[0], { type: 'image', mediaType: 'image/png', data: 'QUFB' });
+	assert.deepEqual(userTurn?.content[1], { type: 'text', text: 'look at this screenshot' });
+});
+
+test('an unresolvable image degrades the turn to text instead of failing it', () => {
+	const messages: ISessionMessage[] = [{ id: 'u1', role: 'user', text: 'see image', attachments: [{ kind: 'image', path: 'media/s/gone.png', mediaType: 'image/png' }] }];
+	const transcript = toTranscript(messages, new Map());
+	assert.deepEqual(transcript[0]?.content, [{ type: 'text', text: 'see image' }]);
+});
+
+test('an image-only message survives toTranscript without an empty text block', () => {
+	const messages: ISessionMessage[] = [{ id: 'u1', role: 'user', text: '', attachments: [{ kind: 'image', path: 'p.png', mediaType: 'image/png' }] }];
+	const transcript = toTranscript(messages, new Map([['p.png', { mediaType: 'image/png', data: 'Q0ND' }]]));
+	assert.equal(transcript.length, 1);
+	assert.deepEqual(transcript[0]?.content, [{ type: 'image', mediaType: 'image/png', data: 'Q0ND' }]);
+});

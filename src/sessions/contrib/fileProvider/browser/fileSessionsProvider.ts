@@ -22,7 +22,7 @@ import type {
 import { SessionInteractivity, SessionStatus } from '../../../services/sessions/common/session.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
-import type { ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
+import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
 export interface IFileSessionsProviderOptions {
@@ -117,6 +117,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 	private readonly sessions: IMutableSession[] = [];
 	private readonly refs = new Map<string, ISessionRef>();
 	private readonly pendingReplies = new Map<string, IPendingReply>();
+	/** Raw base64 of stored images, keyed `sessionId:path` — populated on store and on first read-back. */
+	private readonly mediaCache = new Map<string, string>();
 	private readonly responseDelayMs: number;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private initialized = false;
@@ -174,7 +176,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const ref: ISessionRef = { sessionId, ...(options?.projectId ? { projectId: options.projectId } : {}) };
 		const now = new Date();
 		const initialMode = permissionMode.get();
-		const attachments = normalizeAttachments(options?.attachments);
+		const imageAttachments = await this.storeImages(ref, options?.images);
+		const attachments = normalizeAttachments([...(options?.attachments ?? []), ...imageAttachments]);
 		const userMessage: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now, ...(attachments ? { attachments } : {}) };
 
 		await this.enqueueWrite(async () => {
@@ -254,7 +257,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const session = this.getMutableSession(sessionId);
 		const ref = this.getRef(sessionId);
 		const now = new Date();
-		const attachments = normalizeAttachments(options?.attachments);
+		const imageAttachments = await this.storeImages(ref, options?.images);
+		const attachments = normalizeAttachments([...(options?.attachments ?? []), ...imageAttachments]);
 		const message: ISessionMessage = { id: `${sessionId}-user-${generateId()}`, role: 'user', text: query, timestamp: now, ...(attachments ? { attachments } : {}) };
 
 		await this.enqueueWrite(async () => {
@@ -474,6 +478,65 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return next;
 	}
 
+	/** Persist composer images to session media; a failed store drops that image (the message still sends). */
+	private async storeImages(ref: ISessionRef, images: readonly IPendingImage[] | undefined): Promise<ISessionAttachment[]> {
+		if (!images || images.length === 0 || !this.bridge.storeMedia) {
+			return [];
+		}
+		const attachments: ISessionAttachment[] = [];
+		for (const image of images) {
+			try {
+				const path = await this.bridge.storeMedia(ref, image.data, image.mediaType);
+				attachments.push({ kind: 'image', path, mediaType: image.mediaType });
+				this.mediaCache.set(`${ref.sessionId}:${path}`, image.data);
+			} catch (error) {
+				console.warn(`Storing an attached image failed for ${ref.sessionId}:`, error);
+			}
+		}
+		return attachments;
+	}
+
+	private async readMediaBase64(sessionId: string, path: string): Promise<string | undefined> {
+		const key = `${sessionId}:${path}`;
+		const cached = this.mediaCache.get(key);
+		if (cached) {
+			return cached;
+		}
+		const data = await this.bridge.readMedia?.(this.getRef(sessionId), path);
+		if (data) {
+			this.mediaCache.set(key, data);
+		}
+		return data;
+	}
+
+	/** Data URL for a stored image attachment — the conversation view's thumbnails. */
+	async resolveMedia(sessionId: string, path: string): Promise<string | undefined> {
+		const data = await this.readMediaBase64(sessionId, path);
+		return data ? `data:${mediaTypeFromPath(path)};base64,${data}` : undefined;
+	}
+
+	/**
+	 * The model request needs image bytes, which live on disk — resolve every
+	 * image attachment in the history (cache-first) before building the
+	 * transcript. An unreadable image degrades to text-only rather than failing
+	 * the run.
+	 */
+	private async buildTranscript(session: IMutableSession): Promise<IAgentMessage[]> {
+		const messages = session.messages.get();
+		const images = new Map<string, { mediaType: string; data: string }>();
+		for (const message of messages) {
+			for (const attachment of message.attachments ?? []) {
+				if (attachment.kind === 'image' && !images.has(attachment.path)) {
+					const data = await this.readMediaBase64(session.sessionId, attachment.path);
+					if (data) {
+						images.set(attachment.path, { mediaType: attachment.mediaType ?? mediaTypeFromPath(attachment.path), data });
+					}
+				}
+			}
+		}
+		return toTranscript(messages, images);
+	}
+
 	private generateReply(session: IMutableSession): void {
 		const hasModel = this.modelsService?.registry.get().providers.some(provider => provider.models.some(model => model.enabled)) ?? false;
 		if (this.agent && hasModel) {
@@ -497,7 +560,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const modelId = this.modelsService?.selectedModel.get()?.id;
 		const assistantId = `${sessionId}-assistant-${generateId()}`;
 		const workId = `${sessionId}-work-${generateId()}`;
-		const transcript = toTranscript(session.messages.get());
 		let text = '';
 		let created = false;
 		let finalized = false;
@@ -683,11 +745,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		});
 
-		void agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get()).catch(error => {
-			text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
-			updateAssistant();
-			finalize();
-		});
+		void this.buildTranscript(session)
+			.then(transcript => agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get()))
+			.catch(error => {
+				text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
+				updateAssistant();
+				finalize();
+			});
 	}
 
 	/** When there is no model to answer, reply with an honest prompt to configure one. */
@@ -764,13 +828,13 @@ function normalizeAttachments(attachments: readonly ISessionAttachment[] | undef
 	const seen = new Set<string>();
 	const normalized: ISessionAttachment[] = [];
 	for (const attachment of attachments) {
-		if ((attachment.kind !== 'file' && attachment.kind !== 'folder') || typeof attachment.path !== 'string' || attachment.path === '') {
+		if ((attachment.kind !== 'file' && attachment.kind !== 'folder' && attachment.kind !== 'image') || typeof attachment.path !== 'string' || attachment.path === '') {
 			continue;
 		}
 		const key = `${attachment.kind}:${attachment.path}`;
 		if (!seen.has(key)) {
 			seen.add(key);
-			normalized.push({ kind: attachment.kind, path: attachment.path });
+			normalized.push({ kind: attachment.kind, path: attachment.path, ...(attachment.mediaType !== undefined ? { mediaType: attachment.mediaType } : {}) });
 		}
 	}
 	return normalized.length > 0 ? normalized : undefined;
@@ -782,26 +846,51 @@ function formatAttachmentsBlock(attachments: readonly ISessionAttachment[]): str
 	return `<user-attached-paths>\nThe user attached these workspace-relative paths. Read the relevant ones with your tools before answering.\n${lines.join('\n')}\n</user-attached-paths>`;
 }
 
+const MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	webp: 'image/webp',
+	gif: 'image/gif',
+};
+
+function mediaTypeFromPath(path: string): string {
+	return MEDIA_TYPES_BY_EXTENSION[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'image/png';
+}
+
 /**
  * Build the message list sent to the model from the session history. Only
  * user/assistant turns cross the wire (work/tool blocks are UI-only), and
- * empty-text turns are dropped — the model APIs reject a request that contains
- * an empty-content message ("assistant message must not be empty", HTTP 400),
- * which a stray blank reply would otherwise poison every later run with.
- * Attachments become a path-hint block on the user turn — never inlined content.
+ * empty-content turns are dropped — the model APIs reject a request that
+ * contains an empty-content message ("assistant message must not be empty",
+ * HTTP 400), which a stray blank reply would otherwise poison every later run
+ * with. Path attachments become a hint block on the user turn (never inlined
+ * content); image attachments become image blocks from `images` (path →
+ * bytes), placed before the text per the Messages API convention.
  */
-export function toTranscript(messages: readonly ISessionMessage[]): IAgentMessage[] {
+export function toTranscript(messages: readonly ISessionMessage[], images?: ReadonlyMap<string, { readonly mediaType: string; readonly data: string }>): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
 	for (const message of messages) {
 		if (message.role !== 'user' && message.role !== 'assistant') {
 			continue;
 		}
-		if (message.text.trim() === '') {
+		const attachments = message.role === 'user' ? (normalizeAttachments(message.attachments) ?? []) : [];
+		const pathAttachments = attachments.filter(attachment => attachment.kind !== 'image');
+		const imageBlocks: IAgentMessage['content'][number][] = [];
+		for (const attachment of attachments) {
+			if (attachment.kind !== 'image') {
+				continue;
+			}
+			const image = images?.get(attachment.path);
+			if (image) {
+				imageBlocks.push({ type: 'image', mediaType: image.mediaType, data: image.data });
+			}
+		}
+		const text = pathAttachments.length > 0 ? `${message.text}\n\n${formatAttachmentsBlock(pathAttachments)}` : message.text;
+		if (text.trim() === '' && imageBlocks.length === 0) {
 			continue;
 		}
-		const attachments = message.role === 'user' ? normalizeAttachments(message.attachments) : undefined;
-		const text = attachments ? `${message.text}\n\n${formatAttachmentsBlock(attachments)}` : message.text;
-		transcript.push({ role: message.role, content: [{ type: 'text', text }] });
+		transcript.push({ role: message.role, content: [...imageBlocks, ...(text.trim() !== '' ? [{ type: 'text' as const, text }] : [])] });
 	}
 
 	return transcript;

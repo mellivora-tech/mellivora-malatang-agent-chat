@@ -33,6 +33,8 @@ export interface IModelParams {
 	readonly thinking?: boolean;
 	/** Reasoning effort; omitted = provider default (nothing is sent). */
 	readonly effort?: ModelEffort;
+	/** Image input support. `false` strips images from requests (a text note rides instead); omitted = unknown, images pass through. */
+	readonly vision?: boolean;
 }
 
 /** A model offered by a provider. Upsert payload from the renderer. */

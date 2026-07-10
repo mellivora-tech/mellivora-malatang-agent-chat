@@ -30,6 +30,8 @@ export interface ISessionsService {
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 	deleteSession(sessionId: string): Promise<void>;
+	/** Data URL for a stored image attachment, for thumbnails. */
+	resolveMedia(sessionId: string, path: string): Promise<string | undefined>;
 }
 
 export class SessionsService extends Disposable implements ISessionsService {
@@ -97,6 +99,10 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		return this.managementService.stopSession(sessionId);
+	}
+
+	async resolveMedia(sessionId: string, path: string): Promise<string | undefined> {
+		return this.managementService.resolveMedia(sessionId, path);
 	}
 
 	async setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession> {

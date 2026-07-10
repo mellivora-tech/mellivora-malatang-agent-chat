@@ -88,3 +88,68 @@
 .conversation-message-attachment .codicon {
 	font-size: inherit;
 }
+
+/* Pending-image thumbnail strip above the composer input. */
+
+.composer-image-strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-6) 0;
+}
+
+.composer-image-thumb {
+	position: relative;
+	width: 56px;
+	height: 56px;
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	overflow: hidden;
+}
+
+.composer-image-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.composer-image-remove {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	width: 16px;
+	height: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--vscode-agents-color-shadow) 70%, transparent);
+	color: #fff;
+	font-size: 12px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.composer-drop-active {
+	outline: var(--vscode-agents-space-2) dashed color-mix(in srgb, var(--vscode-agents-color-focusBorder) 70%, transparent);
+	outline-offset: calc(-1 * var(--vscode-agents-space-2));
+}
+
+/* Sent-image thumbnails under a user bubble. */
+
+.conversation-message-image {
+	display: inline-flex;
+	max-width: 200px;
+	max-height: 160px;
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	overflow: hidden;
+}
+
+.conversation-message-image img {
+	max-width: 100%;
+	max-height: 160px;
+	object-fit: contain;
+	display: block;
+}

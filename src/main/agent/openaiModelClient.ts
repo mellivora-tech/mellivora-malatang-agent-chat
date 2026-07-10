@@ -28,9 +28,12 @@ interface IOpenAIChunk {
 	readonly usage?: IOpenAIUsage;
 }
 
+/** A user-turn content part; images ride as data-URL image_url parts. */
+type IOpenAIContentPart = { readonly type: 'text'; readonly text: string } | { readonly type: 'image_url'; readonly image_url: { readonly url: string } };
+
 interface IOpenAIMessage {
 	readonly role: 'system' | 'user' | 'assistant' | 'tool';
-	readonly content: string | null;
+	readonly content: string | null | readonly IOpenAIContentPart[];
 	readonly tool_calls?: readonly { readonly id: string; readonly type: 'function'; readonly function: { readonly name: string; readonly arguments: string } }[];
 	readonly tool_call_id?: string;
 }
@@ -55,16 +58,21 @@ export function toOpenAIMessages(system: string, messages: readonly IAgentMessag
 			continue;
 		}
 
-		// A user turn is either tool results or plain text.
+		// A user turn is either tool results or text (optionally with images).
 		let text = '';
+		const images: IOpenAIContentPart[] = [];
 		for (const block of message.content) {
 			if (block.type === 'tool_result') {
 				wire.push({ role: 'tool', tool_call_id: block.toolUseId, content: block.content });
 			} else if (block.type === 'text') {
 				text += block.text;
+			} else if (block.type === 'image') {
+				images.push({ type: 'image_url', image_url: { url: `data:${block.mediaType};base64,${block.data}` } });
 			}
 		}
-		if (text.length > 0) {
+		if (images.length > 0) {
+			wire.push({ role: 'user', content: [...images, ...(text.length > 0 ? [{ type: 'text', text } satisfies IOpenAIContentPart] : [])] });
+		} else if (text.length > 0) {
 			wire.push({ role: 'user', content: text });
 		}
 	}

@@ -51,6 +51,14 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return this.getOwningProvider(sessionId).sendMessage(sessionId, query, options);
 	}
 
+	async resolveMedia(sessionId: string, path: string): Promise<string | undefined> {
+		try {
+			return await this.getOwningProvider(sessionId).resolveMedia?.(sessionId, path);
+		} catch {
+			return undefined;
+		}
+	}
+
 	async stopSession(sessionId: string): Promise<ISession> {
 		return this.getOwningProvider(sessionId).stopSession(sessionId);
 	}

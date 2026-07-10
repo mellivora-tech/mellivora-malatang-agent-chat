@@ -33,6 +33,8 @@ const sessions: ISessionsBridge = {
 	create: (header: ISessionHeader) => ipcRenderer.invoke('sessions:create', header),
 	append: (ref: ISessionRef, entry: ISessionEntry) => ipcRenderer.invoke('sessions:append', ref, entry),
 	delete: (ref: ISessionRef) => ipcRenderer.invoke('sessions:delete', ref),
+	storeMedia: (ref: ISessionRef, base64: string, mediaType: string) => ipcRenderer.invoke('sessions:storeMedia', ref, base64, mediaType),
+	readMedia: (ref: ISessionRef, entryPath: string) => ipcRenderer.invoke('sessions:readMedia', ref, entryPath),
 };
 
 const appState: IAppStateBridge = {

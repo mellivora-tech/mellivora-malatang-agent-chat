@@ -13,14 +13,22 @@ export interface ISessionChangeEvent {
 	readonly changed: readonly ISession[];
 }
 
+/** An image captured in the composer, not yet written to session media (raw base64, no data: prefix). */
+export interface IPendingImage {
+	readonly data: string;
+	readonly mediaType: string;
+}
+
 export interface IStartSessionOptions {
 	readonly workspace?: ISessionWorkspace;
 	readonly projectId?: string;
 	readonly attachments?: readonly ISessionAttachment[];
+	readonly images?: readonly IPendingImage[];
 }
 
 export interface ISendMessageOptions {
 	readonly attachments?: readonly ISessionAttachment[];
+	readonly images?: readonly IPendingImage[];
 }
 
 export interface ISessionsProvider {
@@ -40,4 +48,6 @@ export interface ISessionsProvider {
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	/** Duplicate the session's history up to (and including) `messageId` into a new session. */
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
+	/** Data URL for a stored image attachment, for thumbnails. Optional; undefined when unavailable. */
+	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
 }

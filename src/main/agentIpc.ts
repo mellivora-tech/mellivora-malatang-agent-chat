@@ -64,6 +64,14 @@ interface IAgentTitlePayload {
 const TITLE_MAX_TOKENS = 256;
 const TITLE_TIMEOUT_MS = 20_000;
 
+/** A model flagged vision: false must not receive image blocks — swap each for a note so the turn still parses. */
+function stripImageBlocks(messages: readonly IAgentMessage[]): readonly IAgentMessage[] {
+	return messages.map(message => ({
+		...message,
+		content: message.content.map(block => (block.type === 'image' ? { type: 'text' as const, text: '[Image omitted: the selected model does not support image input.]' } : block)),
+	}));
+}
+
 /**
  * Drives the agent loop in the main process and streams its events to the
  * renderer over `agent:event`. Mutating tools consult the permission gate for
@@ -153,7 +161,8 @@ export function registerAgentIpc(dataRoot: string): void {
 
 		try {
 			const system = cwd ? workspaceSystemPrompt(cwd, mode) + (instructions ? `\n\n${formatInstructionsBlock(instructions)}` : '') : DEFAULT_SYSTEM;
-			const loop = runAgentLoop(payload.messages, {
+			const messages = config.params?.vision === false ? stripImageBlocks(payload.messages) : payload.messages;
+			const loop = runAgentLoop(messages, {
 				system,
 				tools,
 				modelClient: createModelClient(config),

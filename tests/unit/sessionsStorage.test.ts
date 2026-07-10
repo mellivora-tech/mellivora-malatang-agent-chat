@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, loadSession } from '../../src/main/sessionsStorage.js';
+import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, loadSession, readSessionMedia, storeSessionMedia } from '../../src/main/sessionsStorage.js';
 import type { ISessionHeader } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
 
 async function createTempRoot(): Promise<string> {
@@ -267,6 +267,54 @@ test('loadAllSessions returns empty for a missing root and skips invalid files',
 			sessions.map(session => session.sessionId),
 			['valid-one'],
 		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+const PNG_BASE64 = Buffer.from('fake-png-bytes').toString('base64');
+
+test('storeSessionMedia writes content-addressed bytes and readSessionMedia round-trips them', async () => {
+	const root = await createTempRoot();
+	try {
+		await createSessionFile(root, createHeader('med-1'));
+		const ref = { sessionId: 'med-1' };
+
+		const path = await storeSessionMedia(root, ref, PNG_BASE64, 'image/png');
+		assert.match(path, /^media\/med-1\/[0-9a-f]{16}\.png$/);
+
+		// Same bytes → same path (content-addressed, no duplicate files).
+		assert.equal(await storeSessionMedia(root, ref, PNG_BASE64, 'image/png'), path);
+
+		assert.equal(await readSessionMedia(root, ref, path), PNG_BASE64);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('storeSessionMedia rejects unknown media types; readSessionMedia refuses path escapes', async () => {
+	const root = await createTempRoot();
+	try {
+		const ref = { sessionId: 'med-2' };
+		await assert.rejects(storeSessionMedia(root, ref, PNG_BASE64, 'application/pdf'), /Unsupported media type/);
+
+		await storeSessionMedia(root, ref, PNG_BASE64, 'image/png');
+		assert.equal(await readSessionMedia(root, ref, '../med-2.jsonl'), undefined, 'a traversal outside the media dir reads nothing');
+		assert.equal(await readSessionMedia(root, ref, 'media/med-2/missing.png'), undefined, 'a missing file reads nothing');
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('deleteSessionFile removes the media dir with the transcript', async () => {
+	const root = await createTempRoot();
+	try {
+		await createSessionFile(root, createHeader('med-3'));
+		const ref = { sessionId: 'med-3' };
+		const path = await storeSessionMedia(root, ref, PNG_BASE64, 'image/png');
+
+		await deleteSessionFile(root, ref);
+		assert.equal(await readSessionMedia(root, ref, path), undefined);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

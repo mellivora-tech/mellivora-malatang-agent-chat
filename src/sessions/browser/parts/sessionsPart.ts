@@ -35,8 +35,8 @@ export class SessionsPart extends Part {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
 			new NewSessionView({
-				onStartSession: (query, attachments) =>
-					this.sessionsService?.startSession(query, { ...this.getStartSessionOptions(), ...(attachments ? { attachments } : {}) }) ?? Promise.resolve(),
+				onStartSession: (query, attachments, images) =>
+					this.sessionsService?.startSession(query, { ...this.getStartSessionOptions(), ...(attachments ? { attachments } : {}), ...(images ? { images } : {}) }) ?? Promise.resolve(),
 				...(this.projectsService ? { projectsService: this.projectsService } : {}),
 				...(modelsService ? { modelsService } : {}),
 			}),

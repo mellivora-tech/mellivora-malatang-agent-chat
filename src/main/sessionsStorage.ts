@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import type {
 	ISessionEntry,
 	ISessionHeader,
@@ -36,6 +37,51 @@ export async function appendSessionEntry(root: string, ref: ISessionRef, entry: 
 
 export async function deleteSessionFile(root: string, ref: ISessionRef): Promise<void> {
 	await rm(sessionFilePath(root, ref), { force: true });
+	await rm(sessionMediaDir(root, ref), { recursive: true, force: true });
+}
+
+// --- Session media (attached images) --------------------------------------------
+// Bytes live beside the transcript, never inside it: the JSONL entry carries only
+// a media-relative path, so transcripts stay greppable and cheap to fold.
+
+const MEDIA_EXTENSIONS: Readonly<Record<string, string>> = {
+	'image/png': 'png',
+	'image/jpeg': 'jpg',
+	'image/webp': 'webp',
+	'image/gif': 'gif',
+};
+
+function sessionMediaDir(root: string, ref: ISessionRef): string {
+	return join(dirname(sessionFilePath(root, ref)), 'media', ref.sessionId);
+}
+
+/** Write one image (raw base64) and return its entry path (`media/<sessionId>/<hash>.<ext>`). Content-addressed: re-attaching the same image is a no-op. */
+export async function storeSessionMedia(root: string, ref: ISessionRef, base64: string, mediaType: string): Promise<string> {
+	const extension = MEDIA_EXTENSIONS[mediaType];
+	if (!extension) {
+		throw new Error(`Unsupported media type: ${mediaType}`);
+	}
+	const bytes = Buffer.from(base64, 'base64');
+	const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+	const dir = sessionMediaDir(root, ref);
+	await mkdir(dir, { recursive: true });
+	const file = join(dir, `${hash}.${extension}`);
+	await writeFile(file, bytes);
+	return `media/${ref.sessionId}/${hash}.${extension}`;
+}
+
+/** Read a stored image back as raw base64; undefined when missing or the path escapes the media dir. */
+export async function readSessionMedia(root: string, ref: ISessionRef, entryPath: string): Promise<string | undefined> {
+	const mediaRoot = resolve(sessionMediaDir(root, ref));
+	const target = resolve(dirname(sessionFilePath(root, ref)), entryPath);
+	if (target !== mediaRoot && !target.startsWith(mediaRoot + sep)) {
+		return undefined;
+	}
+	try {
+		return (await readFile(target)).toString('base64');
+	} catch {
+		return undefined;
+	}
 }
 
 export async function loadSession(root: string, ref: ISessionRef): Promise<ISessionSnapshot | undefined> {

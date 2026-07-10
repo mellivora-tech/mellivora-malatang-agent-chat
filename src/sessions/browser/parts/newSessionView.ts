@@ -8,11 +8,13 @@ import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ISessionAttachment } from '../../services/sessions/common/session.js';
+import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import { installImageAttachments } from './composerImages.js';
 import { installFileMentions } from './composerMentions.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 
 export interface INewSessionViewOptions {
-	readonly onStartSession?: (query: string, attachments?: readonly ISessionAttachment[]) => Promise<unknown>;
+	readonly onStartSession?: (query: string, attachments?: readonly ISessionAttachment[], images?: readonly IPendingImage[]) => Promise<unknown>;
 	readonly projectsService?: IProjectsService;
 	readonly modelsService?: IModelsService;
 }
@@ -68,7 +70,7 @@ export class NewSessionView extends Disposable {
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
 		input.rows = 2;
-		input.placeholder = 'Ask Mellivora anything, @ for files or folders';
+		input.placeholder = 'Ask Mellivora anything, @ for files or folders, paste or drop images';
 		input.spellcheck = true;
 
 		// Installed before the Enter-to-send handler below — an Enter that picks
@@ -83,6 +85,7 @@ export class NewSessionView extends Disposable {
 				},
 			}),
 		);
+		const images = this._register(installImageAttachments({ input, dropTarget: composer }));
 
 		const toolbar = append(composer, document.createElement('div'));
 		toolbar.className = 'new-session-composer-toolbar';
@@ -93,11 +96,12 @@ export class NewSessionView extends Disposable {
 		const addButton = append(leftControls, document.createElement('button')) as HTMLButtonElement;
 		addButton.className = 'new-session-toolbar-button';
 		addButton.type = 'button';
-		addButton.title = 'Add context';
-		addButton.setAttribute('aria-label', 'Add context');
+		addButton.title = 'Attach images';
+		addButton.setAttribute('aria-label', 'Attach images');
 		const addIcon = append(addButton, document.createElement('span'));
 		addIcon.className = 'codicon codicon-add';
 		addIcon.setAttribute('aria-hidden', 'true');
+		addButton.addEventListener('click', () => images.pick());
 
 		const access = append(leftControls, document.createElement('button')) as HTMLButtonElement;
 		access.className = 'new-session-access';
@@ -163,9 +167,11 @@ export class NewSessionView extends Disposable {
 			}
 
 			const attachments = mentions.collectAttachments(query);
+			const pendingImages = images.getImages();
 			input.value = '';
 			mentions.reset();
-			void this.options.onStartSession?.(query, attachments.length > 0 ? attachments : undefined);
+			images.reset();
+			void this.options.onStartSession?.(query, attachments.length > 0 ? attachments : undefined, pendingImages.length > 0 ? pendingImages : undefined);
 		});
 
 		input.addEventListener('keydown', event => {

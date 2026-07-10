@@ -51,7 +51,8 @@ type AnthropicWireBlock =
 	| { readonly type: 'text'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly id: string; readonly name: string; readonly input: unknown }
 	| { readonly type: 'tool_result'; readonly tool_use_id: string; readonly content: string; readonly is_error: boolean }
-	| { readonly type: 'thinking'; readonly thinking: string; readonly signature?: string };
+	| { readonly type: 'thinking'; readonly thinking: string; readonly signature?: string }
+	| { readonly type: 'image'; readonly source: { readonly type: 'base64'; readonly media_type: string; readonly data: string } };
 
 interface IAnthropicMessage {
 	readonly role: 'user' | 'assistant';
@@ -74,6 +75,9 @@ export function toAnthropicMessages(messages: readonly IAgentMessage[]): IAnthro
 				// Passed back verbatim (signature included) — required by the API in
 				// tool-use loops whenever extended thinking is enabled.
 				return { type: 'thinking', thinking: block.thinking, ...(block.signature !== undefined ? { signature: block.signature } : {}) };
+			}
+			if (block.type === 'image') {
+				return { type: 'image', source: { type: 'base64', media_type: block.mediaType, data: block.data } };
 			}
 			return { type: 'tool_result', tool_use_id: block.toolUseId, content: block.content, is_error: block.isError };
 		}),

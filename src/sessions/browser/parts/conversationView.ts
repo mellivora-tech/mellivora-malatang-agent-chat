@@ -9,6 +9,8 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { IActiveSession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../services/sessions/common/session.js';
+import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import { installImageAttachments, type IImageController } from './composerImages.js';
 import { installFileMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
 import { renderMarkdown } from './markdownRenderer.js';
@@ -18,11 +20,13 @@ import type { PermissionMode } from '../../services/agent/common/agent.js';
 import { toDisposable } from '../../base/common/lifecycle.js';
 
 export interface ISessionMessageSender {
-	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[] }): Promise<unknown>;
+	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[]; readonly images?: readonly IPendingImage[] }): Promise<unknown>;
 	stopSession(sessionId: string): Promise<unknown>;
 	setSessionPermissionMode?(sessionId: string, mode: PermissionMode): Promise<unknown>;
 	setMessageFeedback?(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<unknown>;
 	forkSession?(sessionId: string, messageId: string): Promise<unknown>;
+	/** Data URL for a stored image attachment, for thumbnails in the transcript. */
+	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
 }
 
 export class ConversationView extends Disposable {
@@ -68,6 +72,7 @@ export class ConversationView extends Disposable {
 	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage }>();
 
 	private readonly mentions: IMentionController;
+	private readonly images: IImageController;
 
 	constructor(
 		private readonly messageSender?: ISessionMessageSender,
@@ -116,6 +121,7 @@ export class ConversationView extends Disposable {
 				},
 			}),
 		);
+		this.images = this._register(installImageAttachments({ input: this.input, dropTarget: this.composer, onDidChange: () => this.updateComposerState() }));
 
 		const toolbar = append(inputWrap, document.createElement('div'));
 		toolbar.className = 'conversation-composer-toolbar';
@@ -228,8 +234,9 @@ export class ConversationView extends Disposable {
 		this.header.openSession(session);
 		this.setSendError(undefined);
 		this.queuedFollowUp = undefined;
-		// Mentions recorded against another session's project must not leak here.
+		// Mentions and pending images belong to the session they were staged in.
 		this.mentions.reset();
+		this.images.reset();
 		// A freshly opened conversation starts at its latest message.
 		this.scrollToBottomOnRender = true;
 
@@ -280,6 +287,13 @@ export class ConversationView extends Disposable {
 				: {}),
 			...(sender?.forkSession ? { fork: () => void sender.forkSession!(session.sessionId, message.id) } : {}),
 		};
+	}
+
+	/** Path → data URL for image attachments in the transcript; undefined when the sender can't resolve media. */
+	private buildImageResolver(): ((path: string) => Promise<string | undefined>) | undefined {
+		const sessionId = this.session?.sessionId;
+		const resolve = this.messageSender?.resolveMedia?.bind(this.messageSender);
+		return sessionId && resolve ? path => resolve(sessionId, path) : undefined;
 	}
 
 	private notifyPermissionListeners(): void {
@@ -439,7 +453,7 @@ export class ConversationView extends Disposable {
 				}
 				existing.message = message;
 			} else {
-				element = message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message, this.buildMessageActions(message));
+				element = message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message, this.buildMessageActions(message), this.buildImageResolver());
 				this.renderedRows.set(message.id, { element, message });
 			}
 
@@ -916,13 +930,14 @@ export class ConversationView extends Disposable {
 		const isRunning = this.session?.status.get() === SessionStatus.InProgress;
 		const canType = Boolean(this.session && interactivity === SessionInteractivity.Full && !this.isSending);
 		const hasText = this.input.value.trim().length > 0;
+		const hasContent = hasText || this.images.hasImages();
 
 		this.composer.hidden = interactivity === SessionInteractivity.Hidden;
 		this.composer.classList.toggle('running', isRunning);
 		this.composer.classList.toggle('idle', !isRunning);
 		this.composer.dataset.state = isRunning ? 'running' : 'idle';
 		this.input.disabled = !canType;
-		this.sendButton.disabled = !canType || !hasText;
+		this.sendButton.disabled = !canType || !hasContent;
 		this.sendButton.hidden = isRunning;
 		this.stopButton.hidden = !isRunning;
 		this.input.placeholder = isRunning
@@ -948,7 +963,7 @@ export class ConversationView extends Disposable {
 	private async send(): Promise<void> {
 		const query = this.input.value.trim();
 		const session = this.session;
-		if (!query || !session || this.isSending || session.interactivity.get() !== SessionInteractivity.Full) {
+		if ((!query && !this.images.hasImages()) || !session || this.isSending || session.interactivity.get() !== SessionInteractivity.Full) {
 			return;
 		}
 
@@ -969,9 +984,14 @@ export class ConversationView extends Disposable {
 
 		try {
 			const attachments = this.mentions.collectAttachments(query);
-			await this.messageSender?.sendMessage(session.sessionId, query, attachments.length > 0 ? { attachments } : undefined);
+			const images = this.images.getImages();
+			await this.messageSender?.sendMessage(session.sessionId, query, {
+				...(attachments.length > 0 ? { attachments } : {}),
+				...(images.length > 0 ? { images } : {}),
+			});
 			this.input.value = '';
 			this.mentions.reset();
+			this.images.reset();
 		} catch {
 			this.setSendError('Message failed to send. Your draft was kept — try again.');
 		} finally {
@@ -1088,7 +1108,7 @@ interface IMessageActions {
 	fork?(): void;
 }
 
-function createMessageRow(message: ISessionMessage, actions?: IMessageActions): HTMLElement {
+function createMessageRow(message: ISessionMessage, actions?: IMessageActions, resolveImage?: (path: string) => Promise<string | undefined>): HTMLElement {
 	const row = document.createElement('article');
 	row.className = `conversation-message ${message.role}`;
 	row.dataset.role = message.role;
@@ -1116,10 +1136,27 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions): 
 		const bubble = append(body, document.createElement('div'));
 		bubble.className = 'conversation-message-bubble';
 		bubble.textContent = message.text;
+		// An image-only message has no text — don't render an empty bubble.
+		bubble.hidden = message.text.trim() === '';
 		if (message.attachments && message.attachments.length > 0) {
 			const chips = append(body, document.createElement('div'));
 			chips.className = 'conversation-message-attachments';
 			for (const attachment of message.attachments) {
+				if (attachment.kind === 'image') {
+					const thumb = append(chips, document.createElement('span'));
+					thumb.className = 'conversation-message-image';
+					const img = append(thumb, document.createElement('img')) as HTMLImageElement;
+					img.alt = 'Attached image';
+					// The bytes live on disk — hydrate the thumbnail when they arrive.
+					void resolveImage?.(attachment.path).then(url => {
+						if (url) {
+							img.src = url;
+						} else {
+							thumb.remove();
+						}
+					});
+					continue;
+				}
 				const chip = append(chips, document.createElement('span'));
 				chip.className = 'conversation-message-attachment';
 				chip.title = attachment.path;

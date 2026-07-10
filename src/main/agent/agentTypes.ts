@@ -51,7 +51,15 @@ export interface IThinkingBlock {
 	readonly signature?: string;
 }
 
-export type IContentBlock = ITextBlock | IToolUseBlock | IToolResultBlock | IThinkingBlock;
+/** An inline image on a user turn. `data` is raw base64 (no data: prefix). */
+export interface IImageBlock {
+	readonly type: 'image';
+	/** e.g. 'image/png', 'image/jpeg', 'image/webp', 'image/gif'. */
+	readonly mediaType: string;
+	readonly data: string;
+}
+
+export type IContentBlock = ITextBlock | IToolUseBlock | IToolResultBlock | IThinkingBlock | IImageBlock;
 
 export interface IAgentMessage {
 	readonly role: 'user' | 'assistant';
