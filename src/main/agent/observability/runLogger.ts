@@ -158,7 +158,16 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 				case 'usage':
 					// Without this, real token counts reach only the UI meter — logs
 					// could never answer "estimate vs actual" questions.
-					agentLog.emit({ ts: now(), ...base, type: 'usage', turn, inputTokens: event.inputTokens, ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}) });
+					agentLog.emit({
+						ts: now(),
+						...base,
+						type: 'usage',
+						turn,
+						inputTokens: event.inputTokens,
+						...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+						...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
+						...(event.cacheWriteTokens !== undefined ? { cacheWriteTokens: event.cacheWriteTokens } : {}),
+					});
 					break;
 				case 'tool_prune':
 					agentLog.emit({ ts: now(), ...base, type: 'tool_prune', prunedResults: event.prunedResults, prunedChars: event.prunedChars });

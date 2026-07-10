@@ -742,7 +742,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 			} else if (event?.type === 'usage') {
 				// The provider's real prompt size for the request just completed —
 				// the conversation view prefers this over its char-count estimate.
-				session.contextUsage.set({ inputTokens: event.inputTokens });
+				// Cache hits are part of the prompt (Anthropic wire semantics keeps
+				// them out of input_tokens), so the meter sums all three.
+				session.contextUsage.set({ inputTokens: event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0) });
 			} else if (event?.type === 'compaction') {
 				// An ok compaction becomes the session's cross-run anchor: the same
 				// head is summarized once per session instead of once per run. The

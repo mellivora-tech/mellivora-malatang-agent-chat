@@ -799,3 +799,43 @@ test('compaction: a restored anchor pre-seeds the view with ZERO summary calls, 
 		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
 	}
 });
+
+test('compaction trigger counts cache tokens — a cached prompt is still a full prompt', async () => {
+	process.env['AGENT_CHAT_REPLY_VERIFIER'] = 'off';
+	try {
+		// input_tokens alone (4K) is far under the 52K threshold; with the 116K
+		// cache-read the true prompt is 120K — the trigger must fire.
+		let mainCount = 0;
+		const compactions: unknown[] = [];
+		const client = {
+			async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+				mainCount += 1;
+				if (mainCount === 1) {
+					yield { type: 'tool_use', block: { type: 'tool_use', id: 't1', name: 'big', input: { n: 1 } } };
+					yield { type: 'usage', inputTokens: 4_000, cacheReadTokens: 116_000 };
+					yield { type: 'message_stop', stopReason: 'tool_use' };
+				} else {
+					yield { type: 'text_delta', text: 'done' };
+					yield { type: 'message_stop', stopReason: 'end_turn' };
+				}
+			},
+		};
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('q')], {
+				system: 's',
+				tools: [bigTool],
+				modelClient: client as never,
+				permissionGate: allowAllPermissionGate,
+				compaction: { contextWindow: 100_000 },
+			}),
+		);
+		compactions.push(...compactionEvents(events));
+
+		assert.equal(terminal.reason, 'completed');
+		const [compaction] = compactionEvents(events);
+		assert.ok(compaction, 'over-threshold cached prompt triggered a compaction attempt');
+		assert.equal(compaction.beforeTokens, 120_000, 'the trigger base sums input + cache');
+	} finally {
+		delete process.env['AGENT_CHAT_REPLY_VERIFIER'];
+	}
+});

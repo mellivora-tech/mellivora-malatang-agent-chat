@@ -28,6 +28,9 @@ interface IAnthropicContentBlock {
 interface IAnthropicUsage {
 	readonly input_tokens?: number;
 	readonly output_tokens?: number;
+	/** Prompt-cache hits/writes — NOT included in input_tokens on this wire format. Kimi's implicit cache reports cache_read too. */
+	readonly cache_read_input_tokens?: number;
+	readonly cache_creation_input_tokens?: number;
 }
 
 interface IAnthropicStreamEvent {
@@ -109,6 +112,8 @@ export class AnthropicStreamAccumulator {
 	private stopReason: string | undefined;
 	private inputTokens: number | undefined;
 	private outputTokens: number | undefined;
+	private cacheReadTokens: number | undefined;
+	private cacheWriteTokens: number | undefined;
 
 	push(event: unknown): IModelStreamEvent[] {
 		const wire = event as IAnthropicStreamEvent;
@@ -121,6 +126,12 @@ export class AnthropicStreamAccumulator {
 			}
 			if (typeof usage?.output_tokens === 'number') {
 				this.outputTokens = usage.output_tokens;
+			}
+			if (typeof usage?.cache_read_input_tokens === 'number') {
+				this.cacheReadTokens = usage.cache_read_input_tokens;
+			}
+			if (typeof usage?.cache_creation_input_tokens === 'number') {
+				this.cacheWriteTokens = usage.cache_creation_input_tokens;
 			}
 			return [];
 		}
@@ -197,7 +208,13 @@ export class AnthropicStreamAccumulator {
 		// input_tokens on message_start is the ground truth for this turn's prompt
 		// size — the renderer uses it as the context-window occupancy reading.
 		if (this.inputTokens !== undefined) {
-			events.push({ type: 'usage', inputTokens: this.inputTokens, ...(this.outputTokens !== undefined ? { outputTokens: this.outputTokens } : {}) });
+			events.push({
+				type: 'usage',
+				inputTokens: this.inputTokens,
+				...(this.outputTokens !== undefined ? { outputTokens: this.outputTokens } : {}),
+				...(this.cacheReadTokens !== undefined ? { cacheReadTokens: this.cacheReadTokens } : {}),
+				...(this.cacheWriteTokens !== undefined ? { cacheWriteTokens: this.cacheWriteTokens } : {}),
+			});
 		}
 
 		events.push({ type: 'message_stop', stopReason: this.mapStop() });

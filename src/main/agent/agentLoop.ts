@@ -236,10 +236,18 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 							toolUses.push(event.block);
 							break;
 						case 'usage':
-							// input + output: the next request carries this turn's output
-							// too, so their sum is the true base for the threshold check.
-							lastUsageTokens = event.inputTokens + (event.outputTokens ?? 0);
-							yield { type: 'usage', inputTokens: event.inputTokens, ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}) };
+							// The true prompt size is input + BOTH cache fields (Anthropic
+							// wire semantics: input_tokens excludes cache hits — counting it
+							// alone under-reads occupancy by the whole cached prefix), plus
+							// output because the next request carries this turn's output too.
+							lastUsageTokens = event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0) + (event.outputTokens ?? 0);
+							yield {
+								type: 'usage',
+								inputTokens: event.inputTokens,
+								...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+								...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
+								...(event.cacheWriteTokens !== undefined ? { cacheWriteTokens: event.cacheWriteTokens } : {}),
+							};
 							break;
 						case 'message_stop':
 							stopReason = event.stopReason;

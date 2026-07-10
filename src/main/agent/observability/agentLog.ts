@@ -64,8 +64,8 @@ export type AgentLogEvent =
 	 * stays under detail. Watch fail rates in real logs to tune or disable.
 	 */
 	| (IBaseEvent & { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly detail?: { readonly reason?: string } })
-	/** Real provider token counts for one turn — the ground truth the compaction threshold and the UI meter read. */
-	| (IBaseEvent & { readonly type: 'usage'; readonly turn: number; readonly inputTokens: number; readonly outputTokens?: number })
+	/** Real provider token counts for one turn — the ground truth the compaction threshold and the UI meter read. True prompt size = input + cacheRead + cacheWrite. */
+	| (IBaseEvent & { readonly type: 'usage'; readonly turn: number; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number })
 	/** A persisted cross-run anchor arrived; watch the rejected rate — it should be ≈0 outside history edits. */
 	| (IBaseEvent & { readonly type: 'compaction_anchor'; readonly covered: number; readonly summaryChars: number; readonly accepted: boolean })
 	/** Tool outputs aged out of the request view. Counts only — the full content stays in the adjacent tool_result events. */

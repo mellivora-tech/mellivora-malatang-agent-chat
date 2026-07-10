@@ -79,8 +79,8 @@ export type IModelStreamEvent =
 	| { readonly type: 'tool_use'; readonly block: IToolUseBlock }
 	/** A complete thinking block (text + signature), emitted at stream end so the loop can preserve it in the transcript. UI streaming stays on thinking_delta. */
 	| { readonly type: 'thinking_block'; readonly block: IThinkingBlock }
-	/** The provider's own token count for this turn — ground truth for context-window occupancy. */
-	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number }
+	/** The provider's own token count for this turn — ground truth for context-window occupancy. Anthropic-format input_tokens EXCLUDES cache hits, so the cache fields must ride along or occupancy under-counts. */
+	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number }
 	| { readonly type: 'message_stop'; readonly stopReason: ModelStopReason };
 
 /** The tool schema handed to the model (name + description + JSON Schema). */
@@ -174,8 +174,8 @@ export type IAgentEvent =
 	| { readonly type: 'tool_result'; readonly toolUseId: string; readonly content: string; readonly isError: boolean }
 	/** The model stream failed before producing output; the loop is backing off and will retry. */
 	| { readonly type: 'stream_retry'; readonly attempt: number; readonly maxAttempts: number; readonly delayMs: number }
-	/** Real token counts for the turn just completed — the renderer uses inputTokens for the context-window meter. */
-	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number }
+	/** Real token counts for the turn just completed. The true prompt size is inputTokens + both cache fields (Anthropic wire semantics: input_tokens excludes cache hits) — the renderer's meter and the compaction trigger must sum them. */
+	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number }
 	/** The loop guard blocked a repeated identical call — logged so trigger/false-positive rates are measurable; the renderer may ignore it. */
 	| { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number }
 	/** The reply verifier judged the final answer. verdict 'fail' means a single retry follows — the renderer replaces the rejected reply instead of appending. */

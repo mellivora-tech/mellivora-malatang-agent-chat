@@ -272,3 +272,19 @@ test('toOpenAIMessages keeps plain-string content for text-only user turns', () 
 	const wire = toOpenAIMessages('SYS', [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
 	assert.equal(wire.find(message => message.role === 'user')?.content, 'hello');
 });
+
+test('Anthropic accumulator carries cache fields — input_tokens alone under-counts the prompt', () => {
+	const events = runAnthropic([
+		{ type: 'message_start', message: { usage: { input_tokens: 4_000, output_tokens: 1, cache_read_input_tokens: 116_000, cache_creation_input_tokens: 2_500 } } },
+		{ type: 'content_block_start', index: 0, content_block: { type: 'text' } },
+		{ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } },
+		{ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 9 } },
+		{ type: 'message_stop' },
+	]);
+	const usage = findUsage(events);
+	assert.ok(usage, 'expected a usage event');
+	assert.equal(usage.inputTokens, 4_000);
+	assert.equal(usage.outputTokens, 9);
+	assert.equal(usage.cacheReadTokens, 116_000);
+	assert.equal(usage.cacheWriteTokens, 2_500);
+});
