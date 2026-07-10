@@ -15,6 +15,8 @@ export interface IRunLoggerContext {
 	readonly toolCount: number;
 	readonly cwd?: string;
 	readonly projectId?: string;
+	/** Project instructions injected into the system prompt (AGENTS.md/CLAUDE.md), when present. */
+	readonly instructions?: { readonly file: string; readonly chars: number; readonly truncated: boolean };
 }
 
 export interface IRunLogger {
@@ -76,7 +78,15 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 		mode: context.mode,
 		hasWorkspace: context.hasWorkspace,
 		toolCount: context.toolCount,
-		...(context.cwd ? { detail: { cwd: context.cwd, ...(context.projectId ? { projectId: context.projectId } : {}) } } : {}),
+		...(context.cwd
+			? {
+					detail: {
+						cwd: context.cwd,
+						...(context.projectId ? { projectId: context.projectId } : {}),
+						...(context.instructions ? { instructions: context.instructions } : {}),
+					},
+				}
+			: {}),
 	});
 
 	const markFirstToken = (): void => {

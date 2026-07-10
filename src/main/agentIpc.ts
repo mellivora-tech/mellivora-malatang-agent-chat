@@ -10,6 +10,7 @@ import { agentLog } from './agent/observability/agentLog.js';
 import { createJsonlFileSink, resolveAgentLogsDir } from './agent/observability/jsonlFileSink.js';
 import { createRunLogger } from './agent/observability/runLogger.js';
 import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
+import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createModelClient } from './agent/createModelClient.js';
 import { getProject } from './projectsStorage.js';
@@ -93,6 +94,10 @@ export function registerAgentIpc(dataRoot: string): void {
 		const cwd = project?.path;
 		const tools: readonly IAgentTool[] = cwd ? createWorkspaceTools(cwd, { includeMutations: mode !== 'plan' }) : [];
 
+		// Project instructions (AGENTS.md/CLAUDE.md at the root) ride the system
+		// prompt deterministically instead of hoping the model reads them.
+		const instructions = cwd && isProjectInstructionsEnabled(process.env) ? await loadProjectInstructions(cwd) : undefined;
+
 		const controller = new AbortController();
 		abortControllers.set(payload.sessionId, controller);
 		const sender = event.sender;
@@ -132,11 +137,13 @@ export function registerAgentIpc(dataRoot: string): void {
 			toolCount: tools.length,
 			...(cwd ? { cwd } : {}),
 			...(payload.projectId ? { projectId: payload.projectId } : {}),
+			...(instructions ? { instructions: { file: instructions.file, chars: instructions.text.length, truncated: instructions.truncated } } : {}),
 		});
 
 		try {
+			const system = cwd ? workspaceSystemPrompt(cwd, mode) + (instructions ? `\n\n${formatInstructionsBlock(instructions)}` : '') : DEFAULT_SYSTEM;
 			const loop = runAgentLoop(payload.messages, {
-				system: cwd ? workspaceSystemPrompt(cwd, mode) : DEFAULT_SYSTEM,
+				system,
 				tools,
 				modelClient: createModelClient(config),
 				permissionGate: createGateForMode(mode, requestApproval),

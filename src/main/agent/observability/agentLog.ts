@@ -27,7 +27,11 @@ export type AgentLogEvent =
 			readonly mode: string;
 			readonly hasWorkspace: boolean;
 			readonly toolCount: number;
-			readonly detail?: { readonly cwd?: string; readonly projectId?: string };
+			readonly detail?: {
+				readonly cwd?: string;
+				readonly projectId?: string;
+				readonly instructions?: { readonly file: string; readonly chars: number; readonly truncated: boolean };
+			};
 	  })
 	| (IBaseEvent & { readonly type: 'turn_start'; readonly turn: number })
 	| (IBaseEvent & { readonly type: 'ttft'; readonly turn: number; readonly ttftMs: number })

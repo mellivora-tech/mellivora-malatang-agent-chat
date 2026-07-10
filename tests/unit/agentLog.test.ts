@@ -180,6 +180,28 @@ test('runLogger maps a reply_verifier event with its verdict; the reason stays u
 	assert.equal((exported as { verdict: string }).verdict, 'fail');
 });
 
+test('runLogger records injected project instructions on run_start detail', () => {
+	const collected = collectingSink();
+	agentLog.attach(collected.sink);
+
+	createRunLogger({
+		runId: 'r6',
+		sessionId: 's6',
+		model: 'kimi',
+		mode: 'full',
+		hasWorkspace: true,
+		toolCount: 8,
+		cwd: '/repo',
+		instructions: { file: 'AGENTS.md', chars: 1854, truncated: false },
+	});
+
+	const started = collected.events.find((event: AgentLogEvent) => event.type === 'run_start') as Extract<AgentLogEvent, { type: 'run_start' }>;
+	assert.deepEqual(started.detail?.instructions, { file: 'AGENTS.md', chars: 1854, truncated: false });
+	// Export safety unchanged: detail (with the file name) strips off.
+	const exported = toExportable(started);
+	assert.equal('detail' in exported, false);
+});
+
 test('runLogger maps a tool_prune event with its counts', () => {
 	const collected = collectingSink();
 	agentLog.attach(collected.sink);
