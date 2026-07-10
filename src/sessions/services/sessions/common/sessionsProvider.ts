@@ -48,6 +48,8 @@ export interface ISessionsProvider {
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	/** Duplicate the session's history up to (and including) `messageId` into a new session. */
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
+	/** Manually set the session title; an empty (trimmed) title is ignored. */
+	renameSession(sessionId: string, title: string): Promise<ISession>;
 	/** Data URL for a stored image attachment, for thumbnails. Optional; undefined when unavailable. */
 	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
 }

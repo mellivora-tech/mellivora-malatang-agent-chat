@@ -21,6 +21,7 @@ export interface ISessionsManagementService {
 	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
+	renameSession(sessionId: string, title: string): Promise<ISession>;
 	/** Data URL for a stored image attachment, for thumbnails. */
 	resolveMedia(sessionId: string, path: string): Promise<string | undefined>;
 }

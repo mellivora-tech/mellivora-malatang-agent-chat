@@ -1684,3 +1684,116 @@
 	transition: none !important;
 	animation: none !important;
 }
+
+/* Rename action — one slot left of delete (delete sits one slot left of archive). */
+.sessions-project-task-rename {
+	right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-24) + var(--vscode-agents-space-24));
+}
+
+/* Rename dialog — a compact modal; inline row editing was abandoned (grid +
+   absolutely-positioned hover actions made in-place inputs fragile). */
+.sessions-rename-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--vscode-agents-color-shadow) 35%, transparent);
+}
+
+.sessions-rename-dialog {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-10);
+	width: 360px;
+	max-width: calc(100vw - var(--vscode-agents-space-32));
+	padding: var(--vscode-agents-space-16);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-sizing: border-box;
+}
+
+.sessions-rename-title {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-body1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-rename-input {
+	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	outline: none;
+}
+
+.sessions-rename-input:focus {
+	border-color: var(--vscode-agents-color-focusBorder);
+}
+
+.sessions-rename-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--vscode-agents-space-6);
+}
+
+/* Project group header: the toggle plus a hover-revealed quick new-task button. */
+.sessions-project-header {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.sessions-project-header .sessions-project-toggle {
+	flex: 1;
+	min-width: 0;
+}
+
+/* While the + is revealed, the name must truncate BEFORE it — reserve the
+   button's slot (plus a gap) so the ellipsis never touches the icon. */
+.sessions-project-header:hover .sessions-project-toggle,
+.sessions-project-header:focus-within .sessions-project-toggle {
+	padding-right: calc(var(--vscode-agents-space-6) + var(--vscode-agents-space-22) + var(--vscode-agents-space-8));
+}
+
+.sessions-project-add-task {
+	position: absolute;
+	top: 50%;
+	right: var(--vscode-agents-space-6);
+	transform: translateY(-50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--vscode-agents-space-22);
+	height: var(--vscode-agents-space-22);
+	padding: 0;
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	cursor: default;
+	opacity: 0;
+	visibility: hidden;
+}
+
+.sessions-project-header:hover .sessions-project-add-task,
+.sessions-project-header:focus-within .sessions-project-add-task {
+	opacity: 1;
+	visibility: visible;
+}
+
+.sessions-project-add-task:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 12%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+/* Keep the count from sitting under the hover-revealed +. */
+.sessions-project-header:hover .sessions-project-count,
+.sessions-project-header:focus-within .sessions-project-count {
+	visibility: hidden;
+}

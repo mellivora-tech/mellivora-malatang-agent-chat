@@ -28,6 +28,7 @@ export interface ISessionsService {
 	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
+	renameSession(sessionId: string, title: string): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 	deleteSession(sessionId: string): Promise<void>;
 	/** Data URL for a stored image attachment, for thumbnails. */
@@ -122,6 +123,10 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
 		return this.managementService.setSessionPinned(sessionId, isPinned);
+	}
+
+	async renameSession(sessionId: string, title: string): Promise<ISession> {
+		return this.managementService.renameSession(sessionId, title);
 	}
 
 	async setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession> {

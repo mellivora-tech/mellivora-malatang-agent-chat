@@ -49,6 +49,7 @@ interface ISessionListRow {
 	readonly onPin?: () => void;
 	readonly onArchive?: () => void;
 	readonly onDelete?: () => void;
+	readonly onRename?: (title: string) => void;
 }
 
 interface ISessionListRowMeta {
@@ -279,6 +280,7 @@ export class SessionsList extends Disposable {
 				onPin: () => void this.options.sessionsService?.setSessionPinned(session.sessionId, !isPinned),
 				onArchive: () => void this.options.sessionsService?.setSessionArchived(session.sessionId, true),
 				onDelete: () => void this.options.sessionsService?.deleteSession(session.sessionId),
+				onRename: title => void this.options.sessionsService?.renameSession(session.sessionId, title),
 			};
 		};
 
@@ -371,6 +373,25 @@ export class SessionsList extends Disposable {
 		count.textContent = String(project.count);
 		toggle.appendChild(count);
 
+		// Quick new-task for THIS project: pre-selects it and opens the New Task
+		// page — no detour through the project picker while another project's
+		// session is busy working.
+		const addTask = document.createElement('button');
+		addTask.className = 'sessions-project-add-task';
+		addTask.type = 'button';
+		addTask.title = `New task in ${project.name}`;
+		addTask.setAttribute('aria-label', `New task in ${project.name}`);
+		addTask.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			this.options.projectsService?.setActiveProject(project.id);
+			this.options.sessionsPartService?.showNewSession();
+		});
+		const addIcon = document.createElement('span');
+		addIcon.className = 'codicon codicon-add';
+		addIcon.setAttribute('aria-hidden', 'true');
+		addTask.appendChild(addIcon);
+
 		const rows = document.createElement('div');
 		rows.className = 'sessions-project-session-list';
 		rows.hidden = !project.expanded;
@@ -391,7 +412,12 @@ export class SessionsList extends Disposable {
 			rows.hidden = !expanded;
 		});
 
-		group.append(toggle, rows);
+		// The + is a sibling of the toggle (a button cannot nest in a button).
+		const header = document.createElement('div');
+		header.className = 'sessions-project-header';
+		header.append(toggle, addTask);
+
+		group.append(header, rows);
 		return group;
 	}
 
@@ -497,6 +523,24 @@ export class SessionsList extends Disposable {
 
 		wrapper.appendChild(main);
 
+		if (row.onRename) {
+			const rename = document.createElement('button');
+			rename.className = 'sessions-project-task-action sessions-project-task-rename';
+			rename.type = 'button';
+			rename.title = 'Rename task';
+			rename.setAttribute('aria-label', `Rename ${row.title}`);
+			rename.addEventListener('click', event => {
+				event.preventDefault();
+				event.stopPropagation();
+				this.openRenameDialog(row);
+			});
+			const renameIcon = document.createElement('span');
+			renameIcon.className = 'codicon codicon-edit';
+			renameIcon.setAttribute('aria-hidden', 'true');
+			rename.appendChild(renameIcon);
+			wrapper.appendChild(rename);
+		}
+
 		if (row.onArchive) {
 			const archive = document.createElement('button');
 			archive.className = 'sessions-project-task-action';
@@ -538,6 +582,89 @@ export class SessionsList extends Disposable {
 		}
 
 		return wrapper;
+	}
+
+	/**
+	 * Rename via a small modal dialog — deliberately NOT inline editing: the
+	 * row is a grid of absolutely-positioned hover actions and an author-styled
+	 * main button, which inline swaps kept fighting (hidden vs display:flex,
+	 * grid auto-placement). A dialog owns its layout outright.
+	 */
+	private openRenameDialog(row: ISessionListRow): void {
+		if (document.querySelector('.sessions-rename-backdrop')) {
+			return;
+		}
+		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
+
+		const backdrop = document.createElement('div');
+		backdrop.className = 'sessions-rename-backdrop';
+
+		const dialog = document.createElement('div');
+		dialog.className = 'sessions-rename-dialog';
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-label', 'Rename task');
+		backdrop.appendChild(dialog);
+
+		const heading = document.createElement('h3');
+		heading.className = 'sessions-rename-title';
+		heading.textContent = 'Rename task';
+		dialog.appendChild(heading);
+
+		const input = document.createElement('input');
+		input.className = 'sessions-rename-input';
+		input.value = row.title;
+		input.setAttribute('aria-label', 'Task name');
+		dialog.appendChild(input);
+
+		const actions = document.createElement('div');
+		actions.className = 'sessions-rename-actions';
+		dialog.appendChild(actions);
+
+		const close = (): void => backdrop.remove();
+		const commit = (): void => {
+			const title = input.value.trim();
+			close();
+			if (title !== '' && title !== row.title) {
+				row.onRename?.(title);
+			}
+		};
+
+		const cancel = document.createElement('button');
+		cancel.className = 'sessions-settings-btn';
+		cancel.type = 'button';
+		cancel.textContent = 'Cancel';
+		cancel.addEventListener('click', close);
+		actions.appendChild(cancel);
+
+		const save = document.createElement('button');
+		save.className = 'sessions-settings-btn sessions-rename-save';
+		save.type = 'button';
+		save.textContent = 'Rename';
+		save.addEventListener('click', commit);
+		actions.appendChild(save);
+
+		backdrop.addEventListener('mousedown', event => {
+			if (event.target === backdrop) {
+				close();
+			}
+		});
+		input.addEventListener('keydown', event => {
+			if (event.isComposing) {
+				return;
+			}
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				commit();
+			} else if (event.key === 'Escape') {
+				event.preventDefault();
+				close();
+			}
+		});
+
+		host.appendChild(backdrop);
+		input.focus();
+		input.select();
 	}
 
 	private renderFooter(container: HTMLElement): void {

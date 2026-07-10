@@ -294,6 +294,23 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async renameSession(sessionId: string, title: string): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		const trimmed = title.trim();
+		if (trimmed === '' || trimmed === session.title.get()) {
+			return session;
+		}
+		session.title.set(trimmed);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		// The fold takes the LAST title-bearing state entry, so appending is the
+		// whole persistence story — and generateTitle's placeholder guard means a
+		// concurrent AI title can never overwrite a manual rename.
+		await this.enqueueWrite(async () => {
+			await this.bridge.append(this.getRef(sessionId), { type: 'state', timestamp: new Date().toISOString(), title: trimmed });
+		});
+		return session;
+	}
+
 	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
 		const session = this.getMutableSession(sessionId);
 		await this.persistStatePatch(sessionId, { isPinned });

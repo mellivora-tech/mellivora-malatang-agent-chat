@@ -94,6 +94,11 @@ class TestProvider implements ISessionsProvider {
 		return this.sessions[0]!;
 	}
 
+	async renameSession(sessionId: string, title: string): Promise<ISession> {
+		this.requests.push(`rename:${sessionId}:${title}`);
+		return this.sessions[0]!;
+	}
+
 	async setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession> {
 		this.requests.push(`pin:${sessionId}:${isPinned}`);
 		return this.sessions[0]!;

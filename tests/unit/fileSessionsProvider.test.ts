@@ -929,3 +929,26 @@ test('answer-writing time is not mislabeled as a trailing "Thought" step', async
 	assert.equal(thinkingSteps.length, 1, `exactly one Thought step (the real one), got ${JSON.stringify(work.steps)}`);
 	assert.ok(thinkingSteps[0]!.detail?.includes('weighing the answer'), 'the surviving Thought step carries the reasoning text');
 });
+
+test('renameSession updates the observable, persists a title entry, and survives rehydration', async () => {
+	const bridge = createFakeBridge();
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await provider.initialize();
+	const session = await provider.startSession('original question text');
+	await provider.whenIdle();
+
+	await provider.renameSession(session.sessionId, '  自定义名字  ');
+	assert.equal(session.title.get(), '自定义名字', 'the title is trimmed and applied');
+
+	// Empty and unchanged titles are no-ops (no extra state entries).
+	const entriesAfterRename = bridge.appends.filter(call => call.entry.type === 'state' && 'title' in call.entry && call.entry.title !== undefined).length;
+	await provider.renameSession(session.sessionId, '   ');
+	await provider.renameSession(session.sessionId, '自定义名字');
+	const entriesAfterNoOps = bridge.appends.filter(call => call.entry.type === 'state' && 'title' in call.entry && call.entry.title !== undefined).length;
+	assert.equal(entriesAfterNoOps, entriesAfterRename, 'no-op renames persist nothing');
+
+	// A second provider folding the same store sees the manual title.
+	const rehydrated = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
+	await rehydrated.initialize();
+	assert.equal(rehydrated.getSessions().find(candidate => candidate.sessionId === session.sessionId)?.title.get(), '自定义名字');
+});
