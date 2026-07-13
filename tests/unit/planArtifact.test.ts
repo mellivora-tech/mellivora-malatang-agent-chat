@@ -101,6 +101,39 @@ test('a plan payload survives the JSONL fold round-trip', async () => {
 	assert.match(message?.text ?? '', /## 实现方案 v1/, 'markdown fallback folded back');
 });
 
+// --- planState overlay fold (P1) ---
+
+test('planState entries overlay the plan message; the last entry wins', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'agent-chat-planstate-'));
+	const header = {
+		type: 'session',
+		version: 1,
+		sessionId: 'ps-sess',
+		sessionType: 'agent-chat',
+		icon: 'codicon-new-session',
+		createdAt: '2026-07-13T00:00:00.000Z',
+		interactivity: 'full',
+	} as const;
+	await createSessionFile(root, header);
+
+	const plan = materializePlan(parsePlanInput(INPUT)!, 'plan-1', 1);
+	const ref = { sessionId: 'ps-sess' };
+	await appendSessionEntry(root, ref, { type: 'message', id: 'm1', role: 'plan', text: planToMarkdown(plan), plan, timestamp: '2026-07-13T00:00:01.000Z' });
+	await appendSessionEntry(root, ref, { type: 'planState', messageId: 'm1', planState: 'approved', timestamp: '2026-07-13T00:00:02.000Z' });
+
+	const approved = await loadSession(root, ref);
+	assert.equal(approved?.messages.find(message => message.id === 'm1')?.plan?.state, 'approved');
+
+	await appendSessionEntry(root, ref, { type: 'planState', messageId: 'm1', planState: 'superseded', timestamp: '2026-07-13T00:00:03.000Z' });
+	const superseded = await loadSession(root, ref);
+	assert.equal(superseded?.messages.find(message => message.id === 'm1')?.plan?.state, 'superseded', 'last planState entry wins');
+
+	// A planState for a message without a plan payload is a harmless no-op.
+	await appendSessionEntry(root, ref, { type: 'planState', messageId: 'nope', planState: 'approved', timestamp: '2026-07-13T00:00:04.000Z' });
+	const unchanged = await loadSession(root, ref);
+	assert.equal(unchanged?.messages.length, 1);
+});
+
 // --- toTranscript mapping (audit finding E) ---
 
 test('toTranscript carries a plan message as an assistant turn; work stays dropped', () => {

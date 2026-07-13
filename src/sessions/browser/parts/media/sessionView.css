@@ -754,6 +754,68 @@ button.conversation-work-step-row:hover {
 	font-size: var(--vscode-agents-fontSize-body2);
 }
 
+/* A superseded card's header doubles as its expand toggle. */
+button.conversation-plan-header {
+	width: 100%;
+	border: 0;
+	font: inherit;
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	text-align: left;
+	cursor: default;
+}
+
+.conversation-plan.collapsed .conversation-plan-header {
+	border-bottom: 0;
+}
+
+.conversation-plan-chevron {
+	margin-left: auto;
+}
+
+.conversation-plan-state.approved {
+	background: color-mix(in srgb, var(--vscode-agents-color-button-background, #2ea043) 18%, transparent);
+	color: var(--vscode-agents-color-button-background, #2ea043);
+}
+
+.conversation-plan-actions {
+	display: flex;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
+.conversation-plan-actions button {
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-14);
+	border: var(--vscode-agents-space-1) solid transparent;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	font: inherit;
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	cursor: default;
+}
+
+.conversation-plan-actions button:disabled {
+	opacity: 0.5;
+}
+
+.conversation-plan-approve {
+	background: var(--vscode-agents-color-button-background, #2ea043);
+	color: var(--vscode-agents-color-button-foreground, #fff);
+}
+
+.conversation-plan-approve:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--vscode-agents-color-button-background, #2ea043) 88%, #fff);
+}
+
+.conversation-plan-revise {
+	background: transparent;
+	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 24%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-plan-revise:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
 .conversation-approval {
 	display: flex;
 	flex-direction: column;

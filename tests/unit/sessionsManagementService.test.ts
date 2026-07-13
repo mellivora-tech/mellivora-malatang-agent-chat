@@ -89,6 +89,11 @@ class TestProvider implements ISessionsProvider {
 		return this.sessions[0]!;
 	}
 
+	async setPlanState(sessionId: string): Promise<ISession> {
+		this.requests.push(`planState:${sessionId}`);
+		return this.sessions[0]!;
+	}
+
 	async forkSession(sessionId: string): Promise<ISession> {
 		this.requests.push(`fork:${sessionId}`);
 		return this.sessions[0]!;

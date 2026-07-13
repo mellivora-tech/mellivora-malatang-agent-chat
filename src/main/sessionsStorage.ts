@@ -139,6 +139,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let compactionAnchor: ISessionStateEntry['compactionAnchor'];
 	let contextUsage: ISessionStateEntry['contextUsage'];
 	const feedback = new Map<string, 'like' | 'dislike'>();
+	const planStates = new Map<string, 'draft' | 'approved' | 'superseded'>();
 
 	for (const line of lines.slice(1)) {
 		const entry = parseEntry(line);
@@ -156,6 +157,11 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 			} else {
 				feedback.set(entry.messageId, entry.feedback);
 			}
+			continue;
+		}
+
+		if (entry.type === 'planState') {
+			planStates.set(entry.messageId, entry.planState);
 			continue;
 		}
 
@@ -219,7 +225,9 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		isRead,
 		isPinned,
 		...(permissionMode !== undefined ? { permissionMode } : {}),
-		messages: messages.map(message => (feedback.has(message.id) ? { ...message, feedback: feedback.get(message.id)! } : message)),
+		messages: messages
+			.map(message => (feedback.has(message.id) ? { ...message, feedback: feedback.get(message.id)! } : message))
+			.map(message => (message.plan !== undefined && planStates.has(message.id) ? { ...message, plan: { ...message.plan, state: planStates.get(message.id)! } } : message)),
 		// The directory decides project membership; the header copy is only
 		// for debuggability and may be stale.
 		...(projectId !== undefined ? { projectId } : {}),
@@ -292,6 +300,13 @@ function parseEntry(line: string): ISessionEntry | undefined {
 
 	if (candidate['type'] === 'feedback') {
 		if (typeof candidate['messageId'] !== 'string' || !['like', 'dislike', null].includes(candidate['feedback'] as never)) {
+			return undefined;
+		}
+		return parsed as ISessionEntry;
+	}
+
+	if (candidate['type'] === 'planState') {
+		if (typeof candidate['messageId'] !== 'string' || !['draft', 'approved', 'superseded'].includes(candidate['planState'] as never)) {
 			return undefined;
 		}
 		return parsed as ISessionEntry;

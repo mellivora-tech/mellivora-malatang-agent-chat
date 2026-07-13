@@ -79,8 +79,8 @@ function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBri
 					...existing,
 					messages: [...existing.messages, { id: entry.id, role: entry.role, text: entry.text, ...(entry.detail !== undefined ? { detail: entry.detail } : {}) }],
 				});
-			} else if (entry.type === 'feedback') {
-				// Feedback entries fold onto messages in the real store; the fake keeps them raw.
+			} else if (entry.type === 'feedback' || entry.type === 'planState') {
+				// Feedback/planState entries fold onto messages in the real store; the fake keeps them raw.
 			} else {
 				store.set(ref.sessionId, {
 					...existing,
@@ -472,6 +472,81 @@ test('agent runs assemble a work block with tool steps and persist it', async ()
 	assert.ok(((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length ?? 0) >= 2, 'persisted steps include thinking and tool');
 });
 
+test('propose_plan materializes a plan card; a new version supersedes the old; setPlanState persists', async () => {
+	const bridge = createFakeBridge();
+	const PLAN_INPUT = {
+		title: 'SSH sudo 支持',
+		sections: [{ kind: 'files', heading: '改动文件', items: ['sshTool.ts'] }],
+	};
+
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			// Two calls in one run — the LAST one wins.
+			emit({ event: { type: 'tool_use', toolUseId: 'p0', name: 'propose_plan', input: { title: 'draft-discarded', sections: PLAN_INPUT.sections } } });
+			emit({ event: { type: 'tool_result', toolUseId: 'p0', content: 'ok', isError: false } });
+			emit({ event: { type: 'tool_use', toolUseId: 'p1', name: 'propose_plan', input: PLAN_INPUT } });
+			emit({ event: { type: 'tool_result', toolUseId: 'p1', content: 'ok', isError: false } });
+			emit({ event: { type: 'assistant_delta', text: '请评审。' } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('出方案');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	// Run 1: one plan message, v1 draft, from the LAST propose_plan call.
+	const afterV1 = session.messages.get().filter(message => message.role === 'plan');
+	assert.equal(afterV1.length, 1);
+	assert.equal(afterV1[0]?.plan?.version, 1);
+	assert.equal(afterV1[0]?.plan?.state, 'draft');
+	assert.equal(afterV1[0]?.plan?.title, 'SSH sudo 支持', 'last call of the run wins');
+	assert.equal(afterV1[0]?.plan?.sections[0]?.id, `${afterV1[0]?.id}-s0`, 'deterministic section ids');
+	const planIndex = session.messages.get().findIndex(message => message.role === 'plan');
+	const assistantIndex = session.messages.get().findIndex(message => message.role === 'assistant');
+	assert.ok(planIndex < assistantIndex, 'plan card precedes the reply');
+
+	// Run 2: the new version retires v1 — live view and persisted overlay alike.
+	await provider.sendMessage(session.sessionId, '改一下');
+	await new Promise(resolve => setTimeout(resolve, 10));
+	const plans = session.messages.get().filter(message => message.role === 'plan');
+	assert.equal(plans.length, 2);
+	assert.equal(plans[0]?.plan?.state, 'superseded');
+	assert.equal(plans[1]?.plan?.version, 2);
+	assert.equal(plans[1]?.plan?.state, 'draft');
+	const supersedeEntry = bridge.appends.find(call => call.entry.type === 'planState' && call.entry.messageId === plans[0]?.id);
+	assert.ok(supersedeEntry, 'superseded overlay persisted');
+
+	// Approve: live flip + planState entry.
+	await provider.setPlanState(session.sessionId, plans[1]!.id, 'approved');
+	assert.equal(
+		session.messages
+			.get()
+			.filter(message => message.role === 'plan')
+			.at(-1)?.plan?.state,
+		'approved',
+	);
+	const approveEntry = bridge.appends.find(call => call.entry.type === 'planState' && call.entry.messageId === plans[1]?.id && call.entry.planState === 'approved');
+	assert.ok(approveEntry, 'approved overlay persisted');
+});
+
 test('a run that ends at the step limit with no text shows a note, not a blank bubble', async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
@@ -665,7 +740,7 @@ test('a generated title replaces the first-message placeholder and is persisted'
 	assert.equal(titles.at(-1), '项目结构梳理', 'the new title is persisted as the last title-bearing state entry');
 });
 
-test('a failed title call keeps the placeholder silently', async (t) => {
+test('a failed title call keeps the placeholder silently', async t => {
 	const warnSpy = t.mock.method(console, 'warn', () => undefined);
 	const bridge = createFakeBridge();
 	const agent = createTitleAgent(async () => {
@@ -686,9 +761,12 @@ test('a failed title call keeps the placeholder silently', async (t) => {
 test('a title that arrives after the user renamed the session does not overwrite it', async () => {
 	let resolveTitle!: (title: string | undefined) => void;
 	const bridge = createFakeBridge();
-	const agent = createTitleAgent(() => new Promise(resolve => {
-		resolveTitle = resolve;
-	}));
+	const agent = createTitleAgent(
+		() =>
+			new Promise(resolve => {
+				resolveTitle = resolve;
+			}),
+	);
 	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
 	await provider.initialize();
 
@@ -812,7 +890,10 @@ test('skill attachments are collected across turns and passed to agent.run, not 
 
 	// The path-hint block is for files/folders only — the skill must not appear in it.
 	const transcript = toTranscript(session.messages.get());
-	assert.ok(transcript.every(turn => !(turn.content[0] as { text?: string }).text?.includes('<user-attached-paths>')), 'no path block from skill-only attachments');
+	assert.ok(
+		transcript.every(turn => !(turn.content[0] as { text?: string }).text?.includes('<user-attached-paths>')),
+		'no path block from skill-only attachments',
+	);
 });
 
 test('a compaction ok event becomes the persisted cross-run anchor and rides the next run', async () => {
@@ -826,7 +907,10 @@ test('a compaction ok event becomes the persisted cross-run anchor and rides the
 			runs += 1;
 			if (runs === 1) {
 				// The harness folded the head: summary + covered-initial arrive here.
-				listener?.({ sessionId, event: { type: 'compaction', trigger: 'preflight', beforeTokens: 210_000, boundaryIndex: 1, summaryChars: 12, outcome: 'ok', summary: '## anchor v1', coveredInitial: 1 } } as never);
+				listener?.({
+					sessionId,
+					event: { type: 'compaction', trigger: 'preflight', beforeTokens: 210_000, boundaryIndex: 1, summaryChars: 12, outcome: 'ok', summary: '## anchor v1', coveredInitial: 1 },
+				} as never);
 			}
 			listener?.({ sessionId, event: { type: 'assistant_delta', text: `answer ${runs}` } } as never);
 			listener?.({ sessionId, done: { reason: 'completed', turns: 1 } } as never);
@@ -867,7 +951,11 @@ test('formatSessionContext keeps recent turns, truncates long ones, and caps the
 	const messages: ISessionMessage[] = [
 		{ id: 'u0', role: 'user', text: 'ancient question' },
 		{ id: 'w1', role: 'work', text: '' },
-		...Array.from({ length: 8 }, (_, index) => ({ id: `m${index}`, role: index % 2 === 0 ? ('user' as const) : ('assistant' as const), text: `turn ${index} ${'x'.repeat(index === 7 ? 2000 : 10)}` })),
+		...Array.from({ length: 8 }, (_, index) => ({
+			id: `m${index}`,
+			role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+			text: `turn ${index} ${'x'.repeat(index === 7 ? 2000 : 10)}`,
+		})),
 	];
 	const block = formatSessionContext('梳理下项目', messages);
 	assert.match(block, /^<referenced-session title="梳理下项目">/);
@@ -950,7 +1038,13 @@ test('renameSession updates the observable, persists a title entry, and survives
 	// A second provider folding the same store sees the manual title.
 	const rehydrated = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
 	await rehydrated.initialize();
-	assert.equal(rehydrated.getSessions().find(candidate => candidate.sessionId === session.sessionId)?.title.get(), '自定义名字');
+	assert.equal(
+		rehydrated
+			.getSessions()
+			.find(candidate => candidate.sessionId === session.sessionId)
+			?.title.get(),
+		'自定义名字',
+	);
 });
 
 test('context_breakdown and usage events merge into contextUsage without clobbering each other', async () => {
@@ -1063,7 +1157,7 @@ test('context_breakdown keeps the previous real usage total instead of resetting
 	assert.equal(session.contextUsage.get()?.breakdown?.systemChars, 10, 'the breakdown itself did update');
 });
 
-test('a fresh run\'s FIRST context_breakdown does not invent a fake real 0 — it estimates from session text instead', async () => {
+test("a fresh run's FIRST context_breakdown does not invent a fake real 0 — it estimates from session text instead", async () => {
 	// Regression: reported live — a reopened session (contextUsage undefined
 	// since restart) sent a new message; the ring briefly showed a confident
 	// "0% used" the instant the run started, before usage() corrected it a
@@ -1168,7 +1262,12 @@ test('the context meter reading persists at finalize and rehydrates as "restored
 	assert.equal(persisted.breakdown?.systemChars, 400);
 
 	// A second provider folding the same store hydrates it as a restored bill.
-	const snapshot = createSnapshot(session.sessionId, { contextUsage: { inputTokens: 12_345, breakdown: { systemChars: 400, instructionsChars: 40, skillsChars: 0, toolsChars: 800, messagesChars: 200, compactedChars: 0, prunedChars: 0 } } });
+	const snapshot = createSnapshot(session.sessionId, {
+		contextUsage: {
+			inputTokens: 12_345,
+			breakdown: { systemChars: 400, instructionsChars: 40, skillsChars: 0, toolsChars: 800, messagesChars: 200, compactedChars: 0, prunedChars: 0 },
+		},
+	});
 	const rehydrated = new FileSessionsProvider(createFakeBridge([snapshot]), { responseDelayMs: 1 });
 	await rehydrated.initialize();
 	const restored = rehydrated.getSessions()[0]!.contextUsage.get();
@@ -1178,7 +1277,7 @@ test('the context meter reading persists at finalize and rehydrates as "restored
 	assert.equal(restored.breakdown?.systemChars, 400);
 });
 
-test('a restored total carries through the next run\'s first breakdown without demotion to estimate', async () => {
+test("a restored total carries through the next run's first breakdown without demotion to estimate", async () => {
 	const snapshot = createSnapshot('s-restored', { contextUsage: { inputTokens: 30_000 } });
 	const bridge = createFakeBridge([snapshot]);
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
@@ -1224,12 +1323,12 @@ test('a restored total carries through the next run\'s first breakdown without d
 
 	const usage = session.contextUsage.get();
 	assert.ok(usage);
-	assert.equal(usage.totalSource, 'restored', 'the last run\'s real bill beats a fresh estimate');
+	assert.equal(usage.totalSource, 'restored', "the last run's real bill beats a fresh estimate");
 	assert.equal(usage.inputTokens, 30_000, 'the restored number carries forward');
 	assert.equal(usage.breakdown?.systemChars, 10, 'the live breakdown still updates');
 });
 
-test('pre-tool narration relocates into the work block; only the terminal turn\'s text is the answer', async () => {
+test("pre-tool narration relocates into the work block; only the terminal turn's text is the answer", async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
 	const agent: IAgentBridge = {
@@ -1287,7 +1386,10 @@ test('pre-tool narration relocates into the work block; only the terminal turn\'
 	assert.equal((persistedAssistant.entry as { text: string }).text, '项目结构如下：…');
 	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
 	assert.ok(persistedWork, 'work entry persisted');
-	assert.ok(((persistedWork.entry as { steps?: readonly { kind: string }[] }).steps ?? []).some(step => step.kind === 'narration'), 'narration step persisted');
+	assert.ok(
+		((persistedWork.entry as { steps?: readonly { kind: string }[] }).steps ?? []).some(step => step.kind === 'narration'),
+		'narration step persisted',
+	);
 });
 
 test('a rejected reply never resurfaces as narration in the retry turn', async () => {

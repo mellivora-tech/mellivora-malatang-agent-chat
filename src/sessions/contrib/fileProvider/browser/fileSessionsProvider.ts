@@ -357,6 +357,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		session.messages.set(
+			session.messages.get().map(message => (message.id === messageId && message.plan !== undefined ? { ...message, plan: { ...message.plan, state } } : message)),
+		);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		await this.enqueueWrite(async () => {
+			await this.bridge.append(this.getRef(sessionId), { type: 'planState', messageId, planState: state, timestamp: new Date().toISOString() });
+		});
+		return session;
+	}
+
 	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
 		const source = this.getMutableSession(sessionId);
 		const history = source.messages.get();
@@ -767,11 +779,20 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// and the next run's transcript both read it). Slots between the work
 			// block and the answer bubble, in the live view and on disk alike.
 			let planMessage: ISessionMessage | undefined;
+			let supersededIds: readonly string[] = [];
 			if (pendingPlanInput !== undefined) {
 				const planId = `${sessionId}-plan-${generateId()}`;
 				const plan = materializePlan(pendingPlanInput, planId, nextPlanVersion(session.messages.get()));
 				planMessage = { id: planId, role: 'plan', text: planToMarkdown(plan), plan, timestamp: now };
-				const messages = session.messages.get();
+				// A new version retires every earlier plan still in play — live
+				// view first, matching planState entries below.
+				supersededIds = session.messages
+					.get()
+					.filter(message => message.plan !== undefined && message.plan.state !== 'superseded')
+					.map(message => message.id);
+				const messages = session.messages
+					.get()
+					.map(message => (supersededIds.includes(message.id) && message.plan !== undefined ? { ...message, plan: { ...message.plan, state: 'superseded' as const } } : message));
 				const assistantIndex = messages.findIndex(message => message.id === assistantId);
 				session.messages.set(assistantIndex === -1 ? [...messages, planMessage] : [...messages.slice(0, assistantIndex), planMessage, ...messages.slice(assistantIndex)]);
 			}
@@ -780,6 +801,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 				const ref = this.getRef(sessionId);
 				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
 				if (planMessage?.plan) {
+					for (const supersededId of supersededIds) {
+						await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
+					}
 					await this.bridge.append(ref, { type: 'message', id: planMessage.id, role: 'plan', text: planMessage.text, plan: planMessage.plan, timestamp: now.toISOString() });
 				}
 				if (hasReply) {

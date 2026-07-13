@@ -20,6 +20,8 @@ export interface ISessionsManagementService {
 	deleteSession(sessionId: string): Promise<void>;
 	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
+	/** Set a plan artifact's review state (approved / superseded); overlaid onto the plan message like feedback. */
+	setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession>;
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	renameSession(sessionId: string, title: string): Promise<ISession>;
 	/** Data URL for a stored image attachment, for thumbnails. */

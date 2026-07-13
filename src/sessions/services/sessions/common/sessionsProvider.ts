@@ -46,6 +46,8 @@ export interface ISessionsProvider {
 	deleteSession(sessionId: string): Promise<void>;
 	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
+	/** Set a plan artifact's review state (approved / superseded); overlaid onto the plan message like feedback. */
+	setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession>;
 	/** Duplicate the session's history up to (and including) `messageId` into a new session. */
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	/** Manually set the session title; an empty (trimmed) title is ignored. */

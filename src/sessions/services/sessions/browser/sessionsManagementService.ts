@@ -83,6 +83,10 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 		return this.getOwningProvider(sessionId).setMessageFeedback(sessionId, messageId, feedback);
 	}
 
+	async setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession> {
+		return this.getOwningProvider(sessionId).setPlanState(sessionId, messageId, state);
+	}
+
 	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
 		return this.getOwningProvider(sessionId).forkSession(sessionId, messageId);
 	}

@@ -26,6 +26,8 @@ export interface ISessionMessageSender {
 	stopSession(sessionId: string): Promise<unknown>;
 	setSessionPermissionMode?(sessionId: string, mode: PermissionMode): Promise<unknown>;
 	setMessageFeedback?(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<unknown>;
+	/** Flip a plan artifact's review state (approve / supersede); the store overlays it onto the plan message. */
+	setPlanState?(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<unknown>;
 	forkSession?(sessionId: string, messageId: string): Promise<unknown>;
 	/** Data URL for a stored image attachment, for thumbnails in the transcript. */
 	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
@@ -62,6 +64,8 @@ export class ConversationView extends Disposable {
 	private queuedFollowUp: string | undefined;
 	// Work blocks: user toggles override the default (open while live, closed when done).
 	private readonly workExpandOverride = new Map<string, boolean>();
+	/** Superseded plan cards a click expanded back open (they collapse by default). */
+	private readonly planExpand = new Set<string>();
 	// Individually expanded tool steps ("messageId:index").
 	private readonly stepExpand = new Set<string>();
 	private scrollToBottomOnRender = false;
@@ -515,7 +519,7 @@ export class ConversationView extends Disposable {
 					this.patchWorkBlock(element, message);
 				} else if (message.role === 'plan') {
 					if (existing.message !== message) {
-						patchPlanCard(element, message);
+						this.patchPlanCard(element, message);
 					}
 				} else if (existing.message !== message) {
 					this.patchRow(element, message);
@@ -526,7 +530,7 @@ export class ConversationView extends Disposable {
 					message.role === 'work'
 						? this.createWorkBlock(message)
 						: message.role === 'plan'
-							? createPlanCard(message)
+							? this.createPlanCard(message)
 							: createMessageRow(message, this.buildMessageActions(message), this.buildImageResolver());
 				this.renderedRows.set(message.id, { element, message });
 			}
@@ -586,6 +590,140 @@ export class ConversationView extends Disposable {
 		(message.steps ?? []).forEach((step, index) => {
 			stepsList.appendChild(this.createWorkStepRow(`${message.id}:${index}`, step));
 		});
+	}
+
+	/**
+	 * The reviewable plan artifact card (`role:'plan'`): sectioned content with
+	 * the version in the header. A draft card carries the review actions
+	 * (按此执行 / 让它改); a superseded one collapses to its header. A message
+	 * whose structured payload is missing falls back to its markdown text.
+	 */
+	private createPlanCard(message: ISessionMessage): HTMLElement {
+		const card = document.createElement('section');
+		card.className = 'conversation-plan';
+		card.dataset.messageId = message.id;
+		this.renderPlanCardContent(card, message);
+		return card;
+	}
+
+	/** Same content builder as createPlanCard — the reconciler patches by rebuilding inside the SAME root element. */
+	private patchPlanCard(card: HTMLElement, message: ISessionMessage): void {
+		clearNode(card);
+		this.renderPlanCardContent(card, message);
+	}
+
+	private renderPlanCardContent(card: HTMLElement, message: ISessionMessage): void {
+		const plan = message.plan;
+		const superseded = plan?.state === 'superseded';
+		const collapsed = superseded && !this.planExpand.has(message.id);
+		card.classList.toggle('superseded', superseded);
+		card.classList.toggle('collapsed', collapsed);
+
+		const header = append(card, document.createElement(superseded ? 'button' : 'div')) as HTMLElement;
+		header.className = 'conversation-plan-header';
+		const icon = append(header, document.createElement('span'));
+		icon.className = 'codicon codicon-checklist';
+		icon.setAttribute('aria-hidden', 'true');
+		const title = append(header, document.createElement('span'));
+		title.className = 'conversation-plan-title';
+		title.textContent = plan ? plan.title : 'Implementation plan';
+		if (plan) {
+			const version = append(header, document.createElement('span'));
+			version.className = 'conversation-plan-version';
+			version.textContent = `v${plan.version}`;
+			if (plan.state !== 'draft') {
+				const state = append(header, document.createElement('span'));
+				state.className = `conversation-plan-state ${plan.state}`;
+				state.textContent = plan.state === 'approved' ? '已批准' : '已过期';
+			}
+		}
+		if (superseded) {
+			// A retired version folds to its header; the header itself toggles it.
+			const chevron = append(header, document.createElement('span'));
+			chevron.className = `codicon ${collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down'} conversation-plan-chevron`;
+			chevron.setAttribute('aria-hidden', 'true');
+			header.addEventListener('click', () => {
+				if (this.planExpand.has(message.id)) {
+					this.planExpand.delete(message.id);
+				} else {
+					this.planExpand.add(message.id);
+				}
+				this.patchPlanCard(card, message);
+			});
+		}
+		if (collapsed) {
+			return;
+		}
+
+		if (!plan) {
+			// Structured payload missing — the markdown fallback is the content.
+			const body = append(card, document.createElement('div'));
+			body.className = 'conversation-plan-fallback conversation-markdown';
+			body.appendChild(renderMarkdown(message.text));
+			return;
+		}
+
+		const sections = append(card, document.createElement('div'));
+		sections.className = 'conversation-plan-sections';
+		for (const section of plan.sections) {
+			const sectionEl = append(sections, document.createElement('div'));
+			sectionEl.className = 'conversation-plan-section';
+			sectionEl.dataset.sectionId = section.id;
+
+			const kicker = append(sectionEl, document.createElement('div'));
+			kicker.className = 'conversation-plan-kicker';
+			const kickerIcon = append(kicker, document.createElement('span'));
+			kickerIcon.className = `codicon ${PLAN_SECTION_ICONS[section.kind] ?? 'codicon-circle-small'}`;
+			kickerIcon.setAttribute('aria-hidden', 'true');
+			const heading = append(kicker, document.createElement('span'));
+			heading.textContent = section.heading;
+
+			if (section.body.trim() !== '') {
+				const body = append(sectionEl, document.createElement('div'));
+				body.className = 'conversation-plan-body conversation-markdown';
+				body.appendChild(renderMarkdown(section.body));
+			}
+			if (section.items !== undefined && section.items.length > 0) {
+				const list = append(sectionEl, document.createElement('ul'));
+				list.className = 'conversation-plan-items';
+				for (const item of section.items) {
+					const li = append(list, document.createElement('li'));
+					li.textContent = item;
+				}
+			}
+		}
+
+		// Review actions live only on a draft — an approved or superseded plan
+		// is settled. Approve flips the SESSION mode (the run reads
+		// session.permissionMode) and sends the proceed turn; revise focuses
+		// the composer so the user says what to change.
+		const sessionId = this.session?.sessionId;
+		if (plan.state === 'draft' && sessionId && this.messageSender) {
+			const sender = this.messageSender;
+			const actions = append(card, document.createElement('div'));
+			actions.className = 'conversation-plan-actions';
+			const approve = append(actions, document.createElement('button'));
+			approve.className = 'conversation-plan-approve';
+			approve.textContent = '按此执行';
+			const revise = append(actions, document.createElement('button'));
+			revise.className = 'conversation-plan-revise';
+			revise.textContent = '让它改';
+			approve.addEventListener('click', () => {
+				approve.disabled = true;
+				revise.disabled = true;
+				void (async () => {
+					await sender.setPlanState?.(sessionId, message.id, 'approved');
+					await sender.setSessionPermissionMode?.(sessionId, 'auto-edit');
+					await sender.sendMessage(sessionId, '按已批准的实现方案执行。');
+				})().catch(() => {
+					approve.disabled = false;
+					revise.disabled = false;
+				});
+			});
+			revise.addEventListener('click', () => {
+				this.input.focus();
+			});
+		}
 	}
 
 	/** The only place that decides a work block's title text, spinner, and expand state — called on real content changes and on the once-a-second live tick alike. */
@@ -1437,88 +1575,6 @@ const PLAN_SECTION_ICONS: Readonly<Record<string, string>> = {
 	steps: 'codicon-list-ordered',
 	risks: 'codicon-warning',
 };
-
-/**
- * The reviewable plan artifact card (`role:'plan'`). P0 renders it read-only —
- * sectioned content with the version in the header; review actions and
- * per-section comments arrive with P1/P2. A message whose structured payload is
- * missing (dropped by an older writer) falls back to its markdown text.
- */
-function createPlanCard(message: ISessionMessage): HTMLElement {
-	const card = document.createElement('section');
-	card.className = 'conversation-plan';
-	card.dataset.messageId = message.id;
-	renderPlanCardContent(card, message);
-	return card;
-}
-
-/** Same content builder as createPlanCard — the reconciler patches by rebuilding inside the SAME root element. */
-function patchPlanCard(card: HTMLElement, message: ISessionMessage): void {
-	clearNode(card);
-	renderPlanCardContent(card, message);
-}
-
-function renderPlanCardContent(card: HTMLElement, message: ISessionMessage): void {
-	const plan = message.plan;
-	card.classList.toggle('superseded', plan?.state === 'superseded');
-
-	const header = append(card, document.createElement('div'));
-	header.className = 'conversation-plan-header';
-	const icon = append(header, document.createElement('span'));
-	icon.className = 'codicon codicon-checklist';
-	icon.setAttribute('aria-hidden', 'true');
-	const title = append(header, document.createElement('span'));
-	title.className = 'conversation-plan-title';
-	title.textContent = plan ? plan.title : 'Implementation plan';
-	if (plan) {
-		const version = append(header, document.createElement('span'));
-		version.className = 'conversation-plan-version';
-		version.textContent = `v${plan.version}`;
-		if (plan.state !== 'draft') {
-			const state = append(header, document.createElement('span'));
-			state.className = `conversation-plan-state ${plan.state}`;
-			state.textContent = plan.state;
-		}
-	}
-
-	if (!plan) {
-		// Structured payload missing — the markdown fallback is the content.
-		const body = append(card, document.createElement('div'));
-		body.className = 'conversation-plan-fallback conversation-markdown';
-		body.appendChild(renderMarkdown(message.text));
-		return;
-	}
-
-	const sections = append(card, document.createElement('div'));
-	sections.className = 'conversation-plan-sections';
-	for (const section of plan.sections) {
-		const sectionEl = append(sections, document.createElement('div'));
-		sectionEl.className = 'conversation-plan-section';
-		sectionEl.dataset.sectionId = section.id;
-
-		const kicker = append(sectionEl, document.createElement('div'));
-		kicker.className = 'conversation-plan-kicker';
-		const kickerIcon = append(kicker, document.createElement('span'));
-		kickerIcon.className = `codicon ${PLAN_SECTION_ICONS[section.kind] ?? 'codicon-circle-small'}`;
-		kickerIcon.setAttribute('aria-hidden', 'true');
-		const heading = append(kicker, document.createElement('span'));
-		heading.textContent = section.heading;
-
-		if (section.body.trim() !== '') {
-			const body = append(sectionEl, document.createElement('div'));
-			body.className = 'conversation-plan-body conversation-markdown';
-			body.appendChild(renderMarkdown(section.body));
-		}
-		if (section.items !== undefined && section.items.length > 0) {
-			const list = append(sectionEl, document.createElement('ul'));
-			list.className = 'conversation-plan-items';
-			for (const item of section.items) {
-				const li = append(list, document.createElement('li'));
-				li.textContent = item;
-			}
-		}
-	}
-}
 
 /** File names touched by a work block's write/edit tool steps. */
 function extractWorkFiles(work: ISessionMessage | undefined): string[] {

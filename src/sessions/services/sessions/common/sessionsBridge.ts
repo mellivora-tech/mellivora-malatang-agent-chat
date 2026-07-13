@@ -103,6 +103,19 @@ export interface ISessionFeedbackEntry {
 }
 
 /**
+ * A plan artifact's review-state change (approved / superseded), overlaid onto
+ * the plan message like feedback — the last entry per message wins. The field
+ * is named `planState` (never `status`) so an old build's fold can't mistake it
+ * for session state.
+ */
+export interface ISessionPlanStateEntry {
+	readonly type: 'planState';
+	readonly messageId: string;
+	readonly planState: 'draft' | 'approved' | 'superseded';
+	readonly timestamp: string;
+}
+
+/**
  * A compaction summary persisted with the session. `covered` counts the prefix
  * of the transcript (as toTranscript builds it) the summary stands in for;
  * `prefixChars` is that prefix's content size for the main-side integrity gate.
@@ -147,7 +160,7 @@ export interface ISessionStateEntry {
 	readonly contextUsage?: ISessionContextUsageData;
 }
 
-export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry;
+export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry | ISessionPlanStateEntry;
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
