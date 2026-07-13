@@ -235,6 +235,22 @@ test('anthropic default max_tokens leaves room for thinking + text; params overr
 	assert.equal(overridden['max_tokens'], 8000);
 });
 
+test('anthropic thinking param: adaptive for the official API, enabled+budget for compat endpoints', () => {
+	const signal = new AbortController().signal;
+	const request = { system: 's', messages: [], tools: [], signal };
+
+	const officialBody = buildAnthropicRequestBody({ baseURL: 'https://api.anthropic.com/v1', model: 'm', params: { thinking: true } }, request);
+	assert.deepEqual(officialBody['thinking'], { type: 'adaptive' });
+
+	// Kimi treats 'adaptive' as advisory and can still skip the thinking block,
+	// leaking reasoning into visible text — 'enabled' forces the block.
+	const compatBody = buildAnthropicRequestBody({ baseURL: 'https://api.kimi.com/coding/', model: 'm', params: { thinking: true } }, request);
+	assert.deepEqual(compatBody['thinking'], { type: 'enabled', budget_tokens: 8192 });
+
+	const offBody = buildAnthropicRequestBody({ baseURL: 'https://api.kimi.com/coding/', model: 'm' }, request);
+	assert.equal(offBody['thinking'], undefined);
+});
+
 test('createModelClient picks the client class from the provider', () => {
 	const base: Omit<IStoredModelConfig, 'provider'> = { id: 'm', label: 'M', baseURL: 'https://x/v1', model: 'm' };
 	assert.ok(createModelClient({ ...base, provider: 'openai-compatible' }) instanceof OpenAIModelClient);

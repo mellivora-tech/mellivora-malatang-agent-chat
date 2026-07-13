@@ -14,6 +14,8 @@ import { readServerSentEvents } from './sse.js';
 // it is a ceiling, not a target — replies don't get longer or pricier unless
 // they genuinely need the room. Override per model via params.maxTokens.
 const DEFAULT_MAX_TOKENS = 32_000;
+// Reasoning cap for 'enabled' thinking; counts against max_tokens, not on top.
+const THINKING_BUDGET_TOKENS = 8192;
 const ANTHROPIC_VERSION = '2023-06-01';
 
 // --- Wire shapes ---------------------------------------------------------------
@@ -99,9 +101,30 @@ export function buildAnthropicRequestBody(config: IModelClientConfig, request: I
 		messages: toAnthropicMessages(request.messages),
 		stream: true,
 		...(request.tools.length > 0 ? { tools: toAnthropicTools(request.tools) } : {}),
-		...(config.params?.thinking ? { thinking: { type: 'adaptive' } } : {}),
+		...(config.params?.thinking ? { thinking: thinkingParam(config.baseURL) } : {}),
 		...(config.params?.effort ? { output_config: { effort: config.params.effort } } : {}),
 	};
+}
+
+/**
+ * 'adaptive' (model decides when to think) is an Anthropic-API-only shape.
+ * Compat endpoints treat it as advisory — Kimi K2.7 still skips the thinking
+ * block ~1/4 of the time and then streams its reasoning as visible text
+ * (observed live; replaying the same request flip-flopped). 'enabled' with an
+ * explicit budget is the documented cross-provider form and forced the block
+ * on every replay, so anything not api.anthropic.com gets that instead.
+ */
+function thinkingParam(baseURL: string): Record<string, unknown> {
+	const isOfficial = /(^|\.)api\.anthropic\.com$/.test(safeHostname(baseURL));
+	return isOfficial ? { type: 'adaptive' } : { type: 'enabled', budget_tokens: THINKING_BUDGET_TOKENS };
+}
+
+function safeHostname(baseURL: string): string {
+	try {
+		return new URL(baseURL).hostname;
+	} catch {
+		return '';
+	}
 }
 
 /** Folds Anthropic stream events into text deltas (now) and tool_use blocks (at the end). */
