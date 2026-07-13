@@ -18,7 +18,7 @@ import {
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
-import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest } from './workDigest.js';
+import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest, seedWorkDigestFromMessages } from './workDigest.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 100;
@@ -132,6 +132,14 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// transcript opens knowing what was already explored (see workDigest.ts).
 	const digestEnabled = isWorkDigestEnabled(process.env);
 	const workDigest = createWorkDigest();
+	// Seed from the previous run's digest (it rides the transcript as an
+	// assistant turn) so the file union is cumulative across the whole session.
+	if (digestEnabled) {
+		seedWorkDigestFromMessages(workDigest, initialMessages);
+	}
+	// Did THIS run touch a tracked tool? A conversational run leaves the seeded
+	// (previous) digest to ride forward untouched instead of re-emitting it.
+	let digestWorkedThisRun = false;
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -336,8 +344,8 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 			} else if (toolUse.name === 'write_walkthrough') {
 				walkthroughWritten = true;
 			}
-			if (digestEnabled) {
-				recordWorkDigest(workDigest, toolUse.name, toolUse.input);
+			if (digestEnabled && recordWorkDigest(workDigest, toolUse.name, toolUse.input)) {
+				digestWorkedThisRun = true;
 			}
 		}
 
@@ -377,7 +385,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 				continue;
 			}
 
-			if (digestEnabled) {
+			if (digestEnabled && digestWorkedThisRun) {
 				const digest = buildWorkDigestEvent(workDigest);
 				if (digest) {
 					yield { type: 'work_digest', ...digest };
@@ -393,7 +401,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		messages.push({ role: 'user', content: toolResults });
 
 		if (turn >= maxTurns) {
-			if (digestEnabled) {
+			if (digestEnabled && digestWorkedThisRun) {
 				const digest = buildWorkDigestEvent(workDigest);
 				if (digest) {
 					yield { type: 'work_digest', ...digest };

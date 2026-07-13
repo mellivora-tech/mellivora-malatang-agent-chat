@@ -6,7 +6,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildWorkDigestEvent, buildWorkDigestText, createWorkDigest, isWorkDigestEnabled, recordWorkDigest, summarizeWorkDigest } from '../../src/main/agent/workDigest.js';
+import {
+	buildWorkDigestEvent,
+	buildWorkDigestText,
+	createWorkDigest,
+	isWorkDigestEnabled,
+	recordWorkDigest,
+	seedWorkDigestFromMessages,
+	seedWorkDigestFromText,
+	summarizeWorkDigest,
+} from '../../src/main/agent/workDigest.js';
+import type { IAgentMessage } from '../../src/main/agent/agentTypes.js';
 
 function digestOf(calls: readonly (readonly [string, unknown])[]): ReturnType<typeof createWorkDigest> {
 	const digest = createWorkDigest();
@@ -123,6 +133,82 @@ test('a large read list is capped with an overflow marker', () => {
 	const text = buildWorkDigestText(digest);
 	assert.ok(text);
 	assert.match(text, /…\+5 more/);
+});
+
+test('recordWorkDigest reports tracked tools true and unknown ones false', () => {
+	const digest = createWorkDigest();
+	assert.equal(recordWorkDigest(digest, 'read_file', { path: 'a.ts' }), true);
+	assert.equal(recordWorkDigest(digest, 'bash', { command: 'ls' }), true);
+	assert.equal(recordWorkDigest(digest, 'propose_plan', { title: 'x' }), false);
+	assert.equal(recordWorkDigest(digest, 'write_walkthrough', {}), false);
+});
+
+test('a rendered digest round-trips: render → seed reproduces the file buckets', () => {
+	const original = digestOf([
+		['read_file', { path: 'src/a.ts' }],
+		['read_file', { path: 'src/b.ts' }],
+		['edit_file', { path: 'src/c.ts' }],
+		['write_file', { path: 'src/d.ts' }],
+		['list_dir', { path: 'src/' }],
+		['grep', { pattern: 'x' }],
+	]);
+	const text = buildWorkDigestText(original);
+	assert.ok(text);
+
+	const seeded = createWorkDigest();
+	seedWorkDigestFromText(seeded, text);
+	assert.deepEqual([...seeded.filesRead], ['src/a.ts', 'src/b.ts']);
+	assert.deepEqual([...seeded.filesEdited], ['src/c.ts']);
+	assert.deepEqual([...seeded.filesWritten], ['src/d.ts']);
+	assert.deepEqual([...seeded.dirsListed], ['src/']);
+	// Activity counts are per-run telemetry — not carried across the seed.
+	assert.equal(seeded.searches, 0);
+});
+
+test('seeding is cumulative: a new run unions its files onto the previous digest', () => {
+	const first = buildWorkDigestText(digestOf([['read_file', { path: 'a.ts' }]]));
+	assert.ok(first);
+
+	// Second run seeds from the first digest, then reads a new file.
+	const second = createWorkDigest();
+	seedWorkDigestFromText(second, first);
+	recordWorkDigest(second, 'read_file', { path: 'b.ts' });
+	assert.deepEqual([...second.filesRead], ['a.ts', 'b.ts']);
+
+	// Third run seeds from the second digest — a.ts survives two hops.
+	const secondText = buildWorkDigestText(second);
+	assert.ok(secondText);
+	const third = createWorkDigest();
+	seedWorkDigestFromText(third, secondText);
+	assert.deepEqual([...third.filesRead], ['a.ts', 'b.ts']);
+});
+
+test('seedWorkDigestFromMessages reads the digest out of an assistant transcript turn', () => {
+	const digestText = buildWorkDigestText(digestOf([['read_file', { path: 'a.ts' }]]));
+	assert.ok(digestText);
+	const messages: IAgentMessage[] = [
+		{ role: 'user', content: [{ type: 'text', text: 'question' }] },
+		{ role: 'assistant', content: [{ type: 'text', text: 'an answer' }] },
+		{ role: 'assistant', content: [{ type: 'text', text: digestText }] },
+	];
+	const digest = createWorkDigest();
+	seedWorkDigestFromMessages(digest, messages);
+	assert.deepEqual([...digest.filesRead], ['a.ts']);
+});
+
+test('seeding ignores a body with no digest block and drops the truncation marker', () => {
+	const noBlock = createWorkDigest();
+	seedWorkDigestFromText(noBlock, 'just a normal reply, nothing to seed');
+	assert.equal(summarizeWorkDigest(noBlock).toolCalls, 0);
+
+	// A capped list seeds the named files but not the "…+N more" marker.
+	const capped = createWorkDigest();
+	for (let i = 0; i < 45; i++) {
+		recordWorkDigest(capped, 'read_file', { path: `f${i}.ts` });
+	}
+	const reseeded = createWorkDigest();
+	seedWorkDigestFromText(reseeded, buildWorkDigestText(capped)!);
+	assert.equal(reseeded.filesRead.size, 40, 'exactly the capped 40 seed back, marker skipped');
 });
 
 test('kill switch: MELLIVORA_WORK_DIGEST=off disables, anything else enables', () => {

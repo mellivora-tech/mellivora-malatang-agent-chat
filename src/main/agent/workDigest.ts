@@ -21,10 +21,29 @@
  * The digest is folded into a hidden `role:'digest'` session message and the
  * NEXT run's transcript carries only the latest one (see toTranscript), so
  * window occupancy stays bounded at a single digest regardless of run count.
+ *
+ * It is CUMULATIVE across the session: because the previous digest rides the
+ * next run's transcript as an assistant turn, the loop seeds a fresh run's
+ * accumulator from it ({@link seedWorkDigestFromMessages}) before recording the
+ * run's own tools. So the file union grows monotonically and a 3rd-run digest
+ * still names files the 1st run read — without any extra persistence, the
+ * transcript round-trip IS the carrier.
  */
+
+import type { IAgentMessage } from './agentTypes.js';
 
 /** Cap the per-list file count so a sprawling run can't bloat the digest. */
 const MAX_LISTED_FILES = 40;
+
+const DIGEST_OPEN = '<work-digest>';
+const DIGEST_CLOSE = '</work-digest>';
+/** The label each bucket renders under, and the set it re-seeds into. */
+const BUCKET_LABELS = [
+	['Read', 'filesRead'],
+	['Edited', 'filesEdited'],
+	['Wrote', 'filesWritten'],
+	['Listed', 'dirsListed'],
+] as const;
 
 export interface IWorkDigest {
 	readonly filesRead: Set<string>;
@@ -52,40 +71,43 @@ function inputPath(input: unknown): string | undefined {
 /**
  * Fold one tool call into the digest. Tool names mirror the workspace tools
  * (readFileTool etc.); unknown tools and malformed inputs are ignored, so a
- * new tool simply doesn't contribute until taught here.
+ * new tool simply doesn't contribute until taught here. Returns whether the
+ * call was a tracked tool — the loop uses this to tell a run that DID work
+ * (re-persist the cumulative digest) from a purely conversational one (let the
+ * previous run's digest ride forward untouched).
  */
-export function recordWorkDigest(digest: IWorkDigest, name: string, input: unknown): void {
+export function recordWorkDigest(digest: IWorkDigest, name: string, input: unknown): boolean {
 	const path = inputPath(input);
 	switch (name) {
 		case 'read_file':
 			if (path) {
 				digest.filesRead.add(path);
 			}
-			break;
+			return true;
 		case 'write_file':
 			if (path) {
 				digest.filesWritten.add(path);
 			}
-			break;
+			return true;
 		case 'edit_file':
 			if (path) {
 				digest.filesEdited.add(path);
 			}
-			break;
+			return true;
 		case 'list_dir':
 			if (path) {
 				digest.dirsListed.add(path);
 			}
-			break;
+			return true;
 		case 'grep':
 		case 'glob':
 			digest.searches += 1;
-			break;
+			return true;
 		case 'bash':
 			digest.commands += 1;
-			break;
+			return true;
 		default:
-			break;
+			return false;
 	}
 }
 
@@ -114,23 +136,16 @@ function formatList(paths: ReadonlySet<string>): string {
 }
 
 /**
- * Render the digest as a compact hidden block, or undefined when the run
- * touched nothing worth carrying (a purely conversational turn) — in which
- * case no digest message is emitted at all.
+ * Render the digest as a compact hidden block, or undefined when nothing worth
+ * carrying was touched (a purely conversational run with no seeded history) —
+ * in which case no digest message is emitted at all.
  */
 export function buildWorkDigestText(digest: IWorkDigest): string | undefined {
 	const lines: string[] = [];
-	if (digest.filesRead.size > 0) {
-		lines.push(`Read: ${formatList(digest.filesRead)}`);
-	}
-	if (digest.filesEdited.size > 0) {
-		lines.push(`Edited: ${formatList(digest.filesEdited)}`);
-	}
-	if (digest.filesWritten.size > 0) {
-		lines.push(`Wrote: ${formatList(digest.filesWritten)}`);
-	}
-	if (digest.dirsListed.size > 0) {
-		lines.push(`Listed: ${formatList(digest.dirsListed)}`);
+	for (const [label, key] of BUCKET_LABELS) {
+		if (digest[key].size > 0) {
+			lines.push(`${label}: ${formatList(digest[key])}`);
+		}
 	}
 	const activity: string[] = [];
 	if (digest.searches > 0) {
@@ -145,7 +160,53 @@ export function buildWorkDigestText(digest: IWorkDigest): string | undefined {
 	if (lines.length === 0) {
 		return undefined;
 	}
-	return `<work-digest>\nMy previous run touched these — no need to re-read them unless they may have changed:\n${lines.join('\n')}\n</work-digest>`;
+	return `${DIGEST_OPEN}\nFiles I have already explored this session — no need to re-read them unless they may have changed:\n${lines.join('\n')}\n${DIGEST_CLOSE}`;
+}
+
+/**
+ * Re-seed an accumulator from a digest block previously rendered by
+ * {@link buildWorkDigestText} — the inverse of the render, so a run inherits
+ * every file its predecessors touched. Only file buckets are carried (the
+ * activity counts are per-run telemetry, not cumulative); the truncation
+ * marker and unparsable lines are ignored, and a body without a digest block
+ * is a no-op.
+ */
+export function seedWorkDigestFromText(digest: IWorkDigest, text: string): void {
+	const open = text.indexOf(DIGEST_OPEN);
+	const close = text.indexOf(DIGEST_CLOSE, open + DIGEST_OPEN.length);
+	if (open === -1 || close === -1) {
+		return;
+	}
+	const body = text.slice(open + DIGEST_OPEN.length, close);
+	for (const line of body.split('\n')) {
+		const separator = line.indexOf(': ');
+		if (separator === -1) {
+			continue;
+		}
+		const label = line.slice(0, separator).trim();
+		const bucket = BUCKET_LABELS.find(([name]) => name === label);
+		if (!bucket) {
+			continue;
+		}
+		for (const raw of line.slice(separator + 2).split(', ')) {
+			const file = raw.trim();
+			// Skip the "…+N more" truncation marker — those files are unrecoverable.
+			if (file !== '' && !file.startsWith('…+')) {
+				digest[bucket[1]].add(file);
+			}
+		}
+	}
+}
+
+/** Seed from every text block in a transcript (only the newest digest is present, but union is safe). */
+export function seedWorkDigestFromMessages(digest: IWorkDigest, messages: readonly IAgentMessage[]): void {
+	for (const message of messages) {
+		for (const block of message.content) {
+			if (block.type === 'text' && block.text.includes(DIGEST_OPEN)) {
+				seedWorkDigestFromText(digest, block.text);
+			}
+		}
+	}
 }
 
 /** The loop-event payload (sans `type`), or undefined when nothing was tracked. */

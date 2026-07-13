@@ -80,6 +80,19 @@ const walkthroughToolStub = defineTool({
 	call: async () => ({ content: 'walkthrough recorded' }),
 });
 
+const readFileTool = defineTool({
+	name: 'read_file',
+	description: 'Read a file.',
+	inputSchema: { type: 'object' },
+	isReadOnly: () => true,
+	validateInput: input => ({ ok: true, value: input }),
+	call: async () => ({ content: 'file contents' }),
+});
+
+function workDigestEvent(events: readonly IAgentEvent[]): Extract<IAgentEvent, { type: 'work_digest' }> | undefined {
+	return events.find((event): event is Extract<IAgentEvent, { type: 'work_digest' }> => event.type === 'work_digest');
+}
+
 /** A scripted client that also records the request.messages it was called with. */
 function capturingModelClient(turns: readonly { readonly emit: readonly IScriptedLike[] }[]): { client: IModelClient; requests: IModelRequest[] } {
 	const requests: IModelRequest[] = [];
@@ -1075,5 +1088,56 @@ test('context_breakdown: prunedChars mirrors the tool_prune outcome for the same
 		assert.ok(matchingBreakdown, `expected a context_breakdown with prunedChars=${lastPruneChars}, got [${breakdowns.map(b => b.prunedChars).join(',')}]`);
 	} finally {
 		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('work digest: a run emits a cumulative digest seeded from the previous run', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		// The previous run's digest rides in as an assistant turn.
+		const priorDigest = { role: 'assistant' as const, content: [{ type: 'text' as const, text: '<work-digest>\nRead: src/old.ts\n</work-digest>' }] };
+		const { client } = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: { path: 'src/new.ts' } }] },
+			{ emit: [{ type: 'text', text: 'Done.' }] },
+		]);
+		const { events } = await drive(
+			runAgentLoop([userMessage('follow-up'), priorDigest], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+
+		const digest = workDigestEvent(events);
+		assert.ok(digest, 'a work_digest event was emitted');
+		// Cumulative: the seeded old.ts and this run's new.ts both appear.
+		assert.match(digest.text, /src\/old\.ts/);
+		assert.match(digest.text, /src\/new\.ts/);
+		assert.equal(digest.filesRead, 2);
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('work digest: a purely conversational run emits none, letting the prior digest ride forward', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const priorDigest = { role: 'assistant' as const, content: [{ type: 'text' as const, text: '<work-digest>\nRead: src/old.ts\n</work-digest>' }] };
+		const { client } = capturingModelClient([{ emit: [{ type: 'text', text: 'Just answering, no tools.' }] }]);
+		const { events } = await drive(
+			runAgentLoop([userMessage('a question'), priorDigest], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(workDigestEvent(events), undefined, 'no digest re-emitted when the run did no tracked work');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('work digest: MELLIVORA_WORK_DIGEST=off suppresses the event', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	process.env['MELLIVORA_WORK_DIGEST'] = 'off';
+	try {
+		const { client } = capturingModelClient([{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: { path: 'a.ts' } }] }, { emit: [{ type: 'text', text: 'Done.' }] }]);
+		const { events } = await drive(runAgentLoop([userMessage('go')], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }));
+		assert.equal(workDigestEvent(events), undefined, 'the kill switch suppresses the digest entirely');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+		delete process.env['MELLIVORA_WORK_DIGEST'];
 	}
 });
