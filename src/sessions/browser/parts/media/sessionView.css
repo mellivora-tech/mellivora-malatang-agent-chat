@@ -938,9 +938,12 @@ button.conversation-plan-header {
 	max-width: var(--vscode-agents-size-conversation-width);
 	margin: 0 auto var(--vscode-agents-space-18);
 	padding: var(--vscode-agents-space-14) var(--vscode-agents-space-16);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-warning, #d29922) 45%, transparent);
+	/* Calm artifact card, unified with .conversation-plan — no whole-card warning
+	   wash. The "needs you" signal lives on the header icon alone, so an approval
+	   reads as part of the conversation instead of an alarm block. */
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
 	border-radius: var(--vscode-agents-radius-container, 10px);
-	background: color-mix(in srgb, var(--vscode-agents-color-warning, #d29922) 8%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
 }
 
 .conversation-approval-header {
@@ -952,7 +955,7 @@ button.conversation-plan-header {
 }
 
 .conversation-approval-header .codicon {
-	color: var(--vscode-agents-color-warning, #d29922);
+	color: var(--vscode-agents-color-text-secondary);
 }
 
 .conversation-approval-title {
@@ -1072,13 +1075,18 @@ button.conversation-plan-header {
 	line-height: 1;
 }
 
+/* Primary, but calm: a tinted green surface (symmetric with the neutral deny
+   button) instead of a saturated solid CTA — green still marks the affirmative,
+   without shouting over the transcript. */
 .conversation-approval-allow {
-	background: var(--vscode-agents-color-success);
-	color: var(--vscode-agents-color-accent-foreground);
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 18%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 40%, transparent);
+	color: var(--vscode-agents-color-success);
 }
 
 .conversation-approval-allow:hover {
-	background: color-mix(in srgb, var(--vscode-agents-color-success) 88%, var(--vscode-agents-color-text-inverse));
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 28%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 55%, transparent);
 }
 
 /* Secondary: a real filled surface so it reads as a button, not text. */
