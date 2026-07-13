@@ -260,9 +260,18 @@ export class ConversationView extends Disposable {
 						{ name: 'model', kind: 'action', description: 'Pick the model', run: () => model.click() },
 						{ name: 'permission', kind: 'action', description: 'Pick the approval mode', run: () => access.click() },
 						...(session && lastMessage && this.messageSender?.forkSession
-							? [{ name: 'fork', kind: 'action' as const, description: 'Fork this conversation from its latest message', run: () => void this.messageSender!.forkSession!(session.sessionId, lastMessage.id) }]
+							? [
+									{
+										name: 'fork',
+										kind: 'action' as const,
+										description: 'Fork this conversation from its latest message',
+										run: () => void this.messageSender!.forkSession!(session.sessionId, lastMessage.id),
+									},
+								]
 							: []),
-						...(session?.status.get() === SessionStatus.InProgress ? [{ name: 'stop', kind: 'action' as const, description: 'Stop the current run', run: () => void this.stop() }] : []),
+						...(session?.status.get() === SessionStatus.InProgress
+							? [{ name: 'stop', kind: 'action' as const, description: 'Stop the current run', run: () => void this.stop() }]
+							: []),
 						...TEMPLATE_COMMANDS,
 					];
 				},
@@ -504,12 +513,21 @@ export class ConversationView extends Disposable {
 					// ticker — so it always resyncs. Cheap, and work steps have no
 					// hover-fade UI to protect (unlike the message action bar below).
 					this.patchWorkBlock(element, message);
+				} else if (message.role === 'plan') {
+					if (existing.message !== message) {
+						patchPlanCard(element, message);
+					}
 				} else if (existing.message !== message) {
 					this.patchRow(element, message);
 				}
 				existing.message = message;
 			} else {
-				element = message.role === 'work' ? this.createWorkBlock(message) : createMessageRow(message, this.buildMessageActions(message), this.buildImageResolver());
+				element =
+					message.role === 'work'
+						? this.createWorkBlock(message)
+						: message.role === 'plan'
+							? createPlanCard(message)
+							: createMessageRow(message, this.buildMessageActions(message), this.buildImageResolver());
 				this.renderedRows.set(message.id, { element, message });
 			}
 
@@ -977,8 +995,7 @@ export class ConversationView extends Disposable {
 		breakdownList.replaceChildren();
 		const breakdown = usage?.breakdown;
 		if (breakdown) {
-			const categoryChars =
-				breakdown.systemChars + breakdown.instructionsChars + breakdown.skillsChars + breakdown.toolsChars + breakdown.compactedChars + breakdown.messagesChars;
+			const categoryChars = breakdown.systemChars + breakdown.instructionsChars + breakdown.skillsChars + breakdown.toolsChars + breakdown.compactedChars + breakdown.messagesChars;
 			breakdownList.append(createBreakdownRow('System prompt', formatBreakdownEntry(breakdown.systemChars, contextLength)));
 			breakdownList.append(createBreakdownRow('Project instructions', formatBreakdownEntry(breakdown.instructionsChars, contextLength)));
 			breakdownList.append(createBreakdownRow('Skills', formatBreakdownEntry(breakdown.skillsChars, contextLength)));
@@ -1220,7 +1237,11 @@ function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 }
 
 /** The #-picker's entries: other sessions, newest first, capped. */
-export function listReferencableSessions(sessions: readonly ISession[], currentSessionId: string | undefined, limit: number = 50): { id: string; name: string; description: string }[] {
+export function listReferencableSessions(
+	sessions: readonly ISession[],
+	currentSessionId: string | undefined,
+	limit: number = 50,
+): { id: string; name: string; description: string }[] {
 	return sessions
 		.filter(session => session.sessionId !== currentSessionId && !session.isArchived.get())
 		.sort((a, b) => b.updatedAt.get().getTime() - a.updatedAt.get().getTime())
@@ -1409,6 +1430,96 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions, r
 	return row;
 }
 
+const PLAN_SECTION_ICONS: Readonly<Record<string, string>> = {
+	overview: 'codicon-info',
+	files: 'codicon-files',
+	approach: 'codicon-lightbulb',
+	steps: 'codicon-list-ordered',
+	risks: 'codicon-warning',
+};
+
+/**
+ * The reviewable plan artifact card (`role:'plan'`). P0 renders it read-only —
+ * sectioned content with the version in the header; review actions and
+ * per-section comments arrive with P1/P2. A message whose structured payload is
+ * missing (dropped by an older writer) falls back to its markdown text.
+ */
+function createPlanCard(message: ISessionMessage): HTMLElement {
+	const card = document.createElement('section');
+	card.className = 'conversation-plan';
+	card.dataset.messageId = message.id;
+	renderPlanCardContent(card, message);
+	return card;
+}
+
+/** Same content builder as createPlanCard — the reconciler patches by rebuilding inside the SAME root element. */
+function patchPlanCard(card: HTMLElement, message: ISessionMessage): void {
+	clearNode(card);
+	renderPlanCardContent(card, message);
+}
+
+function renderPlanCardContent(card: HTMLElement, message: ISessionMessage): void {
+	const plan = message.plan;
+	card.classList.toggle('superseded', plan?.state === 'superseded');
+
+	const header = append(card, document.createElement('div'));
+	header.className = 'conversation-plan-header';
+	const icon = append(header, document.createElement('span'));
+	icon.className = 'codicon codicon-checklist';
+	icon.setAttribute('aria-hidden', 'true');
+	const title = append(header, document.createElement('span'));
+	title.className = 'conversation-plan-title';
+	title.textContent = plan ? plan.title : 'Implementation plan';
+	if (plan) {
+		const version = append(header, document.createElement('span'));
+		version.className = 'conversation-plan-version';
+		version.textContent = `v${plan.version}`;
+		if (plan.state !== 'draft') {
+			const state = append(header, document.createElement('span'));
+			state.className = `conversation-plan-state ${plan.state}`;
+			state.textContent = plan.state;
+		}
+	}
+
+	if (!plan) {
+		// Structured payload missing — the markdown fallback is the content.
+		const body = append(card, document.createElement('div'));
+		body.className = 'conversation-plan-fallback conversation-markdown';
+		body.appendChild(renderMarkdown(message.text));
+		return;
+	}
+
+	const sections = append(card, document.createElement('div'));
+	sections.className = 'conversation-plan-sections';
+	for (const section of plan.sections) {
+		const sectionEl = append(sections, document.createElement('div'));
+		sectionEl.className = 'conversation-plan-section';
+		sectionEl.dataset.sectionId = section.id;
+
+		const kicker = append(sectionEl, document.createElement('div'));
+		kicker.className = 'conversation-plan-kicker';
+		const kickerIcon = append(kicker, document.createElement('span'));
+		kickerIcon.className = `codicon ${PLAN_SECTION_ICONS[section.kind] ?? 'codicon-circle-small'}`;
+		kickerIcon.setAttribute('aria-hidden', 'true');
+		const heading = append(kicker, document.createElement('span'));
+		heading.textContent = section.heading;
+
+		if (section.body.trim() !== '') {
+			const body = append(sectionEl, document.createElement('div'));
+			body.className = 'conversation-plan-body conversation-markdown';
+			body.appendChild(renderMarkdown(section.body));
+		}
+		if (section.items !== undefined && section.items.length > 0) {
+			const list = append(sectionEl, document.createElement('ul'));
+			list.className = 'conversation-plan-items';
+			for (const item of section.items) {
+				const li = append(list, document.createElement('li'));
+				li.textContent = item;
+			}
+		}
+	}
+}
+
 /** File names touched by a work block's write/edit tool steps. */
 function extractWorkFiles(work: ISessionMessage | undefined): string[] {
 	const files: string[] = [];
@@ -1521,6 +1632,8 @@ function messageIcon(role: ISessionMessage['role']): string {
 		case 'tool':
 		case 'work':
 			return 'codicon-tools';
+		case 'plan':
+			return 'codicon-checklist';
 	}
 }
 
@@ -1533,6 +1646,8 @@ function messageLabel(role: ISessionMessage['role']): string {
 		case 'tool':
 		case 'work':
 			return 'Tool';
+		case 'plan':
+			return 'Plan';
 	}
 }
 

@@ -20,6 +20,7 @@ import type {
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
+import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionCompactionAnchorData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
 import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
@@ -391,6 +392,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(message.detail !== undefined ? { detail: message.detail } : {}),
 					...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 					...(message.steps !== undefined ? { steps: message.steps } : {}),
+					...(message.plan !== undefined ? { plan: message.plan } : {}),
 				});
 			}
 			await this.bridge.append(ref, {
@@ -460,6 +462,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.detail !== undefined ? { detail: message.detail } : {}),
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
+				...(message.plan !== undefined ? { plan: message.plan } : {}),
 				...(message.feedback !== undefined ? { feedback: message.feedback } : {}),
 				...(message.timestamp !== undefined ? { timestamp: new Date(message.timestamp) } : {}),
 			})),
@@ -614,6 +617,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const steps: ISessionWorkStep[] = [];
 		let stepStart = workStart;
 		let openToolLabel: string | undefined;
+		// The run's latest propose_plan input — last call wins; materialized into
+		// a role:'plan' message at finalize (ids/version assigned there, never by
+		// the model).
+		let pendingPlanInput: IProposePlanInput | undefined;
 		// Reasoning text streamed since the last step boundary; becomes the
 		// closing thinking step's expandable detail.
 		let thinkingBuffer = '';
@@ -754,9 +761,27 @@ export class FileSessionsProvider implements ISessionsProvider {
 					? { inputTokens: usageAtEnd.inputTokens, ...(usageAtEnd.breakdown ? { breakdown: usageAtEnd.breakdown } : {}) }
 					: undefined;
 			const now = new Date();
+
+			// A propose_plan call materializes into a role:'plan' message here —
+			// deterministic ids/version, markdown fallback on `text` (older builds
+			// and the next run's transcript both read it). Slots between the work
+			// block and the answer bubble, in the live view and on disk alike.
+			let planMessage: ISessionMessage | undefined;
+			if (pendingPlanInput !== undefined) {
+				const planId = `${sessionId}-plan-${generateId()}`;
+				const plan = materializePlan(pendingPlanInput, planId, nextPlanVersion(session.messages.get()));
+				planMessage = { id: planId, role: 'plan', text: planToMarkdown(plan), plan, timestamp: now };
+				const messages = session.messages.get();
+				const assistantIndex = messages.findIndex(message => message.id === assistantId);
+				session.messages.set(assistantIndex === -1 ? [...messages, planMessage] : [...messages.slice(0, assistantIndex), planMessage, ...messages.slice(assistantIndex)]);
+			}
+
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
 				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
+				if (planMessage?.plan) {
+					await this.bridge.append(ref, { type: 'message', id: planMessage.id, role: 'plan', text: planMessage.text, plan: planMessage.plan, timestamp: now.toISOString() });
+				}
 				if (hasReply) {
 					await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
 				}
@@ -815,6 +840,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 			} else if (event?.type === 'tool_use') {
 				closeThinkingOrSkip();
 				relocateTurnNarration();
+				if (event.name === 'propose_plan') {
+					// Malformed input stays on the previous capture — the tool result
+					// already told the model what was wrong.
+					pendingPlanInput = parsePlanInput(event.input) ?? pendingPlanInput;
+				}
 				openToolLabel = describeWorkTool(event.name, event.input);
 				updateWork();
 			} else if (event?.type === 'tool_result') {
@@ -866,7 +896,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// head is summarized once per session instead of once per run. The
 				// prefix measure must mirror the harness's measurePrefixChars — it is
 				// the integrity gate that invalidates the anchor if history changes.
-				if (event.outcome === 'ok' && event.summary !== undefined && typeof event.coveredInitial === 'number' && event.coveredInitial >= 1 && event.coveredInitial <= sentTranscript.length) {
+				if (
+					event.outcome === 'ok' &&
+					event.summary !== undefined &&
+					typeof event.coveredInitial === 'number' &&
+					event.coveredInitial >= 1 &&
+					event.coveredInitial <= sentTranscript.length
+				) {
 					let prefixChars = 0;
 					for (let i = 0; i < event.coveredInitial; i++) {
 						prefixChars += JSON.stringify(sentTranscript[i]!.content).length;
@@ -1104,6 +1140,16 @@ export function toTranscript(
 ): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
 	for (const message of messages) {
+		// A plan artifact must reach the model next run — revise ("adjust per my
+		// comments") and approve ("execute the plan") both depend on the model
+		// seeing its own proposal. The markdown fallback crosses as an assistant
+		// turn; dropping it like work/tool would sever the review loop.
+		if (message.role === 'plan') {
+			if (message.text.trim() !== '') {
+				transcript.push({ role: 'assistant', content: [{ type: 'text', text: message.text }] });
+			}
+			continue;
+		}
 		if (message.role !== 'user' && message.role !== 'assistant') {
 			continue;
 		}

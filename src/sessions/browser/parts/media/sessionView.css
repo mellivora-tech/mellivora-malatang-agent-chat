@@ -663,6 +663,97 @@ button.conversation-work-step-row:hover {
 	font-variant-numeric: tabular-nums;
 }
 
+/* The reviewable plan artifact card (role:'plan'): sectioned implementation
+   plan proposed via propose_plan. Read-only in P0 — actions/comments are P1/P2. */
+.conversation-plan {
+	display: flex;
+	flex-direction: column;
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-18);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	border-radius: var(--vscode-agents-radius-container, 10px);
+	overflow: hidden;
+}
+
+.conversation-plan.superseded {
+	opacity: 0.6;
+}
+
+.conversation-plan-header {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	border-bottom: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-plan-header .codicon {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-plan-version {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+}
+
+.conversation-plan-state {
+	padding: 0 var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	text-transform: uppercase;
+}
+
+.conversation-plan-section {
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+}
+
+.conversation-plan-section + .conversation-plan-section {
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
+.conversation-plan-kicker {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.conversation-plan-kicker .codicon {
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-plan-body {
+	margin-top: var(--vscode-agents-space-6);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-plan-items {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+	margin: var(--vscode-agents-space-6) 0 0;
+	padding-left: var(--vscode-agents-space-18);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-plan-fallback {
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
 .conversation-approval {
 	display: flex;
 	flex-direction: column;

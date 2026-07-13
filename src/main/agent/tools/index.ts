@@ -9,6 +9,7 @@ import { createEditFileTool } from './editFileTool.js';
 import { createGlobTool } from './globTool.js';
 import { createGrepTool } from './grepTool.js';
 import { createListDirTool } from './listDirTool.js';
+import { createProposePlanTool } from './proposePlanTool.js';
 import { createReadFileTool } from './readFileTool.js';
 import { createUpdatePlanTool } from './updatePlanTool.js';
 import { createWriteFileTool } from './writeFileTool.js';
@@ -29,9 +30,10 @@ export interface IWorkspaceToolsOptions {
  * bash is NOT sandboxed (it can run anything) — gates route it to approval.
  */
 export function createWorkspaceTools(roots: readonly string[], options: IWorkspaceToolsOptions = {}): readonly IAgentTool[] {
-	// update_plan is a meta-tool (no side effects) available in every mode — it
-	// helps the model bound its own exploration.
-	const readOnly = [createUpdatePlanTool(), createReadFileTool(roots), createListDirTool(roots), createGlobTool(roots), createGrepTool(roots)];
+	// update_plan and propose_plan are meta-tools (no side effects) available in
+	// every mode — the first bounds the model's own exploration (running
+	// checklist), the second proposes a reviewable implementation plan.
+	const readOnly = [createUpdatePlanTool(), createProposePlanTool(), createReadFileTool(roots), createListDirTool(roots), createGlobTool(roots), createGrepTool(roots)];
 	if (!options.includeMutations) {
 		return readOnly;
 	}

@@ -34,8 +34,10 @@ function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): 
 	}
 	if (mode === 'plan') {
 		lines.push(
-			'You are in plan mode: explore with the read-only tools (read_file, list_dir, glob, grep) and present a plan.',
-			'Do not attempt to change files or run commands — propose what you would do instead.',
+			'You are in plan mode: explore with the read-only tools (read_file, list_dir, glob, grep), then call propose_plan with a SECTIONED implementation plan — which files change, the approach, the steps, the risks.',
+			'Do not attempt to change files or run commands.',
+			'The plan card is the deliverable: after propose_plan, close with ONE short sentence and stop — do not restate the plan in prose.',
+			'If the user left review comments on plan sections, revise accordingly and call propose_plan again (it becomes a new version).',
 		);
 	} else {
 		lines.push(

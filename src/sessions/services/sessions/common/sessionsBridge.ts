@@ -57,17 +57,41 @@ export interface ISessionAttachmentData {
 	readonly label?: string;
 }
 
+/** Wire mirror of IPlanSection (session.ts) — pure JSON. */
+export interface IPlanSectionData {
+	readonly id: string;
+	readonly kind: 'overview' | 'files' | 'approach' | 'steps' | 'risks';
+	readonly heading: string;
+	readonly body: string;
+	readonly items?: readonly string[];
+}
+
+/**
+ * Wire mirror of IPlanArtifact (session.ts). Nested under the message entry's
+ * `plan` key — never a top-level entry field, so the fold's state branch can't
+ * mistake its keys for session state.
+ */
+export interface IPlanArtifactData {
+	readonly id: string;
+	readonly version: number;
+	readonly title: string;
+	readonly sections: readonly IPlanSectionData[];
+	readonly state: 'draft' | 'approved' | 'superseded';
+}
+
 export interface ISessionMessageEntry {
 	readonly type: 'message';
 	readonly id: string;
 	/** 'work' entries summarize one agent run: total duration plus its steps. */
-	readonly role: 'user' | 'assistant' | 'tool' | 'work';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
 	readonly timestamp: string;
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStepData[];
+	/** 'plan' entries carry the structured artifact; `text` is its markdown fallback. */
+	readonly plan?: IPlanArtifactData;
 }
 
 /** User feedback on a single message; the last entry per message wins. */
@@ -127,12 +151,13 @@ export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISession
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
-	readonly role: 'user' | 'assistant' | 'tool' | 'work';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStepData[];
+	readonly plan?: IPlanArtifactData;
 	readonly feedback?: 'like' | 'dislike';
 	readonly timestamp?: string;
 }

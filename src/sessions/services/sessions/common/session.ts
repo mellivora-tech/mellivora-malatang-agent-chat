@@ -59,16 +59,45 @@ export interface ISessionAttachment {
 	readonly label?: string;
 }
 
+/** One section of a plan artifact — the stable anchor unit for review comments. */
+export interface IPlanSection {
+	/** Renderer-assigned, deterministic (`${planId}-s${index}`) — the model never sees ids. */
+	readonly id: string;
+	readonly kind: 'overview' | 'files' | 'approach' | 'steps' | 'risks';
+	readonly heading: string;
+	/** Markdown body, rendered with the shared markdown renderer. */
+	readonly body: string;
+	/** Bullet items (files / steps sections). */
+	readonly items?: readonly string[];
+}
+
+/**
+ * A reviewable implementation plan the model proposed via `propose_plan`. Rides
+ * on a `role:'plan'` message; the message's `text` holds a markdown fallback so
+ * older builds (and the next run's transcript) still see the content.
+ */
+export interface IPlanArtifact {
+	readonly id: string;
+	/** Iteration number within the session; a revision supersedes the prior version. */
+	readonly version: number;
+	readonly title: string;
+	readonly sections: readonly IPlanSection[];
+	/** Named `state` (not `status`) so a top-level echo can never collide with the fold's session-status key. */
+	readonly state: 'draft' | 'approved' | 'superseded';
+}
+
 export interface ISessionMessage {
 	readonly id: string;
 	/** 'work' messages summarize one agent run: total duration plus its steps. */
-	readonly role: 'user' | 'assistant' | 'tool' | 'work';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachment[];
 	readonly detail?: string;
 	/** Total run duration; unset while the run is still in progress. */
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStep[];
+	/** 'plan' messages carry the structured artifact; `text` is its markdown fallback. */
+	readonly plan?: IPlanArtifact;
 	readonly feedback?: 'like' | 'dislike';
 	/** When the message landed (user: send time; assistant: reply completion). */
 	readonly timestamp?: Date;

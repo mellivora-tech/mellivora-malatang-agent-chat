@@ -168,6 +168,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 				...(entry.detail !== undefined ? { detail: entry.detail } : {}),
 				...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
 				...(entry.steps !== undefined ? { steps: entry.steps } : {}),
+				...(entry.plan !== undefined ? { plan: entry.plan } : {}),
 				timestamp: entry.timestamp,
 			});
 			continue;
@@ -299,8 +300,8 @@ function parseEntry(line: string): ISessionEntry | undefined {
 	return undefined;
 }
 
-function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' {
-	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work';
+function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' | 'plan' {
+	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work' || value === 'plan';
 }
 
 async function listJsonlFiles(dir: string): Promise<readonly string[]> {
