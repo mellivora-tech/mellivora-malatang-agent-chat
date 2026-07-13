@@ -187,8 +187,20 @@ function renderList(lines: readonly string[], start: number): { element: HTMLEle
 		if (!match) {
 			// Indented continuation text belongs to the current item.
 			if (currentItem && line.trim() !== '' && /^\s+/.test(line)) {
+				const trimmed = line.trim();
+				// Indented block-level markers (code fences, headings, quotes, tables, rules)
+				// should be handled by the outer renderer, not flattened into inline text.
+				if (
+					trimmed.startsWith('```') ||
+					trimmed.startsWith('#') ||
+					trimmed.startsWith('>') ||
+					trimmed.startsWith('|') ||
+					/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)
+				) {
+					break;
+				}
 				currentItem.appendChild(document.createElement('br'));
-				currentItem.appendChild(renderInline(line.trim()));
+				currentItem.appendChild(renderInline(trimmed));
 				index++;
 				continue;
 			}
