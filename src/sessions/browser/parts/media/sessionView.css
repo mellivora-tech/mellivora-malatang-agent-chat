@@ -1032,15 +1032,22 @@ button.conversation-plan-header {
 }
 
 .conversation-approval-actions button {
+	-webkit-appearance: none;
+	appearance: none;
 	display: inline-flex;
 	align-items: center;
-	gap: var(--vscode-agents-space-6);
-	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-12);
+	gap: var(--vscode-agents-space-8);
+	height: var(--vscode-agents-space-28, 28px);
+	padding: 0 var(--vscode-agents-space-12);
 	border: var(--vscode-agents-space-1) solid transparent;
 	border-radius: var(--vscode-agents-radius-control, 6px);
 	font: inherit;
-	font-weight: var(--vscode-agents-fontWeight-medium);
+	font-size: var(--vscode-agents-fontSize-body2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
 	cursor: default;
+	transition:
+		background 80ms ease-out,
+		border-color 80ms ease-out;
 }
 
 .conversation-approval-actions button:focus-visible {
@@ -1048,19 +1055,21 @@ button.conversation-plan-header {
 	outline-offset: var(--vscode-agents-space-2);
 }
 
-/* Inline key hint on each action. */
+/* Inline key hint — a subtle keycap that reads as a hint, not a control. */
 .conversation-approval-key {
+	display: inline-flex;
+	align-items: center;
+	min-width: var(--vscode-agents-space-16, 16px);
+	height: var(--vscode-agents-space-16, 16px);
 	padding: 0 var(--vscode-agents-space-4);
-	border-radius: var(--vscode-agents-radius-control, 6px);
-	background: color-mix(in srgb, var(--vscode-agents-color-text-inverse) 22%, transparent);
+	justify-content: center;
+	border-radius: var(--vscode-agents-radius-control, 4px);
+	background: color-mix(in srgb, currentColor 18%, transparent);
+	color: inherit;
 	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 	font-size: var(--vscode-agents-fontSize-label2, 11px);
-	line-height: 1.6;
-}
-
-.conversation-approval-deny .conversation-approval-key {
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
-	color: var(--vscode-agents-color-text-secondary);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	line-height: 1;
 }
 
 .conversation-approval-allow {
@@ -1072,14 +1081,16 @@ button.conversation-plan-header {
 	background: color-mix(in srgb, var(--vscode-agents-color-success) 88%, var(--vscode-agents-color-text-inverse));
 }
 
+/* Secondary: a real filled surface so it reads as a button, not text. */
 .conversation-approval-deny {
-	background: transparent;
-	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 24%, transparent);
-	color: var(--vscode-agents-color-text-primary);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
 }
 
 .conversation-approval-deny:hover {
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	color: var(--vscode-agents-color-text-primary);
 }
 
 .conversation-message.user .conversation-message-avatar {
