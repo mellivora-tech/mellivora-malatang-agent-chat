@@ -14,7 +14,7 @@ interface IListDirInput {
 	readonly path?: string;
 }
 
-export function createListDirTool(cwd: string): IAgentTool {
+export function createListDirTool(roots: readonly string[]): IAgentTool {
 	return defineTool({
 		name: 'list_dir',
 		description: 'List the immediate entries of a directory in the workspace. Directories are suffixed with "/". Not recursive.',
@@ -36,7 +36,7 @@ export function createListDirTool(cwd: string): IAgentTool {
 		},
 		call: async input => {
 			const { path } = input as IListDirInput;
-			const absolute = resolveInWorkspace(cwd, path ?? '.');
+			const absolute = resolveInWorkspace(roots, path ?? '.');
 			const entries = await readdir(absolute, { withFileTypes: true });
 			if (entries.length === 0) {
 				return { content: '(empty directory)' };

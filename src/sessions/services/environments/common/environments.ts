@@ -20,40 +20,152 @@
  * crosses, in the *View types).
  */
 
-/** MVP ships 'database' only; config-center / redis / mq come later. */
-export type DataSourceKind = 'database';
+/** The connection kinds an environment can hold. Each carries its own coordinates shape. */
+export type DataSourceKind = 'database' | 'redis' | 'mq' | 'nacos' | 'elasticsearch' | 'server';
 
 export type DatabaseDriver = 'mysql' | 'postgres';
+export type MqDriver = 'kafka' | 'rabbitmq';
+/** How the agent authenticates the SSH connection to a server. */
+export type ServerAuth = 'password' | 'key';
 
-/** baseline = known-good (usually dev), target = under investigation (usually prod). Diff defaults to baseline↔target. */
-export type EnvironmentRole = 'baseline' | 'target' | 'other';
-
-/** read-only is the default and is FORCED for target/prod environments (see isReadOnlyForced). */
+/**
+ * The account's DECLARED permission — layer 2 of the two-layer write control.
+ * Layer 1 is {@link IEnvironment.writable} (the app-side guardrail); layer 2 is
+ * the reality of the account you configure (a read-only DB grant). A write only
+ * happens when BOTH allow it. This field records the intent for layer 2; the
+ * grant itself is out-of-band and the app cannot verify it.
+ */
 export type DataSourceAccess = 'read-only' | 'read-write';
 
-export interface IDatabaseCoordinates {
-	readonly driver: DatabaseDriver;
+/** Every coordinates variant carries host + port; kind-specific fields extend it. */
+export interface ICoordinatesBase {
 	readonly host: string;
 	readonly port: number;
+}
+export interface IDatabaseCoordinates extends ICoordinatesBase {
+	readonly driver: DatabaseDriver;
 	readonly database: string;
 }
+export interface IRedisCoordinates extends ICoordinatesBase {
+	readonly db: number;
+}
+export interface IMqCoordinates extends ICoordinatesBase {
+	readonly driver: MqDriver;
+}
+export interface INacosCoordinates extends ICoordinatesBase {
+	readonly namespace: string;
+	readonly group: string;
+}
+export interface IElasticsearchCoordinates extends ICoordinatesBase {
+	readonly index: string;
+}
+export interface IServerCoordinates extends ICoordinatesBase {
+	readonly user: string;
+	readonly auth: ServerAuth;
+}
 
-/** A named runtime instance of the project's system. Owns nothing but its identity + role; data sources reference it. */
+/** The default port for a kind (used when the user leaves Port blank). */
+export function defaultPort(kind: DataSourceKind, driver?: string): number {
+	switch (kind) {
+		case 'database':
+			return driver === 'postgres' ? 5432 : 3306;
+		case 'redis':
+			return 6379;
+		case 'mq':
+			return driver === 'rabbitmq' ? 5672 : 9092;
+		case 'nacos':
+			return 8848;
+		case 'elasticsearch':
+			return 9200;
+		case 'server':
+			return 22;
+	}
+}
+
+/** A one-line coordinates summary for the data-source row. */
+export function formatCoordinates(source: IDataSource): string {
+	switch (source.kind) {
+		case 'database':
+			return `${source.coordinates.driver} · ${source.coordinates.host}:${source.coordinates.port}/${source.coordinates.database}`;
+		case 'redis':
+			return `${source.coordinates.host}:${source.coordinates.port} · db${source.coordinates.db}`;
+		case 'mq':
+			return `${source.coordinates.driver} · ${source.coordinates.host}:${source.coordinates.port}`;
+		case 'nacos':
+			return `${source.coordinates.host}:${source.coordinates.port} · ${source.coordinates.namespace}/${source.coordinates.group}`;
+		case 'elasticsearch':
+			return `${source.coordinates.host}:${source.coordinates.port}${source.coordinates.index ? `/${source.coordinates.index}` : ''}`;
+		case 'server':
+			return `${source.coordinates.user}@${source.coordinates.host}:${source.coordinates.port} · ${source.coordinates.auth === 'key' ? '密钥' : '密码'}`;
+	}
+}
+
+/**
+ * A named runtime instance of the project's system (dev / test / prod / …). Owns
+ * nothing but its identity + writability; data sources reference it.
+ *
+ * `writable` is LAYER 1 of the write control — the app-side guardrail declared
+ * when the environment is created. Seeds: dev/test writable, prod NOT. Names are
+ * team-customizable, so protection is an explicit flag here, never inferred from
+ * the name.
+ */
 export interface IEnvironment {
 	readonly id: string;
 	readonly name: string;
-	readonly role: EnvironmentRole;
+	readonly writable: boolean;
+	/** The environment's front-end page URL (e.g. the web UI). */
+	readonly frontendUrl?: string;
+	/** The environment's back-end service URL (e.g. the API / gateway). */
+	readonly backendUrl?: string;
 }
 
-/** A connection definition (NO credential). `label` is the logical resource name used to pair across environments for diff. */
-export interface IDataSource {
+/**
+ * Every project starts with these three; all are fully editable (rename / delete /
+ * add more) — they are seed data, not fixed constants. Stable ids so data sources
+ * seeded alongside them stay referentially valid.
+ */
+export const SEED_ENVIRONMENTS: readonly IEnvironment[] = [
+	{ id: 'env-dev', name: 'dev', writable: true },
+	{ id: 'env-test', name: 'test', writable: true },
+	{ id: 'env-prod', name: 'prod', writable: false },
+];
+
+/** Fields common to every data source (a connection definition, NO credential). */
+export interface IDataSourceBase {
 	readonly id: string;
 	readonly environmentId: string;
-	readonly kind: DataSourceKind;
 	readonly label: string;
 	readonly access: DataSourceAccess;
+}
+export interface IDatabaseSource extends IDataSourceBase {
+	readonly kind: 'database';
 	readonly coordinates: IDatabaseCoordinates;
 }
+export interface IRedisSource extends IDataSourceBase {
+	readonly kind: 'redis';
+	readonly coordinates: IRedisCoordinates;
+}
+export interface IMqSource extends IDataSourceBase {
+	readonly kind: 'mq';
+	readonly coordinates: IMqCoordinates;
+}
+export interface INacosSource extends IDataSourceBase {
+	readonly kind: 'nacos';
+	readonly coordinates: INacosCoordinates;
+}
+export interface IElasticsearchSource extends IDataSourceBase {
+	readonly kind: 'elasticsearch';
+	readonly coordinates: IElasticsearchCoordinates;
+}
+export interface IServerSource extends IDataSourceBase {
+	readonly kind: 'server';
+	readonly coordinates: IServerCoordinates;
+}
+/** A connection definition, discriminated by `kind`. */
+export type IDataSource = IDatabaseSource | IRedisSource | IMqSource | INacosSource | IElasticsearchSource | IServerSource;
+
+/** Distributes Omit over a union so the `kind`→`coordinates` correlation survives. */
+type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
 
 /** The shareable, non-secret project config persisted inside the workspace. */
 export interface IWorkspaceConfig {
@@ -69,12 +181,12 @@ export interface IDataSourceSecret {
 	readonly username?: string;
 	readonly password?: string;
 	readonly token?: string;
+	/** SSH private key (PEM) for a server connection using key auth. */
+	readonly privateKey?: string;
 }
 
 /** The redacted data-source the renderer sees: definition + whether a secret is on file (never the secret). */
-export interface IDataSourceView extends IDataSource {
-	readonly hasCredential: boolean;
-}
+export type IDataSourceView = IDataSource & { readonly hasCredential: boolean };
 
 /** The redacted project config the renderer sees (data sources carry hasCredential, never secrets). */
 export interface IWorkspaceConfigView {
@@ -86,17 +198,13 @@ export interface IWorkspaceConfigView {
 export interface IEnvironmentInput {
 	readonly id?: string;
 	readonly name: string;
-	readonly role: EnvironmentRole;
+	readonly writable: boolean;
+	readonly frontendUrl?: string;
+	readonly backendUrl?: string;
 }
 
-/** Upsert payload for a data source (kind fixed to 'database' in the MVP); absent id ⇒ create. Credentials go via {@link IDataSourceSecret}, never here. */
-export interface IDataSourceInput {
-	readonly id?: string;
-	readonly environmentId: string;
-	readonly label: string;
-	readonly access: DataSourceAccess;
-	readonly coordinates: IDatabaseCoordinates;
-}
+/** Upsert payload for a data source (same shape as {@link IDataSource} but id optional). Credentials go via {@link IDataSourceSecret}, never here. */
+export type IDataSourceInput = DistributiveOmit<IDataSource, 'id'> & { readonly id?: string };
 
 /**
  * The shape exposed on `agentWindow.environments` by the preload script. All
@@ -114,14 +222,11 @@ export interface IEnvironmentsBridge {
 }
 
 /**
- * Target/prod is read-only, no exceptions from the renderer: a write there must
- * be a deliberate, separately-gated action. 'other'/baseline may allow writes.
+ * Whether the app may issue a write against this data source — the AND of the two
+ * layers. Layer 1: the environment is writable. Layer 2: the account's declared
+ * access is read-write. Either being restrictive makes the source effectively
+ * read-only. (Layer 2's real grant is out-of-band and still the hard backstop.)
  */
-export function isReadOnlyForced(role: EnvironmentRole): boolean {
-	return role === 'target';
-}
-
-/** The effective access after applying the forced-read-only policy for the owning environment's role. */
-export function effectiveAccess(access: DataSourceAccess, role: EnvironmentRole): DataSourceAccess {
-	return isReadOnlyForced(role) ? 'read-only' : access;
+export function isEffectivelyWritable(environmentWritable: boolean, access: DataSourceAccess): boolean {
+	return environmentWritable && access === 'read-write';
 }

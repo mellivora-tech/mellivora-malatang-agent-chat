@@ -38,7 +38,7 @@ async function run(tool: IAgentTool, input: unknown): Promise<{ content: string;
 
 test('read_file returns contents and pages with offset/limit', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	const full = await run(tools.read_file!, { path: 'README.md' });
 	assert.match(full.content, /hello world/);
@@ -50,7 +50,7 @@ test('read_file returns contents and pages with offset/limit', async () => {
 test('read_file dedup: an unchanged identical re-read returns a stub, not a second copy', async () => {
 	delete process.env['MELLIVORA_READ_DEDUP'];
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	const first = await run(tools.read_file!, { path: 'README.md' });
 	assert.match(first.content, /hello world/, 'first read serves full content');
@@ -68,7 +68,7 @@ test('read_file dedup: an unchanged identical re-read returns a stub, not a seco
 test('read_file dedup: a changed file busts the stub and reads fresh', async () => {
 	delete process.env['MELLIVORA_READ_DEDUP'];
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	await run(tools.read_file!, { path: 'README.md' });
 	// A content-length change guarantees invalidation even when two writes land
@@ -84,14 +84,14 @@ test('read_file dedup: scoped to one tool instance, disabled by the kill switch'
 
 	// Fresh instances (= a new run) never stub the first read.
 	delete process.env['MELLIVORA_READ_DEDUP'];
-	await run(byName(createWorkspaceTools(cwd)).read_file!, { path: 'README.md' });
-	const freshInstance = await run(byName(createWorkspaceTools(cwd)).read_file!, { path: 'README.md' });
+	await run(byName(createWorkspaceTools([cwd])).read_file!, { path: 'README.md' });
+	const freshInstance = await run(byName(createWorkspaceTools([cwd])).read_file!, { path: 'README.md' });
 	assert.match(freshInstance.content, /hello world/, 'a new run starts with a clean dedup slate');
 
 	// Kill switch: repeats keep serving full content.
 	process.env['MELLIVORA_READ_DEDUP'] = 'off';
 	try {
-		const tools = byName(createWorkspaceTools(cwd));
+		const tools = byName(createWorkspaceTools([cwd]));
 		await run(tools.read_file!, { path: 'README.md' });
 		const repeat = await run(tools.read_file!, { path: 'README.md' });
 		assert.match(repeat.content, /hello world/);
@@ -102,7 +102,7 @@ test('read_file dedup: scoped to one tool instance, disabled by the kill switch'
 
 test('list_dir lists entries with a trailing slash on directories', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	const result = await run(tools.list_dir!, { path: '.' });
 	assert.match(result.content, /^src\/$/m);
@@ -111,7 +111,7 @@ test('list_dir lists entries with a trailing slash on directories', async () => 
 
 test('glob matches by pattern and skips node_modules', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	const result = await run(tools.glob!, { pattern: '**/*.ts' });
 	assert.match(result.content, /src\/a\.ts/);
@@ -121,7 +121,7 @@ test('glob matches by pattern and skips node_modules', async () => {
 
 test('grep finds content and reports path:line', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	const result = await run(tools.grep!, { pattern: 'answer', glob: '**/*.ts' });
 	assert.match(result.content, /src\/a\.ts:1:/);
@@ -130,17 +130,17 @@ test('grep finds content and reports path:line', async () => {
 
 test('paths that escape the workspace are refused', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd));
+	const tools = byName(createWorkspaceTools([cwd]));
 
 	await assert.rejects(() => run(tools.read_file!, { path: '../../../etc/passwd' }), /escapes the workspace/);
 });
 
 test('mutating tools appear only with includeMutations, marked non-read-only', () => {
 	const cwd = tmpdir();
-	const readOnly = createWorkspaceTools(cwd).map(tool => tool.name);
+	const readOnly = createWorkspaceTools([cwd]).map(tool => tool.name);
 	assert.deepEqual(readOnly, ['update_plan', 'read_file', 'list_dir', 'glob', 'grep']);
 
-	const all = byName(createWorkspaceTools(cwd, { includeMutations: true }));
+	const all = byName(createWorkspaceTools([cwd], { includeMutations: true }));
 	for (const name of ['write_file', 'edit_file', 'bash']) {
 		assert.ok(all[name], `${name} registered`);
 		assert.equal(all[name]!.isReadOnly({}), false, `${name} must not claim read-only`);
@@ -149,7 +149,7 @@ test('mutating tools appear only with includeMutations, marked non-read-only', (
 
 test('write_file creates parents and reports overwrite; refuses escapes', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd, { includeMutations: true }));
+	const tools = byName(createWorkspaceTools([cwd], { includeMutations: true }));
 
 	const created = await run(tools.write_file!, { path: 'deep/dir/new.txt', content: 'a\nb' });
 	assert.match(created.content, /^Created deep\/dir\/new\.txt/);
@@ -163,7 +163,7 @@ test('write_file creates parents and reports overwrite; refuses escapes', async 
 
 test('edit_file replaces a unique match and rejects ambiguity without replace_all', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd, { includeMutations: true }));
+	const tools = byName(createWorkspaceTools([cwd], { includeMutations: true }));
 	await writeFile(join(cwd, 'multi.txt'), 'aaa bbb aaa\n');
 
 	const ambiguous = await run(tools.edit_file!, { path: 'multi.txt', old_string: 'aaa', new_string: 'zzz' });
@@ -180,7 +180,7 @@ test('edit_file replaces a unique match and rejects ambiguity without replace_al
 
 test('bash runs in the workspace cwd and reports failures', async () => {
 	const cwd = await fixture();
-	const tools = byName(createWorkspaceTools(cwd, { includeMutations: true }));
+	const tools = byName(createWorkspaceTools([cwd], { includeMutations: true }));
 
 	const pwd = await run(tools.bash!, { command: 'pwd' });
 	assert.equal(pwd.isError, false);
@@ -191,8 +191,32 @@ test('bash runs in the workspace cwd and reports failures', async () => {
 	assert.match(fail.content, /Exit code: 3/);
 });
 
+test('multi-root: tools span all code roots; the boundary is the union', async () => {
+	const primary = await fixture();
+	const secondary = await mkdtemp(join(tmpdir(), 'mmac-tools2-'));
+	await mkdir(join(secondary, 'lib'), { recursive: true });
+	await writeFile(join(secondary, 'lib', 'c.ts'), 'export const other = 7;\n');
+	const tools = byName(createWorkspaceTools([primary, secondary], { includeMutations: true }));
+
+	// A secondary root is addressed by ABSOLUTE path (multi-root display is absolute).
+	const read = await run(tools.read_file!, { path: join(secondary, 'lib', 'c.ts') });
+	assert.match(read.content, /other = 7/);
+
+	// glob with no path spans both roots — primary shows relative, secondary absolute.
+	const globbed = await run(tools.glob!, { pattern: '**/*.ts' });
+	assert.match(globbed.content, /src\/a\.ts/, 'primary root file, relative path');
+	assert.match(globbed.content, new RegExp(join(secondary, 'lib', 'c.ts').replace(/[.]/g, '\\.')), 'secondary root file, absolute path');
+
+	// grep spans both roots too.
+	const grepped = await run(tools.grep!, { pattern: 'other' });
+	assert.ok(grepped.content.includes(join(secondary, 'lib', 'c.ts')), 'grep reaches the secondary root');
+
+	// A path in neither root is still refused.
+	await assert.rejects(() => run(tools.read_file!, { path: '/etc/passwd' }), /escapes the workspace/);
+});
+
 test('update_plan is a no-op meta-tool that renders the checklist', async () => {
-	const tools = byName(createWorkspaceTools('/repo'));
+	const tools = byName(createWorkspaceTools(['/repo']));
 	const plan = tools.update_plan!;
 	assert.equal(plan.isReadOnly({}), true, 'meta-tool is always allowed');
 

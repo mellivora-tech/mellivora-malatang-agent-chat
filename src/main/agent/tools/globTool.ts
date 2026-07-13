@@ -5,7 +5,7 @@
 
 import { defineTool } from '../agentTools.js';
 import type { IAgentTool } from '../agentTypes.js';
-import { asRecord, globToRegExp, invalid, resolveInWorkspace, toWorkspacePath, valid, walkFiles } from './workspace.js';
+import { asRecord, globToRegExp, invalid, resolveInWorkspace, toWorkspacePath, valid, walkFiles, workspaceMatchPath } from './workspace.js';
 
 const MAX_RESULTS = 200;
 
@@ -14,7 +14,7 @@ interface IGlobInput {
 	readonly path?: string;
 }
 
-export function createGlobTool(cwd: string): IAgentTool {
+export function createGlobTool(roots: readonly string[]): IAgentTool {
 	return defineTool({
 		name: 'glob',
 		description: 'Find files by glob pattern (e.g. "**/*.ts", "src/**/*.{ts,css}"). Matches against workspace-relative paths; ignores node_modules, .git and build output.',
@@ -44,19 +44,24 @@ export function createGlobTool(cwd: string): IAgentTool {
 		},
 		call: async (input, context) => {
 			const { pattern, path } = input as IGlobInput;
-			const root = resolveInWorkspace(cwd, path ?? '.');
+			// A `path` scopes to one directory; otherwise every code root is searched.
+			const searchDirs = path !== undefined ? [resolveInWorkspace(roots, path)] : [...roots];
 			const regExp = globToRegExp(pattern);
 
 			const matches: string[] = [];
 			let truncated = false;
-			for await (const absolute of walkFiles(root, { signal: context.signal })) {
-				const relative = toWorkspacePath(cwd, absolute);
-				if (regExp.test(relative)) {
-					matches.push(relative);
-					if (matches.length >= MAX_RESULTS) {
-						truncated = true;
-						break;
+			for (const dir of searchDirs) {
+				for await (const absolute of walkFiles(dir, { signal: context.signal })) {
+					if (regExp.test(workspaceMatchPath(roots, absolute))) {
+						matches.push(toWorkspacePath(roots, absolute));
+						if (matches.length >= MAX_RESULTS) {
+							truncated = true;
+							break;
+						}
 					}
+				}
+				if (truncated) {
+					break;
 				}
 			}
 

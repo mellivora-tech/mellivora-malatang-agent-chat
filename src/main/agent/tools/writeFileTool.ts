@@ -14,7 +14,7 @@ interface IWriteFileInput {
 	readonly content: string;
 }
 
-export function createWriteFileTool(cwd: string): IAgentTool {
+export function createWriteFileTool(roots: readonly string[]): IAgentTool {
 	return defineTool({
 		name: 'write_file',
 		description: 'Create or overwrite a UTF-8 text file in the workspace. Parent directories are created as needed. Prefer edit_file for changing part of an existing file.',
@@ -44,7 +44,7 @@ export function createWriteFileTool(cwd: string): IAgentTool {
 		},
 		call: async input => {
 			const { path, content } = input as IWriteFileInput;
-			const absolute = resolveInWorkspace(cwd, path);
+			const absolute = resolveInWorkspace(roots, path);
 
 			let existed = false;
 			try {
@@ -56,7 +56,7 @@ export function createWriteFileTool(cwd: string): IAgentTool {
 			await mkdir(dirname(absolute), { recursive: true });
 			await writeFile(absolute, content, 'utf8');
 			const lines = content === '' ? 0 : content.split('\n').length;
-			return { content: `${existed ? 'Overwrote' : 'Created'} ${toWorkspacePath(cwd, absolute)} (${lines} lines).` };
+			return { content: `${existed ? 'Overwrote' : 'Created'} ${toWorkspacePath(roots, absolute)} (${lines} lines).` };
 		},
 	});
 }

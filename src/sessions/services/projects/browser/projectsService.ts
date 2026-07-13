@@ -6,7 +6,7 @@
 import { observableValue, type IObservable } from '../../../base/common/observable.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
 import type { IAppStateBridge } from '../../appState/common/appState.js';
-import type { IProject, IProjectsBridge } from '../common/projects.js';
+import type { ICodeRootView, IDiscoveredRepo, IProject, IProjectsBridge, IRemoteRepoInput, IRemoteRepoView } from '../common/projects.js';
 
 export const IProjectsService = createDecorator<IProjectsService>('projectsService');
 
@@ -16,10 +16,24 @@ export interface IProjectsService {
 	initialize(): Promise<void>;
 	setActiveProject(projectId: string): void;
 	addProjectViaDialog(): Promise<IProject | undefined>;
+	/** Delete a project and refresh the list. */
+	deleteProject(projectId: string): Promise<void>;
 	/** Workspace-relative file paths under the project root, for the composer's @-mention picker. Empty when unsupported. */
 	listProjectFiles(projectId: string): Promise<readonly string[]>;
 	/** Open the project directory in the OS file manager. */
 	revealInFolder?(projectId: string): Promise<boolean>;
+	/** The project's tracked code roots, annotated with detected VCS. */
+	listCodeRoots(projectId: string): Promise<readonly ICodeRootView[]>;
+	/** Scan for git/svn repos to offer as code roots (defaults to the user's home). */
+	discoverRepos(projectId: string, scanRoot?: string): Promise<readonly IDiscoveredRepo[]>;
+	addCodeRoot(projectId: string, path: string): Promise<readonly ICodeRootView[]>;
+	removeCodeRoot(projectId: string, path: string): Promise<readonly ICodeRootView[]>;
+	/** Folder-picker add; resolves to undefined if the user cancels. */
+	pickCodeRoot(projectId: string): Promise<readonly ICodeRootView[] | undefined>;
+	listRemotes(projectId: string): Promise<readonly IRemoteRepoView[]>;
+	addRemote(projectId: string, input: IRemoteRepoInput): Promise<readonly IRemoteRepoView[]>;
+	removeRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]>;
+	cloneRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]>;
 }
 
 export class ProjectsService implements IProjectsService {
@@ -68,6 +82,50 @@ export class ProjectsService implements IProjectsService {
 		return (await this.bridge?.revealInFolder(projectId)) ?? false;
 	}
 
+	async listCodeRoots(projectId: string): Promise<readonly ICodeRootView[]> {
+		return (await this.bridge?.listCodeRoots(projectId)) ?? [];
+	}
+
+	async discoverRepos(projectId: string, scanRoot?: string): Promise<readonly IDiscoveredRepo[]> {
+		return (await this.bridge?.discoverRepos(projectId, scanRoot)) ?? [];
+	}
+
+	async addCodeRoot(projectId: string, path: string): Promise<readonly ICodeRootView[]> {
+		const roots = (await this.bridge?.addCodeRoot(projectId, path)) ?? [];
+		await this.refresh();
+		return roots;
+	}
+
+	async removeCodeRoot(projectId: string, path: string): Promise<readonly ICodeRootView[]> {
+		const roots = (await this.bridge?.removeCodeRoot(projectId, path)) ?? [];
+		await this.refresh();
+		return roots;
+	}
+
+	async pickCodeRoot(projectId: string): Promise<readonly ICodeRootView[] | undefined> {
+		const roots = await this.bridge?.pickCodeRoot(projectId);
+		if (roots) {
+			await this.refresh();
+		}
+		return roots;
+	}
+
+	async listRemotes(projectId: string): Promise<readonly IRemoteRepoView[]> {
+		return (await this.bridge?.listRemotes(projectId)) ?? [];
+	}
+
+	async addRemote(projectId: string, input: IRemoteRepoInput): Promise<readonly IRemoteRepoView[]> {
+		return (await this.bridge?.addRemote(projectId, input)) ?? [];
+	}
+
+	async removeRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]> {
+		return (await this.bridge?.removeRemote(projectId, remoteId)) ?? [];
+	}
+
+	async cloneRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]> {
+		return (await this.bridge?.cloneRemote(projectId, remoteId)) ?? [];
+	}
+
 	async addProjectViaDialog(): Promise<IProject | undefined> {
 		if (!this.bridge) {
 			return undefined;
@@ -81,6 +139,14 @@ export class ProjectsService implements IProjectsService {
 		await this.refresh();
 		this.setActiveProject(project.id);
 		return project;
+	}
+
+	async deleteProject(projectId: string): Promise<void> {
+		if (!this.bridge) {
+			return;
+		}
+		await this.bridge.deleteProject(projectId);
+		await this.refresh();
 	}
 
 	private async refresh(): Promise<void> {

@@ -23,16 +23,17 @@ export interface IWorkspaceToolsOptions {
 }
 
 /**
- * Build the tool set bound to a single workspace root (`cwd`). Every file tool
- * resolves model-supplied paths against `cwd` and refuses to escape it. bash is
- * NOT sandboxed (it can run anything) — gates route it to explicit approval.
+ * Build the tool set bound to the project's code roots (`roots`, non-empty;
+ * `roots[0]` is the primary — relative paths and bash's cwd resolve there).
+ * File tools accept a path inside ANY root and refuse to escape all of them.
+ * bash is NOT sandboxed (it can run anything) — gates route it to approval.
  */
-export function createWorkspaceTools(cwd: string, options: IWorkspaceToolsOptions = {}): readonly IAgentTool[] {
+export function createWorkspaceTools(roots: readonly string[], options: IWorkspaceToolsOptions = {}): readonly IAgentTool[] {
 	// update_plan is a meta-tool (no side effects) available in every mode — it
 	// helps the model bound its own exploration.
-	const readOnly = [createUpdatePlanTool(), createReadFileTool(cwd), createListDirTool(cwd), createGlobTool(cwd), createGrepTool(cwd)];
+	const readOnly = [createUpdatePlanTool(), createReadFileTool(roots), createListDirTool(roots), createGlobTool(roots), createGrepTool(roots)];
 	if (!options.includeMutations) {
 		return readOnly;
 	}
-	return [...readOnly, createWriteFileTool(cwd), createEditFileTool(cwd), createBashTool(cwd)];
+	return [...readOnly, createWriteFileTool(roots), createEditFileTool(roots), createBashTool(roots)];
 }

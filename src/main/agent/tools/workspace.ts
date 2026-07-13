@@ -10,24 +10,48 @@ import type { IInputValidation } from '../agentTypes.js';
 /** Directories the workspace walkers skip by default (noise / VCS / build output). */
 export const DEFAULT_IGNORED_DIRS: ReadonlySet<string> = new Set(['.git', 'node_modules', 'dist', 'out', 'build', '.next', '.cache', 'coverage', '.turbo']);
 
+/** True when `absolute` is `root` itself or lives inside it (no `..`/absolute escape). */
+function isInside(root: string, absolute: string): boolean {
+	const rel = relative(root, absolute);
+	return rel === '' || !(rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
+}
+
+/** The first code root that contains `absolute`, or undefined if none does. */
+function containingRoot(roots: readonly string[], absolute: string): string | undefined {
+	return roots.find(root => isInside(root, absolute));
+}
+
 /**
- * Resolve a model-supplied path against the workspace root, refusing to escape it.
- * Absolute paths are allowed only when they already fall inside the workspace;
- * anything that would resolve outside `cwd` (via `..` or an outside absolute path)
- * throws — the fail-closed boundary between the model and the filesystem.
+ * Resolve a model-supplied path against the code roots, refusing to escape them.
+ * Relative paths resolve against the PRIMARY root (`roots[0]`); a path is allowed
+ * when it falls inside ANY root. Anything outside every root throws — the
+ * fail-closed boundary between the model and the filesystem.
  */
-export function resolveInWorkspace(cwd: string, input: string): string {
-	const absolute = isAbsolute(input) ? resolve(input) : resolve(cwd, input);
-	const rel = relative(cwd, absolute);
-	if (rel !== '' && (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel))) {
+export function resolveInWorkspace(roots: readonly string[], input: string): string {
+	const absolute = isAbsolute(input) ? resolve(input) : resolve(roots[0] ?? process.cwd(), input);
+	if (!containingRoot(roots, absolute)) {
 		throw new Error(`Path escapes the workspace: ${input}`);
 	}
 	return absolute;
 }
 
-/** Workspace-relative, forward-slash path for display back to the model. */
-export function toWorkspacePath(cwd: string, absolute: string): string {
-	const rel = relative(cwd, absolute);
+/**
+ * The path shown back to the model. With a single root it is root-relative
+ * (compact). With multiple roots it is ABSOLUTE — unambiguous across repos and
+ * always resolvable via {@link resolveInWorkspace}.
+ */
+export function toWorkspacePath(roots: readonly string[], absolute: string): string {
+	if (roots.length > 1) {
+		return absolute;
+	}
+	const rel = relative(roots[0] ?? '', absolute);
+	return rel === '' ? '.' : rel.split(sep).join('/');
+}
+
+/** The path RELATIVE to its containing root — what glob/grep patterns match against, so `src/**` works per repo. */
+export function workspaceMatchPath(roots: readonly string[], absolute: string): string {
+	const root = containingRoot(roots, absolute) ?? roots[0] ?? '';
+	const rel = relative(root, absolute);
 	return rel === '' ? '.' : rel.split(sep).join('/');
 }
 

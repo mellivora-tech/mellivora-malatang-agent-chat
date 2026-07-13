@@ -25,7 +25,7 @@ function countOccurrences(haystack: string, needle: string): number {
 	return count;
 }
 
-export function createEditFileTool(cwd: string): IAgentTool {
+export function createEditFileTool(roots: readonly string[]): IAgentTool {
 	return defineTool({
 		name: 'edit_file',
 		description: 'Replace an exact string in a workspace file. `old_string` must match exactly (including whitespace) and be unique in the file unless `replace_all` is true.',
@@ -64,8 +64,8 @@ export function createEditFileTool(cwd: string): IAgentTool {
 		},
 		call: async input => {
 			const { path, old_string, new_string, replace_all } = input as IEditFileInput;
-			const absolute = resolveInWorkspace(cwd, path);
-			const display = toWorkspacePath(cwd, absolute);
+			const absolute = resolveInWorkspace(roots, path);
+			const display = toWorkspacePath(roots, absolute);
 
 			const original = await readFile(absolute, 'utf8');
 			const occurrences = countOccurrences(original, old_string);

@@ -6,7 +6,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { defineTool } from '../agentTools.js';
 import type { IAgentTool } from '../agentTypes.js';
-import { asRecord, globToRegExp, invalid, resolveInWorkspace, toWorkspacePath, valid, walkFiles } from './workspace.js';
+import { asRecord, globToRegExp, invalid, resolveInWorkspace, toWorkspacePath, valid, walkFiles, workspaceMatchPath } from './workspace.js';
 
 const MAX_MATCHES = 200;
 const MAX_FILE_BYTES = 1_000_000;
@@ -30,7 +30,7 @@ function looksBinary(buffer: Buffer): boolean {
 	return false;
 }
 
-export function createGrepTool(cwd: string): IAgentTool {
+export function createGrepTool(roots: readonly string[]): IAgentTool {
 	return defineTool({
 		name: 'grep',
 		description: 'Search file contents by JavaScript regular expression. Returns "path:line: text" matches; ignores node_modules, .git, build output and binary files.',
@@ -73,35 +73,38 @@ export function createGrepTool(cwd: string): IAgentTool {
 		},
 		call: async (input, context) => {
 			const { pattern, path, glob, ignoreCase } = input as IGrepInput;
-			const root = resolveInWorkspace(cwd, path ?? '.');
+			// A `path` scopes to one directory; otherwise every code root is searched.
+			const searchDirs = path !== undefined ? [resolveInWorkspace(roots, path)] : [...roots];
 			const regExp = new RegExp(pattern, ignoreCase ? 'i' : '');
 			const globRegExp = glob ? globToRegExp(glob) : undefined;
 
 			const lines: string[] = [];
 			let truncated = false;
-			outer: for await (const absolute of walkFiles(root, { signal: context.signal })) {
-				const relative = toWorkspacePath(cwd, absolute);
-				if (globRegExp && !globRegExp.test(relative)) {
-					continue;
-				}
+			outer: for (const dir of searchDirs) {
+				for await (const absolute of walkFiles(dir, { signal: context.signal })) {
+					if (globRegExp && !globRegExp.test(workspaceMatchPath(roots, absolute))) {
+						continue;
+					}
 
-				const info = await stat(absolute);
-				if (info.size > MAX_FILE_BYTES) {
-					continue;
-				}
-				const buffer = await readFile(absolute);
-				if (looksBinary(buffer)) {
-					continue;
-				}
+					const info = await stat(absolute);
+					if (info.size > MAX_FILE_BYTES) {
+						continue;
+					}
+					const buffer = await readFile(absolute);
+					if (looksBinary(buffer)) {
+						continue;
+					}
 
-				const fileLines = buffer.toString('utf8').split('\n');
-				for (let i = 0; i < fileLines.length; i++) {
-					if (regExp.test(fileLines[i]!)) {
-						const text = fileLines[i]!.trim().slice(0, MAX_LINE_LENGTH);
-						lines.push(`${relative}:${i + 1}: ${text}`);
-						if (lines.length >= MAX_MATCHES) {
-							truncated = true;
-							break outer;
+					const display = toWorkspacePath(roots, absolute);
+					const fileLines = buffer.toString('utf8').split('\n');
+					for (let i = 0; i < fileLines.length; i++) {
+						if (regExp.test(fileLines[i]!)) {
+							const text = fileLines[i]!.trim().slice(0, MAX_LINE_LENGTH);
+							lines.push(`${display}:${i + 1}: ${text}`);
+							if (lines.length >= MAX_MATCHES) {
+								truncated = true;
+								break outer;
+							}
 						}
 					}
 				}

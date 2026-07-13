@@ -13,17 +13,25 @@ import { createRunLogger } from './agent/observability/runLogger.js';
 import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
+import { createDataSourceTools, type IQueryableSource } from './agent/tools/dataSourceTools.js';
+import { createSshTools, type ISshServer } from './agent/tools/sshTool.js';
 import { createModelClient } from './agent/createModelClient.js';
 import { generateSessionTitle } from './agent/sessionTitle.js';
-import { getProject } from './projectsStorage.js';
+import { getCredential } from './credentialStorage.js';
+import { createSafeStorageCipher } from './secretCipher.js';
+import { readWorkspaceConfig } from './workspaceConfigStorage.js';
+import { ensureRemotesCloned, getProject, projectCodeRoots } from './projectsStorage.js';
 import { resolveModelConfig } from './modelConfigStorage.js';
 import { formatSkillBlock, getSkill } from './skillsStorage.js';
 
 const DEFAULT_SYSTEM = 'You are a helpful coding agent.';
 
 /** System prompt for a run bound to a workspace, reflecting the permission mode. */
-function workspaceSystemPrompt(cwd: string, mode: PermissionMode): string {
-	const lines = ["You are a helpful coding agent working inside the user's project.", `Working directory: ${cwd}`];
+function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): string {
+	const lines = ["You are a helpful coding agent working inside the user's project.", `Working directory: ${roots[0]}`];
+	if (roots.length > 1) {
+		lines.push(`Additional code roots (address files in these with ABSOLUTE paths): ${roots.slice(1).join(', ')}.`);
+	}
 	if (mode === 'plan') {
 		lines.push(
 			'You are in plan mode: explore with the read-only tools (read_file, list_dir, glob, grep) and present a plan.',
@@ -40,7 +48,11 @@ function workspaceSystemPrompt(cwd: string, mode: PermissionMode): string {
 			'For any multi-step task, call update_plan first to lay out a short finite checklist, keep it updated as you go, and once every step is done STOP and give your final answer — do not keep pulling threads. If a question cannot be answered from the code alone (e.g. it depends on runtime data), say so and stop rather than reading more.',
 		);
 	}
-	lines.push('All paths are relative to the working directory; you cannot access files outside it.');
+	lines.push(
+		roots.length > 1
+			? 'Relative paths resolve against the working directory; use absolute paths for the other code roots. You cannot access files outside these roots.'
+			: 'All paths are relative to the working directory; you cannot access files outside it.',
+	);
 	return lines.join('\n');
 }
 
@@ -125,11 +137,55 @@ export function registerAgentIpc(dataRoot: string): void {
 
 		const mode = asPermissionMode(payload.permissionMode);
 
+		const controller = new AbortController();
+		abortControllers.set(payload.sessionId, controller);
+		const sender = event.sender;
+
 		// Bind file tools to the session's project directory. The workspace root is
 		// resolved here from the stored project — never from a renderer-supplied path.
 		const project = payload.projectId ? await getProject(dataRoot, payload.projectId) : undefined;
-		const cwd = project?.path;
-		const tools: readonly IAgentTool[] = cwd ? createWorkspaceTools(cwd, { includeMutations: mode !== 'plan' }) : [];
+		// The agent operates over ALL the project's code roots: explicit local
+		// codeRoots (else the workspace/path) PLUS any remote repos, cloned now if
+		// not already on disk (best-effort — a clone failure just drops that root).
+		const localRoots = project ? projectCodeRoots(project) : [];
+		const remoteRoots = project ? await ensureRemotesCloned(dataRoot, project.id, controller.signal) : [];
+		// Dedupe: a path must never reach the file tools twice (e.g. if a clone dir
+		// somehow also got tracked as a local root).
+		const roots = [...new Set([...localRoots, ...remoteRoots])];
+		// The primary root is the bash cwd + where relative paths and project
+		// instructions resolve.
+		const cwd = roots[0];
+		const fileTools = roots.length > 0 ? createWorkspaceTools(roots, { includeMutations: mode !== 'plan' }) : [];
+
+		// Read-only data-source tools: the project's configured databases become
+		// queryable (SELECT only). Coordinates come from the workspace config;
+		// credentials from the (encrypted) app store, resolved per query.
+		const cipher = createSafeStorageCipher();
+		const workspacePath = project?.workspacePath ?? project?.path;
+		const wsConfig = workspacePath ? await readWorkspaceConfig(workspacePath) : undefined;
+		const envName = new Map((wsConfig?.environments ?? []).map(environment => [environment.id, environment.name]));
+		const querySources: IQueryableSource[] = (wsConfig?.dataSources ?? [])
+			.filter(dataSource => dataSource.kind === 'database')
+			.map(dataSource => ({
+				id: dataSource.id,
+				label: dataSource.label,
+				environmentName: envName.get(dataSource.environmentId) ?? '',
+				coordinates: dataSource.coordinates as IQueryableSource['coordinates'],
+			}));
+		const dataSourceTools = querySources.length > 0 ? createDataSourceTools({ sources: querySources, getSecret: id => getCredential(dataRoot, id, cipher) }) : [];
+
+		// SSH servers → run_on_server (mutation-class: gated, and omitted in plan mode like bash).
+		const sshServers: ISshServer[] = (wsConfig?.dataSources ?? [])
+			.filter(dataSource => dataSource.kind === 'server')
+			.map(dataSource => ({
+				id: dataSource.id,
+				label: dataSource.label,
+				environmentName: envName.get(dataSource.environmentId) ?? '',
+				coordinates: dataSource.coordinates as ISshServer['coordinates'],
+			}));
+		const sshTools = sshServers.length > 0 && mode !== 'plan' ? createSshTools({ servers: sshServers, getSecret: id => getCredential(dataRoot, id, cipher) }) : [];
+
+		const tools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...sshTools];
 
 		// Project instructions (AGENTS.md/CLAUDE.md at the root) ride the system
 		// prompt deterministically instead of hoping the model reads them.
@@ -144,10 +200,6 @@ export function registerAgentIpc(dataRoot: string): void {
 				skillBlocks.push(formatSkillBlock(skill));
 			}
 		}
-
-		const controller = new AbortController();
-		abortControllers.set(payload.sessionId, controller);
-		const sender = event.sender;
 
 		// A mutation the gate cannot auto-decide becomes a question to the renderer;
 		// the reply (or an abort / run end) resolves it. Denied by default.
@@ -189,7 +241,15 @@ export function registerAgentIpc(dataRoot: string): void {
 		});
 
 		try {
-			const workspacePrompt = cwd ? workspaceSystemPrompt(cwd, mode) : DEFAULT_SYSTEM;
+			const dbNote =
+				querySources.length > 0
+					? `\nThis project has ${querySources.length} configured database data source(s). Use list_data_sources to see them and query_data_source (read-only SELECT) to inspect data.`
+					: '';
+			const sshNote =
+				sshTools.length > 0
+					? `\nThis project has ${sshServers.length} configured server(s). Use list_servers and run_on_server to execute commands over SSH (may require approval).`
+					: '';
+			const workspacePrompt = (roots.length > 0 ? workspaceSystemPrompt(roots, mode) : DEFAULT_SYSTEM) + dbNote + sshNote;
 			const instructionsBlock = instructions ? formatInstructionsBlock(instructions) : undefined;
 			const baseSystem = instructionsBlock ? `${workspacePrompt}\n\n${instructionsBlock}` : workspacePrompt;
 			const skillsBlock = skillBlocks.length > 0 ? skillBlocks.join('\n\n') : undefined;

@@ -9,7 +9,24 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
-import { createProject, ensureProject, ensureProjectsRoot, getProject, listProjects, resolveDataRoot } from '../../src/main/projectsStorage.js';
+import {
+	addCodeRoot,
+	addRemote,
+	createProject,
+	detectVcs,
+	ensureCodeRootsSeeded,
+	ensureProject,
+	ensureProjectsRoot,
+	getProject,
+	listCodeRoots,
+	listProjects,
+	listRemotes,
+	remoteLocalPath,
+	removeCodeRoot,
+	removeRemote,
+	resolveDataRoot,
+} from '../../src/main/projectsStorage.js';
+import type { CommandRunner } from '../../src/main/repoClone.js';
 
 async function createTempRoot(): Promise<string> {
 	return mkdtemp(join(tmpdir(), 'agent-chat-projects-'));
@@ -146,6 +163,124 @@ test('ensureProjectsRoot creates the projects directory', async () => {
 		await ensureProjectsRoot(dataRoot);
 		const stats = await stat(join(dataRoot, 'projects'));
 		assert.ok(stats.isDirectory());
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('addCodeRoot / removeCodeRoot persist absolute, deduped paths', async () => {
+	const root = await createTempRoot();
+	try {
+		const project = await createProject(root, { name: 'app', path: '/tmp/app' });
+		await addCodeRoot(root, project.id, '/tmp/app/../app/service');
+		const afterAdd = await addCodeRoot(root, project.id, '/tmp/app/service'); // same resolved path → deduped
+		assert.deepEqual(afterAdd, [resolve('/tmp/app/service')]);
+		assert.deepEqual((await getProject(root, project.id))?.codeRoots, [resolve('/tmp/app/service')]);
+
+		const afterRemove = await removeCodeRoot(root, project.id, resolve('/tmp/app/service'));
+		assert.deepEqual(afterRemove, []);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('detectVcs / listCodeRoots annotate roots by their VCS marker', async () => {
+	const root = await createTempRoot();
+	try {
+		const gitDir = join(root, 'code', 'gitrepo');
+		await mkdir(join(gitDir, '.git'), { recursive: true });
+		const plainDir = join(root, 'code', 'plain');
+		await mkdir(plainDir, { recursive: true });
+
+		assert.equal(await detectVcs(gitDir), 'git');
+		assert.equal(await detectVcs(plainDir), undefined);
+
+		const project = await createProject(root, { name: 'app', path: '/tmp/app' });
+		await addCodeRoot(root, project.id, gitDir);
+		await addCodeRoot(root, project.id, plainDir);
+		const views = await listCodeRoots(root, project.id);
+		assert.deepEqual(
+			views.map(view => [view.name, view.vcs]),
+			[
+				['gitrepo', 'git'],
+				['plain', undefined],
+			],
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('ensureCodeRootsSeeded seeds workspace repos once, then respects removals', async () => {
+	const root = await createTempRoot();
+	const ws = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+	try {
+		await mkdir(join(ws, 'svc-a', '.git'), { recursive: true });
+		await mkdir(join(ws, 'plain'), { recursive: true }); // not a repo — not seeded
+		const project = await createProject(root, { name: 'app', path: ws });
+
+		await ensureCodeRootsSeeded(root, project.id);
+		const seeded = await listCodeRoots(root, project.id);
+		assert.deepEqual(
+			seeded.map(view => view.name),
+			['svc-a'],
+			'only the git repo under the workspace is seeded',
+		);
+
+		// Remove it, then re-seed — the empty (present) array must not be re-populated.
+		await removeCodeRoot(root, project.id, seeded[0]!.path);
+		await ensureCodeRootsSeeded(root, project.id);
+		assert.deepEqual(await listCodeRoots(root, project.id), []);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(ws, { recursive: true, force: true });
+	}
+});
+
+test('addRemote / listRemotes / removeRemote manage remote repos and their clone state', async () => {
+	const root = await createTempRoot();
+	try {
+		const project = await createProject(root, { name: 'app', path: '/tmp/app' });
+		const added = await addRemote(root, project.id, { url: 'https://github.com/acme/order-service.git' });
+		// A normalized-equal URL (ssh form here) is rejected as a duplicate.
+		await assert.rejects(() => addRemote(root, project.id, { url: 'git@github.com:acme/order-service.git' }), /已添加/);
+		assert.equal(added.length, 1);
+		const remote = added[0]!;
+		assert.equal(remote.name, 'order-service');
+		assert.equal(remote.vcs, 'git');
+		assert.match(remote.id, /^repo-/);
+
+		const views = await listRemotes(root, project.id);
+		assert.equal(views[0]!.localPath, remoteLocalPath(root, project.id, remote.id));
+		assert.equal(views[0]!.cloned, false, 'not cloned until fetched');
+
+		// Simulate a clone landing on disk → cloned becomes true.
+		await mkdir(join(remoteLocalPath(root, project.id, remote.id), '.git'), { recursive: true });
+		assert.equal((await listRemotes(root, project.id))[0]!.cloned, true);
+
+		await removeRemote(root, project.id, remote.id);
+		assert.deepEqual(await listRemotes(root, project.id), []);
+		await assert.rejects(() => stat(remoteLocalPath(root, project.id, remote.id)), 'the clone dir is deleted');
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('addRemote dedups against a local code root by its git origin (normalized)', async () => {
+	const root = await createTempRoot();
+	try {
+		const project = await createProject(root, { name: 'app', path: '/tmp/app' });
+		await addCodeRoot(root, project.id, '/code/order-service');
+		// Fake `git -C <path> config --get remote.origin.url` for that local root.
+		const fakeGit: CommandRunner = async (_file, args) =>
+			args.includes('/code/order-service') ? { code: 0, output: 'git@github.com:acme/order-service.git\n' } : { code: 1, output: '' };
+
+		// Same repo (https form) as the local root → rejected.
+		await assert.rejects(() => addRemote(root, project.id, { url: 'https://github.com/acme/order-service.git' }, fakeGit), /本地代码/);
+		// A different repo is accepted.
+		const ok = await addRemote(root, project.id, { url: 'https://github.com/acme/gateway.git' }, fakeGit);
+		assert.equal(ok.length, 1);
+		assert.equal(ok[0]!.name, 'gateway');
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

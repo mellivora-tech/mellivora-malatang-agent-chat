@@ -10,7 +10,7 @@ import { ToolBar } from '../../../base/browser/ui/toolbar/toolbar.js';
 import type { IAction } from '../../../base/common/actions.js';
 import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
 import { SkillSettingsView } from '../../../browser/parts/skillSettingsView.js';
-import { EnvironmentsConfigView } from '../../../browser/parts/environmentsConfigView.js';
+import { ProjectConfigView } from '../../../browser/parts/projectConfigView.js';
 import { settingsDropdown, settingsRow, settingsSection, settingsToggle } from '../../../browser/parts/settingsControls.js';
 import { readPreferences, updatePreferences } from '../../../browser/parts/settingsPrefs.js';
 import type { ThemeId } from '../../../platform/theme/theme.js';
@@ -474,9 +474,12 @@ export class SessionsList extends Disposable {
 			});
 		};
 
-		addItem('codicon-server-environment', 'Configure environments', () => this.openEnvironmentsDialog(projectId, projectName));
+		addItem('codicon-settings-gear', '项目配置', () => this.openProjectConfig(projectId, projectName));
 		if (this.options.projectsService?.revealInFolder) {
-			addItem('codicon-folder-opened', 'Reveal in Finder', () => void this.options.projectsService!.revealInFolder!(projectId));
+			addItem('codicon-folder-opened', '在 Finder 中显示', () => void this.options.projectsService!.revealInFolder!(projectId));
+		}
+		if (this.options.projectsService?.deleteProject) {
+			addItem('codicon-trash', '删除项目', () => this.confirmDeleteProject(projectId, projectName));
 		}
 
 		host.appendChild(menu);
@@ -487,50 +490,83 @@ export class SessionsList extends Disposable {
 		document.addEventListener('mousedown', onOutside, true);
 	}
 
-	/** Open the per-project environments & data-sources editor in a modal dialog. */
-	private openEnvironmentsDialog(projectId: string, projectName: string): void {
-		const service = this.options.environmentsService;
-		if (!service || document.querySelector('.sessions-env-dialog-backdrop')) {
+	/** Confirm and delete a project (removes its sessions + config; external code is untouched). */
+	private confirmDeleteProject(projectId: string, projectName: string): void {
+		const service = this.options.projectsService;
+		if (!service?.deleteProject || document.querySelector('.sessions-discover-backdrop')) {
 			return;
 		}
 		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
-
 		const backdrop = document.createElement('div');
-		backdrop.className = 'sessions-env-dialog-backdrop';
+		backdrop.className = 'sessions-discover-backdrop';
 		const dialog = append(backdrop, document.createElement('div'));
-		dialog.className = 'sessions-env-dialog';
+		dialog.className = 'sessions-discover-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', `Environments for ${projectName}`);
-
+		dialog.setAttribute('aria-label', '删除项目');
 		const header = append(dialog, document.createElement('div'));
-		header.className = 'sessions-env-dialog-header';
-		const title = append(header, document.createElement('span'));
-		title.className = 'sessions-env-dialog-title';
-		title.textContent = projectName;
-		const closeButton = append(header, document.createElement('button')) as HTMLButtonElement;
-		closeButton.className = 'sessions-settings-close';
-		closeButton.type = 'button';
-		closeButton.title = 'Close';
-		closeButton.setAttribute('aria-label', 'Close');
-		append(closeButton, document.createElement('span')).className = 'codicon codicon-close';
-
-		const view = new EnvironmentsConfigView(projectId, service);
+		header.className = 'sessions-discover-header';
+		append(header, document.createElement('span')).textContent = '删除项目';
 		const body = append(dialog, document.createElement('div'));
-		body.className = 'sessions-env-dialog-body';
-		body.appendChild(view.element);
+		body.className = 'sessions-discover-body';
+		body.textContent = `确定删除项目 “${projectName}” 吗?这将移除该项目及其所有会话与配置。本地代码不受影响,不会被删除。`;
 
 		const close = (): void => {
-			view.dispose();
 			backdrop.remove();
+			document.removeEventListener('keydown', onKey, true);
 		};
-		closeButton.addEventListener('click', close);
+		const onKey = (event: KeyboardEvent): void => {
+			if (event.key === 'Escape') {
+				close();
+			}
+		};
+		document.addEventListener('keydown', onKey, true);
 		backdrop.addEventListener('mousedown', event => {
 			if (event.target === backdrop) {
 				close();
 			}
 		});
+
+		const footer = append(dialog, document.createElement('div'));
+		footer.className = 'sessions-discover-footer';
+		const confirmButton = append(footer, document.createElement('button')) as HTMLButtonElement;
+		confirmButton.className = 'sessions-settings-btn sessions-danger-btn';
+		confirmButton.type = 'button';
+		confirmButton.textContent = '删除';
+		confirmButton.addEventListener('click', () => {
+			close();
+			void service.deleteProject(projectId);
+		});
+		const cancelButton = append(footer, document.createElement('button')) as HTMLButtonElement;
+		cancelButton.className = 'sessions-settings-btn';
+		cancelButton.type = 'button';
+		cancelButton.textContent = '取消';
+		cancelButton.addEventListener('click', close);
+
 		host.appendChild(backdrop);
+	}
+
+	/** Open the per-project configuration page (full-bleed settings shell). */
+	private openProjectConfig(projectId: string, projectName: string): void {
+		const service = this.options.environmentsService;
+		if (!service || document.querySelector('.sessions-settings-dialog-backdrop')) {
+			return;
+		}
+		const host = document.querySelector<HTMLElement>('.agent-sessions-workbench') ?? this.container;
+
+		function close(): void {
+			document.removeEventListener('keydown', onKeyDown, true);
+			view.dispose();
+			view.element.remove();
+		}
+		const view = new ProjectConfigView(projectId, projectName, service, this.options.projectsService, close);
+		const onKeyDown = (event: KeyboardEvent): void => {
+			if (event.key === 'Escape') {
+				close();
+			}
+		};
+		document.addEventListener('keydown', onKeyDown, true);
+		host.appendChild(view.element);
 	}
 
 	private renderSidebarTreeSection(container: HTMLElement, id: SidebarTreeSectionId, title: string, contentElement: HTMLElement): void {

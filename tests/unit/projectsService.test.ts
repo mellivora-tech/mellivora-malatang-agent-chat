@@ -40,12 +40,22 @@ function createBridge(options: { projects?: IProject[]; picked?: IProject | unde
 			return project;
 		},
 		revealInFolder: async () => true,
+		deleteProject: async () => {},
 		pickAndCreate: async () => {
 			if (options.picked) {
 				projects.push(options.picked);
 			}
 			return options.picked;
 		},
+		listCodeRoots: async () => [],
+		discoverRepos: async () => [],
+		addCodeRoot: async () => [],
+		removeCodeRoot: async () => [],
+		pickCodeRoot: async () => undefined,
+		listRemotes: async () => [],
+		addRemote: async () => [],
+		removeRemote: async () => [],
+		cloneRemote: async () => [],
 	};
 }
 

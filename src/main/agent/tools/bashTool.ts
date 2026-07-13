@@ -25,7 +25,10 @@ interface IBashInput {
  * elsewhere it is unsandboxed. Either way the permission gates route bash to
  * explicit approval in every mode short of full access.
  */
-export function createBashTool(cwd: string): IAgentTool {
+export function createBashTool(roots: readonly string[]): IAgentTool {
+	// bash runs from the primary root; it is not boundary-checked (unsandboxed by
+	// design, gated by permission), so the model can `cd` into any other root.
+	const cwd = roots[0] ?? process.cwd();
 	return defineTool({
 		name: 'bash',
 		description: 'Run a shell command from the workspace root and return its output. Use for builds, tests, git, and other project commands.',

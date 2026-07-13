@@ -15,7 +15,7 @@ import type {
 	ModelEffort,
 } from '../sessions/services/models/common/models.js';
 import type { IGitBridge } from '../sessions/services/git/common/git.js';
-import type { IProjectInput, IProjectsBridge } from '../sessions/services/projects/common/projects.js';
+import type { IProjectInput, IProjectsBridge, IRemoteRepoInput } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
 import type { IDataSourceInput, IDataSourceSecret, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
@@ -25,9 +25,19 @@ const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS
 const projects: IProjectsBridge = {
 	list: () => ipcRenderer.invoke('projects:list'),
 	create: (input: IProjectInput) => ipcRenderer.invoke('projects:create', input),
+	deleteProject: (projectId: string) => ipcRenderer.invoke('projects:delete', projectId),
 	pickAndCreate: () => ipcRenderer.invoke('projects:pickAndCreate'),
 	revealInFolder: (projectId: string) => ipcRenderer.invoke('projects:revealInFolder', projectId),
 	listFiles: (projectId: string) => ipcRenderer.invoke('projects:listFiles', projectId),
+	listCodeRoots: (projectId: string) => ipcRenderer.invoke('projects:listCodeRoots', projectId),
+	discoverRepos: (projectId: string, scanRoot?: string) => ipcRenderer.invoke('projects:discoverRepos', projectId, scanRoot),
+	addCodeRoot: (projectId: string, path: string) => ipcRenderer.invoke('projects:addCodeRoot', projectId, path),
+	removeCodeRoot: (projectId: string, path: string) => ipcRenderer.invoke('projects:removeCodeRoot', projectId, path),
+	pickCodeRoot: (projectId: string) => ipcRenderer.invoke('projects:pickCodeRoot', projectId),
+	listRemotes: (projectId: string) => ipcRenderer.invoke('projects:listRemotes', projectId),
+	addRemote: (projectId: string, input: IRemoteRepoInput) => ipcRenderer.invoke('projects:addRemote', projectId, input),
+	removeRemote: (projectId: string, remoteId: string) => ipcRenderer.invoke('projects:removeRemote', projectId, remoteId),
+	cloneRemote: (projectId: string, remoteId: string) => ipcRenderer.invoke('projects:cloneRemote', projectId, remoteId),
 };
 
 const sessions: ISessionsBridge = {

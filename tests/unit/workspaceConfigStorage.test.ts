@@ -9,8 +9,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { effectiveAccess, isReadOnlyForced, type IWorkspaceConfig } from '../../src/sessions/services/environments/common/environments.js';
-import { normalizeConfig, readWorkspaceConfig, removeDataSource, removeEnvironment, upsertDataSource, upsertEnvironment, workspaceConfigPath, writeWorkspaceConfig } from '../../src/main/workspaceConfigStorage.js';
+import { SEED_ENVIRONMENTS, isEffectivelyWritable, type IWorkspaceConfig } from '../../src/sessions/services/environments/common/environments.js';
+import {
+	normalizeConfig,
+	readOrSeedWorkspaceConfig,
+	readWorkspaceConfig,
+	removeDataSource,
+	removeEnvironment,
+	upsertDataSource,
+	upsertEnvironment,
+	workspaceConfigPath,
+	writeWorkspaceConfig,
+} from '../../src/main/workspaceConfigStorage.js';
 
 async function tempWorkspace(): Promise<string> {
 	return mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
@@ -19,8 +29,8 @@ async function tempWorkspace(): Promise<string> {
 const SAMPLE: IWorkspaceConfig = {
 	version: 1,
 	environments: [
-		{ id: 'e-dev', name: 'dev', role: 'baseline' },
-		{ id: 'e-prod', name: 'prod', role: 'target' },
+		{ id: 'e-dev', name: 'dev', writable: true },
+		{ id: 'e-prod', name: 'prod', writable: false },
 	],
 	dataSources: [
 		{ id: 'd1', environmentId: 'e-dev', kind: 'database', label: '订单库', access: 'read-write', coordinates: { driver: 'mysql', host: 'dev.db', port: 3306, database: 'orders' } },
@@ -53,7 +63,7 @@ test('a missing workspace config folds to empty, not an error', async () => {
 
 test('normalizeConfig drops orphan data sources and malformed entries', () => {
 	const config = normalizeConfig({
-		environments: [{ id: 'e-dev', name: 'dev', role: 'baseline' }, { name: 'no-id' }],
+		environments: [{ id: 'e-dev', name: 'dev', writable: true }, { name: 'no-id' }],
 		dataSources: [
 			{ id: 'ok', environmentId: 'e-dev', kind: 'database', label: 'x', coordinates: { driver: 'mysql', host: 'h', database: 'd' } },
 			{ id: 'orphan', environmentId: 'e-gone', kind: 'database', label: 'y', coordinates: { driver: 'mysql', host: 'h', database: 'd' } },
@@ -70,33 +80,113 @@ test('normalizeConfig drops orphan data sources and malformed entries', () => {
 	assert.equal(config.dataSources[0]!.coordinates.port, 3306, 'mysql port defaults to 3306');
 });
 
-test('read-only is forced for target (prod) environments regardless of stored access', () => {
-	assert.equal(isReadOnlyForced('target'), true);
-	assert.equal(isReadOnlyForced('baseline'), false);
-	assert.equal(effectiveAccess('read-write', 'target'), 'read-only', 'prod write intent is overridden to read-only');
-	assert.equal(effectiveAccess('read-write', 'baseline'), 'read-write');
+test('normalizeConfig parses redis / mq / nacos / elasticsearch with per-kind defaults', () => {
+	const config = normalizeConfig({
+		environments: [{ id: 'e', name: 'dev', writable: true }],
+		dataSources: [
+			{ id: 'r', environmentId: 'e', kind: 'redis', label: 'cache', coordinates: { host: 'h' } },
+			{ id: 'm', environmentId: 'e', kind: 'mq', label: 'bus', coordinates: { host: 'h', driver: 'rabbitmq' } },
+			{ id: 'n', environmentId: 'e', kind: 'nacos', label: 'cfg', coordinates: { host: 'h' } },
+			{ id: 's', environmentId: 'e', kind: 'elasticsearch', label: 'es', coordinates: { host: 'h', port: 9201, index: 'logs' } },
+			{ id: 'bad', environmentId: 'e', kind: 'redis', label: 'x', coordinates: {} }, // no host → dropped
+			{ id: 'unknown', environmentId: 'e', kind: 'kafka', label: 'y', coordinates: { host: 'h' } }, // unknown kind → dropped
+		],
+	});
+	const byId = new Map(config.dataSources.map(source => [source.id, source]));
+	assert.deepEqual([...byId.keys()].sort(), ['m', 'n', 'r', 's']);
+
+	const redis = byId.get('r');
+	assert.ok(redis && redis.kind === 'redis');
+	assert.equal(redis.coordinates.port, 6379);
+	assert.equal(redis.coordinates.db, 0);
+
+	const mq = byId.get('m');
+	assert.ok(mq && mq.kind === 'mq');
+	assert.equal(mq.coordinates.driver, 'rabbitmq');
+	assert.equal(mq.coordinates.port, 5672);
+
+	const nacos = byId.get('n');
+	assert.ok(nacos && nacos.kind === 'nacos');
+	assert.deepEqual([nacos.coordinates.port, nacos.coordinates.namespace, nacos.coordinates.group], [8848, 'public', 'DEFAULT_GROUP']);
+
+	const es = byId.get('s');
+	assert.ok(es && es.kind === 'elasticsearch');
+	assert.deepEqual([es.coordinates.port, es.coordinates.index], [9201, 'logs']);
+});
+
+test('upsertDataSource round-trips a non-database kind (redis)', () => {
+	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true });
+	const result = upsertDataSource(cfg.config, { kind: 'redis', environmentId: cfg.id, label: 'cache', access: 'read-only', coordinates: { host: 'h', port: 6379, db: 2 } });
+	const source = result.config.dataSources[0];
+	assert.ok(source && source.kind === 'redis');
+	assert.equal(source.coordinates.db, 2);
+});
+
+test('effective writability is the AND of both layers (env writable + account read-write)', () => {
+	assert.equal(isEffectivelyWritable(true, 'read-write'), true, 'both allow → writable');
+	assert.equal(isEffectivelyWritable(false, 'read-write'), false, 'protected env blocks even a read-write account');
+	assert.equal(isEffectivelyWritable(true, 'read-only'), false, 'a read-only account blocks even a writable env');
+	assert.equal(isEffectivelyWritable(false, 'read-only'), false);
+});
+
+test('legacy role migrates to writable (target ⇒ protected, everything else ⇒ writable)', () => {
+	const config = normalizeConfig({
+		environments: [
+			{ id: 'e-prod', name: 'prod', role: 'target' },
+			{ id: 'e-dev', name: 'dev', role: 'baseline' },
+			{ id: 'e-x', name: 'x' },
+		],
+		dataSources: [],
+	});
+	assert.equal(config.environments.find(e => e.id === 'e-prod')!.writable, false, "legacy 'target' becomes protected");
+	assert.equal(config.environments.find(e => e.id === 'e-dev')!.writable, true, "legacy 'baseline' becomes writable");
+	assert.equal(config.environments.find(e => e.id === 'e-x')!.writable, true, 'a missing flag defaults to writable');
+});
+
+test('readOrSeedWorkspaceConfig seeds dev/test/prod on first touch, then respects the file', async () => {
+	const ws = await tempWorkspace();
+	try {
+		const seeded = await readOrSeedWorkspaceConfig(ws);
+		assert.deepEqual(
+			seeded.environments.map(e => e.name),
+			['dev', 'test', 'prod'],
+		);
+		assert.deepEqual(SEED_ENVIRONMENTS.map(e => e.writable), [true, true, false], 'prod ships protected');
+		// The seed is persisted, so deleting all environments is NOT re-seeded.
+		await writeWorkspaceConfig(ws, { version: 1, environments: [], dataSources: [] });
+		assert.deepEqual((await readOrSeedWorkspaceConfig(ws)).environments, [], 'an existing empty file is left alone');
+	} finally {
+		await rm(ws, { recursive: true, force: true });
+	}
+});
+
+test('upsertEnvironment persists front-end / back-end URLs (trimmed, blanks dropped)', () => {
+	const created = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true, frontendUrl: '  https://dev.example.com  ', backendUrl: '' });
+	const env = created.config.environments[0]!;
+	assert.equal(env.frontendUrl, 'https://dev.example.com');
+	assert.equal(env.backendUrl, undefined, 'a blank URL is omitted, not stored empty');
 });
 
 test('upsertEnvironment creates then updates by id', () => {
-	const created = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', role: 'baseline' });
+	const created = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true });
 	assert.match(created.id, /^env-/);
 	assert.equal(created.config.environments.length, 1);
-	const updated = upsertEnvironment(created.config, { id: created.id, name: 'dev2', role: 'other' });
+	const updated = upsertEnvironment(created.config, { id: created.id, name: 'dev2', writable: false });
 	assert.equal(updated.config.environments.length, 1, 'same id updates in place');
 	assert.equal(updated.config.environments[0]!.name, 'dev2');
 });
 
 test('upsertDataSource rejects an unknown environment', () => {
 	assert.throws(
-		() => upsertDataSource({ version: 1, environments: [], dataSources: [] }, { environmentId: 'nope', label: 'x', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } }),
+		() => upsertDataSource({ version: 1, environments: [], dataSources: [] }, { kind: 'database', environmentId: 'nope', label: 'x', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } }),
 		/Unknown environment/,
 	);
 });
 
 test('removeEnvironment cascades to its data sources', () => {
-	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', role: 'baseline' });
+	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true });
 	const envId = cfg.id;
-	const ds = upsertDataSource(cfg.config, { environmentId: envId, label: '库', access: 'read-only', coordinates: { driver: 'postgres', host: 'h', port: 5432, database: 'd' } });
+	const ds = upsertDataSource(cfg.config, { kind: 'database', environmentId: envId, label: '库', access: 'read-only', coordinates: { driver: 'postgres', host: 'h', port: 5432, database: 'd' } });
 	assert.equal(ds.config.dataSources.length, 1);
 	const after = removeEnvironment(ds.config, envId);
 	assert.equal(after.environments.length, 0);
@@ -104,9 +194,9 @@ test('removeEnvironment cascades to its data sources', () => {
 });
 
 test('removeDataSource removes only the target', () => {
-	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', role: 'baseline' });
-	const a = upsertDataSource(cfg.config, { environmentId: cfg.id, label: 'a', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
-	const b = upsertDataSource(a.config, { environmentId: cfg.id, label: 'b', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
+	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true });
+	const a = upsertDataSource(cfg.config, { kind: 'database', environmentId: cfg.id, label: 'a', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
+	const b = upsertDataSource(a.config, { kind: 'database', environmentId: cfg.id, label: 'b', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
 	const after = removeDataSource(b.config, a.id);
 	assert.deepEqual(after.dataSources.map(d => d.id), [b.id]);
 });
