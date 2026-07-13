@@ -199,7 +199,7 @@
 }
 
 .sessions-skills-error {
-	color: var(--vscode-agents-color-error, #f14c4c);
+	color: var(--vscode-agents-color-danger);
 }
 
 .sessions-settings-page-intro {

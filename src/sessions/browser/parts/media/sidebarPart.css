@@ -1695,12 +1695,12 @@
 }
 
 .sessions-danger-btn {
-	color: #f14c4c;
-	border-color: color-mix(in srgb, #f14c4c 40%, var(--vscode-agents-color-control-border));
+	color: var(--vscode-agents-color-danger);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-danger) 40%, var(--vscode-agents-color-control-border));
 }
 
 .sessions-danger-btn:hover {
-	background: color-mix(in srgb, #f14c4c 15%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-danger) 15%, transparent);
 }
 
 /* Reduce-motion preference: kill transitions and animations app-wide */
@@ -1973,7 +1973,7 @@
 }
 
 .sessions-env-role.role-protected {
-	background: color-mix(in srgb, #f14c4c 22%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-danger) 22%, transparent);
 	color: inherit;
 }
 
@@ -2527,7 +2527,7 @@
 }
 
 .sessions-env-badge.cred-missing {
-	color: #f14c4c;
+	color: var(--vscode-agents-color-danger);
 }
 
 /* Two-column form grid for the connection editors. */

@@ -132,8 +132,8 @@
 }
 
 .conversation-context-pill.has-error {
-	border-color: color-mix(in srgb, var(--vscode-agents-color-error, #f14c4c) 55%, transparent);
-	color: var(--vscode-agents-color-error, #f14c4c);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-danger) 55%, transparent);
+	color: var(--vscode-agents-color-danger);
 }
 
 /* Branch picker anchored under the branch pill. */
@@ -189,7 +189,7 @@
 
 .conversation-branch-menu-error {
 	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8);
-	color: var(--vscode-agents-color-error, #f14c4c);
+	color: var(--vscode-agents-color-danger);
 	font-size: var(--vscode-agents-fontSize-label2);
 	white-space: normal;
 	word-break: break-word;
@@ -1422,6 +1422,6 @@ button.conversation-plan-header {
 .conversation-send-error {
 	margin: 4px auto 0;
 	max-width: var(--vscode-agents-size-composer-width);
-	color: var(--vscode-agents-color-status-error, #f14c4c);
+	color: var(--vscode-agents-color-danger);
 	font-size: 12px;
 }
