@@ -5,6 +5,7 @@
 
 import { ipcMain } from 'electron';
 import { runAgentLoop } from './agent/agentLoop.js';
+import { deriveGrant, matchesAllowlist, type IAllowlistGrant } from './agent/approvalAllowlist.js';
 import type { IAgentMessage, IAgentTerminal, IAgentTool, ICompactionAnchor } from './agent/agentTypes.js';
 import { restoreAnchor } from './agent/compaction.js';
 import { agentLog } from './agent/observability/agentLog.js';
@@ -87,6 +88,8 @@ function asAnchorShape(value: unknown): ICompactionAnchor | undefined {
 interface IApprovalResponsePayload {
 	readonly requestId: string;
 	readonly approved: boolean;
+	/** The user picked "always allow": add the request's grant to the session allowlist. */
+	readonly always?: boolean;
 }
 
 interface IAgentTitlePayload {
@@ -114,7 +117,14 @@ function stripImageBlocks(messages: readonly IAgentMessage[]): readonly IAgentMe
  */
 export function registerAgentIpc(dataRoot: string): void {
 	const abortControllers = new Map<string, AbortController>();
-	const pendingApprovals = new Map<string, { readonly sessionId: string; resolve(approved: boolean): void }>();
+	// The grant rides the pending entry because the response only carries a
+	// requestId — the tool input (and the pattern derived from it) is long gone
+	// by the time "always" comes back.
+	const pendingApprovals = new Map<string, { readonly sessionId: string; readonly grant?: IAllowlistGrant; resolve(approved: boolean): void }>();
+	// Session-level "always allow" patterns. In-memory only (never persisted),
+	// keyed by sessionId like the pending/abort maps, so it survives across runs
+	// of a session but dies with the process — the "会话级、不落盘" contract.
+	const sessionAllowlists = new Map<string, Set<string>>();
 
 	// Agent observability (P1): attach the local JSONL sink when enabled.
 	const logsDir = resolveAgentLogsDir(dataRoot, process.env);
@@ -212,7 +222,18 @@ export function registerAgentIpc(dataRoot: string): void {
 					resolve(false);
 					return;
 				}
-				pendingApprovals.set(context.toolUseId, { sessionId: payload.sessionId, resolve });
+				// Session-level "always allow": a covered call runs unattended, with
+				// no prompt. Checked here (not in the gate) so permission.ts keeps its
+				// read-only/plan/full semantics untouched.
+				const allowlist = sessionAllowlists.get(payload.sessionId);
+				if (allowlist && matchesAllowlist(tool.name, input, allowlist)) {
+					resolve(true);
+					return;
+				}
+				// Only offer the third button for tools that are safe to always-allow
+				// (deriveGrant returns undefined for run_on_server et al.).
+				const grant = deriveGrant(tool.name, input);
+				pendingApprovals.set(context.toolUseId, { sessionId: payload.sessionId, ...(grant ? { grant } : {}), resolve });
 				controller.signal.addEventListener(
 					'abort',
 					() => {
@@ -227,6 +248,7 @@ export function registerAgentIpc(dataRoot: string): void {
 					requestId: context.toolUseId,
 					toolName: tool.name,
 					detail: describeToolCall(tool.name, input),
+					...(grant ? { alwaysAllow: grant.display } : {}),
 				});
 			});
 
@@ -343,6 +365,16 @@ export function registerAgentIpc(dataRoot: string): void {
 		const pending = pendingApprovals.get(payload.requestId);
 		if (pending) {
 			pendingApprovals.delete(payload.requestId);
+			// "Always" only takes effect for a grant we actually offered — a stray
+			// always=true on a non-always-allowable tool (e.g. run_on_server) has no
+			// grant and is silently ignored, so prod SSH can never be allowlisted.
+			if (payload.approved === true && payload.always === true && pending.grant) {
+				const allowlist = sessionAllowlists.get(pending.sessionId) ?? new Set<string>();
+				for (const pattern of pending.grant.patterns) {
+					allowlist.add(pattern);
+				}
+				sessionAllowlists.set(pending.sessionId, allowlist);
+			}
 			pending.resolve(payload.approved === true);
 		}
 	});

@@ -180,7 +180,10 @@ export interface ISessionPendingApproval {
 	readonly toolName: string;
 	/** One-line summary of what the tool wants to do (command, file path…). */
 	readonly detail: string;
-	respond(approved: boolean): void;
+	/** Present iff this call can be "always allowed" this session — the button label (e.g. `mvn *`). */
+	readonly alwaysAllow?: string;
+	/** `always` records the pattern so future matching calls skip the prompt. */
+	respond(approved: boolean, always?: boolean): void;
 }
 
 export interface ISession {

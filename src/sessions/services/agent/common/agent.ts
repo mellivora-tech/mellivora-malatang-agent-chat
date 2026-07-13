@@ -25,6 +25,8 @@ export interface IApprovalRequestPayload {
 	readonly toolName: string;
 	/** One-line summary of what the tool wants to do (command, file path…). */
 	readonly detail: string;
+	/** Present iff this call is safe to "always allow" this session — the button label (e.g. `mvn *`). */
+	readonly alwaysAllow?: string;
 }
 
 /** The shape exposed on `agentWindow.agent` by the preload script. */
@@ -44,6 +46,6 @@ export interface IAgentBridge {
 	onEvent(listener: (payload: IAgentEventPayload) => void): () => void;
 	/** Subscribe to approval requests from the permission gate; returns an unsubscribe function. */
 	onApprovalRequest(listener: (payload: IApprovalRequestPayload) => void): () => void;
-	/** Answer an approval request. Unanswered requests are denied when the run ends. */
-	respondApproval(requestId: string, approved: boolean): Promise<void>;
+	/** Answer an approval request. `always` adds this call's pattern to the session allowlist (allow-only). Unanswered requests are denied when the run ends. */
+	respondApproval(requestId: string, approved: boolean, always?: boolean): Promise<void>;
 }

@@ -1026,14 +1026,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 				requestId: payload.requestId,
 				toolName: payload.toolName,
 				detail: payload.detail,
-				respond: approved => {
+				...(payload.alwaysAllow ? { alwaysAllow: payload.alwaysAllow } : {}),
+				respond: (approved, always) => {
 					if (session.pendingApproval.get()?.requestId !== payload.requestId) {
 						return;
 					}
 					session.pendingApproval.set(undefined);
 					session.status.set(SessionStatus.InProgress);
 					this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-					void agent.respondApproval(payload.requestId, approved);
+					void agent.respondApproval(payload.requestId, approved, always);
 				},
 			};
 			session.pendingApproval.set(approval);

@@ -103,7 +103,7 @@ const agent: IAgentBridge = {
 		ipcRenderer.on('agent:approval-request', handler);
 		return () => ipcRenderer.removeListener('agent:approval-request', handler);
 	},
-	respondApproval: (requestId: string, approved: boolean) => ipcRenderer.invoke('agent:approval-response', { requestId, approved }),
+	respondApproval: (requestId: string, approved: boolean, always?: boolean) => ipcRenderer.invoke('agent:approval-response', { requestId, approved, always }),
 };
 
 contextBridge.exposeInMainWorld('agentWindow', {

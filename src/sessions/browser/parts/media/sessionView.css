@@ -1101,6 +1101,28 @@ button.conversation-plan-header {
 	color: var(--vscode-agents-color-text-primary);
 }
 
+/* "Always allow [pattern]": a quiet outline action — a bigger commitment than a
+   one-off allow, so it stays understated. The granted pattern rides inside as a
+   mono chip so the scope is unmistakable. */
+.conversation-approval-always {
+	background: transparent;
+	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 16%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-approval-always:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-approval-pattern {
+	padding: 0 var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-radius-control, 4px);
+	background: color-mix(in srgb, currentColor 14%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+}
+
 .conversation-message.user .conversation-message-avatar {
 	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 22%, transparent);
 	color: var(--vscode-agents-color-badge-foreground);

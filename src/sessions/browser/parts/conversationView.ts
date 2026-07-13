@@ -1594,6 +1594,21 @@ function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 	allowKey.textContent = '⏎';
 	allow.addEventListener('click', () => approval.respond(true));
 
+	// "Always allow [pattern]" — offered only for safe, always-allowable tools
+	// (main-side deriveGrant gates this; run_on_server never gets a label). The
+	// pattern is shown verbatim so the user sees exactly what they're granting.
+	if (approval.alwaysAllow !== undefined) {
+		const always = append(actions, document.createElement('button')) as HTMLButtonElement;
+		always.className = 'conversation-approval-always';
+		always.type = 'button';
+		always.title = `本会话不再询问：${approval.alwaysAllow}`;
+		append(always, document.createElement('span')).textContent = '始终允许';
+		const pattern = append(always, document.createElement('code'));
+		pattern.className = 'conversation-approval-pattern';
+		pattern.textContent = approval.alwaysAllow;
+		always.addEventListener('click', () => approval.respond(true, true));
+	}
+
 	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
 	deny.className = 'conversation-approval-deny';
 	deny.type = 'button';
