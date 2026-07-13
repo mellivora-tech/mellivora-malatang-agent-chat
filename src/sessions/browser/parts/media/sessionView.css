@@ -951,15 +951,79 @@ button.conversation-plan-header {
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
-.conversation-approval-detail {
-	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
-	overflow-x: auto;
+.conversation-approval-header .codicon {
+	color: var(--vscode-agents-color-warning, #d29922);
+}
+
+.conversation-approval-title {
+	font-size: var(--vscode-agents-fontSize-body1, 14px);
+}
+
+/* Tool-name chip, pinned right of the title. */
+.conversation-approval-chip {
+	margin-left: auto;
+	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-6);
 	border-radius: var(--vscode-agents-radius-control, 6px);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+}
+
+/* Command block: terminal-flavored, and the command WRAPS (never a sad scrollbar). */
+.conversation-approval-terminal {
+	display: flex;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+}
+
+.conversation-approval-prompt {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-success);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-body2);
+	user-select: none;
+}
+
+.conversation-approval-command {
+	flex: 1 1 auto;
+	min-width: 0;
 	color: var(--vscode-agents-color-text-primary);
 	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 	font-size: var(--vscode-agents-fontSize-body2);
-	white-space: pre;
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+}
+
+/* File path: directory muted, filename emphasized. */
+.conversation-approval-path {
+	display: flex;
+	align-items: baseline;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-12);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-body2);
+	word-break: break-all;
+}
+
+.conversation-approval-path .codicon {
+	align-self: center;
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.conversation-approval-path-dir {
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.conversation-approval-path-base {
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
 .conversation-approval-actions {
@@ -968,12 +1032,35 @@ button.conversation-plan-header {
 }
 
 .conversation-approval-actions button {
-	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-14);
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-12);
 	border: var(--vscode-agents-space-1) solid transparent;
 	border-radius: var(--vscode-agents-radius-control, 6px);
 	font: inherit;
 	font-weight: var(--vscode-agents-fontWeight-medium);
 	cursor: default;
+}
+
+.conversation-approval-actions button:focus-visible {
+	outline: var(--vscode-agents-space-2) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
+}
+
+/* Inline key hint on each action. */
+.conversation-approval-key {
+	padding: 0 var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-inverse) 22%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	line-height: 1.6;
+}
+
+.conversation-approval-deny .conversation-approval-key {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
 }
 
 .conversation-approval-allow {

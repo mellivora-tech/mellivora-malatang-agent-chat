@@ -75,6 +75,8 @@ export class ConversationView extends Disposable {
 	private queuedFollowUp: string | undefined;
 	// Work blocks: user toggles override the default (open while live, closed when done).
 	private readonly workExpandOverride = new Map<string, boolean>();
+	/** The approval request whose Allow button already got initial focus (re-render guard). */
+	private focusedApprovalId: string | undefined;
 	/** Superseded plan cards a click expanded back open (they collapse by default). */
 	private readonly planExpand = new Set<string>();
 	/** Sections with an open comment editor (`messageId:sectionId`) and their unsent drafts. */
@@ -481,8 +483,19 @@ export class ConversationView extends Disposable {
 		this.transcript.querySelector('.conversation-working-row')?.remove();
 		this.transcript.querySelector('.conversation-thinking-row')?.remove();
 		if (approval) {
-			this.transcript.appendChild(createApprovalCard(approval));
-		} else if (this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
+			const card = createApprovalCard(approval);
+			this.transcript.appendChild(card);
+			// The card is re-created on every render (incl. the 1s live ticker), so
+			// focus the Allow button ONCE per request — not every second — and never
+			// steal focus the user has already moved into the card.
+			if (approval.requestId !== this.focusedApprovalId && !card.contains(document.activeElement)) {
+				card.querySelector<HTMLButtonElement>('.conversation-approval-allow')?.focus();
+			}
+			this.focusedApprovalId = approval.requestId;
+		} else {
+			this.focusedApprovalId = undefined;
+		}
+		if (!approval && this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
 			// Mock/legacy runs without a work block keep the plain progress rows.
 			this.transcript.appendChild(this.createWorkingRow());
 			this.transcript.appendChild(this.createThinkingRow());
@@ -1495,21 +1508,76 @@ export class ConversationView extends Disposable {
 }
 
 /** The gate paused on a mutating tool: say what it wants and offer Allow / Deny. */
+/** Per-tool presentation of an approval prompt: icon, human title, type chip, and how to show the detail. */
+function describeApproval(toolName: string, detail: string): { icon: string; title: string; chip: string; command?: string; path?: string } {
+	switch (toolName) {
+		case 'bash':
+			return { icon: 'codicon-terminal', title: '运行命令', chip: 'bash', command: detail };
+		case 'write_file':
+			return { icon: 'codicon-new-file', title: '写入文件', chip: 'write_file', path: detail.replace(/^write /, '') };
+		case 'edit_file':
+			return { icon: 'codicon-edit', title: '修改文件', chip: 'edit_file', path: detail.replace(/^edit /, '') };
+		default:
+			return { icon: 'codicon-shield', title: '批准此操作', chip: toolName };
+	}
+}
+
 function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 	const card = document.createElement('div');
 	card.className = 'conversation-approval';
 	card.setAttribute('role', 'alertdialog');
 	card.setAttribute('aria-label', 'Approval required');
+	// Esc denies. The focused Allow button (a child) bubbles the keydown up here,
+	// and the listener dies with the card — no document-level leak.
+	card.addEventListener('keydown', event => {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			approval.respond(false);
+		}
+	});
+
+	const spec = describeApproval(approval.toolName, approval.detail);
 
 	const header = append(card, document.createElement('div'));
 	header.className = 'conversation-approval-header';
-	appendCodicon(header, 'codicon-shield');
+	appendCodicon(header, spec.icon);
 	const title = append(header, document.createElement('span'));
-	title.textContent = approval.toolName === 'bash' ? 'Run this command?' : 'Apply this change?';
+	title.className = 'conversation-approval-title';
+	title.textContent = spec.title;
+	const chip = append(header, document.createElement('span'));
+	chip.className = 'conversation-approval-chip';
+	chip.textContent = spec.chip;
 
-	const detail = append(card, document.createElement('code'));
-	detail.className = 'conversation-approval-detail';
-	detail.textContent = approval.detail;
+	if (spec.command !== undefined) {
+		// Terminal-style block: a $ prompt marker, and the command WRAPS instead of
+		// scrolling off — a long path stays fully readable.
+		const term = append(card, document.createElement('div'));
+		term.className = 'conversation-approval-terminal';
+		const marker = append(term, document.createElement('span'));
+		marker.className = 'conversation-approval-prompt';
+		marker.textContent = '$';
+		const cmd = append(term, document.createElement('code'));
+		cmd.className = 'conversation-approval-command';
+		cmd.textContent = spec.command;
+	} else if (spec.path !== undefined) {
+		// Show the path with its directory muted and the filename emphasized.
+		const row = append(card, document.createElement('div'));
+		row.className = 'conversation-approval-path';
+		appendCodicon(row, 'codicon-file');
+		const slash = spec.path.lastIndexOf('/');
+		if (slash >= 0) {
+			const dir = append(row, document.createElement('span'));
+			dir.className = 'conversation-approval-path-dir';
+			dir.textContent = spec.path.slice(0, slash + 1);
+		}
+		const base = append(row, document.createElement('span'));
+		base.className = 'conversation-approval-path-base';
+		base.textContent = slash >= 0 ? spec.path.slice(slash + 1) : spec.path;
+	} else {
+		const detail = append(card, document.createElement('code'));
+		detail.className = 'conversation-approval-command';
+		detail.textContent = approval.detail;
+	}
 
 	const actions = append(card, document.createElement('div'));
 	actions.className = 'conversation-approval-actions';
@@ -1517,13 +1585,20 @@ function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
 	allow.className = 'conversation-approval-allow';
 	allow.type = 'button';
-	allow.textContent = 'Allow';
+	allow.innerHTML = '';
+	append(allow, document.createElement('span')).textContent = '允许';
+	const allowKey = append(allow, document.createElement('kbd'));
+	allowKey.className = 'conversation-approval-key';
+	allowKey.textContent = '⏎';
 	allow.addEventListener('click', () => approval.respond(true));
 
 	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
 	deny.className = 'conversation-approval-deny';
 	deny.type = 'button';
-	deny.textContent = 'Deny';
+	append(deny, document.createElement('span')).textContent = '拒绝';
+	const denyKey = append(deny, document.createElement('kbd'));
+	denyKey.className = 'conversation-approval-key';
+	denyKey.textContent = 'Esc';
 	deny.addEventListener('click', () => approval.respond(false));
 
 	return card;
