@@ -883,8 +883,8 @@ button.conversation-plan-header {
 }
 
 .conversation-plan-state.approved {
-	background: color-mix(in srgb, var(--vscode-agents-color-button-background, #2ea043) 18%, transparent);
-	color: var(--vscode-agents-color-button-background, #2ea043);
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 18%, transparent);
+	color: var(--vscode-agents-color-success);
 }
 
 .conversation-plan-state.walkthrough {
@@ -913,12 +913,12 @@ button.conversation-plan-header {
 }
 
 .conversation-plan-approve {
-	background: var(--vscode-agents-color-button-background, #2ea043);
-	color: var(--vscode-agents-color-button-foreground, #fff);
+	background: var(--vscode-agents-color-success);
+	color: var(--vscode-agents-color-accent-foreground);
 }
 
 .conversation-plan-approve:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--vscode-agents-color-button-background, #2ea043) 88%, #fff);
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 88%, var(--vscode-agents-color-text-inverse));
 }
 
 .conversation-plan-revise {
@@ -977,12 +977,12 @@ button.conversation-plan-header {
 }
 
 .conversation-approval-allow {
-	background: var(--vscode-agents-color-button-background, #2ea043);
-	color: var(--vscode-agents-color-button-foreground, #fff);
+	background: var(--vscode-agents-color-success);
+	color: var(--vscode-agents-color-accent-foreground);
 }
 
 .conversation-approval-allow:hover {
-	background: color-mix(in srgb, var(--vscode-agents-color-button-background, #2ea043) 88%, #fff);
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 88%, var(--vscode-agents-color-text-inverse));
 }
 
 .conversation-approval-deny {
