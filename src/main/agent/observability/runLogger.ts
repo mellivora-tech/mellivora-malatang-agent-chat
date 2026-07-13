@@ -172,6 +172,10 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 				case 'tool_prune':
 					agentLog.emit({ ts: now(), ...base, type: 'tool_prune', prunedResults: event.prunedResults, prunedChars: event.prunedChars });
 					break;
+				case 'work_digest':
+					// Counts are export-safe; the digest text (file paths) stays in detail.
+					agentLog.emit({ ts: now(), ...base, type: 'work_digest', filesRead: event.filesRead, filesWritten: event.filesWritten, toolCalls: event.toolCalls, detail: { text: event.text } });
+					break;
 				case 'context_breakdown':
 					agentLog.emit({
 						ts: now(),

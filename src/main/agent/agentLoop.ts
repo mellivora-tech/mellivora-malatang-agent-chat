@@ -18,6 +18,7 @@ import {
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
+import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest } from './workDigest.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 100;
@@ -126,6 +127,11 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	let filesChangedThisRun = false;
 	let walkthroughWritten = false;
 	let walkthroughNudged = false;
+	// Work digest: deterministically accumulate what this run touched (files
+	// read/changed + activity counts) and sink it at run end, so the next run's
+	// transcript opens knowing what was already explored (see workDigest.ts).
+	const digestEnabled = isWorkDigestEnabled(process.env);
+	const workDigest = createWorkDigest();
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -330,6 +336,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 			} else if (toolUse.name === 'write_walkthrough') {
 				walkthroughWritten = true;
 			}
+			if (digestEnabled) {
+				recordWorkDigest(workDigest, toolUse.name, toolUse.input);
+			}
 		}
 
 		// Stop condition: no tool_use block == the turn is complete. A max_tokens
@@ -368,6 +377,12 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 				continue;
 			}
 
+			if (digestEnabled) {
+				const digest = buildWorkDigestEvent(workDigest);
+				if (digest) {
+					yield { type: 'work_digest', ...digest };
+				}
+			}
 			return { reason, turns: turn };
 		}
 
@@ -378,6 +393,12 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		messages.push({ role: 'user', content: toolResults });
 
 		if (turn >= maxTurns) {
+			if (digestEnabled) {
+				const digest = buildWorkDigestEvent(workDigest);
+				if (digest) {
+					yield { type: 'work_digest', ...digest };
+				}
+			}
 			return { reason: 'max_turns', turns: turn };
 		}
 	}

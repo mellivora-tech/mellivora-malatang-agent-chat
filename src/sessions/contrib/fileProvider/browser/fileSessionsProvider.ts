@@ -655,6 +655,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// (ids/version assigned there, never by the model).
 		let pendingPlanInput: IProposePlanInput | undefined;
 		let pendingWalkthroughInput: IProposePlanInput | undefined;
+		// The run's work digest (files read/changed), emitted once at run end;
+		// materialized into a hidden role:'digest' message at finalize and carried
+		// on the next run's transcript to pay down the re-exploration tax.
+		let pendingDigest: string | undefined;
 		// Reasoning text streamed since the last step boundary; becomes the
 		// closing thinking step's expandable detail.
 		let thinkingBuffer = '';
@@ -832,6 +836,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 				);
 			}
 
+			// The work digest lands last (after the answer) as a hidden message, so
+			// the next run's transcript carries it at the tail — see toTranscript,
+			// which forwards only the most recent digest.
+			let digestMessage: ISessionMessage | undefined;
+			if (pendingDigest !== undefined) {
+				digestMessage = { id: `${sessionId}-digest-${generateId()}`, role: 'digest', text: pendingDigest, timestamp: now };
+				session.messages.set([...session.messages.get(), digestMessage]);
+			}
+
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
 				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
@@ -852,6 +865,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 				}
 				if (hasReply) {
 					await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
+				}
+				if (digestMessage) {
+					await this.bridge.append(ref, { type: 'message', id: digestMessage.id, role: 'digest', text: digestMessage.text, timestamp: now.toISOString() });
 				}
 				await this.bridge.append(ref, {
 					type: 'state',
@@ -961,6 +977,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 						prunedChars: event.prunedChars,
 					},
 				});
+			} else if (event?.type === 'work_digest') {
+				// Captured now, persisted at finalize as a hidden role:'digest'
+				// message — the last one wins on the next run's transcript.
+				pendingDigest = event.text;
 			} else if (event?.type === 'compaction') {
 				// An ok compaction becomes the session's cross-run anchor: the same
 				// head is summarized once per session instead of once per run. The
@@ -1209,7 +1229,20 @@ export function toTranscript(
 	sessionContexts?: ReadonlyMap<string, string>,
 ): IAgentMessage[] {
 	const transcript: IAgentMessage[] = [];
+	// Only the newest digest is carried — older runs' digests are stale and
+	// letting them accumulate would defeat the point (bounded window occupancy).
+	const latestDigest = [...messages].reverse().find(message => message.role === 'digest');
 	for (const message of messages) {
+		// The work digest (files the last run read/changed) crosses as an
+		// assistant turn — same mechanism as plan below — so a follow-up run opens
+		// knowing what was already explored instead of re-reading it. Only the
+		// latest digest survives; earlier ones are skipped.
+		if (message.role === 'digest') {
+			if (message === latestDigest && message.text.trim() !== '') {
+				transcript.push({ role: 'assistant', content: [{ type: 'text', text: message.text }] });
+			}
+			continue;
+		}
 		// A plan artifact must reach the model next run — revise ("adjust per my
 		// comments") and approve ("execute the plan") both depend on the model
 		// seeing its own proposal. The markdown fallback crosses as an assistant

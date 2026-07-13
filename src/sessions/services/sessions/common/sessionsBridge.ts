@@ -83,8 +83,8 @@ export interface IPlanArtifactData {
 export interface ISessionMessageEntry {
 	readonly type: 'message';
 	readonly id: string;
-	/** 'work' entries summarize one agent run: total duration plus its steps. */
-	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan';
+	/** 'work' entries summarize one agent run; 'digest' entries are the hidden per-run work summary carried across runs. */
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
@@ -187,7 +187,7 @@ export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISession
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
-	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;

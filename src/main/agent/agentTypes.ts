@@ -182,6 +182,8 @@ export type IAgentEvent =
 	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
 	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
 	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number }
+	/** A run's deterministic work digest (files read/changed + activity counts). `text` is persisted as a hidden message and carried on the next run's transcript to pay down the re-exploration tax; the counts are export-safe telemetry. Emitted once at run end, only when the run touched something. */
+	| { readonly type: 'work_digest'; readonly text: string; readonly filesRead: number; readonly filesWritten: number; readonly toolCalls: number }
 	/** The transcript head was folded into an anchored summary (request view only; history intact). `summary` feeds the local log's detail; the renderer persists `summary`+`coveredInitial` as the cross-run anchor. */
 	| {
 			readonly type: 'compaction';

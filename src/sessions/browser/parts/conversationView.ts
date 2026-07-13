@@ -472,7 +472,9 @@ export class ConversationView extends Disposable {
 		const previousScrollTop = this.transcript.scrollTop;
 		this.scrollToBottomOnRender = false;
 
-		const messages = this.session?.messages.get() ?? [];
+		// Digest messages are hidden context for the next run's transcript, not
+		// conversation — drop them before any rendering (rows, timeline, tickers).
+		const messages = (this.session?.messages.get() ?? []).filter(message => message.role !== 'digest');
 		this.reconcileTranscript(messages);
 
 		const hasLiveWork = messages.some(message => message.role === 'work' && message.durationMs === undefined);
@@ -1917,6 +1919,7 @@ function messageIcon(role: ISessionMessage['role']): string {
 			return 'codicon-copilot';
 		case 'tool':
 		case 'work':
+		case 'digest':
 			return 'codicon-tools';
 		case 'plan':
 			return 'codicon-checklist';
@@ -1931,6 +1934,7 @@ function messageLabel(role: ISessionMessage['role']): string {
 			return 'Mellivora';
 		case 'tool':
 		case 'work':
+		case 'digest':
 			return 'Tool';
 		case 'plan':
 			return 'Plan';

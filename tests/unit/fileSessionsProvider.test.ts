@@ -472,6 +472,61 @@ test('agent runs assemble a work block with tool steps and persist it', async ()
 	assert.ok(((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length ?? 0) >= 2, 'persisted steps include thinking and tool');
 });
 
+test('a work_digest event materializes a hidden digest message, persisted after the reply', async () => {
+	const bridge = createFakeBridge();
+
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'read_file', input: { path: 'src/a.ts' } } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'ok', isError: false } });
+			emit({ event: { type: 'assistant_delta', text: 'Done' } });
+			emit({ event: { type: 'work_digest', text: '<work-digest>Read: src/a.ts</work-digest>', filesRead: 1, filesWritten: 0, toolCalls: 1 } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('do something');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const messages = session.messages.get();
+	const digest = messages.find(message => message.role === 'digest');
+	assert.ok(digest, 'a hidden digest message was added to the session');
+	assert.equal(digest.text, '<work-digest>Read: src/a.ts</work-digest>');
+	assert.ok(messages.findIndex(m => m.role === 'assistant') < messages.indexOf(digest), 'the digest trails the reply');
+
+	// Persisted as a digest entry, after the assistant reply on disk.
+	const entryRoles = bridge.appends.filter(call => call.entry.type === 'message').map(call => (call.entry as { role: string }).role);
+	assert.ok(entryRoles.includes('digest'), 'digest entry persisted');
+	assert.ok(entryRoles.indexOf('assistant') < entryRoles.indexOf('digest'), 'digest persisted after the reply');
+
+	// The next run's transcript carries the digest as an assistant turn.
+	const transcript = toTranscript(session.messages.get());
+	assert.ok(
+		transcript.some(m => m.role === 'assistant' && (m.content[0] as { text?: string }).text === '<work-digest>Read: src/a.ts</work-digest>'),
+		'digest rides the transcript for the next run',
+	);
+});
+
 test('propose_plan materializes a plan card; a new version supersedes the old; setPlanState persists', async () => {
 	const bridge = createFakeBridge();
 	const PLAN_INPUT = {
@@ -760,6 +815,31 @@ test('toTranscript drops empty and non-conversational messages (400 guard)', () 
 	);
 	// No message with empty content survives — that is exactly what the API rejects.
 	assert.ok(transcript.every(m => (m.content[0] as { text: string }).text.trim() !== ''));
+});
+
+test('toTranscript carries only the latest work digest, as an assistant turn', () => {
+	const messages: ISessionMessage[] = [
+		{ id: 'u1', role: 'user', text: 'q1' },
+		{ id: 'a1', role: 'assistant', text: 'a1' },
+		{ id: 'd1', role: 'digest', text: '<work-digest>Read: a.ts</work-digest>' },
+		{ id: 'u2', role: 'user', text: 'q2' },
+		{ id: 'a2', role: 'assistant', text: 'a2' },
+		{ id: 'd2', role: 'digest', text: '<work-digest>Read: b.ts</work-digest>' },
+		{ id: 'u3', role: 'user', text: 'q3' },
+	];
+	const transcript = toTranscript(messages);
+	assert.deepEqual(
+		transcript.map(m => ({ role: m.role, text: (m.content[0] as { text: string }).text })),
+		[
+			{ role: 'user', text: 'q1' },
+			{ role: 'assistant', text: 'a1' },
+			{ role: 'user', text: 'q2' },
+			{ role: 'assistant', text: 'a2' },
+			// Only d2 survives; d1 is a stale earlier-run digest.
+			{ role: 'assistant', text: '<work-digest>Read: b.ts</work-digest>' },
+			{ role: 'user', text: 'q3' },
+		],
+	);
 });
 
 /** Agent stub whose run completes immediately; generateTitle is supplied per test. */

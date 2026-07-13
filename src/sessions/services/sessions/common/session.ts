@@ -108,8 +108,12 @@ export interface IPlanComment {
 
 export interface ISessionMessage {
 	readonly id: string;
-	/** 'work' messages summarize one agent run: total duration plus its steps. */
-	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan';
+	/**
+	 * 'work' messages summarize one agent run: total duration plus its steps.
+	 * 'digest' messages are hidden, deterministic per-run work summaries (files
+	 * read/changed) carried on the next run's transcript — not rendered.
+	 */
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachment[];
 	readonly detail?: string;

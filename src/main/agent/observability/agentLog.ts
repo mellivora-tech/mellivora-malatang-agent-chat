@@ -82,6 +82,8 @@ export type AgentLogEvent =
 	  })
 	/** Tool outputs aged out of the request view. Counts only — the full content stays in the adjacent tool_result events. */
 	| (IBaseEvent & { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number })
+	/** A run's work digest was sunk. Counts are export-safe; the digest text carries file paths, so it lives under detail. */
+	| (IBaseEvent & { readonly type: 'work_digest'; readonly filesRead: number; readonly filesWritten: number; readonly toolCalls: number; readonly detail?: { readonly text: string } })
 	/**
 	 * The transcript head was folded into an anchored summary. Trigger math and
 	 * sizes are export-safe; the summary text (conversation content) is detail.
