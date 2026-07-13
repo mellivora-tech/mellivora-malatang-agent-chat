@@ -9,7 +9,7 @@ import test from 'node:test';
 import { runAgentLoop } from '../../src/main/agent/agentLoop.js';
 import { allowAllPermissionGate, createApprovalPermissionGate, defineTool, toolSpec } from '../../src/main/agent/agentTools.js';
 import { createScriptedModelClient } from '../../src/main/agent/scriptedModelClient.js';
-import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelRequest, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelClient, IModelRequest, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
 
 async function drive(loop: AsyncGenerator<IAgentEvent, IAgentTerminal>): Promise<{ events: IAgentEvent[]; terminal: IAgentTerminal }> {
 	const events: IAgentEvent[] = [];
@@ -61,6 +61,126 @@ const writeTool = defineTool({
 	inputSchema: { type: 'object' },
 	validateInput: input => ({ ok: true, value: input }),
 	call: async () => ({ content: 'wrote file' }),
+});
+
+const writeFileTool = defineTool({
+	name: 'write_file',
+	description: 'Write a file.',
+	inputSchema: { type: 'object' },
+	validateInput: input => ({ ok: true, value: input }),
+	call: async () => ({ content: 'wrote' }),
+});
+
+const walkthroughToolStub = defineTool({
+	name: 'write_walkthrough',
+	description: 'Record a walkthrough.',
+	inputSchema: { type: 'object' },
+	isReadOnly: () => true,
+	validateInput: input => ({ ok: true, value: input }),
+	call: async () => ({ content: 'walkthrough recorded' }),
+});
+
+/** A scripted client that also records the request.messages it was called with. */
+function capturingModelClient(turns: readonly { readonly emit: readonly IScriptedLike[] }[]): { client: IModelClient; requests: IModelRequest[] } {
+	const requests: IModelRequest[] = [];
+	let index = 0;
+	const client: IModelClient = {
+		async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+			// The loop mutates one `messages` array in place, so a stored reference
+			// would always read the FINAL transcript — snapshot at call time.
+			requests.push({ ...request, messages: JSON.parse(JSON.stringify(request.messages)) as IModelRequest['messages'] });
+			const turn = turns[index];
+			index += 1;
+			if (!turn) {
+				yield { type: 'message_stop', stopReason: 'end_turn' };
+				return;
+			}
+			let emittedToolUse = false;
+			for (const emission of turn.emit) {
+				if (emission.type === 'text') {
+					yield { type: 'text_delta', text: emission.text };
+				} else {
+					emittedToolUse = true;
+					yield { type: 'tool_use', block: { type: 'tool_use', id: emission.id, name: emission.name, input: emission.input } };
+				}
+			}
+			yield { type: 'message_stop', stopReason: emittedToolUse ? 'tool_use' : 'end_turn' };
+		},
+	};
+	return { client, requests };
+}
+type IScriptedLike = { readonly type: 'text'; readonly text: string } | { readonly type: 'tool_use'; readonly id: string; readonly name: string; readonly input: unknown };
+
+function lastUserText(request: IModelRequest): string {
+	const users = request.messages.filter(message => message.role === 'user');
+	const last = users[users.length - 1];
+	return last ? text(last) : '';
+}
+
+test('walkthrough nudge: a file-changing run with no walkthrough is forced to write one', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off'; // isolate the nudge from the reply verifier
+	try {
+		const { client, requests } = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'write_file', input: {} }] }, // turn 1: change a file
+			{ emit: [{ type: 'text', text: 'Done, I changed the file.' }] }, // turn 2: stop WITHOUT a walkthrough
+			{ emit: [{ type: 'tool_use', id: 't2', name: 'write_walkthrough', input: {} }] }, // turn 3: after the nudge
+		]);
+		const { terminal } = await drive(
+			runAgentLoop([userMessage('add a feature')], {
+				system: 's',
+				tools: [writeFileTool, walkthroughToolStub],
+				modelClient: client,
+				permissionGate: allowAllPermissionGate,
+			}),
+		);
+
+		assert.equal(terminal.reason, 'completed');
+		// Without the nudge the model would have stopped at turn 2; it was forced on.
+		assert.ok(terminal.turns >= 3, `expected a forced extra turn, got ${terminal.turns}`);
+		// The turn-3 model call received the injected walkthrough reminder.
+		assert.match(lastUserText(requests[2]!), /write_walkthrough/);
+		assert.ok(
+			requests.some(request => /You changed files/.test(lastUserText(request))),
+			'the nudge reminder was injected',
+		);
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('walkthrough nudge: does NOT fire when a walkthrough was already written', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client, requests } = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'write_file', input: {} }] },
+			{ emit: [{ type: 'tool_use', id: 't2', name: 'write_walkthrough', input: {} }] },
+			{ emit: [{ type: 'text', text: 'All done.' }] },
+		]);
+		const { terminal } = await drive(
+			runAgentLoop([userMessage('add a feature')], { system: 's', tools: [writeFileTool, walkthroughToolStub], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(terminal.turns, 3, 'stops naturally, no forced extra turn');
+		assert.ok(!requests.some(request => /You changed files/.test(lastUserText(request))), 'no nudge injected');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('walkthrough nudge: does NOT fire when no files were changed', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client, requests } = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'echo', input: { text: 'x' } }] }, // read-only
+			{ emit: [{ type: 'text', text: 'Here is the answer.' }] },
+		]);
+		const { terminal } = await drive(
+			runAgentLoop([userMessage('what does this do')], { system: 's', tools: [echoTool, walkthroughToolStub], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(terminal.turns, 2, 'a read-only run stops without a nudge');
+		assert.ok(!requests.some(request => /You changed files/.test(lastUserText(request))), 'no nudge injected');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
 });
 
 test('a tool_use turn runs the tool and loops to completion', async () => {
@@ -561,7 +681,10 @@ const bigTool = defineTool({
  * A client that plays a main conversation (tool turns with growing usage, then
  * a final text) and answers compaction summary requests separately.
  */
-function compactionAwareClient(usagePerTurn: readonly number[], summaries: readonly string[]): {
+function compactionAwareClient(
+	usagePerTurn: readonly number[],
+	summaries: readonly string[],
+): {
 	client: { stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> };
 	mainRequests: IModelRequest[];
 	summaryRequests: IModelRequest[];
@@ -607,10 +730,7 @@ test('compaction: usage over threshold folds the head into an anchored summary, 
 	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
 		// threshold = 100000 − 32000 − 16000 = 52000; usage crosses it on turn 1.
-		const { client, mainRequests, summaryRequests } = compactionAwareClient(
-			[60_000, 80_000, 100_000],
-			['## Objective\n- compacted state', '## Objective\n- updated state'],
-		);
+		const { client, mainRequests, summaryRequests } = compactionAwareClient([60_000, 80_000, 100_000], ['## Objective\n- compacted state', '## Objective\n- updated state']);
 		const { events, terminal } = await drive(
 			runAgentLoop([userMessage('map the repo')], {
 				system: 'test system',
@@ -723,9 +843,7 @@ test('compaction: fail-open on summary errors, off without a window, off via kil
 
 		// No compaction config → mechanism off even with huge usage.
 		const off = compactionAwareClient([60_000, 80_000], []);
-		const offRun = await drive(
-			runAgentLoop([userMessage('q')], { system: 's', tools: [bigTool], modelClient: off.client as never, permissionGate: allowAllPermissionGate }),
-		);
+		const offRun = await drive(runAgentLoop([userMessage('q')], { system: 's', tools: [bigTool], modelClient: off.client as never, permissionGate: allowAllPermissionGate }));
 		assert.equal(compactionEvents(offRun.events).length, 0);
 		assert.equal(off.summaryRequests.length, 0);
 
@@ -877,9 +995,7 @@ test('context_breakdown: system segments come from config verbatim, tools/messag
 
 test('context_breakdown: without systemBreakdown, systemChars falls back to the full system string length', async () => {
 	const model = createScriptedModelClient([{ emit: [{ type: 'text', text: 'hi' }] }]);
-	const { events } = await drive(
-		runAgentLoop([userMessage('hi')], { system: 'x'.repeat(250), tools: [], modelClient: model, permissionGate: allowAllPermissionGate }),
-	);
+	const { events } = await drive(runAgentLoop([userMessage('hi')], { system: 'x'.repeat(250), tools: [], modelClient: model, permissionGate: allowAllPermissionGate }));
 	const [breakdown] = breakdownEvents(events);
 	assert.equal(breakdown!.systemChars, 250);
 	assert.equal(breakdown!.instructionsChars, 0);
@@ -890,9 +1006,7 @@ test('context_breakdown: without systemBreakdown, systemChars falls back to the 
 test('context_breakdown: a hard-brake turn reports zero tools, matching what is actually sent', async () => {
 	// maxTurns=2 → hardBrakeTurn = max(1, floor(2*0.9)) = 1: turn 1 is already hard.
 	const model = createScriptedModelClient([{ emit: [{ type: 'text', text: 'final answer' }] }]);
-	const { events } = await drive(
-		runAgentLoop([userMessage('go')], { system: 's', tools: [echoTool], modelClient: model, permissionGate: allowAllPermissionGate, maxTurns: 2 }),
-	);
+	const { events } = await drive(runAgentLoop([userMessage('go')], { system: 's', tools: [echoTool], modelClient: model, permissionGate: allowAllPermissionGate, maxTurns: 2 }));
 	const [breakdown] = breakdownEvents(events);
 	assert.equal(breakdown!.toolsChars, JSON.stringify([]).length, 'hard brake withholds tools from the request');
 });

@@ -5,7 +5,16 @@
 
 import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IThinkingBlock, IToolUseBlock, ModelStopReason } from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
-import { RETRY_GROWTH_TOKENS, compactionThreshold, estimateTokens, formatCompactedBlock, generateSummary, isCompactionEnabled, selectBoundary, serializeForSummary } from './compaction.js';
+import {
+	RETRY_GROWTH_TOKENS,
+	compactionThreshold,
+	estimateTokens,
+	formatCompactedBlock,
+	generateSummary,
+	isCompactionEnabled,
+	selectBoundary,
+	serializeForSummary,
+} from './compaction.js';
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
@@ -20,6 +29,10 @@ const SOFT_BRAKE_REMINDER =
 	'<system-reminder>You have used most of your step budget. Wrap up: finish the current thread and give your final answer soon. Do not open new lines of investigation.</system-reminder>';
 const HARD_BRAKE_REMINDER =
 	'<system-reminder>Step budget reached. Tools are no longer available this turn — give your final answer now from what you already know, and state plainly anything you could not verify (e.g. it depends on runtime data).</system-reminder>';
+
+/** Injected once when a file-changing run ends without a walkthrough — forces one. */
+const WALKTHROUGH_NUDGE =
+	'<system-reminder>You changed files in this task but have not recorded a walkthrough. Call write_walkthrough now with a short sectioned report — what changed (files) and how to verify it (verify) — then close with one short sentence. Do not repeat the edits; just summarize.</system-reminder>';
 
 /** Append a reminder to the model's view of the transcript without touching history. */
 function withReminder(messages: readonly IAgentMessage[], reminder: string): IAgentMessage[] {
@@ -105,6 +118,14 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	const question = extractLatestUserText(initialMessages);
 	const verifierEnabled = isReplyVerifierEnabled(process.env);
 	let verifierFired = false;
+	// Walkthrough nudge: if a run actually changed files but never wrote a
+	// walkthrough, force ONE hidden turn asking for it (the prompt's soft
+	// request is unreliable — models often just stop). Only when the tool is in
+	// play (present iff the session has code roots + the P3 build).
+	const walkthroughToolAvailable = config.tools.some(tool => tool.name === 'write_walkthrough');
+	let filesChangedThisRun = false;
+	let walkthroughWritten = false;
+	let walkthroughNudged = false;
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -301,6 +322,16 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		assistantBlocks.push(...toolUses);
 		messages.push({ role: 'assistant', content: assistantBlocks });
 
+		// Track file-changing activity and whether the walkthrough was written,
+		// across all turns of this run (drives the nudge at convergence).
+		for (const toolUse of toolUses) {
+			if (toolUse.name === 'write_file' || toolUse.name === 'edit_file') {
+				filesChangedThisRun = true;
+			} else if (toolUse.name === 'write_walkthrough') {
+				walkthroughWritten = true;
+			}
+		}
+
 		// Stop condition: no tool_use block == the turn is complete. A max_tokens
 		// stop is surfaced as its own reason — the reply was truncated (possibly
 		// to nothing, if thinking consumed the whole budget), and folding it into
@@ -325,6 +356,16 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 					messages.push({ role: 'user', content: [{ type: 'text', text: buildRetryFeedback(question, verification.reason) }] });
 					continue;
 				}
+			}
+
+			// Walkthrough nudge: a run that changed files but never wrote a
+			// walkthrough gets exactly one forced turn to produce one. Deterministic
+			// (based on the tools actually called), so it never relies on the model
+			// remembering the prompt's soft request.
+			if (reason === 'completed' && walkthroughToolAvailable && filesChangedThisRun && !walkthroughWritten && !walkthroughNudged) {
+				walkthroughNudged = true;
+				messages.push({ role: 'user', content: [{ type: 'text', text: WALKTHROUGH_NUDGE }] });
+				continue;
 			}
 
 			return { reason, turns: turn };
