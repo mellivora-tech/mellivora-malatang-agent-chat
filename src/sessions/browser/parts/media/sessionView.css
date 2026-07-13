@@ -887,6 +887,11 @@ button.conversation-plan-header {
 	color: var(--vscode-agents-color-button-background, #2ea043);
 }
 
+.conversation-plan-state.walkthrough {
+	background: color-mix(in srgb, var(--vscode-agents-color-focusBorder, #3794ff) 16%, transparent);
+	color: var(--vscode-agents-color-focusBorder, #3794ff);
+}
+
 .conversation-plan-actions {
 	display: flex;
 	gap: var(--vscode-agents-space-8);

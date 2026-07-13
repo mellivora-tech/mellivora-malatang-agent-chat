@@ -48,6 +48,7 @@ function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): 
 			'Use bash only for short, purposeful commands. Avoid long-running or blocking ones — dev servers, watch modes, full end-to-end / integration suites, or anything that launches the app or waits indefinitely — as they stall the turn. If a long command is genuinely required, scope it narrowly and set a timeout.',
 			'Batch independent work into a single step: when you need several files or several searches, issue those tool calls together in one turn rather than one at a time — it is far faster and avoids running out of steps.',
 			'For any multi-step task, call update_plan first to lay out a short finite checklist, keep it updated as you go, and once every step is done STOP and give your final answer — do not keep pulling threads. If a question cannot be answered from the code alone (e.g. it depends on runtime data), say so and stop rather than reading more.',
+			'After completing a multi-step task that CHANGED files, call write_walkthrough with a short sectioned report — what changed, how to verify — then close with one short sentence. Skip it for trivial or read-only tasks.',
 		);
 	}
 	lines.push(

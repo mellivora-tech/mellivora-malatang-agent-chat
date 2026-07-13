@@ -101,6 +101,32 @@ test('a plan payload survives the JSONL fold round-trip', async () => {
 	assert.match(message?.text ?? '', /## 实现方案 v1/, 'markdown fallback folded back');
 });
 
+// --- walkthrough artifact (P3) ---
+
+test('a walkthrough materializes settled (approved), with its own version chain and markdown header', () => {
+	const input = parsePlanInput({
+		title: 'SSH sudo 支持已完成',
+		sections: [
+			{ kind: 'files', heading: '改动文件', items: ['sshTool.ts', 'sshExec.ts'] },
+			{ kind: 'verify', heading: '如何验证', items: ['npm run test:unit', 'docker sshd 实测 sudo id'] },
+		],
+	});
+	assert.ok(input, 'verify is a valid section kind');
+	const walkthrough = materializePlan(input, 'wt-1', 1, 'walkthrough');
+
+	assert.equal(walkthrough.kind, 'walkthrough');
+	assert.equal(walkthrough.state, 'approved', 'a walkthrough lands settled, never a draft');
+	assert.match(planToMarkdown(walkthrough), /^## 完成小结: SSH sudo 支持已完成/);
+
+	// Version chains are per kind — a walkthrough never bumps plan versions.
+	const plan = materializePlan(parsePlanInput(INPUT)!, 'plan-1', 3);
+	const messages = [{ plan }, { plan: walkthrough }];
+	assert.equal(nextPlanVersion(messages, 'plan'), 4);
+	assert.equal(nextPlanVersion(messages, 'walkthrough'), 2);
+	// A plan without `kind` counts as kind 'plan' (back-compat).
+	assert.equal(nextPlanVersion([{ plan: { ...plan, version: 7 } }], 'plan'), 8);
+});
+
 // --- planState overlay fold (P1) ---
 
 test('planState entries overlay the plan message; the last entry wins', async () => {

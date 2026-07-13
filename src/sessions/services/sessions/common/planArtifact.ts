@@ -13,7 +13,7 @@
 
 import type { IPlanArtifact, IPlanComment, IPlanSection } from './session.js';
 
-export const PLAN_SECTION_KINDS: readonly IPlanSection['kind'][] = ['overview', 'files', 'approach', 'steps', 'risks'];
+export const PLAN_SECTION_KINDS: readonly IPlanSection['kind'][] = ['overview', 'files', 'approach', 'steps', 'risks', 'verify'];
 
 /** What the model sends `propose_plan` — no ids, no version, no state. */
 export interface IProposePlanSectionInput {
@@ -61,13 +61,18 @@ export function parsePlanInput(input: unknown): IProposePlanInput | undefined {
 	return { title: record.title, sections };
 }
 
-/** Build the artifact from validated input. Section ids are deterministic (`${planId}-s${index}`). */
-export function materializePlan(input: IProposePlanInput, planId: string, version: number): IPlanArtifact {
+/**
+ * Build the artifact from validated input. Section ids are deterministic
+ * (`${planId}-s${index}`). A plan arrives as a reviewable draft; a walkthrough
+ * is a post-completion report — settled ('approved') on arrival.
+ */
+export function materializePlan(input: IProposePlanInput, planId: string, version: number, kind: 'plan' | 'walkthrough' = 'plan'): IPlanArtifact {
 	return {
 		id: planId,
 		version,
 		title: input.title,
-		state: 'draft',
+		state: kind === 'walkthrough' ? 'approved' : 'draft',
+		...(kind === 'walkthrough' ? { kind } : {}),
 		sections: input.sections.map((section, index) => ({
 			id: `${planId}-s${index}`,
 			kind: section.kind,
@@ -80,7 +85,7 @@ export function materializePlan(input: IProposePlanInput, planId: string, versio
 
 /** Markdown fallback: what older builds render, and what the next run's transcript carries. */
 export function planToMarkdown(plan: IPlanArtifact): string {
-	const lines: string[] = [`## 实现方案 v${plan.version}: ${plan.title}`];
+	const lines: string[] = [plan.kind === 'walkthrough' ? `## 完成小结: ${plan.title}` : `## 实现方案 v${plan.version}: ${plan.title}`];
 	for (const section of plan.sections) {
 		lines.push('', `### ${section.heading}`);
 		if (section.body.trim() !== '') {
@@ -113,11 +118,11 @@ export function buildReviseTurn(plan: IPlanArtifact, comments: readonly IPlanCom
 	return lines.join('\n');
 }
 
-/** The next plan version in this session: 1 + the highest version already present. */
-export function nextPlanVersion(messages: readonly { readonly plan?: IPlanArtifact }[]): number {
+/** The next artifact version in this session, counted WITHIN a kind — walkthroughs never bump plan versions or vice versa. */
+export function nextPlanVersion(messages: readonly { readonly plan?: IPlanArtifact }[], kind: 'plan' | 'walkthrough' = 'plan'): number {
 	let max = 0;
 	for (const message of messages) {
-		if (message.plan !== undefined && message.plan.version > max) {
+		if (message.plan !== undefined && (message.plan.kind ?? 'plan') === kind && message.plan.version > max) {
 			max = message.plan.version;
 		}
 	}

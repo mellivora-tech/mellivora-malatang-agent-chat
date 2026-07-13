@@ -60,7 +60,7 @@ export interface ISessionAttachmentData {
 /** Wire mirror of IPlanSection (session.ts) — pure JSON. */
 export interface IPlanSectionData {
 	readonly id: string;
-	readonly kind: 'overview' | 'files' | 'approach' | 'steps' | 'risks';
+	readonly kind: 'overview' | 'files' | 'approach' | 'steps' | 'risks' | 'verify';
 	readonly heading: string;
 	readonly body: string;
 	readonly items?: readonly string[];
@@ -77,6 +77,7 @@ export interface IPlanArtifactData {
 	readonly title: string;
 	readonly sections: readonly IPlanSectionData[];
 	readonly state: 'draft' | 'approved' | 'superseded';
+	readonly kind?: 'plan' | 'walkthrough';
 }
 
 export interface ISessionMessageEntry {

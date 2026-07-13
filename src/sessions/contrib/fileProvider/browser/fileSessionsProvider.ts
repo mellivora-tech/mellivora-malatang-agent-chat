@@ -650,10 +650,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const steps: ISessionWorkStep[] = [];
 		let stepStart = workStart;
 		let openToolLabel: string | undefined;
-		// The run's latest propose_plan input — last call wins; materialized into
-		// a role:'plan' message at finalize (ids/version assigned there, never by
-		// the model).
+		// The run's latest propose_plan / write_walkthrough inputs — last call of
+		// each wins; materialized into role:'plan' messages at finalize
+		// (ids/version assigned there, never by the model).
 		let pendingPlanInput: IProposePlanInput | undefined;
+		let pendingWalkthroughInput: IProposePlanInput | undefined;
 		// Reasoning text streamed since the last step boundary; becomes the
 		// closing thinking step's expandable detail.
 		let thinkingBuffer = '';
@@ -795,11 +796,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 					: undefined;
 			const now = new Date();
 
-			// A propose_plan call materializes into a role:'plan' message here —
-			// deterministic ids/version, markdown fallback on `text` (older builds
-			// and the next run's transcript both read it). Slots between the work
-			// block and the answer bubble, in the live view and on disk alike.
+			// propose_plan / write_walkthrough calls materialize into role:'plan'
+			// messages here — deterministic ids/version, markdown fallback on
+			// `text` (older builds and the next run's transcript both read it).
+			// They slot between the work block and the answer bubble, in the live
+			// view and on disk alike. Only a new PLAN retires earlier plans —
+			// walkthroughs are settled reports, outside the version chain.
 			let planMessage: ISessionMessage | undefined;
+			let walkthroughMessage: ISessionMessage | undefined;
 			let supersededIds: readonly string[] = [];
 			if (pendingPlanInput !== undefined) {
 				const planId = `${sessionId}-plan-${generateId()}`;
@@ -809,23 +813,42 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// view first, matching planState entries below.
 				supersededIds = session.messages
 					.get()
-					.filter(message => message.plan !== undefined && message.plan.state !== 'superseded')
+					.filter(message => message.plan !== undefined && (message.plan.kind ?? 'plan') === 'plan' && message.plan.state !== 'superseded')
 					.map(message => message.id);
+			}
+			if (pendingWalkthroughInput !== undefined) {
+				const walkthroughId = `${sessionId}-walkthrough-${generateId()}`;
+				const walkthrough = materializePlan(pendingWalkthroughInput, walkthroughId, nextPlanVersion(session.messages.get(), 'walkthrough'), 'walkthrough');
+				walkthroughMessage = { id: walkthroughId, role: 'plan', text: planToMarkdown(walkthrough), plan: walkthrough, timestamp: now };
+			}
+			const artifactMessages = [planMessage, walkthroughMessage].filter((message): message is ISessionMessage => message !== undefined);
+			if (artifactMessages.length > 0) {
 				const messages = session.messages
 					.get()
 					.map(message => (supersededIds.includes(message.id) && message.plan !== undefined ? { ...message, plan: { ...message.plan, state: 'superseded' as const } } : message));
 				const assistantIndex = messages.findIndex(message => message.id === assistantId);
-				session.messages.set(assistantIndex === -1 ? [...messages, planMessage] : [...messages.slice(0, assistantIndex), planMessage, ...messages.slice(assistantIndex)]);
+				session.messages.set(
+					assistantIndex === -1 ? [...messages, ...artifactMessages] : [...messages.slice(0, assistantIndex), ...artifactMessages, ...messages.slice(assistantIndex)],
+				);
 			}
 
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
 				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
-				if (planMessage?.plan) {
-					for (const supersededId of supersededIds) {
-						await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
+				for (const supersededId of supersededIds) {
+					await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
+				}
+				for (const artifactMessage of artifactMessages) {
+					if (artifactMessage.plan) {
+						await this.bridge.append(ref, {
+							type: 'message',
+							id: artifactMessage.id,
+							role: 'plan',
+							text: artifactMessage.text,
+							plan: artifactMessage.plan,
+							timestamp: now.toISOString(),
+						});
 					}
-					await this.bridge.append(ref, { type: 'message', id: planMessage.id, role: 'plan', text: planMessage.text, plan: planMessage.plan, timestamp: now.toISOString() });
 				}
 				if (hasReply) {
 					await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
@@ -889,6 +912,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 					// Malformed input stays on the previous capture — the tool result
 					// already told the model what was wrong.
 					pendingPlanInput = parsePlanInput(event.input) ?? pendingPlanInput;
+				} else if (event.name === 'write_walkthrough') {
+					pendingWalkthroughInput = parsePlanInput(event.input) ?? pendingWalkthroughInput;
 				}
 				openToolLabel = describeWorkTool(event.name, event.input);
 				updateWork();

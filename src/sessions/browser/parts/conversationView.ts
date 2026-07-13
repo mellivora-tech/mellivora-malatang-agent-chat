@@ -646,22 +646,31 @@ export class ConversationView extends Disposable {
 		card.classList.toggle('superseded', superseded);
 		card.classList.toggle('collapsed', collapsed);
 
+		// A walkthrough is the post-completion twin: book icon, "完成小结" tag,
+		// no version badge, no review actions (it lands settled, never a draft).
+		const isWalkthrough = plan?.kind === 'walkthrough';
 		const header = append(card, document.createElement(superseded ? 'button' : 'div')) as HTMLElement;
 		header.className = 'conversation-plan-header';
 		const icon = append(header, document.createElement('span'));
-		icon.className = 'codicon codicon-checklist';
+		icon.className = `codicon ${isWalkthrough ? 'codicon-book' : 'codicon-checklist'}`;
 		icon.setAttribute('aria-hidden', 'true');
 		const title = append(header, document.createElement('span'));
 		title.className = 'conversation-plan-title';
 		title.textContent = plan ? plan.title : 'Implementation plan';
 		if (plan) {
-			const version = append(header, document.createElement('span'));
-			version.className = 'conversation-plan-version';
-			version.textContent = `v${plan.version}`;
-			if (plan.state !== 'draft') {
-				const state = append(header, document.createElement('span'));
-				state.className = `conversation-plan-state ${plan.state}`;
-				state.textContent = plan.state === 'approved' ? '已批准' : '已过期';
+			if (isWalkthrough) {
+				const tag = append(header, document.createElement('span'));
+				tag.className = 'conversation-plan-state walkthrough';
+				tag.textContent = '完成小结';
+			} else {
+				const version = append(header, document.createElement('span'));
+				version.className = 'conversation-plan-version';
+				version.textContent = `v${plan.version}`;
+				if (plan.state !== 'draft') {
+					const state = append(header, document.createElement('span'));
+					state.className = `conversation-plan-state ${plan.state}`;
+					state.textContent = plan.state === 'approved' ? '已批准' : '已过期';
+				}
 			}
 		}
 		if (superseded) {

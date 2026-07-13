@@ -63,7 +63,7 @@ export interface ISessionAttachment {
 export interface IPlanSection {
 	/** Renderer-assigned, deterministic (`${planId}-s${index}`) — the model never sees ids. */
 	readonly id: string;
-	readonly kind: 'overview' | 'files' | 'approach' | 'steps' | 'risks';
+	readonly kind: 'overview' | 'files' | 'approach' | 'steps' | 'risks' | 'verify';
 	readonly heading: string;
 	/** Markdown body, rendered with the shared markdown renderer. */
 	readonly body: string;
@@ -84,6 +84,12 @@ export interface IPlanArtifact {
 	readonly sections: readonly IPlanSection[];
 	/** Named `state` (not `status`) so a top-level echo can never collide with the fold's session-status key. */
 	readonly state: 'draft' | 'approved' | 'superseded';
+	/**
+	 * 'plan' (default when absent): pre-execution proposal, reviewable draft,
+	 * new versions supersede old. 'walkthrough': post-completion report (what
+	 * was done + how to verify) — settled on arrival, never versioned away.
+	 */
+	readonly kind?: 'plan' | 'walkthrough';
 }
 
 /**

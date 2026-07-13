@@ -557,6 +557,65 @@ test('propose_plan materializes a plan card; a new version supersedes the old; s
 	assert.equal(commentEntries.length, 2, 'both writes persisted as entries');
 });
 
+test('write_walkthrough materializes a settled walkthrough card and does NOT supersede the plan', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	let runCount = 0;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			runCount += 1;
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			if (runCount === 1) {
+				emit({ event: { type: 'tool_use', toolUseId: 'p1', name: 'propose_plan', input: { title: '方案', sections: [{ kind: 'overview', heading: '概述', body: 'x' }] } } });
+				emit({ event: { type: 'tool_result', toolUseId: 'p1', content: 'ok', isError: false } });
+			} else {
+				emit({
+					event: {
+						type: 'tool_use',
+						toolUseId: 'w1',
+						name: 'write_walkthrough',
+						input: { title: '完成了', sections: [{ kind: 'verify', heading: '如何验证', items: ['npm test'] }] },
+					},
+				});
+				emit({ event: { type: 'tool_result', toolUseId: 'w1', content: 'ok', isError: false } });
+			}
+			emit({ event: { type: 'assistant_delta', text: '好。' } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('出方案');
+	await new Promise(resolve => setTimeout(resolve, 10));
+	await provider.sendMessage(session.sessionId, '执行吧');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const artifacts = session.messages.get().filter(message => message.role === 'plan');
+	assert.equal(artifacts.length, 2);
+	const plan = artifacts.find(message => (message.plan?.kind ?? 'plan') === 'plan');
+	const walkthrough = artifacts.find(message => message.plan?.kind === 'walkthrough');
+	assert.ok(plan && walkthrough);
+	assert.equal(plan.plan?.state, 'draft', 'the walkthrough must not supersede the plan');
+	assert.equal(walkthrough.plan?.state, 'approved', 'a walkthrough lands settled');
+	assert.equal(walkthrough.plan?.version, 1, 'walkthrough versions count separately');
+	assert.equal(bridge.appends.filter(call => call.entry.type === 'planState').length, 0, 'no supersede overlays written');
+});
+
 test('a run that ends at the step limit with no text shows a note, not a blank bubble', async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
