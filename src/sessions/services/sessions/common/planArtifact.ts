@@ -11,7 +11,7 @@
  * next run's transcript.
  */
 
-import type { IPlanArtifact, IPlanSection } from './session.js';
+import type { IPlanArtifact, IPlanComment, IPlanSection } from './session.js';
 
 export const PLAN_SECTION_KINDS: readonly IPlanSection['kind'][] = ['overview', 'files', 'approach', 'steps', 'risks'];
 
@@ -90,6 +90,26 @@ export function planToMarkdown(plan: IPlanArtifact): string {
 			lines.push('', ...section.items.map(item => `- ${item}`));
 		}
 	}
+	return lines.join('\n');
+}
+
+/**
+ * Assemble the revise turn from a plan's OPEN comments: what the model sees
+ * when the user clicks 让它改. Comments are quoted with their section heading
+ * (the model never saw section ids). Returns undefined when nothing is open —
+ * the caller falls back to focusing the composer.
+ */
+export function buildReviseTurn(plan: IPlanArtifact, comments: readonly IPlanComment[]): string | undefined {
+	const open = comments.filter(comment => comment.planId === plan.id && !comment.resolved);
+	if (open.length === 0) {
+		return undefined;
+	}
+	const heading = (sectionId: string): string => plan.sections.find(section => section.id === sectionId)?.heading ?? '方案';
+	const lines = [
+		`我评审了实现方案 v${plan.version},段落批注如下:`,
+		...open.map(comment => `- [${heading(comment.sectionId)}] ${comment.body}`),
+		'请据此修订,并重新调用 propose_plan 给出新版本。',
+	];
 	return lines.join('\n');
 }
 

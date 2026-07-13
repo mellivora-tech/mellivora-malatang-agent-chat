@@ -9,6 +9,7 @@ import type { IAgentBridge, IAgentMessage, PermissionMode } from '../../../servi
 import type { IGitBridge } from '../../../services/git/common/git.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type {
+	IPlanComment,
 	ISession,
 	ISessionAttachment,
 	ISessionChangesSummary,
@@ -51,6 +52,7 @@ interface IMutableSession extends ISession {
 	readonly isRead: ObservableValue<boolean>;
 	readonly isPinned: ObservableValue<boolean>;
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
+	readonly planComments: ObservableValue<readonly IPlanComment[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
 	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
@@ -79,6 +81,7 @@ function createSession(options: {
 	permissionMode?: PermissionMode;
 	compactionAnchor?: ISessionCompactionAnchorData;
 	contextUsage?: ISessionContextUsage;
+	planComments?: readonly IPlanComment[];
 }): IMutableSession {
 	return {
 		sessionId: options.sessionId,
@@ -97,6 +100,7 @@ function createSession(options: {
 		isRead: observableValue(options.isRead ?? true),
 		isPinned: observableValue(options.isPinned ?? false),
 		messages: observableValue(options.messages),
+		planComments: observableValue<readonly IPlanComment[]>(options.planComments ?? []),
 		interactivity: observableValue(options.interactivity),
 		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
@@ -369,6 +373,22 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return session;
 	}
 
+	async setPlanComment(sessionId: string, comment: IPlanComment): Promise<ISession> {
+		const session = this.getMutableSession(sessionId);
+		const comments = session.planComments.get();
+		const index = comments.findIndex(candidate => candidate.id === comment.id);
+		session.planComments.set(index === -1 ? [...comments, comment] : [...comments.slice(0, index), comment, ...comments.slice(index + 1)]);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		await this.enqueueWrite(async () => {
+			await this.bridge.append(this.getRef(sessionId), {
+				type: 'planComment',
+				comment: { ...comment, createdAt: comment.createdAt.toISOString() },
+				timestamp: new Date().toISOString(),
+			});
+		});
+		return session;
+	}
+
 	async forkSession(sessionId: string, messageId: string): Promise<ISession> {
 		const source = this.getMutableSession(sessionId);
 		const history = source.messages.get();
@@ -478,6 +498,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.feedback !== undefined ? { feedback: message.feedback } : {}),
 				...(message.timestamp !== undefined ? { timestamp: new Date(message.timestamp) } : {}),
 			})),
+			...(snapshot.planComments !== undefined ? { planComments: snapshot.planComments.map(comment => ({ ...comment, createdAt: new Date(comment.createdAt) })) } : {}),
 			interactivity: coerceInteractivity(snapshot.interactivity),
 			isArchived: snapshot.isArchived,
 			isRead: snapshot.isRead,

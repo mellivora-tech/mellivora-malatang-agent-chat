@@ -115,6 +115,28 @@ export interface ISessionPlanStateEntry {
 	readonly timestamp: string;
 }
 
+/** Wire mirror of IPlanComment (session.ts) — pure JSON. */
+export interface IPlanCommentData {
+	readonly id: string;
+	readonly planId: string;
+	readonly sectionId: string;
+	readonly body: string;
+	readonly resolved: boolean;
+	readonly createdAt: string;
+}
+
+/**
+ * A review comment on one plan section, upserted by comment id — the last
+ * entry per id wins (resolve = re-append with resolved:true). The payload is
+ * NESTED under `comment` so its keys can never collide with the fold's
+ * state-branch fields in an old build.
+ */
+export interface ISessionPlanCommentEntry {
+	readonly type: 'planComment';
+	readonly comment: IPlanCommentData;
+	readonly timestamp: string;
+}
+
 /**
  * A compaction summary persisted with the session. `covered` counts the prefix
  * of the transcript (as toTranscript builds it) the summary stands in for;
@@ -160,7 +182,7 @@ export interface ISessionStateEntry {
 	readonly contextUsage?: ISessionContextUsageData;
 }
 
-export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry | ISessionPlanStateEntry;
+export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry | ISessionPlanStateEntry | ISessionPlanCommentEntry;
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
@@ -196,6 +218,7 @@ export interface ISessionSnapshot {
 	readonly compactionAnchor?: ISessionCompactionAnchorData;
 	readonly contextUsage?: ISessionContextUsageData;
 	readonly messages: readonly ISessionSnapshotMessage[];
+	readonly planComments?: readonly IPlanCommentData[];
 }
 
 /** The shape exposed on `agentWindow.sessions` by the preload script. */

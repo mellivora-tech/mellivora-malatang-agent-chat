@@ -7,7 +7,16 @@ import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
-import type { IActiveSession, ISession, ISessionAttachment, ISessionMessage, ISessionPendingApproval, ISessionWorkStep } from '../../services/sessions/common/session.js';
+import type {
+	IActiveSession,
+	IPlanComment,
+	ISession,
+	ISessionAttachment,
+	ISessionMessage,
+	ISessionPendingApproval,
+	ISessionWorkStep,
+} from '../../services/sessions/common/session.js';
+import { buildReviseTurn } from '../../services/sessions/common/planArtifact.js';
 import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
@@ -28,6 +37,8 @@ export interface ISessionMessageSender {
 	setMessageFeedback?(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<unknown>;
 	/** Flip a plan artifact's review state (approve / supersede); the store overlays it onto the plan message. */
 	setPlanState?(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<unknown>;
+	/** Upsert a review comment on a plan section (resolve = same id with resolved:true). */
+	setPlanComment?(sessionId: string, comment: IPlanComment): Promise<unknown>;
 	forkSession?(sessionId: string, messageId: string): Promise<unknown>;
 	/** Data URL for a stored image attachment, for thumbnails in the transcript. */
 	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
@@ -66,6 +77,13 @@ export class ConversationView extends Disposable {
 	private readonly workExpandOverride = new Map<string, boolean>();
 	/** Superseded plan cards a click expanded back open (they collapse by default). */
 	private readonly planExpand = new Set<string>();
+	/** Sections with an open comment editor (`messageId:sectionId`) and their unsent drafts. */
+	private readonly planCommentEditor = new Set<string>();
+	private readonly planCommentDraft = new Map<string, string>();
+	/** Comment editor to focus after the next plan-card rebuild (set on open, consumed once). */
+	private planCommentFocus: string | undefined;
+	/** Comments changed — plan cards must resync even though their message objects didn't change. */
+	private planCardsDirty = false;
 	// Individually expanded tool steps ("messageId:index").
 	private readonly stepExpand = new Set<string>();
 	private scrollToBottomOnRender = false;
@@ -311,6 +329,12 @@ export class ConversationView extends Disposable {
 
 		if (session) {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
+			this.sessionDisposables.add(
+				session.planComments.subscribe(() => {
+					this.planCardsDirty = true;
+					this.render();
+				}),
+			);
 			this.sessionDisposables.add(session.interactivity.subscribe(() => this.render()));
 			this.sessionDisposables.add(
 				session.status.subscribe(() => {
@@ -518,7 +542,9 @@ export class ConversationView extends Disposable {
 					// hover-fade UI to protect (unlike the message action bar below).
 					this.patchWorkBlock(element, message);
 				} else if (message.role === 'plan') {
-					if (existing.message !== message) {
+					// Comment changes don't touch the message object — the dirty
+					// flag forces a resync when the planComments observable fired.
+					if (existing.message !== message || this.planCardsDirty) {
 						this.patchPlanCard(element, message);
 					}
 				} else if (existing.message !== message) {
@@ -548,6 +574,7 @@ export class ConversationView extends Disposable {
 				this.renderedRows.delete(id);
 			}
 		}
+		this.planCardsDirty = false;
 	}
 
 	/** Patch an existing user/assistant/tool row's dynamic content in place — never recreate it. Work blocks go through patchWorkBlock instead (see reconcileTranscript). */
@@ -663,12 +690,20 @@ export class ConversationView extends Disposable {
 			return;
 		}
 
+		const sessionIdForComments = this.session?.sessionId;
+		const allComments = this.session?.planComments.get() ?? [];
+		// Comments are version-scoped via section ids; only a draft accepts new ones.
+		const commentable = plan.state === 'draft' && sessionIdForComments !== undefined && this.messageSender?.setPlanComment !== undefined;
+
 		const sections = append(card, document.createElement('div'));
 		sections.className = 'conversation-plan-sections';
 		for (const section of plan.sections) {
 			const sectionEl = append(sections, document.createElement('div'));
 			sectionEl.className = 'conversation-plan-section';
 			sectionEl.dataset.sectionId = section.id;
+			const sectionComments = allComments.filter(comment => comment.sectionId === section.id);
+			const openCount = sectionComments.filter(comment => !comment.resolved).length;
+			const editorKey = `${message.id}:${section.id}`;
 
 			const kicker = append(sectionEl, document.createElement('div'));
 			kicker.className = 'conversation-plan-kicker';
@@ -677,6 +712,23 @@ export class ConversationView extends Disposable {
 			kickerIcon.setAttribute('aria-hidden', 'true');
 			const heading = append(kicker, document.createElement('span'));
 			heading.textContent = section.heading;
+			if (openCount > 0) {
+				const badge = append(kicker, document.createElement('span'));
+				badge.className = 'conversation-plan-comment-badge';
+				badge.textContent = `💬 ${openCount}`;
+			}
+			if (commentable && !this.planCommentEditor.has(editorKey)) {
+				// Hover gutter: opens the inline comment editor for this section.
+				const gutter = append(kicker, document.createElement('button'));
+				gutter.className = 'conversation-plan-gutter codicon codicon-comment-add';
+				gutter.title = '对这一节留批注';
+				gutter.setAttribute('aria-label', `批注:${section.heading}`);
+				gutter.addEventListener('click', () => {
+					this.planCommentEditor.add(editorKey);
+					this.planCommentFocus = editorKey;
+					this.patchPlanCard(card, message);
+				});
+			}
 
 			if (section.body.trim() !== '') {
 				const body = append(sectionEl, document.createElement('div'));
@@ -689,6 +741,77 @@ export class ConversationView extends Disposable {
 				for (const item of section.items) {
 					const li = append(list, document.createElement('li'));
 					li.textContent = item;
+				}
+			}
+
+			if (sectionComments.length > 0) {
+				const thread = append(sectionEl, document.createElement('div'));
+				thread.className = 'conversation-plan-thread';
+				for (const comment of sectionComments) {
+					const row = append(thread, document.createElement('div'));
+					row.className = `conversation-plan-comment${comment.resolved ? ' resolved' : ''}`;
+					const body = append(row, document.createElement('span'));
+					body.className = 'conversation-plan-comment-body';
+					body.textContent = comment.body;
+					if (comment.resolved) {
+						const tag = append(row, document.createElement('span'));
+						tag.className = 'conversation-plan-comment-tag';
+						tag.textContent = '已解决';
+					} else if (commentable && sessionIdForComments) {
+						const resolve = append(row, document.createElement('button'));
+						resolve.className = 'conversation-plan-comment-resolve';
+						resolve.textContent = '解决';
+						resolve.addEventListener('click', () => {
+							void this.messageSender?.setPlanComment?.(sessionIdForComments, { ...comment, resolved: true });
+						});
+					}
+				}
+			}
+
+			if (commentable && sessionIdForComments && this.planCommentEditor.has(editorKey)) {
+				const editor = append(sectionEl, document.createElement('div'));
+				editor.className = 'conversation-plan-comment-editor';
+				const input = append(editor, document.createElement('textarea'));
+				input.className = 'conversation-plan-comment-input';
+				input.placeholder = `批注「${section.heading}」…`;
+				input.rows = 2;
+				input.value = this.planCommentDraft.get(editorKey) ?? '';
+				input.addEventListener('input', () => this.planCommentDraft.set(editorKey, input.value));
+				const buttons = append(editor, document.createElement('div'));
+				buttons.className = 'conversation-plan-comment-buttons';
+				const submit = append(buttons, document.createElement('button'));
+				submit.className = 'conversation-plan-approve';
+				submit.textContent = '提交';
+				const cancel = append(buttons, document.createElement('button'));
+				cancel.className = 'conversation-plan-revise';
+				cancel.textContent = '取消';
+				submit.addEventListener('click', () => {
+					const body = input.value.trim();
+					if (body === '') {
+						return;
+					}
+					this.planCommentEditor.delete(editorKey);
+					this.planCommentDraft.delete(editorKey);
+					void this.messageSender?.setPlanComment?.(sessionIdForComments, {
+						id: `${section.id}-c${Date.now().toString(36)}`,
+						planId: plan.id,
+						sectionId: section.id,
+						body,
+						resolved: false,
+						createdAt: new Date(),
+					});
+				});
+				cancel.addEventListener('click', () => {
+					this.planCommentEditor.delete(editorKey);
+					this.planCommentDraft.delete(editorKey);
+					this.patchPlanCard(card, message);
+				});
+				if (this.planCommentFocus === editorKey) {
+					this.planCommentFocus = undefined;
+					queueMicrotask(() => {
+						input.focus();
+						input.setSelectionRange(input.value.length, input.value.length);
+					});
 				}
 			}
 		}
@@ -721,7 +844,30 @@ export class ConversationView extends Disposable {
 				});
 			});
 			revise.addEventListener('click', () => {
-				this.input.focus();
+				// With open comments the revise turn writes itself; the model
+				// re-proposes and the comments auto-resolve (they were delivered).
+				// Without any, the user says what to change in the composer.
+				const comments = this.session?.planComments.get() ?? [];
+				const turn = buildReviseTurn(plan, comments);
+				if (turn === undefined) {
+					this.input.focus();
+					return;
+				}
+				approve.disabled = true;
+				revise.disabled = true;
+				void (async () => {
+					await sender.sendMessage(sessionId, turn);
+					// Only after the turn is on its way — a failed send must not
+					// leave the comments falsely marked as delivered.
+					for (const comment of comments) {
+						if (comment.planId === plan.id && !comment.resolved) {
+							await sender.setPlanComment?.(sessionId, { ...comment, resolved: true });
+						}
+					}
+				})().catch(() => {
+					approve.disabled = false;
+					revise.disabled = false;
+				});
 			});
 		}
 	}

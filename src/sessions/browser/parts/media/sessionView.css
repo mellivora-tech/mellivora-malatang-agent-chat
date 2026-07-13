@@ -754,6 +754,116 @@ button.conversation-work-step-row:hover {
 	font-size: var(--vscode-agents-fontSize-body2);
 }
 
+.conversation-plan-comment-badge {
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+/* The comment gutter only surfaces on section hover — margin-note affordance. */
+.conversation-plan-gutter {
+	margin-left: auto;
+	padding: 0 var(--vscode-agents-space-4);
+	border: 0;
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	cursor: default;
+	opacity: 0;
+}
+
+.conversation-plan-section:hover .conversation-plan-gutter,
+.conversation-plan-gutter:focus-visible {
+	opacity: 1;
+}
+
+.conversation-plan-gutter:hover {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-plan-thread {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+	margin-top: var(--vscode-agents-space-8);
+	padding-left: var(--vscode-agents-space-10);
+	border-left: var(--vscode-agents-space-2) solid color-mix(in srgb, var(--vscode-agents-color-focusBorder, #3794ff) 45%, transparent);
+}
+
+.conversation-plan-comment {
+	display: flex;
+	align-items: baseline;
+	gap: var(--vscode-agents-space-8);
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-plan-comment.resolved .conversation-plan-comment-body {
+	color: var(--vscode-agents-color-text-muted);
+	text-decoration: line-through;
+}
+
+.conversation-plan-comment-tag {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-plan-comment-resolve {
+	flex: 0 0 auto;
+	padding: 0 var(--vscode-agents-space-6);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 24%, transparent);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-secondary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	cursor: default;
+}
+
+.conversation-plan-comment-resolve:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
+.conversation-plan-comment-editor {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-6);
+	margin-top: var(--vscode-agents-space-8);
+}
+
+.conversation-plan-comment-input {
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 18%, transparent);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-body2);
+	resize: vertical;
+}
+
+.conversation-plan-comment-input:focus {
+	outline: none;
+	border-color: var(--vscode-agents-color-focusBorder, #3794ff);
+}
+
+.conversation-plan-comment-buttons {
+	display: flex;
+	gap: var(--vscode-agents-space-6);
+}
+
+.conversation-plan-comment-buttons button {
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid transparent;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	cursor: default;
+}
+
 /* A superseded card's header doubles as its expand toggle. */
 button.conversation-plan-header {
 	width: 100%;

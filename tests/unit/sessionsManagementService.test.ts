@@ -28,6 +28,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		isRead: observableValue(true),
 		isPinned: observableValue(false),
 		messages: observableValue<readonly ISessionMessage[]>([]),
+		planComments: observableValue([]),
 		interactivity: observableValue(SessionInteractivity.Full),
 		pendingApproval: observableValue(undefined),
 		reconnect: observableValue(undefined),
@@ -91,6 +92,11 @@ class TestProvider implements ISessionsProvider {
 
 	async setPlanState(sessionId: string): Promise<ISession> {
 		this.requests.push(`planState:${sessionId}`);
+		return this.sessions[0]!;
+	}
+
+	async setPlanComment(sessionId: string): Promise<ISession> {
+		this.requests.push(`planComment:${sessionId}`);
 		return this.sessions[0]!;
 	}
 

@@ -86,6 +86,20 @@ export interface IPlanArtifact {
 	readonly state: 'draft' | 'approved' | 'superseded';
 }
 
+/**
+ * A user's review comment on one plan section (Google-Docs style margin note).
+ * Comments belong to a plan VERSION — section ids are version-scoped, so they
+ * never drift when a revision regenerates the sections.
+ */
+export interface IPlanComment {
+	readonly id: string;
+	readonly planId: string;
+	readonly sectionId: string;
+	readonly body: string;
+	readonly resolved: boolean;
+	readonly createdAt: Date;
+}
+
 export interface ISessionMessage {
 	readonly id: string;
 	/** 'work' messages summarize one agent run: total duration plus its steps. */
@@ -176,6 +190,8 @@ export interface ISession {
 	readonly isRead: IObservable<boolean>;
 	readonly isPinned: IObservable<boolean>;
 	readonly messages: IObservable<readonly ISessionMessage[]>;
+	/** Review comments on plan artifacts, upserted by id (resolve = same id, resolved:true). */
+	readonly planComments: IObservable<readonly IPlanComment[]>;
 	readonly interactivity: IObservable<SessionInteractivity>;
 	readonly pendingApproval: IObservable<ISessionPendingApproval | undefined>;
 	readonly reconnect: IObservable<ISessionReconnect | undefined>;

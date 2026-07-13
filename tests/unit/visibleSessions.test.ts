@@ -23,6 +23,7 @@ function createSession(sessionId: string): ISession {
 		isRead: observableValue(true),
 		isPinned: observableValue(false),
 		messages: observableValue<readonly ISessionMessage[]>([]),
+		planComments: observableValue([]),
 		interactivity: observableValue(SessionInteractivity.Full),
 		pendingApproval: observableValue(undefined),
 		reconnect: observableValue(undefined),

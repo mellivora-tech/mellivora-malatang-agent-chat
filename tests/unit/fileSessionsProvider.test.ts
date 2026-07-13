@@ -79,8 +79,8 @@ function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBri
 					...existing,
 					messages: [...existing.messages, { id: entry.id, role: entry.role, text: entry.text, ...(entry.detail !== undefined ? { detail: entry.detail } : {}) }],
 				});
-			} else if (entry.type === 'feedback' || entry.type === 'planState') {
-				// Feedback/planState entries fold onto messages in the real store; the fake keeps them raw.
+			} else if (entry.type === 'feedback' || entry.type === 'planState' || entry.type === 'planComment') {
+				// Feedback/planState/planComment entries fold onto messages in the real store; the fake keeps them raw.
 			} else {
 				store.set(ref.sessionId, {
 					...existing,
@@ -545,6 +545,16 @@ test('propose_plan materializes a plan card; a new version supersedes the old; s
 	);
 	const approveEntry = bridge.appends.find(call => call.entry.type === 'planState' && call.entry.messageId === plans[1]?.id && call.entry.planState === 'approved');
 	assert.ok(approveEntry, 'approved overlay persisted');
+
+	// Comments: upsert by id — add, then resolve the same id.
+	const comment = { id: 'c1', planId: plans[1]!.plan!.id, sectionId: `${plans[1]!.id}-s0`, body: '别在 prod 开 sudo', resolved: false, createdAt: new Date() };
+	await provider.setPlanComment(session.sessionId, comment);
+	assert.equal(session.planComments.get().length, 1);
+	await provider.setPlanComment(session.sessionId, { ...comment, resolved: true });
+	assert.equal(session.planComments.get().length, 1, 'same id upserts in place');
+	assert.equal(session.planComments.get()[0]?.resolved, true);
+	const commentEntries = bridge.appends.filter(call => call.entry.type === 'planComment');
+	assert.equal(commentEntries.length, 2, 'both writes persisted as entries');
 });
 
 test('a run that ends at the step limit with no text shows a note, not a blank bubble', async () => {

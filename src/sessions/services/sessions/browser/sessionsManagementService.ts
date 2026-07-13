@@ -7,7 +7,7 @@ import { Emitter } from '../../../base/common/event.js';
 import { Disposable, type IDisposable } from '../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
 import type { PermissionMode } from '../../agent/common/agent.js';
-import type { ISession } from '../common/session.js';
+import type { IPlanComment, ISession } from '../common/session.js';
 import type { ISessionsManagementService as ISessionsManagementServiceContract } from '../common/sessionsManagement.js';
 import type { ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../common/sessionsProvider.js';
 import type { ISessionsProvidersChangeEvent, ISessionsProvidersService } from './sessionsProvidersService.js';
@@ -85,6 +85,10 @@ export class SessionsManagementService extends Disposable implements ISessionsMa
 
 	async setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession> {
 		return this.getOwningProvider(sessionId).setPlanState(sessionId, messageId, state);
+	}
+
+	async setPlanComment(sessionId: string, comment: IPlanComment): Promise<ISession> {
+		return this.getOwningProvider(sessionId).setPlanComment(sessionId, comment);
 	}
 
 	async forkSession(sessionId: string, messageId: string): Promise<ISession> {

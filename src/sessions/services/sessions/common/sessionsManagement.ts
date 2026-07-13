@@ -5,7 +5,7 @@
 
 import type { Event } from '../../../base/common/event.js';
 import type { PermissionMode } from '../../agent/common/agent.js';
-import type { ISession } from './session.js';
+import type { IPlanComment, ISession } from './session.js';
 import type { ISendMessageOptions, ISessionChangeEvent, IStartSessionOptions } from './sessionsProvider.js';
 
 export interface ISessionsManagementService {
@@ -22,6 +22,8 @@ export interface ISessionsManagementService {
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	/** Set a plan artifact's review state (approved / superseded); overlaid onto the plan message like feedback. */
 	setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession>;
+	/** Upsert a review comment on a plan section (resolve = same id with resolved:true). */
+	setPlanComment(sessionId: string, comment: IPlanComment): Promise<ISession>;
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	renameSession(sessionId: string, title: string): Promise<ISession>;
 	/** Data URL for a stored image attachment, for thumbnails. */

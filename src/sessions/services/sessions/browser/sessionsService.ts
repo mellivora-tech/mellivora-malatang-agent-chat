@@ -6,7 +6,7 @@
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
 import type { PermissionMode } from '../../agent/common/agent.js';
-import type { ISession } from '../common/session.js';
+import type { IPlanComment, ISession } from '../common/session.js';
 import type { ISessionsManagementService } from '../common/sessionsManagement.js';
 import type { ISendMessageOptions, IStartSessionOptions } from '../common/sessionsProvider.js';
 import { VisibleSessions } from './visibleSessions.js';
@@ -29,6 +29,8 @@ export interface ISessionsService {
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	/** Set a plan artifact's review state (approved / superseded); overlaid onto the plan message like feedback. */
 	setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession>;
+	/** Upsert a review comment on a plan section (resolve = same id with resolved:true). */
+	setPlanComment(sessionId: string, comment: IPlanComment): Promise<ISession>;
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	renameSession(sessionId: string, title: string): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
@@ -118,6 +120,10 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession> {
 		return this.managementService.setPlanState(sessionId, messageId, state);
+	}
+
+	async setPlanComment(sessionId: string, comment: IPlanComment): Promise<ISession> {
+		return this.managementService.setPlanComment(sessionId, comment);
 	}
 
 	async forkSession(sessionId: string, messageId: string): Promise<ISession> {

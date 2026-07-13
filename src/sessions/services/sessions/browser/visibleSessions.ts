@@ -62,6 +62,9 @@ class ActiveSession implements IActiveSession {
 	get messages() {
 		return this.session.messages;
 	}
+	get planComments() {
+		return this.session.planComments;
+	}
 	get interactivity() {
 		return this.session.interactivity;
 	}

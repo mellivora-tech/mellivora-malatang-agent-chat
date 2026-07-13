@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type {
+	IPlanCommentData,
 	ISessionEntry,
 	ISessionHeader,
 	ISessionMessageEntry,
@@ -140,6 +141,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let contextUsage: ISessionStateEntry['contextUsage'];
 	const feedback = new Map<string, 'like' | 'dislike'>();
 	const planStates = new Map<string, 'draft' | 'approved' | 'superseded'>();
+	const planComments = new Map<string, IPlanCommentData>();
 
 	for (const line of lines.slice(1)) {
 		const entry = parseEntry(line);
@@ -162,6 +164,11 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 
 		if (entry.type === 'planState') {
 			planStates.set(entry.messageId, entry.planState);
+			continue;
+		}
+
+		if (entry.type === 'planComment') {
+			planComments.set(entry.comment.id, entry.comment);
 			continue;
 		}
 
@@ -236,6 +243,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		...(summary !== undefined ? { changesSummary: summary } : {}),
 		...(compactionAnchor !== undefined ? { compactionAnchor } : {}),
 		...(contextUsage !== undefined ? { contextUsage } : {}),
+		...(planComments.size > 0 ? { planComments: [...planComments.values()] } : {}),
 	};
 }
 
@@ -307,6 +315,22 @@ function parseEntry(line: string): ISessionEntry | undefined {
 
 	if (candidate['type'] === 'planState') {
 		if (typeof candidate['messageId'] !== 'string' || !['draft', 'approved', 'superseded'].includes(candidate['planState'] as never)) {
+			return undefined;
+		}
+		return parsed as ISessionEntry;
+	}
+
+	if (candidate['type'] === 'planComment') {
+		const comment = candidate['comment'] as Record<string, unknown> | undefined;
+		if (
+			typeof comment !== 'object' ||
+			comment === null ||
+			typeof comment['id'] !== 'string' ||
+			typeof comment['planId'] !== 'string' ||
+			typeof comment['sectionId'] !== 'string' ||
+			typeof comment['body'] !== 'string' ||
+			typeof comment['resolved'] !== 'boolean'
+		) {
 			return undefined;
 		}
 		return parsed as ISessionEntry;

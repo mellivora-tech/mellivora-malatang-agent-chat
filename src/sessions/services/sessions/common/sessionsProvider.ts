@@ -5,7 +5,7 @@
 
 import type { Event } from '../../../base/common/event.js';
 import type { PermissionMode } from '../../agent/common/agent.js';
-import type { ISession, ISessionAttachment, ISessionWorkspace } from './session.js';
+import type { IPlanComment, ISession, ISessionAttachment, ISessionWorkspace } from './session.js';
 
 export interface ISessionChangeEvent {
 	readonly added: readonly ISession[];
@@ -48,6 +48,8 @@ export interface ISessionsProvider {
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
 	/** Set a plan artifact's review state (approved / superseded); overlaid onto the plan message like feedback. */
 	setPlanState(sessionId: string, messageId: string, state: 'draft' | 'approved' | 'superseded'): Promise<ISession>;
+	/** Upsert a review comment on a plan section (resolve = same id with resolved:true). */
+	setPlanComment(sessionId: string, comment: IPlanComment): Promise<ISession>;
 	/** Duplicate the session's history up to (and including) `messageId` into a new session. */
 	forkSession(sessionId: string, messageId: string): Promise<ISession>;
 	/** Manually set the session title; an empty (trimmed) title is ignored. */

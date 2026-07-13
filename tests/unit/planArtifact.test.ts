@@ -12,7 +12,7 @@ import test from 'node:test';
 import { createProposePlanTool } from '../../src/main/agent/tools/proposePlanTool.js';
 import { appendSessionEntry, createSessionFile, loadSession } from '../../src/main/sessionsStorage.js';
 import { toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
-import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown } from '../../src/sessions/services/sessions/common/planArtifact.js';
+import { buildReviseTurn, materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown } from '../../src/sessions/services/sessions/common/planArtifact.js';
 import type { IPlanArtifact, ISessionMessage } from '../../src/sessions/services/sessions/common/session.js';
 
 const INPUT = {
@@ -132,6 +132,69 @@ test('planState entries overlay the plan message; the last entry wins', async ()
 	await appendSessionEntry(root, ref, { type: 'planState', messageId: 'nope', planState: 'approved', timestamp: '2026-07-13T00:00:04.000Z' });
 	const unchanged = await loadSession(root, ref);
 	assert.equal(unchanged?.messages.length, 1);
+});
+
+// --- planComment fold + buildReviseTurn (P2) ---
+
+test('planComment entries fold into the snapshot; upsert by id resolves', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'agent-chat-plancomment-'));
+	const header = {
+		type: 'session',
+		version: 1,
+		sessionId: 'pc-sess',
+		sessionType: 'agent-chat',
+		icon: 'codicon-new-session',
+		createdAt: '2026-07-13T00:00:00.000Z',
+		interactivity: 'full',
+	} as const;
+	await createSessionFile(root, header);
+	const ref = { sessionId: 'pc-sess' };
+
+	const comment = { id: 'c1', planId: 'plan-1', sectionId: 'plan-1-s1', body: '别在 prod 开 sudo', resolved: false, createdAt: '2026-07-13T00:00:01.000Z' };
+	await appendSessionEntry(root, ref, { type: 'planComment', comment, timestamp: '2026-07-13T00:00:01.000Z' });
+
+	const open = await loadSession(root, ref);
+	assert.equal(open?.planComments?.length, 1);
+	assert.equal(open?.planComments?.[0]?.resolved, false);
+
+	await appendSessionEntry(root, ref, { type: 'planComment', comment: { ...comment, resolved: true }, timestamp: '2026-07-13T00:00:02.000Z' });
+	const resolved = await loadSession(root, ref);
+	assert.equal(resolved?.planComments?.length, 1, 'upsert by id, not append');
+	assert.equal(resolved?.planComments?.[0]?.resolved, true, 'last entry wins');
+
+	// A malformed comment entry is dropped whole, never half-parsed.
+	await appendSessionEntry(root, ref, { type: 'planComment', comment: { id: 'bad' }, timestamp: '2026-07-13T00:00:03.000Z' } as never);
+	const after = await loadSession(root, ref);
+	assert.equal(after?.planComments?.length, 1);
+});
+
+test('buildReviseTurn quotes open comments by section heading; empty when all resolved', () => {
+	const plan = materializePlan(parsePlanInput(INPUT)!, 'plan-1', 2);
+	const filesSection = plan.sections[1]!;
+	const comments = [
+		{ id: 'c1', planId: 'plan-1', sectionId: filesSection.id, body: '别动 authService', resolved: false, createdAt: new Date() },
+		{ id: 'c2', planId: 'plan-1', sectionId: plan.sections[2]!.id, body: '风险还要补日志脱敏', resolved: false, createdAt: new Date() },
+		{ id: 'c3', planId: 'plan-1', sectionId: filesSection.id, body: '已处理过的', resolved: true, createdAt: new Date() },
+		{ id: 'c4', planId: 'OTHER-plan', sectionId: 'x', body: '别的版本的', resolved: false, createdAt: new Date() },
+	];
+
+	const turn = buildReviseTurn(plan, comments);
+	assert.ok(turn);
+	assert.match(turn, /实现方案 v2/);
+	assert.match(turn, /\[改动文件\] 别动 authService/);
+	assert.match(turn, /\[风险\] 风险还要补日志脱敏/);
+	assert.doesNotMatch(turn, /已处理过的/, 'resolved comments stay out');
+	assert.doesNotMatch(turn, /别的版本的/, 'other plans stay out');
+	assert.match(turn, /重新调用 propose_plan/);
+
+	assert.equal(
+		buildReviseTurn(
+			plan,
+			comments.map(candidate => ({ ...candidate, resolved: true })),
+		),
+		undefined,
+		'nothing open → undefined',
+	);
 });
 
 // --- toTranscript mapping (audit finding E) ---
