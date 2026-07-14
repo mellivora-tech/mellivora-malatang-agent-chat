@@ -11,10 +11,14 @@ import type { ILoopGuard } from './loopGuard.js';
  * events as it goes and returning the collected result blocks (which the loop
  * appends as a single user message).
  *
- * SEAM (point 3 — concurrency): every tool runs serially today. To parallelize,
- * partition `toolUses` into runs where `tool.isConcurrencySafe(input)` holds and
- * execute each safe run concurrently (bounded, e.g. 10), keeping non-safe tools
- * serial. Nothing outside this function needs to change.
+ * Concurrency (the former point-3 seam, filled after CC's partitionToolCalls):
+ * consecutive calls whose tool says `isConcurrencySafe(input)` run as one
+ * concurrent batch; everything else runs serially in order. `isConcurrencySafe`
+ * throwing counts as NOT safe — conservative. Result blocks keep the original
+ * call order regardless of completion order (the API requires tool_results to
+ * match the tool_use sequence). A concurrent batch emits its use/result event
+ * pairs once the batch settles — today's safe tools are millisecond-local
+ * (fs reads, JS greps), so no live-progress fidelity is lost.
  */
 export async function* executeToolUses(
 	toolUses: readonly IToolUseBlock[],
@@ -25,27 +29,81 @@ export async function* executeToolUses(
 ): AsyncGenerator<IAgentEvent, IToolResultBlock[]> {
 	const results: IToolResultBlock[] = [];
 
-	for (const use of toolUses) {
-		yield { type: 'tool_use', toolUseId: use.id, name: use.name, input: use.input };
+	for (const batch of partitionBySafety(toolUses, tools)) {
+		if (batch.length === 1) {
+			const use = batch[0]!;
+			yield { type: 'tool_use', toolUseId: use.id, name: use.name, input: use.input };
 
-		// The guard sees every call (blocked ones included, so a 4th identical
-		// attempt is also blocked). A blocked call skips execution entirely —
-		// the error result is the model's feedback, same as any other failure.
-		const blocked = guard?.check(use);
-		if (blocked) {
-			yield { type: 'loop_guard', toolUseId: use.id, name: use.name, repeatCount: blocked.repeatCount };
-			const block = errorResult(use.id, blocked.message);
+			// The guard sees every call (blocked ones included, so a 4th identical
+			// attempt is also blocked). A blocked call skips execution entirely —
+			// the error result is the model's feedback, same as any other failure.
+			const blocked = guard?.check(use);
+			if (blocked) {
+				yield { type: 'loop_guard', toolUseId: use.id, name: use.name, repeatCount: blocked.repeatCount };
+				const block = errorResult(use.id, blocked.message);
+				results.push(block);
+				yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
+				continue;
+			}
+
+			const block = await runSingleToolUse(use, tools, permissionGate, signal);
 			results.push(block);
 			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
 			continue;
 		}
 
-		const block = await runSingleToolUse(use, tools, permissionGate, signal);
-		results.push(block);
-		yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
+		// Concurrent batch: guard-check up front (synchronous — the repeat counter
+		// must see calls in order), start the survivors together, then emit
+		// ordered use/result pairs.
+		const settled = await Promise.all(
+			batch.map(use => {
+				const blocked = guard?.check(use);
+				if (blocked) {
+					return Promise.resolve({ use, blocked, block: errorResult(use.id, blocked.message) });
+				}
+				return runSingleToolUse(use, tools, permissionGate, signal).then(block => ({ use, blocked: undefined, block }));
+			}),
+		);
+		for (const { use, blocked, block } of settled) {
+			yield { type: 'tool_use', toolUseId: use.id, name: use.name, input: use.input };
+			if (blocked) {
+				yield { type: 'loop_guard', toolUseId: use.id, name: use.name, repeatCount: blocked.repeatCount };
+			}
+			results.push(block);
+			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
+		}
 	}
 
 	return results;
+}
+
+/** Split one turn's calls into maximal runs of concurrency-safe tools; unsafe (or unknown) tools become singleton batches. */
+function partitionBySafety(toolUses: readonly IToolUseBlock[], tools: readonly IAgentTool[]): IToolUseBlock[][] {
+	const batches: IToolUseBlock[][] = [];
+	let run: IToolUseBlock[] = [];
+	const flush = (): void => {
+		if (run.length > 0) {
+			batches.push(run);
+			run = [];
+		}
+	};
+	for (const use of toolUses) {
+		const tool = tools.find(candidate => candidate.name === use.name);
+		let safe = false;
+		try {
+			safe = tool !== undefined && tool.isConcurrencySafe(use.input);
+		} catch {
+			safe = false;
+		}
+		if (safe) {
+			run.push(use);
+		} else {
+			flush();
+			batches.push([use]);
+		}
+	}
+	flush();
+	return batches;
 }
 
 /**

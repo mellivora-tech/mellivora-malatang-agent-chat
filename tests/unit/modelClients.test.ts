@@ -342,3 +342,24 @@ test('Anthropic accumulator carries cache fields — input_tokens alone under-co
 	assert.equal(usage.cacheReadTokens, 116_000);
 	assert.equal(usage.cacheWriteTokens, 2_500);
 });
+
+test('anthropic request carries exactly two prompt-cache breakpoints: system tail and last message tail', () => {
+	const signal = new AbortController().signal;
+	const messages = [
+		{ role: 'user' as const, content: [{ type: 'text' as const, text: 'q1' }] },
+		{ role: 'assistant' as const, content: [{ type: 'text' as const, text: 'a1' }] },
+		{ role: 'user' as const, content: [{ type: 'text' as const, text: 'q2' }, { type: 'text' as const, text: 'q2-tail' }] },
+	];
+	const body = buildAnthropicRequestBody({ baseURL: 'https://api.kimi.com/coding/', model: 'm' }, { system: 'sys', messages, tools: [], signal });
+
+	const system = body['system'] as { text: string; cache_control?: { type: string } }[];
+	assert.equal(system.length, 1);
+	assert.deepEqual(system[0]?.cache_control, { type: 'ephemeral' });
+
+	const wire = body['messages'] as { content: { text?: string; cache_control?: { type: string } }[] }[];
+	const marked = wire.flatMap(message => message.content.filter(block => block.cache_control !== undefined));
+	assert.equal(marked.length, 1, 'exactly ONE message-level breakpoint');
+	const lastBlock = wire[2]?.content[1];
+	assert.deepEqual(lastBlock?.cache_control, { type: 'ephemeral' }, 'the marker sits on the LAST block of the LAST message');
+	assert.equal(wire[2]?.content[0]?.cache_control, undefined);
+});

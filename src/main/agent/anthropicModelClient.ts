@@ -62,9 +62,12 @@ type AnthropicWireBlock =
 	| { readonly type: 'redacted_thinking'; readonly data: string }
 	| { readonly type: 'image'; readonly source: { readonly type: 'base64'; readonly media_type: string; readonly data: string } };
 
+/** Anthropic prompt-cache marker. Attached to at most TWO places per request — see {@link buildAnthropicRequestBody}. */
+type CacheableWireBlock = AnthropicWireBlock & { readonly cache_control?: { readonly type: 'ephemeral' } };
+
 interface IAnthropicMessage {
 	readonly role: 'user' | 'assistant';
-	readonly content: readonly AnthropicWireBlock[];
+	readonly content: readonly CacheableWireBlock[];
 }
 
 // --- Pure translation ----------------------------------------------------------
@@ -101,12 +104,29 @@ export function toAnthropicTools(tools: readonly IToolSpec[]): { name: string; d
 	return tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema }));
 }
 
+/**
+ * Prompt-cache discipline, modeled on Claude Code's: exactly TWO ephemeral
+ * breakpoints per request — one after the system prompt (caches tools+system,
+ * which serialize before it) and one on the last content block of the LAST
+ * message. The tail marker moves forward every turn, so each request reads the
+ * previous turn's prefix and extends the cache by one turn. Measured absence:
+ * a 78-turn Kimi run (2026-07-14) re-prefilled 6K→48K tokens EVERY turn with
+ * cacheReadTokens 0 — this client read the cache fields but never asked for
+ * caching. Kimi's anthropic-compatible endpoint serves Claude Code traffic,
+ * which always carries these markers.
+ */
 export function buildAnthropicRequestBody(config: IModelClientConfig, request: IModelRequest): Record<string, unknown> {
+	const messages = toAnthropicMessages(request.messages);
+	const last = messages[messages.length - 1];
+	if (last && last.content.length > 0) {
+		const tail = last.content[last.content.length - 1]!;
+		messages[messages.length - 1] = { ...last, content: [...last.content.slice(0, -1), { ...tail, cache_control: { type: 'ephemeral' } }] };
+	}
 	return {
 		model: config.model,
 		max_tokens: config.params?.maxTokens ?? DEFAULT_MAX_TOKENS,
-		system: request.system,
-		messages: toAnthropicMessages(request.messages),
+		system: [{ type: 'text', text: request.system, cache_control: { type: 'ephemeral' } }],
+		messages,
 		stream: true,
 		...(request.tools.length > 0 ? { tools: toAnthropicTools(request.tools) } : {}),
 		...(config.params?.thinking ? { thinking: thinkingParam(config.baseURL) } : {}),
@@ -304,7 +324,16 @@ export class AnthropicModelClient implements IModelClient {
 		const endpoint = `${this.config.baseURL.replace(/\/$/, '')}/v1/messages`;
 		const response = await fetch(endpoint, {
 			method: 'POST',
-			headers: { 'content-type': 'application/json', 'x-api-key': this.config.apiKey ?? '', 'anthropic-version': ANTHROPIC_VERSION },
+			headers: {
+				'content-type': 'application/json',
+				'x-api-key': this.config.apiKey ?? '',
+				'anthropic-version': ANTHROPIC_VERSION,
+				// Prompt caching is GA on the official API (header ignored there), but
+				// several compatible endpoints still gate cache_control handling on the
+				// original beta token. Costs nothing where it's obsolete; measured
+				// cacheReadTokens=0 on Kimi without it despite valid breakpoints.
+				'anthropic-beta': 'prompt-caching-2024-07-31',
+			},
 			body: JSON.stringify(buildAnthropicRequestBody(this.config, request)),
 			signal: request.signal,
 		});
