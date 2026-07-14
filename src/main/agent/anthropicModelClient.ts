@@ -25,6 +25,8 @@ interface IAnthropicContentBlock {
 	readonly text?: string;
 	readonly id?: string;
 	readonly name?: string;
+	/** redacted_thinking payload — arrives complete on content_block_start, no deltas. */
+	readonly data?: string;
 }
 
 interface IAnthropicUsage {
@@ -57,6 +59,7 @@ type AnthropicWireBlock =
 	| { readonly type: 'tool_use'; readonly id: string; readonly name: string; readonly input: unknown }
 	| { readonly type: 'tool_result'; readonly tool_use_id: string; readonly content: string; readonly is_error: boolean }
 	| { readonly type: 'thinking'; readonly thinking: string; readonly signature?: string }
+	| { readonly type: 'redacted_thinking'; readonly data: string }
 	| { readonly type: 'image'; readonly source: { readonly type: 'base64'; readonly media_type: string; readonly data: string } };
 
 interface IAnthropicMessage {
@@ -80,6 +83,11 @@ export function toAnthropicMessages(messages: readonly IAgentMessage[]): IAnthro
 				// Passed back verbatim (signature included) — required by the API in
 				// tool-use loops whenever extended thinking is enabled.
 				return { type: 'thinking', thinking: block.thinking, ...(block.signature !== undefined ? { signature: block.signature } : {}) };
+			}
+			if (block.type === 'redacted_thinking') {
+				// Same passback rule as thinking; the server decrypts it to keep
+				// reasoning continuity across the tool-use loop.
+				return { type: 'redacted_thinking', data: block.data };
 			}
 			if (block.type === 'image') {
 				return { type: 'image', source: { type: 'base64', media_type: block.mediaType, data: block.data } };
@@ -131,6 +139,7 @@ function safeHostname(baseURL: string): string {
 export class AnthropicStreamAccumulator {
 	private readonly blocks = new Map<number, { id: string; name: string; json: string }>();
 	private readonly thinking = new Map<number, { text: string; signature?: string }>();
+	private readonly redacted = new Map<number, string>();
 	private readonly order: number[] = [];
 	private stopReason: string | undefined;
 	private inputTokens: number | undefined;
@@ -167,6 +176,14 @@ export class AnthropicStreamAccumulator {
 
 		if (wire.type === 'content_block_start' && wire.content_block?.type === 'thinking') {
 			this.thinking.set(index, { text: '' });
+			this.order.push(index);
+			return [];
+		}
+
+		if (wire.type === 'content_block_start' && wire.content_block?.type === 'redacted_thinking') {
+			// The encrypted payload arrives whole on content_block_start; nothing
+			// streams to the UI (there is no readable text to show).
+			this.redacted.set(index, wire.content_block.data ?? '');
 			this.order.push(index);
 			return [];
 		}
@@ -220,6 +237,11 @@ export class AnthropicStreamAccumulator {
 			const thought = this.thinking.get(index);
 			if (thought && thought.text.length > 0) {
 				events.push({ type: 'thinking_block', block: { type: 'thinking', thinking: thought.text, ...(thought.signature !== undefined ? { signature: thought.signature } : {}) } });
+				continue;
+			}
+			const redactedData = this.redacted.get(index);
+			if (redactedData !== undefined && redactedData.length > 0) {
+				events.push({ type: 'thinking_block', block: { type: 'redacted_thinking', data: redactedData } });
 				continue;
 			}
 			const block = this.blocks.get(index);

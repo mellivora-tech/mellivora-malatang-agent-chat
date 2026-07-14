@@ -42,13 +42,24 @@ export interface IToolResultBlock {
  * be passed back in tool-use loops — the Anthropic API requires this whenever
  * thinking is enabled; dropping the blocks 400s against real Claude models and
  * measurably shallows Kimi's final syntheses. Signature is optional because
- * some Anthropic-compatible providers omit it. (`redacted_thinking` is a known
- * remaining gap — rare, safety-triggered, not emitted by Kimi.)
+ * some Anthropic-compatible providers omit it.
  */
 export interface IThinkingBlock {
 	readonly type: 'thinking';
 	readonly thinking: string;
 	readonly signature?: string;
+}
+
+/**
+ * Thinking the Anthropic safety system encrypted server-side. Same passback
+ * rule as IThinkingBlock — a tool-use turn whose reasoning was redacted 400s
+ * on the next request if this block is missing. Only the official API emits
+ * it (compat providers mimic the wire format but have no redaction pipeline).
+ */
+export interface IRedactedThinkingBlock {
+	readonly type: 'redacted_thinking';
+	/** Opaque encrypted payload — round-tripped verbatim, never displayed. */
+	readonly data: string;
 }
 
 /** An inline image on a user turn. `data` is raw base64 (no data: prefix). */
@@ -59,7 +70,7 @@ export interface IImageBlock {
 	readonly data: string;
 }
 
-export type IContentBlock = ITextBlock | IToolUseBlock | IToolResultBlock | IThinkingBlock | IImageBlock;
+export type IContentBlock = ITextBlock | IToolUseBlock | IToolResultBlock | IThinkingBlock | IRedactedThinkingBlock | IImageBlock;
 
 export interface IAgentMessage {
 	readonly role: 'user' | 'assistant';
@@ -77,8 +88,8 @@ export type IModelStreamEvent =
 	| { readonly type: 'text_delta'; readonly text: string }
 	| { readonly type: 'thinking_delta'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly block: IToolUseBlock }
-	/** A complete thinking block (text + signature), emitted at stream end so the loop can preserve it in the transcript. UI streaming stays on thinking_delta. */
-	| { readonly type: 'thinking_block'; readonly block: IThinkingBlock }
+	/** A complete thinking block (text + signature, or the redacted form), emitted at stream end so the loop can preserve it in the transcript. UI streaming stays on thinking_delta; redacted blocks have no deltas. */
+	| { readonly type: 'thinking_block'; readonly block: IThinkingBlock | IRedactedThinkingBlock }
 	/** The provider's own token count for this turn — ground truth for context-window occupancy. Anthropic-format input_tokens EXCLUDES cache hits, so the cache fields must ride along or occupancy under-counts. */
 	| { readonly type: 'usage'; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number }
 	| { readonly type: 'message_stop'; readonly stopReason: ModelStopReason };

@@ -173,12 +173,50 @@ test('Anthropic accumulator preserves thinking blocks with their signatures', ()
 
 	const thinkingBlock = events.find((event): event is Extract<IModelStreamEvent, { type: 'thinking_block' }> => event.type === 'thinking_block');
 	assert.ok(thinkingBlock, 'a complete thinking block is emitted');
+	assert.ok(thinkingBlock.block.type === 'thinking', 'plain (non-redacted) thinking');
 	assert.equal(thinkingBlock.block.thinking, 'let me reason');
 	assert.equal(thinkingBlock.block.signature, 'sig-abc');
 	// The block precedes the tool_use, mirroring stream order.
 	assert.ok(events.findIndex(e => e.type === 'thinking_block') < events.findIndex(e => e.type === 'tool_use'));
 	// UI streaming still gets the deltas.
 	assert.equal(events.filter(e => e.type === 'thinking_delta').length, 2);
+});
+
+test('Anthropic accumulator preserves redacted_thinking blocks for passback', () => {
+	const events = runAnthropic([
+		{ type: 'message_start' },
+		// The encrypted payload arrives whole on content_block_start — no deltas.
+		{ type: 'content_block_start', index: 0, content_block: { type: 'redacted_thinking', data: 'ENCRYPTED' } },
+		{ type: 'content_block_stop', index: 0 },
+		{ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'toolu_2', name: 'echo' } },
+		{ type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{}' } },
+		{ type: 'content_block_stop', index: 1 },
+		{ type: 'message_delta', delta: { stop_reason: 'tool_use' } },
+		{ type: 'message_stop' },
+	]);
+
+	const redacted = events.find((event): event is Extract<IModelStreamEvent, { type: 'thinking_block' }> => event.type === 'thinking_block');
+	assert.ok(redacted, 'the redacted block is emitted for the transcript');
+	assert.deepEqual(redacted.block, { type: 'redacted_thinking', data: 'ENCRYPTED' });
+	// Stream order preserved: the block precedes the tool_use it reasoned about.
+	assert.ok(events.findIndex(e => e.type === 'thinking_block') < events.findIndex(e => e.type === 'tool_use'));
+	// Nothing readable to show — no thinking deltas reach the UI.
+	assert.equal(events.filter(e => e.type === 'thinking_delta').length, 0);
+	assert.equal(stopReason(events), 'tool_use');
+});
+
+test('toAnthropicMessages passes redacted_thinking back verbatim; toOpenAIMessages drops it', () => {
+	const withRedacted: readonly IAgentMessage[] = [
+		{
+			role: 'assistant',
+			content: [
+				{ type: 'redacted_thinking', data: 'ENCRYPTED' },
+				{ type: 'tool_use', id: 't1', name: 'echo', input: {} },
+			],
+		},
+	];
+	assert.deepEqual(toAnthropicMessages(withRedacted)[0]?.content[0], { type: 'redacted_thinking', data: 'ENCRYPTED' });
+	assert.equal(JSON.stringify(toOpenAIMessages('SYS', withRedacted)).includes('ENCRYPTED'), false, 'OpenAI wire has no redacted-thinking concept');
 });
 
 test('a thinking-only turn is an end_turn, not a tool_use stop', () => {

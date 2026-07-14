@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IThinkingBlock, IToolUseBlock, ModelStopReason } from './agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IRedactedThinkingBlock, IThinkingBlock, IToolUseBlock, ModelStopReason } from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
 import {
 	RETRY_GROWTH_TOKENS,
@@ -301,7 +301,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// would duplicate output, so those errors surface instead).
 		let assistantText: string;
 		let toolUses: IToolUseBlock[];
-		let thinkingBlocks: IThinkingBlock[];
+		let thinkingBlocks: (IThinkingBlock | IRedactedThinkingBlock)[];
 		let stopReason: ModelStopReason;
 
 		for (let attempt = 1; ; attempt++) {
