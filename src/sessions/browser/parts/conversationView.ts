@@ -1194,9 +1194,15 @@ export class ConversationView extends Disposable {
 			label.textContent = step.label;
 		} else {
 			label.textContent = step.label;
-			const duration = append(row, document.createElement('span'));
-			duration.className = 'conversation-work-step-duration';
-			duration.textContent = formatDurationMs(step.durationMs);
+			if (step.running) {
+				const spinner = append(row, document.createElement('span'));
+				spinner.className = 'codicon codicon-loading codicon-modifier-spin conversation-work-step-duration';
+				spinner.setAttribute('aria-label', '进行中');
+			} else {
+				const duration = append(row, document.createElement('span'));
+				duration.className = 'conversation-work-step-duration';
+				duration.textContent = formatDurationMs(step.durationMs);
+			}
 		}
 
 		if (step.detail) {

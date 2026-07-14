@@ -132,6 +132,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 	private readonly responseDelayMs: number;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private initialized = false;
+	/** In-flight runs' finalizers — drained on window unload so an app quit persists "[应用退出]" summaries instead of erasing the runs (a killed run once vanished without a trace, 2026-07-14). */
+	private readonly inflightFinalizers = new Set<() => void>();
 
 	constructor(
 		private readonly bridge: ISessionsBridge,
@@ -140,6 +142,16 @@ export class FileSessionsProvider implements ISessionsProvider {
 		private readonly modelsService?: IModelsService,
 	) {
 		this.responseDelayMs = options.responseDelayMs ?? DEFAULT_RESPONSE_DELAY_MS;
+		if (typeof window !== 'undefined') {
+			// Best-effort: the appends are async IPC, but the main process outlives
+			// the window long enough to drain them in practice. Without this, a
+			// quit mid-run leaves the transcript as if the run never happened.
+			window.addEventListener('beforeunload', () => {
+				for (const flush of [...this.inflightFinalizers]) {
+					flush();
+				}
+			});
+		}
 	}
 
 	private readonly git: IGitBridge | undefined = (globalThis as GitGlobals).agentWindow?.git;
@@ -704,7 +716,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 		};
 
 		const updateWork = (durationMs?: number): void => {
-			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: [...steps], ...(durationMs === undefined ? {} : { durationMs }) };
+			// The RUNNING call rides the live view as a synthetic open step — steps
+			// only holds closed ones, which left long tool calls (a 5-minute SFTP
+			// upload, a sub-agent) invisible until they finished. tool_progress
+			// events refresh openToolLabel, so this row is where progress renders.
+			const liveSteps: ISessionWorkStep[] =
+				openToolLabel !== undefined ? [...steps, { kind: 'tool', label: openToolLabel, durationMs: Date.now() - stepStart, running: true }] : [...steps];
+			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }) };
 			const messages = session.messages.get();
 			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
@@ -754,11 +772,36 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 		};
 
+		// Torn down when the run settles, whatever ends it (done event, error,
+		// window unload) — currently just the quit-flush registration.
+		const runCleanups: (() => void)[] = [];
+
+		// What a killed run leaves in the transcript: the last thing the model was
+		// thinking/doing, distilled from the work steps. A bare "Stopped." erased
+		// a whole deploy investigation from the next run's memory — the model then
+		// honestly denied ever reporting the failure the user had watched live.
+		const abortSummary = (cause: string): string => {
+			const lastThought = [...steps].reverse().find(step => (step.kind === 'narration' || step.kind === 'thinking') && (step.detail ?? step.label).trim() !== '');
+			const lastTool = [...steps].reverse().find(step => step.kind === 'tool');
+			const parts: string[] = [];
+			if (lastThought) {
+				const thought = (lastThought.detail ?? lastThought.label).trim();
+				parts.push(`中止前的最后判断：${thought.length > 300 ? `${thought.slice(0, 300)}…` : thought}`);
+			}
+			if (lastTool) {
+				parts.push(`中止时正在执行：${lastTool.label}`);
+			}
+			return parts.length === 0 ? `[本次运行被${cause}，任务未完成]` : `[本次运行被${cause}，任务未完成，以下状态未经最终验证]\n${parts.join('\n')}`;
+		};
+
 		const finalize = (reason?: string): void => {
 			if (finalized) {
 				return;
 			}
 			finalized = true;
+			for (const cleanup of runCleanups) {
+				cleanup();
+			}
 			dispose();
 			disposeApprovals();
 			session.pendingApproval.set(undefined);
@@ -782,7 +825,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 					// visible text — without this note the run would end in silence.
 					text = 'I hit the output token limit before producing a reply — ask me to continue.';
 				} else if (reason === 'aborted') {
-					text = 'Stopped.';
+					text = abortSummary('用户中止');
+				} else if (reason === 'app_quit') {
+					text = abortSummary('应用退出');
 				}
 			}
 			const hasReply = text !== '';
@@ -843,9 +888,24 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// The work digest lands last (after the answer) as a hidden message, so
 			// the next run's transcript carries it at the tail — see toTranscript,
 			// which forwards only the most recent digest.
+			let digestText = pendingDigest;
+			if (reason === 'aborted' || reason === 'app_quit') {
+				// An interrupted run marks the digest so the NEXT model treats the
+				// carried state as provisional. The abort summary (assistant text)
+				// aligns the user-visible memory; this line aligns the model's.
+				const previous = digestText ?? [...session.messages.get()].reverse().find(message => message.role === 'digest')?.text;
+				const note = 'Note: the previous run was INTERRUPTED mid-task — its work is incomplete and any conclusions from it are provisional; re-verify before relying on them.';
+				if (previous === undefined) {
+					digestText = `<work-digest>\n${note}\n</work-digest>`;
+				} else if (!previous.includes('INTERRUPTED mid-task')) {
+					digestText = previous.replace('</work-digest>', `${note}\n</work-digest>`);
+				} else {
+					digestText = previous;
+				}
+			}
 			let digestMessage: ISessionMessage | undefined;
-			if (pendingDigest !== undefined) {
-				digestMessage = { id: `${sessionId}-digest-${generateId()}`, role: 'digest', text: pendingDigest, timestamp: now };
+			if (digestText !== undefined) {
+				digestMessage = { id: `${sessionId}-digest-${generateId()}`, role: 'digest', text: digestText, timestamp: now };
 				session.messages.set([...session.messages.get(), digestMessage]);
 			}
 
@@ -1076,6 +1136,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 			session.status.set(SessionStatus.NeedsInput);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		});
+
+		// Window unload folds this run into a persisted "[应用退出]" summary.
+		const quitFlush = (): void => finalize('app_quit');
+		this.inflightFinalizers.add(quitFlush);
+		runCleanups.push(() => this.inflightFinalizers.delete(quitFlush));
 
 		void this.buildTranscript(session)
 			.then(transcript => {

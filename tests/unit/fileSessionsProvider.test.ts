@@ -1582,3 +1582,50 @@ test('a rejected reply never resurfaces as narration in the retry turn', async (
 	const narrations = (work?.steps ?? []).filter(step => step.kind === 'narration');
 	assert.equal(narrations.length, 0, `the rejected reply must not reappear as narration: ${JSON.stringify(narrations)}`);
 });
+
+test('an aborted run persists a substantive summary and an INTERRUPTED digest note, not "Stopped."', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'thinking_delta', text: '服务还是没有运行。启动命令说成功，但状态显示没有运行。让我直接执行 java 命令看看错误。' } });
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'run_on_server', input: { command: 'java -jar yzj-opms.jar' } } });
+			// The user hits stop while the tool streams — no tool_result, no reply text.
+			emit({ done: { reason: 'aborted', turns: 3 } });
+			return { reason: 'aborted', turns: 3 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('部署到服务器');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	const reply = session.messages.get().find(message => message.role === 'assistant');
+	assert.ok(reply, 'an assistant summary exists');
+	assert.notEqual(reply.text, 'Stopped.');
+	assert.match(reply.text, /本次运行被用户中止/);
+	assert.match(reply.text, /中止前的最后判断：服务还是没有运行/);
+	assert.match(reply.text, /中止时正在执行：run_on_server/);
+
+	const digest = session.messages.get().find(message => message.role === 'digest');
+	assert.ok(digest, 'a digest message exists even though the loop never emitted one');
+	assert.match(digest.text, /INTERRUPTED mid-task/);
+
+	const persistedReply = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
+	assert.ok(persistedReply, 'the summary is persisted');
+});

@@ -40,6 +40,8 @@ export interface ISessionWorkStep {
 	readonly durationMs: number;
 	/** Expandable detail — for tool steps, the (truncated) output. */
 	readonly detail?: string;
+	/** Still executing — rendered with a spinner instead of a duration chip. Live-view only; never persisted (the step closes before finalize writes). */
+	readonly running?: boolean;
 }
 
 /**
