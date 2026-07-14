@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { allowAllPermissionGate } from './agentTools.js';
 import type { IAgentTool, IPermissionContext, IPermissionGate } from './agentTypes.js';
+import { isSandboxEscape } from './approvalAllowlist.js';
 
 /**
  * The composer's permission modes. Fail-closed ordering: anything unknown is
@@ -32,7 +32,18 @@ export type ApprovalHandler = (tool: IAgentTool, input: unknown, context: IPermi
 export function createGateForMode(mode: PermissionMode, requestApproval: ApprovalHandler): IPermissionGate {
 	switch (mode) {
 		case 'full':
-			return allowAllPermissionGate;
+			// Full mode runs everything unattended EXCEPT a sandbox escape: there
+			// the seatbelt is the LAST guard, so removing it always asks — the
+			// session allowlist ("mvn *（沙箱外）") is the opt-out, not the mode.
+			return {
+				async check(tool, input, context) {
+					if (!isSandboxEscape(tool.name, input)) {
+						return { behavior: 'allow' };
+					}
+					const approved = await requestApproval(tool, input, context);
+					return approved ? { behavior: 'allow' } : { behavior: 'deny', message: `The user declined running ${tool.name} outside the sandbox.` };
+				},
+			};
 		case 'plan':
 			return {
 				async check(tool, input) {
@@ -68,9 +79,11 @@ export function describeToolCall(toolName: string, input: unknown): string {
 	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
 	switch (toolName) {
 		case 'bash':
-			return typeof record.command === 'string' ? record.command : 'run a command';
+			return `${isSandboxEscape(toolName, input) ? '[沙箱外] ' : ''}${typeof record.command === 'string' ? record.command : 'run a command'}`;
 		case 'write_file':
 			return typeof record.path === 'string' ? `write ${record.path}` : 'write a file';
+		case 'upload_to_server':
+			return typeof record.local_path === 'string' && typeof record.remote_path === 'string' ? `上传 ${record.local_path} → ${typeof record.server === 'string' ? `${record.server}:` : ''}${record.remote_path}` : 'upload a file to a server';
 		case 'edit_file':
 			return typeof record.path === 'string' ? `edit ${record.path}` : 'edit a file';
 		default:

@@ -16,7 +16,17 @@ const MAX_OUTPUT_CHARS = 30_000;
 interface IBashInput {
 	readonly command: string;
 	readonly timeout_ms?: number;
+	readonly disable_sandbox?: boolean;
 }
+
+/**
+ * Appended to a failed SANDBOXED run whose output smells like a Seatbelt write
+ * denial. Without this the model (and the user it reports to) misdiagnoses the
+ * sandbox as OS-level protection — observed live 2026-07-14: a 30-minute Maven
+ * "permission" investigation whose root cause was our own profile.
+ */
+const SANDBOX_HINT =
+	'NOTE: this command ran inside a write sandbox — writes are allowed only under the workspace root, temp dirs, and standard caches (~/.npm, ~/.cache, ~/Library/Caches). "Operation not permitted" on writes elsewhere is the SANDBOX, not the OS. If the write target is legitimate (e.g. ~/.m2, a configured package repository), retry with disable_sandbox: true — the user will be asked to approve it.';
 
 /**
  * Runs a shell command with the workspace as cwd. On macOS it runs inside a
@@ -31,12 +41,16 @@ export function createBashTool(roots: readonly string[]): IAgentTool {
 	const cwd = roots[0] ?? process.cwd();
 	return defineTool({
 		name: 'bash',
-		description: 'Run a shell command from the workspace root and return its output. Use for builds, tests, git, and other project commands.',
+		description:
+			'Run a shell command from the workspace root and return its output. Use for builds, tests, git, and other project commands. ' +
+			'Commands run inside a write sandbox (writes confined to the workspace, temp dirs, and standard caches). ' +
+			'Set disable_sandbox: true ONLY after a sandboxed attempt failed with "Operation not permitted" on a legitimate write target — it always asks the user for approval.',
 		inputSchema: {
 			type: 'object',
 			properties: {
 				command: { type: 'string', description: 'The shell command to execute.' },
 				timeout_ms: { type: 'integer', minimum: 1, description: `Timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}).` },
+				disable_sandbox: { type: 'boolean', description: 'Run WITHOUT the write sandbox (requires user approval). Only for retrying a sandbox-blocked legitimate write.' },
 			},
 			required: ['command'],
 			additionalProperties: false,
@@ -52,14 +66,21 @@ export function createBashTool(roots: readonly string[]): IAgentTool {
 			} catch (error) {
 				return invalid(error instanceof Error ? error.message : String(error));
 			}
+			if (record.disable_sandbox !== undefined && typeof record.disable_sandbox !== 'boolean') {
+				return invalid('disable_sandbox must be a boolean');
+			}
 			return valid(record);
 		},
 		call: async (input, context) => {
-			const { command, timeout_ms } = input as IBashInput;
+			const { command, timeout_ms, disable_sandbox } = input as IBashInput;
 			const timeout = Math.min(timeout_ms ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
 			return new Promise(resolve => {
-				const { file, args } = sandboxedShellCommand(command, cwd, process.env);
+				// disable_sandbox reached here only through the approval gate (see
+				// permission.ts: it prompts in EVERY mode, full included).
+				const { file, args, sandboxed } = disable_sandbox
+					? { file: '/bin/sh', args: ['-c', command] as readonly string[], sandboxed: false }
+					: sandboxedShellCommand(command, cwd, process.env);
 				const child = spawn(file, args, { cwd, env: process.env });
 				let output = '';
 				let truncated = false;
@@ -85,7 +106,10 @@ export function createBashTool(roots: readonly string[]): IAgentTool {
 					clearTimeout(timer);
 					context.signal.removeEventListener('abort', onAbort);
 					const body = output.trim() === '' ? '(no output)' : output;
-					resolve({ content: `${body}${truncated ? '\n\n[output truncated]' : ''}${summary ? `\n\n${summary}` : ''}`, isError });
+					// Sandbox self-disclosure: a write denial inside the sandbox must
+					// say so, or the model diagnoses phantom OS permissions.
+					const hint = isError && sandboxed && output.includes('Operation not permitted') ? `\n\n${SANDBOX_HINT}` : '';
+					resolve({ content: `${body}${truncated ? '\n\n[output truncated]' : ''}${summary ? `\n\n${summary}` : ''}${hint}`, isError });
 				};
 
 				const timer = setTimeout(() => {

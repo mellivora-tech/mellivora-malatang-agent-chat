@@ -90,3 +90,24 @@ test('describeToolCall summarizes the mutation for the prompt', () => {
 	assert.equal(describeToolCall('write_file', { path: 'src/a.ts', content: '' }), 'write src/a.ts');
 	assert.equal(describeToolCall('edit_file', { path: 'b.md' }), 'edit b.md');
 });
+
+test('full mode still asks for a bash sandbox escape — and only for that', async () => {
+	const approved = approvals(true);
+	const gate = createGateForMode('full', approved.handler);
+	// Plain bash, even mutating, stays unattended in full mode.
+	assert.equal((await gate.check(bashTool, { command: 'mvn compile' }, context)).behavior, 'allow');
+	assert.deepEqual(approved.calls, []);
+	// disable_sandbox removes the last guard → approval fires.
+	assert.equal((await gate.check(bashTool, { command: 'mvn compile', disable_sandbox: true }, context)).behavior, 'allow');
+	assert.deepEqual(approved.calls, ['bash']);
+
+	const declined = approvals(false);
+	const strictGate = createGateForMode('full', declined.handler);
+	const denied = await strictGate.check(bashTool, { command: 'rm -rf /', disable_sandbox: true }, context);
+	assert.equal(denied.behavior, 'deny');
+});
+
+test('describeToolCall marks a sandbox escape so the approval card reads differently', () => {
+	assert.equal(describeToolCall('bash', { command: 'mvn compile' }), 'mvn compile');
+	assert.equal(describeToolCall('bash', { command: 'mvn compile', disable_sandbox: true }), '[沙箱外] mvn compile');
+});

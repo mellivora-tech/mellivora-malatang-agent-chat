@@ -14,9 +14,10 @@
  *   - Only bash / write_file / edit_file are ever always-allowable. bash writes
  *     are already boxed by the seatbelt sandbox and file writes by the code-root
  *     boundary, so an always-allow here cannot escape those inner guards.
- *   - `run_on_server` (SSH, incl. prod) is EXCLUDED: its ONLY guard is the
- *     approval prompt itself, so letting it be always-allowed would silently
- *     bypass prod write protection. It is never offered and never matches.
+ *   - `run_on_server` and `upload_to_server` (SSH, incl. prod) are EXCLUDED:
+ *     their ONLY guard is the approval prompt itself, so letting them be
+ *     always-allowed would silently bypass prod write protection. They are
+ *     never offered and never match.
  *
  * Matching mirrors Claude Code's rules: word-boundary leading-token prefixes
  * (`mvn *` matches `mvn test`, never `mvnd`), compound commands split into
@@ -48,6 +49,15 @@ function commandOf(input: unknown): string | undefined {
 		}
 	}
 	return undefined;
+}
+
+/**
+ * A bash call that opts out of the write sandbox. It escalates: approval fires
+ * in EVERY permission mode (full included — the sandbox is the last guard
+ * there), and a normal `bash:` grant never covers it.
+ */
+export function isSandboxEscape(toolName: string, input: unknown): boolean {
+	return toolName === 'bash' && typeof input === 'object' && input !== null && (input as { disable_sandbox?: unknown }).disable_sandbox === true;
 }
 
 /** Leading token of every sub-command in a shell line, deduped, order-preserving. */
@@ -85,6 +95,11 @@ export function deriveGrant(toolName: string, input: unknown): IAllowlistGrant |
 		if (tokens.length === 0) {
 			return undefined;
 		}
+		// Sandbox-escape grants live in their own namespace: always-allowing
+		// "mvn *（沙箱外）" is a bigger decision than "mvn *", never conflated.
+		if (isSandboxEscape(toolName, input)) {
+			return { patterns: tokens.map(token => `bash-nosandbox:${token}`), display: tokens.map(token => `${token} *（沙箱外）`).join(', ') };
+		}
 		return { patterns: tokens.map(token => `bash:${token}`), display: tokens.map(token => `${token} *`).join(', ') };
 	}
 	return undefined;
@@ -103,6 +118,14 @@ export function matchesAllowlist(toolName: string, input: unknown, patterns: Rea
 		return patterns.has(EDIT_PATTERN);
 	}
 	// bash: every sub-command's leading token must be allowlisted (deny-first).
+	// A sandbox-escape call matches ONLY nosandbox grants; a sandboxed call is
+	// covered by either (the nosandbox grant is the superset privilege).
 	const tokens = bashLeadingTokens(input);
-	return tokens.length > 0 && tokens.every(token => patterns.has(`bash:${token}`));
+	if (tokens.length === 0) {
+		return false;
+	}
+	if (isSandboxEscape(toolName, input)) {
+		return tokens.every(token => patterns.has(`bash-nosandbox:${token}`));
+	}
+	return tokens.every(token => patterns.has(`bash:${token}`) || patterns.has(`bash-nosandbox:${token}`));
 }

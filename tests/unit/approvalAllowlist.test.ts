@@ -85,3 +85,17 @@ test('SAFETY: run_on_server can never be granted or matched, even with a full al
 	assert.equal(matchesAllowlist('run_on_server', { command: 'systemctl restart prod' }, everything), false);
 	assert.equal(matchesAllowlist('query_data_source', { sql: 'DROP TABLE t' }, everything), false);
 });
+
+test('sandbox escape lives in its own grant namespace', () => {
+	const escapeInput = { command: 'mvn compile', disable_sandbox: true };
+	const grant = deriveGrant('bash', escapeInput);
+	assert.ok(grant);
+	assert.deepEqual(grant.patterns, ['bash-nosandbox:mvn']);
+	assert.match(grant.display, /沙箱外/);
+
+	// A normal `bash:mvn` grant must NOT cover the escape…
+	assert.equal(matchesAllowlist('bash', escapeInput, new Set(['bash:mvn'])), false);
+	// …the nosandbox grant covers the escape AND (as the superset) the sandboxed call.
+	assert.equal(matchesAllowlist('bash', escapeInput, new Set(['bash-nosandbox:mvn'])), true);
+	assert.equal(matchesAllowlist('bash', { command: 'mvn test' }, new Set(['bash-nosandbox:mvn'])), true);
+});
