@@ -3,7 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IAgentEvent, IAgentMessage, IAgentRunConfig, IAgentTerminal, IContentBlock, IModelRequest, IRedactedThinkingBlock, IThinkingBlock, IToolUseBlock, ModelStopReason } from './agentTypes.js';
+import type {
+	IAgentEvent,
+	IAgentMessage,
+	IAgentRunConfig,
+	IAgentTerminal,
+	IContentBlock,
+	IModelRequest,
+	IRedactedThinkingBlock,
+	IThinkingBlock,
+	IToolUseBlock,
+	ModelStopReason,
+} from './agentTypes.js';
 import { toolSpec } from './agentTools.js';
 import {
 	RETRY_GROWTH_TOKENS,
@@ -18,7 +29,7 @@ import {
 import { createLoopGuard } from './loopGuard.js';
 import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
-import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest, seedWorkDigestFromMessages } from './workDigest.js';
+import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest, seedWorkDigestFromMessages, seedWorkDigestFromText } from './workDigest.js';
 import { executeToolUses } from './toolRunner.js';
 
 const DEFAULT_MAX_TURNS = 100;
@@ -53,7 +64,8 @@ const GROUNDING_NUDGE =
 const STALE_CLAIM_NUDGE =
 	'<system-reminder>Your reply claims a connection or availability failure, but you did not call any data-source tool in this run. An earlier failure may have been fixed since — configurations change between runs. Test it NOW: call query_data_source (or list_data_sources), report what actually happens, and quote only errors produced in this run. If the connection works, answer the user with real data instead.</system-reminder>';
 /** Connection-failure assertions that must be grounded by a this-run tool call (zh + en + raw error codes). */
-const CONNECTION_CLAIM = /连不上|连接不上|无法连接|连接失败|连接超时|数据库.{0,8}不可用|cannot connect|can't connect|connection (?:failed|refused|timed out)|unreachable|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|UnknownHostException/i;
+const CONNECTION_CLAIM =
+	/连不上|连接不上|无法连接|连接失败|连接超时|数据库.{0,8}不可用|cannot connect|can't connect|connection (?:failed|refused|timed out)|unreachable|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|UnknownHostException/i;
 /** The tools whose absence makes a connection claim ungrounded. */
 const DATA_SOURCE_TOOLS: ReadonlySet<string> = new Set(['query_data_source', 'list_data_sources']);
 
@@ -143,7 +155,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// Reply verifier state: the question is the latest user text in the initial
 	// transcript; at most one verification (and one retry) per run.
 	const question = extractLatestUserText(initialMessages);
-	const verifierEnabled = isReplyVerifierEnabled(process.env);
+	const verifierEnabled = !config.disableReplyVerifier && isReplyVerifierEnabled(process.env);
 	let verifierFired = false;
 	// Walkthrough nudge: if a run actually changed files but never wrote a
 	// walkthrough, force ONE hidden turn asking for it (the prompt's soft
@@ -464,6 +476,18 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// plain user content and the API would reject the next request.
 		const toolResults = yield* executeToolUses(toolUses, config.tools, config.permissionGate, signal, loopGuard);
 		messages.push({ role: 'user', content: toolResults });
+
+		// A sub-agent's result carries its own <work-digest> block: fold those
+		// files into THIS run's digest so the next run knows the child covered
+		// them — otherwise delegation re-opens the re-exploration tax it closed.
+		if (digestEnabled) {
+			for (const block of toolResults) {
+				if (block.type === 'tool_result' && block.content.includes('<work-digest>')) {
+					seedWorkDigestFromText(workDigest, block.content);
+					digestWorkedThisRun = true;
+				}
+			}
+		}
 
 		if (turn >= maxTurns) {
 			if (digestEnabled && digestWorkedThisRun) {

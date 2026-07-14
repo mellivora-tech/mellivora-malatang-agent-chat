@@ -1153,7 +1153,10 @@ test('grounding nudge: quoting code with zero tool calls in a digest-seeded run 
 
 		assert.equal(terminal.reason, 'completed');
 		assert.ok(terminal.turns >= 3, `expected a forced re-grounded turn, got ${terminal.turns}`);
-		assert.ok(events.some(event => event.type === 'grounding_nudge'), 'a grounding_nudge event was emitted');
+		assert.ok(
+			events.some(event => event.type === 'grounding_nudge'),
+			'a grounding_nudge event was emitted',
+		);
 		assert.match(lastUserText(requests[1]!), /made no tool calls/, 'the nudge reminder was injected');
 	} finally {
 		delete process.env['MELLIVORA_REPLY_VERIFIER'];
@@ -1215,7 +1218,10 @@ test('stale-claim nudge: asserting a connection failure with no data-source call
 
 		assert.equal(terminal.reason, 'completed');
 		assert.ok(terminal.turns >= 3, `expected a forced test turn, got ${terminal.turns}`);
-		assert.ok(events.some(event => event.type === 'stale_claim_nudge'), 'a stale_claim_nudge event was emitted');
+		assert.ok(
+			events.some(event => event.type === 'stale_claim_nudge'),
+			'a stale_claim_nudge event was emitted',
+		);
 		assert.match(lastUserText(requests[1]!), /did not call any data-source tool/, 'the nudge reminder was injected');
 	} finally {
 		delete process.env['MELLIVORA_REPLY_VERIFIER'];
@@ -1246,9 +1252,7 @@ test('stale-claim nudge: does NOT fire when the run tested the connection or mad
 
 		// No data-source tools in the session — the claim cannot be tested, so no forced turn.
 		const toolless = capturingModelClient([{ emit: [{ type: 'text', text: 'cannot connect to the database from here.' }] }]);
-		const toollessRun = await drive(
-			runAgentLoop([userMessage('查库')], { system: 's', tools: [echoTool], modelClient: toolless.client, permissionGate: allowAllPermissionGate }),
-		);
+		const toollessRun = await drive(runAgentLoop([userMessage('查库')], { system: 's', tools: [echoTool], modelClient: toolless.client, permissionGate: allowAllPermissionGate }));
 		assert.equal(toollessRun.terminal.turns, 1);
 		assert.ok(!toollessRun.events.some(event => event.type === 'stale_claim_nudge'), 'no nudge when the tools are absent');
 	} finally {

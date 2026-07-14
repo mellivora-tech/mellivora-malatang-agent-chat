@@ -672,6 +672,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// measure) and the newest ok compaction of this run.
 		let sentTranscript: readonly IAgentMessage[] = [];
 		let pendingAnchor: ISessionCompactionAnchorData | undefined;
+		// Sub-agent narration state: the spawn step's own label (restored when the
+		// child ends) and the child's currently-running action.
+		let subagentSpawnLabel: string | undefined;
+		let subagentAction: string | undefined;
 
 		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string): void => {
 			const durationMs = Date.now() - stepStart;
@@ -939,6 +943,37 @@ export class FileSessionsProvider implements ISessionsProvider {
 					openToolLabel = undefined;
 					updateWork();
 				}
+			} else if (event?.type === 'tool_progress') {
+				// Live label for the running call (e.g. "上传 … 47% · 4.1 MB/s").
+				// The eventual tool_result closes the step as usual, so the final
+				// label is the last progress line — which reads as the summary.
+				openToolLabel = event.note;
+				updateWork();
+			} else if (event?.type === 'subagent_start') {
+				// A child loop is running inside the open spawn_agent call. Its
+				// narration takes over the open-step slot until subagent_end; the
+				// spawn label is restored then, so the spawn's own tool_result still
+				// closes a matching step.
+				subagentSpawnLabel = openToolLabel;
+				closeStep('tool', `子代理 ⑃ ${firstLine(event.task)}`);
+				openToolLabel = '子代理启动中…';
+				updateWork();
+			} else if (event?.type === 'subagent_tool') {
+				if (subagentAction !== undefined) {
+					closeStep('tool', subagentAction);
+				}
+				subagentAction = `⑃ ${event.summary}`;
+				openToolLabel = subagentAction;
+				updateWork();
+			} else if (event?.type === 'subagent_end') {
+				if (subagentAction !== undefined) {
+					closeStep('tool', subagentAction);
+					subagentAction = undefined;
+				}
+				closeStep('tool', `子代理结束 · ${event.reason}`, `${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`);
+				openToolLabel = subagentSpawnLabel ?? openToolLabel;
+				subagentSpawnLabel = undefined;
+				updateWork();
 			} else if (event?.type === 'usage') {
 				// The provider's real prompt size for the request just completed —
 				// the conversation view prefers this over its char-count estimate.
@@ -1116,8 +1151,14 @@ function truncateStepDetail(content: string, isError: boolean): string {
 /** Short human label for a tool step: the tool plus its most telling argument. */
 function describeWorkTool(name: string, input: unknown): string {
 	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
-	const arg = [record['command'], record['path'], record['pattern']].find(value => typeof value === 'string' && value !== '');
-	return typeof arg === 'string' ? `${name} ${arg}` : name;
+	const arg = [record['command'], record['path'], record['pattern'], record['task']].find(value => typeof value === 'string' && value !== '');
+	return typeof arg === 'string' ? `${name} ${firstLine(arg)}` : name;
+}
+
+/** First line only, bounded — multi-line tasks/commands must not blow up a one-line step label. */
+function firstLine(value: string): string {
+	const line = value.split('\n', 1)[0] ?? '';
+	return line.length > 72 ? `${line.slice(0, 72)}…` : line;
 }
 
 /** Drop malformed entries and duplicates; undefined when nothing survives, so callers can omit the field entirely. */

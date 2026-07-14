@@ -193,6 +193,14 @@ export type IAgentEvent =
 	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
 	/** A zero-tool-call run quoted code with only digest memory to go on; one forced re-grounded turn follows. The renderer may ignore it. */
 	| { readonly type: 'grounding_nudge' }
+	/** A spawn_agent child loop started. NEVER yielded by a loop — the tool reports it via a side channel that agentIpc fans out to the run logger AND the renderer. */
+	| { readonly type: 'subagent_start'; readonly agentId: string; readonly task: string }
+	/** One child tool call — lets the work panel narrate the sub-agent live. Same side channel as subagent_start. */
+	| { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly summary: string; readonly turn: number }
+	/** A spawn_agent child loop finished. Same side channel as subagent_start. */
+	| { readonly type: 'subagent_end'; readonly agentId: string; readonly reason: string; readonly turns: number; readonly toolCalls: number; readonly tokens: number; readonly outputChars: number }
+	/** Mid-execution progress for a long-running tool call (e.g. an SFTP upload) — the work panel live-updates the open step. Same side channel as subagent events. */
+	| { readonly type: 'tool_progress'; readonly toolUseId: string; readonly name: string; readonly note: string }
 	/** The reply asserted a connection failure without any this-run data-source call; one forced real test follows. The renderer may ignore it. */
 	| { readonly type: 'stale_claim_nudge' }
 	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
@@ -260,6 +268,12 @@ export interface IAgentRunConfig {
 	readonly permissionGate: IPermissionGate;
 	readonly maxTurns?: number;
 	readonly signal?: AbortSignal;
+	/**
+	 * Skip the reply-verifier judge call for this run. Set for sub-agent loops:
+	 * their conclusion is consumed by the PARENT model (which can re-delegate or
+	 * dig further itself), so a topical-relevance retry buys nothing but latency.
+	 */
+	readonly disableReplyVerifier?: boolean;
 	/**
 	 * How `system` is composed, broken into the context panel's rows. The caller
 	 * assembles `system` from these same segments, so the lengths are exact, not

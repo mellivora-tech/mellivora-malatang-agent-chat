@@ -68,8 +68,31 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'grounding_nudge' })
 	/** A reply asserted a connection failure with no this-run data-source call and was forced to actually test. Watch alongside grounding_nudge. */
 	| (IBaseEvent & { readonly type: 'stale_claim_nudge' })
+	/** A spawn_agent child loop started. The task text (user-adjacent content) stays in detail. */
+	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly detail?: { readonly task: string } })
+	/** One child tool call — the child's whole activity trace, since its loop events never reach the log directly. The summary (paths/patterns) stays in detail. */
+	| (IBaseEvent & { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly turn: number; readonly detail?: { readonly summary: string } })
+	/** Mid-call progress for a long-running tool (SFTP upload). The note (paths, rates) stays in detail. */
+	| (IBaseEvent & { readonly type: 'tool_progress'; readonly toolUseId: string; readonly name: string; readonly detail?: { readonly note: string } })
+	/** A spawn_agent child loop finished. Watch outputChars≈0 rate (misfired delegations) and tokens (delegation cost). */
+	| (IBaseEvent & {
+			readonly type: 'subagent_end';
+			readonly agentId: string;
+			readonly reason: string;
+			readonly turns: number;
+			readonly toolCalls: number;
+			readonly tokens: number;
+			readonly outputChars: number;
+	  })
 	/** Real provider token counts for one turn — the ground truth the compaction threshold and the UI meter read. True prompt size = input + cacheRead + cacheWrite. */
-	| (IBaseEvent & { readonly type: 'usage'; readonly turn: number; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number })
+	| (IBaseEvent & {
+			readonly type: 'usage';
+			readonly turn: number;
+			readonly inputTokens: number;
+			readonly outputTokens?: number;
+			readonly cacheReadTokens?: number;
+			readonly cacheWriteTokens?: number;
+	  })
 	/** A persisted cross-run anchor arrived; watch the rejected rate — it should be ≈0 outside history edits. */
 	| (IBaseEvent & { readonly type: 'compaction_anchor'; readonly covered: number; readonly summaryChars: number; readonly accepted: boolean })
 	/** What this turn's request view is made of, in chars — mirrors the renderer's context panel so log reviews can see the same breakdown without the UI. */
@@ -87,7 +110,13 @@ export type AgentLogEvent =
 	/** Tool outputs aged out of the request view. Counts only — the full content stays in the adjacent tool_result events. */
 	| (IBaseEvent & { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number })
 	/** A run's work digest was sunk. Counts are export-safe; the digest text carries file paths, so it lives under detail. */
-	| (IBaseEvent & { readonly type: 'work_digest'; readonly filesRead: number; readonly filesWritten: number; readonly toolCalls: number; readonly detail?: { readonly text: string } })
+	| (IBaseEvent & {
+			readonly type: 'work_digest';
+			readonly filesRead: number;
+			readonly filesWritten: number;
+			readonly toolCalls: number;
+			readonly detail?: { readonly text: string };
+	  })
 	/**
 	 * The transcript head was folded into an anchored summary. Trigger math and
 	 * sizes are export-safe; the summary text (conversation content) is detail.

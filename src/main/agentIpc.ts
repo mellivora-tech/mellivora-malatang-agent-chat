@@ -17,6 +17,7 @@ import { createWorkspaceTools } from './agent/tools/index.js';
 import { createDataSourceTools, type IQueryableSource } from './agent/tools/dataSourceTools.js';
 import { createSshTools, type ISshServer } from './agent/tools/sshTool.js';
 import { createModelClient } from './agent/createModelClient.js';
+import { createSpawnAgentTool } from './agent/tools/spawnAgentTool.js';
 import { generateSessionTitle } from './agent/sessionTitle.js';
 import { getCredential } from './credentialStorage.js';
 import { createSafeStorageCipher } from './secretCipher.js';
@@ -42,14 +43,16 @@ function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): 
 		);
 	} else {
 		lines.push(
-			'Tools: read_file, list_dir, glob, grep to explore; write_file, edit_file to change files; bash to run commands.',
+			'Tools: read_file, list_dir, glob, grep to explore; write_file, edit_file to change files; bash to run commands; spawn_agent to delegate a read-only exploration to a sub-agent.',
+			'Open your reply with ONE sentence sizing up the task on two axes, then start. SHAPE sets the discipline: diagnosis → verify against the live code/data THIS run before concluding; change → plan via update_plan first; question → answer directly, read only what the answer needs. SCALE sets the approach, whatever the shape: a couple of reads → just do it; many steps → update_plan and work through; reading many files whose contents you will NOT need afterwards → delegate via spawn_agent (sharded by module/directory when the sweep is large) and keep only the conclusions.',
+			'When a sub-agent reports PARTIAL coverage, delegate the REMAINDER with a narrower scope — never redo in this context what it already covered. For mechanical extraction across many files (listing endpoints, counting patterns), a short bash/script pass usually beats reading files one by one — with or without a sub-agent.',
 			'Do not make claims about code you have not read this session, and do not propose changes to files you have not read — read them first.',
 			'Read-only tools never require approval: use them freely, and never ask the user for permission to read or search. When a tool call does need approval, the system prompts the user automatically; if denied, adjust your approach instead of retrying.',
 			'Environment state (database connections, service reachability) is transient: an earlier failure in this conversation says nothing about now — the user may have fixed it. Never claim a resource is unavailable, and never quote an error, unless a tool call in THIS run actually produced it.',
 			// Steer bash away from commands that block a turn or fabricate "evidence".
 			'For tasks that only need understanding the code — assessing, summarizing, reviewing, explaining — read the relevant files; do NOT run the build or test suite just to "check".',
 			'Use bash only for short, purposeful commands. Avoid long-running or blocking ones — dev servers, watch modes, full end-to-end / integration suites, or anything that launches the app or waits indefinitely — as they stall the turn. If a long command is genuinely required, scope it narrowly and set a timeout.',
-			'Batch independent work into a single step: when you need several files or several searches, issue those tool calls together in one turn rather than one at a time — it is far faster and avoids running out of steps.',
+			'When you need several independent pieces of information, you MUST send a single message with MULTIPLE tool calls — e.g. reading three files is ONE message with three read_file calls; `git status` and `git diff` is ONE message with two bash calls. One tool call per turn wastes a full model round-trip every time; only sequence calls whose inputs depend on an earlier result.',
 			'For any multi-step task, call update_plan first to lay out a short finite checklist, keep it updated as you go, and once every step is done STOP and give your final answer — do not keep pulling threads. Escalate to the user only when you are genuinely stuck after investigating, not as a first response to friction: verify code-level claims by reading the source, and ask the user only for runtime data (logs, database contents, live request values) that the code cannot show.',
 			'After completing a multi-step task that CHANGED files, call write_walkthrough with a short sectioned report — what changed, how to verify — then close with one short sentence. Skip it for trivial or read-only tasks.',
 		);
@@ -198,9 +201,23 @@ export function registerAgentIpc(dataRoot: string): void {
 				environmentName: envName.get(dataSource.environmentId) ?? '',
 				coordinates: dataSource.coordinates as ISshServer['coordinates'],
 			}));
-		const sshTools = sshServers.length > 0 && mode !== 'plan' ? createSshTools({ servers: sshServers, getSecret: id => getCredential(dataRoot, id, cipher) }) : [];
+		// Mid-call progress (SFTP uploads) rides the same fan-out as sub-agent
+		// telemetry: jsonl for diagnosis, agent:event for the live work panel.
+		// Initialized to a no-op and rebound once runLogger exists (created later).
+		let reportToolProgress: (event: { type: 'tool_progress'; toolUseId: string; name: string; note: string }) => void = () => {};
+		const sshTools =
+			sshServers.length > 0 && mode !== 'plan'
+				? createSshTools({ servers: sshServers, roots, getSecret: id => getCredential(dataRoot, id, cipher), report: event => reportToolProgress(event) })
+				: [];
 
-		const tools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...sshTools];
+		// One client instance serves the run AND any sub-agent loops it spawns.
+		const modelClient = createModelClient(config);
+
+		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...sshTools];
+		// spawn_agent (in-process read-only sub-agent, see spawnAgentTool.ts) is
+		// added below, after the run logger exists to receive its telemetry —
+		// it is read-only, so every permission mode admits it.
+		const hasSpawnAgent = roots.length > 0;
 
 		// Project instructions (AGENTS.md/CLAUDE.md at the root) ride the system
 		// prompt deterministically instead of hoping the model reads them.
@@ -260,12 +277,36 @@ export function registerAgentIpc(dataRoot: string): void {
 			model: config.model,
 			mode,
 			hasWorkspace: cwd !== undefined,
-			toolCount: tools.length,
+			toolCount: baseTools.length + (hasSpawnAgent ? 1 : 0),
 			...(cwd ? { cwd } : {}),
 			...(payload.projectId ? { projectId: payload.projectId } : {}),
 			...(instructions ? { instructions: { file: instructions.file, chars: instructions.text.length, truncated: instructions.truncated } } : {}),
 			...(config.contextLength !== undefined ? { contextWindow: config.contextLength } : {}),
 		});
+		// Sub-agent progress fans out to BOTH sinks: the jsonl log (diagnosis) and
+		// the renderer (live work-panel narration) — the parent loop is blocked on
+		// the tool while a child runs, so these can't ride the normal yield path.
+		reportToolProgress = event => {
+			runLogger.record(event);
+			if (!sender.isDestroyed()) {
+				sender.send('agent:event', { sessionId: payload.sessionId, event });
+			}
+		};
+		const spawnTools = hasSpawnAgent
+			? [
+					createSpawnAgentTool({
+						roots,
+						modelClient,
+						record: event => {
+							runLogger.record(event);
+							if (!sender.isDestroyed()) {
+								sender.send('agent:event', { sessionId: payload.sessionId, event });
+							}
+						},
+					}),
+				]
+			: [];
+		const tools: readonly IAgentTool[] = [...baseTools, ...spawnTools];
 
 		try {
 			const dbNote =
@@ -302,7 +343,7 @@ export function registerAgentIpc(dataRoot: string): void {
 				system,
 				systemBreakdown,
 				tools,
-				modelClient: createModelClient(config),
+				modelClient,
 				permissionGate: createGateForMode(mode, requestApproval),
 				signal: controller.signal,
 				// No configured context window → compaction stays off (never guessed).
