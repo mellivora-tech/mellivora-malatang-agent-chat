@@ -92,13 +92,19 @@ function formatResult(result: IQueryResult): string {
 export function createDataSourceTools(deps: IDataSourceToolDeps): readonly IAgentTool[] {
 	const run = deps.runQuery ?? runDbQuery;
 
+	// id → label → environment name, first unique match wins (same contract as
+	// the ssh tools): "dev" hits directly when that environment has one database.
 	const resolve = (source: string): IQueryableSource | IQueryableSource[] | undefined => {
 		const byId = deps.sources.find(candidate => candidate.id === source);
 		if (byId) {
 			return byId;
 		}
 		const byLabel = deps.sources.filter(candidate => candidate.label === source);
-		return byLabel.length === 1 ? byLabel[0] : byLabel.length > 1 ? byLabel : undefined;
+		if (byLabel.length > 0) {
+			return byLabel.length === 1 ? byLabel[0] : byLabel;
+		}
+		const byEnvironment = deps.sources.filter(candidate => candidate.environmentName === source);
+		return byEnvironment.length === 1 ? byEnvironment[0] : byEnvironment.length > 1 ? byEnvironment : undefined;
 	};
 
 	const listTool = defineTool({
@@ -113,7 +119,8 @@ export function createDataSourceTools(deps: IDataSourceToolDeps): readonly IAgen
 
 	const queryTool = defineTool({
 		name: 'query_data_source',
-		description: 'Run a READ-ONLY SQL query (SELECT / WITH / SHOW / EXPLAIN only) against a configured database data source. `source` is its label or id — see list_data_sources.',
+		description:
+			'Run a READ-ONLY SQL query (SELECT / WITH / SHOW / EXPLAIN only) against a configured database data source. `source` is its label, id, or environment name (e.g. "dev") — see list_data_sources.',
 		inputSchema: {
 			type: 'object',
 			properties: {

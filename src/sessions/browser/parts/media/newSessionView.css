@@ -52,8 +52,11 @@
 .new-session-composer {
 	position: relative;
 	z-index: 1;
-	display: grid;
-	grid-template-rows: var(--vscode-agents-space-40) minmax(var(--vscode-agents-space-52), 1fr) var(--vscode-agents-space-46);
+	/* Flex column, not a fixed grid: the image strip (and any future chip row)
+	   is inserted at runtime between context and input — a fixed row template
+	   shifted every child down one row the moment a row appeared. */
+	display: flex;
+	flex-direction: column;
 	width: 100%;
 	min-height: 146px;
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
@@ -72,10 +75,11 @@
 .new-session-composer-context {
 	display: inline-flex;
 	align-items: center;
-	justify-self: start;
+	align-self: flex-start;
+	flex: 0 0 auto;
 	gap: var(--vscode-agents-space-4);
 	height: var(--vscode-agents-space-30);
-	margin: var(--vscode-agents-space-5) var(--vscode-agents-space-16) 0;
+	margin: var(--vscode-agents-space-5) var(--vscode-agents-space-16) var(--vscode-agents-space-5);
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -87,6 +91,7 @@
 }
 
 .new-session-input {
+	flex: 1;
 	min-width: 0;
 	width: 100%;
 	min-height: var(--vscode-agents-space-52);
@@ -118,6 +123,7 @@
 }
 
 .new-session-composer-toolbar {
+	flex: 0 0 auto;
 	justify-content: space-between;
 	gap: var(--vscode-agents-space-12);
 	height: var(--vscode-agents-space-46);
@@ -163,7 +169,10 @@
 	padding: 0;
 }
 
-.new-session-access {
+/* Color follows risk, not the button: neutral for ask/plan/auto-edit, warning
+   only when approvals are OFF (full access) — a persistent warning tint on the
+   safe default read as a permanent alarm. */
+.new-session-access[data-mode='full'] {
 	color: var(--vscode-agents-color-warning);
 }
 

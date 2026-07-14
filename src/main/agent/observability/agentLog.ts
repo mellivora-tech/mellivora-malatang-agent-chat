@@ -68,6 +68,8 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'grounding_nudge' })
 	/** A reply asserted a connection failure with no this-run data-source call and was forced to actually test. Watch alongside grounding_nudge. */
 	| (IBaseEvent & { readonly type: 'stale_claim_nudge' })
+	/** A zero-tool-call reply claimed completed actions and was forced to do-or-retract. Watch the family's rates together. */
+	| (IBaseEvent & { readonly type: 'action_claim_nudge' })
 	/** A spawn_agent child loop started. The task text (user-adjacent content) stays in detail. */
 	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly detail?: { readonly task: string } })
 	/** One child tool call — the child's whole activity trace, since its loop events never reach the log directly. The summary (paths/patterns) stays in detail. */

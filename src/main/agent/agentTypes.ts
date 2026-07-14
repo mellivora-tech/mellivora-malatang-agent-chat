@@ -203,6 +203,8 @@ export type IAgentEvent =
 	| { readonly type: 'tool_progress'; readonly toolUseId: string; readonly name: string; readonly note: string }
 	/** The reply asserted a connection failure without any this-run data-source call; one forced real test follows. The renderer may ignore it. */
 	| { readonly type: 'stale_claim_nudge' }
+	/** The reply claimed completed actions (deploy/upload/…) in a zero-tool-call run; one forced do-or-retract turn follows. The renderer may ignore it. */
+	| { readonly type: 'action_claim_nudge' }
 	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
 	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number }
 	/** A run's deterministic work digest (files read/changed + activity counts). `text` is persisted as a hidden message and carried on the next run's transcript to pay down the re-exploration tax; the counts are export-safe telemetry. Emitted once at run end, only when the run touched something. */

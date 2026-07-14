@@ -22,6 +22,7 @@ import type { IPendingImage } from '../../services/sessions/common/sessionsProvi
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments, type IImageController } from './composerImages.js';
+import { installPromptHistory, type IPromptHistoryController } from './composerHistory.js';
 import { installFileMentions, installSessionMentions, installSkillMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
 import { renderMarkdown } from './markdownRenderer.js';
@@ -105,6 +106,7 @@ export class ConversationView extends Disposable {
 	private readonly skillMentions: IMentionController;
 	private readonly sessionMentions: IMentionController;
 	private readonly images: IImageController;
+	private readonly promptHistory: IPromptHistoryController;
 
 	constructor(
 		private readonly messageSender?: ISessionMessageSender,
@@ -302,6 +304,16 @@ export class ConversationView extends Disposable {
 			}),
 		);
 
+		// After every menu module: their open-menu handlers stopImmediatePropagation
+		// on the arrows, which is what keeps recall out of menu navigation.
+		this.promptHistory = this._register(
+			installPromptHistory({
+				input: this.input,
+				getHistory: () =>
+					(this.session?.messages.get() ?? []).filter(message => message.role === 'user').map(message => message.text),
+			}),
+		);
+
 		this._registerEventListeners();
 		this.render();
 	}
@@ -321,11 +333,13 @@ export class ConversationView extends Disposable {
 		this.header.openSession(session);
 		this.setSendError(undefined);
 		this.queuedFollowUp = undefined;
-		// Mentions and pending images belong to the session they were staged in.
+		// Mentions, pending images and history drafts belong to the session they
+		// were staged in.
 		this.mentions.reset();
 		this.skillMentions.reset();
 		this.sessionMentions.reset();
 		this.images.reset();
+		this.promptHistory.reset();
 		// A freshly opened conversation starts at its latest message.
 		this.scrollToBottomOnRender = true;
 

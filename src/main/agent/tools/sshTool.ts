@@ -52,13 +52,20 @@ function describe(server: ISshServer): string {
 export function createSshTools(deps: ISshToolDeps): readonly IAgentTool[] {
 	const run = deps.runSsh ?? runSsh;
 
+	// id → label → environment name, first unique match wins. The env fallback
+	// lets "dev" resolve directly when the environment has exactly one server —
+	// the model shouldn't need a list_servers round-trip for the common case.
 	const resolve = (source: string): ISshServer | ISshServer[] | undefined => {
 		const byId = deps.servers.find(candidate => candidate.id === source);
 		if (byId) {
 			return byId;
 		}
 		const byLabel = deps.servers.filter(candidate => candidate.label === source);
-		return byLabel.length === 1 ? byLabel[0] : byLabel.length > 1 ? byLabel : undefined;
+		if (byLabel.length > 0) {
+			return byLabel.length === 1 ? byLabel[0] : byLabel;
+		}
+		const byEnvironment = deps.servers.filter(candidate => candidate.environmentName === source);
+		return byEnvironment.length === 1 ? byEnvironment[0] : byEnvironment.length > 1 ? byEnvironment : undefined;
 	};
 
 	const listTool = defineTool({
@@ -74,7 +81,7 @@ export function createSshTools(deps: ISshToolDeps): readonly IAgentTool[] {
 	const execTool = defineTool({
 		name: 'run_on_server',
 		description:
-			'Run a shell command over SSH on a configured server and return its output. `server` is its label or id — see list_servers. May pause for approval. ' +
+			'Run a shell command over SSH on a configured server and return its output. `server` is its label, id, or environment name (e.g. "dev") — see list_servers. May pause for approval. ' +
 			'For long-lived processes (startup scripts, services) detach them — `nohup … > app.log 2>&1 &` — then verify via the log; a foreground service call just hits the timeout. ' +
 			'To transfer files use upload_to_server; NEVER improvise transfers with netcat, base64 pasting, or temporary listeners.',
 		inputSchema: {
@@ -128,7 +135,7 @@ export function createSshTools(deps: ISshToolDeps): readonly IAgentTool[] {
 	const uploadTool = defineTool({
 		name: 'upload_to_server',
 		description:
-			'Upload ONE file from the workspace to a configured server over SFTP. `server` is its label or id — see list_servers. ' +
+			'Upload ONE file from the workspace to a configured server over SFTP. `server` is its label, id, or environment name — see list_servers. ' +
 			'`local_path` must be inside the workspace (build artifacts, scripts); `remote_path` is the absolute destination file path. Always asks for approval.',
 		inputSchema: {
 			type: 'object',

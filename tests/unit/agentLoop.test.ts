@@ -1272,3 +1272,47 @@ test('work digest: MELLIVORA_WORK_DIGEST=off suppresses the event', async () => 
 		delete process.env['MELLIVORA_WORK_DIGEST'];
 	}
 });
+
+test('action-claim nudge: claiming completed actions with zero tool calls forces a do-or-retract turn', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client, requests } = capturingModelClient([
+			{ emit: [{ type: 'text', text: '## 完成小结\n部署成功，编译成功，服务已重启。' }] }, // fabricated completion
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: { path: 'target' } }] }, // actually works after the nudge
+			{ emit: [{ type: 'text', text: '现在真正执行了部署检查。' }] },
+		]);
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('重新部署到开发环境')], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(terminal.reason, 'completed');
+		assert.ok(terminal.turns >= 3, `expected a forced turn, got ${terminal.turns}`);
+		assert.ok(events.some(event => event.type === 'action_claim_nudge'), 'an action_claim_nudge event was emitted');
+		assert.match(lastUserText(requests[1]!), /ZERO tool calls/, 'the nudge reminder was injected');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('action-claim nudge: does NOT fire when the run used tools or made no completion claim', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const worked = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: {} }] },
+			{ emit: [{ type: 'text', text: '部署成功，服务已重启。' }] },
+		]);
+		const workedRun = await drive(
+			runAgentLoop([userMessage('部署')], { system: 's', tools: [readFileTool], modelClient: worked.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(workedRun.terminal.turns, 2, 'a grounded completion claim stops naturally');
+		assert.ok(!workedRun.events.some(event => event.type === 'action_claim_nudge'));
+
+		const plain = capturingModelClient([{ emit: [{ type: 'text', text: '部署需要三步：备份、上传、重启。' }] }]);
+		const plainRun = await drive(
+			runAgentLoop([userMessage('怎么部署?')], { system: 's', tools: [readFileTool], modelClient: plain.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(plainRun.terminal.turns, 1, 'describing steps is not a completion claim');
+		assert.ok(!plainRun.events.some(event => event.type === 'action_claim_nudge'));
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});

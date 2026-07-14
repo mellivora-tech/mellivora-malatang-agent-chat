@@ -158,6 +158,9 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 				case 'stale_claim_nudge':
 					agentLog.emit({ ts: now(), ...base, type: 'stale_claim_nudge' });
 					break;
+				case 'action_claim_nudge':
+					agentLog.emit({ ts: now(), ...base, type: 'action_claim_nudge' });
+					break;
 				case 'tool_progress':
 					agentLog.emit({ ts: now(), ...base, type: 'tool_progress', toolUseId: event.toolUseId, name: event.name, detail: { note: event.note } });
 					break;

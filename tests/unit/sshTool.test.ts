@@ -167,3 +167,25 @@ test('upload_to_server: progress is throttled and carries percent + rate', async
 	assert.match(notes[notes.length - 1]!, /100%/);
 	assert.match(notes[0]!, /MB\/s/);
 });
+
+test('server resolution falls back to a UNIQUE environment name; an ambiguous env lists candidates', async () => {
+	let seenHost = '';
+	const runner: SshRunner = async coordinates => {
+		seenHost = coordinates.host;
+		return { code: 0, output: 'ok' };
+	};
+	const tools = createSshTools({ servers: SERVERS, roots: [], getSecret: async () => ({ privateKey: 'k' }), runSsh: runner });
+	const exec = byName(tools, 'run_on_server');
+
+	// 'prod' names exactly one server (srv-2) → resolves without list_servers.
+	const ok = await run(exec, { server: 'prod', command: 'uptime' });
+	assert.ok(!ok.isError, ok.content);
+	assert.equal(seenHost, 'h2');
+
+	// 'dev' has two servers → ambiguity lists ids instead of guessing.
+	const noSecret = createSshTools({ servers: SERVERS, roots: [], getSecret: async () => undefined });
+	const ambiguous = await run(byName(noSecret, 'run_on_server'), { server: 'dev', command: 'uptime' });
+	assert.ok(ambiguous.isError);
+	assert.match(ambiguous.content, /ambiguous/);
+	assert.match(ambiguous.content, /srv-1, srv-3/);
+});

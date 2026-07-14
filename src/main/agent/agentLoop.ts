@@ -69,6 +69,21 @@ const CONNECTION_CLAIM =
 /** The tools whose absence makes a connection claim ungrounded. */
 const DATA_SOURCE_TOOLS: ReadonlySet<string> = new Set(['query_data_source', 'list_data_sources']);
 
+/**
+ * Injected once when a reply claims actions were PERFORMED (deployed, uploaded,
+ * restarted, built…) while this run made zero tool calls. Observed failure
+ * (2026-07-14): told "重新部署到开发环境", the model produced a full deploy
+ * report — invented server label included — in 8 seconds with no tool use;
+ * "重新" plus remembered earlier deploys read as "already done". Third member
+ * of the ungrounded-claim family (code quotes, connection failures, and now
+ * completed side effects — the most dangerous one).
+ */
+const ACTION_CLAIM_NUDGE =
+	'<system-reminder>Your reply claims actions were performed (deploy / upload / restart / build …), but you made ZERO tool calls in this run — nothing was actually executed. Either perform the work NOW with your tools, or state plainly that it has NOT been done yet and what you would do. Never present remembered or planned work as completed.</system-reminder>';
+/** Completed-action assertions that must be grounded by a this-run tool call (zh + en). */
+const ACTION_CLAIM =
+	/已部署|部署完成|部署成功|部署结果|已上传|上传完成|上传成功|已重启|重启完成|重启成功|已执行|执行成功|编译成功|构建成功|已提交|提交成功|deployed successfully|upload(?:ed)? (?:complete|successful)|restarted successfully|build succeeded/i;
+
 /** Injected once when a file-changing run ends without a walkthrough — forces one. */
 const WALKTHROUGH_NUDGE =
 	'<system-reminder>You changed files in this task but have not recorded a walkthrough. Call write_walkthrough now with a short sectioned report — what changed (files) and how to verify it (verify) — then close with one short sentence. Do not repeat the edits; just summarize.</system-reminder>';
@@ -189,6 +204,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	const dataSourceToolsAvailable = config.tools.some(tool => DATA_SOURCE_TOOLS.has(tool.name));
 	let dataSourceToolCalledThisRun = false;
 	let staleClaimNudged = false;
+	let actionClaimNudged = false;
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -430,6 +446,16 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 				staleClaimNudged = true;
 				yield { type: 'stale_claim_nudge' };
 				messages.push({ role: 'user', content: [{ type: 'text', text: STALE_CLAIM_NUDGE }] });
+				continue;
+			}
+
+			// Action-claim nudge: "I deployed/uploaded/restarted it" from a run that
+			// never called a tool is fabricated completion — force one turn to
+			// actually do the work or retract. Deterministic; at most once per run.
+			if (reason === 'completed' && config.tools.length > 0 && !anyToolCallThisRun && !actionClaimNudged && ACTION_CLAIM.test(assistantText)) {
+				actionClaimNudged = true;
+				yield { type: 'action_claim_nudge' };
+				messages.push({ role: 'user', content: [{ type: 'text', text: ACTION_CLAIM_NUDGE }] });
 				continue;
 			}
 

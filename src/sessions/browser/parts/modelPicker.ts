@@ -129,6 +129,8 @@ export function installPermissionPicker(options: IPermissionPickerOptions, sourc
 		const info = permissionModeInfo(source.get());
 		label.textContent = info.label;
 		trigger.title = `Approvals: ${info.label} — ${info.description}`;
+		// CSS colors the trigger by risk (warning tint on 'full' only).
+		trigger.dataset['mode'] = info.mode;
 		if (icon) {
 			icon.className = `codicon ${info.icon}`;
 		}

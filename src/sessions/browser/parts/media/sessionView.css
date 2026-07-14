@@ -1230,10 +1230,11 @@ button.conversation-plan-header {
 }
 
 .conversation-input-wrap {
-	display: grid;
-	grid-template-rows: minmax(calc(var(--vscode-agents-size-composer-inputHeight) - var(--vscode-agents-size-composer-toolbarHeight) - (var(--vscode-agents-space-1) * 2)), 1fr) var(
-			--vscode-agents-size-composer-toolbarHeight
-		);
+	/* Flex column, not a fixed grid — the image strip is inserted at runtime
+	   before the input, and a fixed row template pushed the input into the
+	   toolbar's row when it appeared (same bug as .new-session-composer). */
+	display: flex;
+	flex-direction: column;
 	max-width: var(--vscode-agents-size-composer-width);
 	min-height: var(--vscode-agents-size-composer-inputHeight);
 	margin: 0 auto;
@@ -1247,6 +1248,7 @@ button.conversation-plan-header {
 }
 
 .conversation-input {
+	flex: 1;
 	min-width: 0;
 	width: 100%;
 	min-height: calc(var(--vscode-agents-size-composer-inputHeight) - var(--vscode-agents-size-composer-toolbarHeight) - (var(--vscode-agents-space-1) * 2));
@@ -1283,6 +1285,7 @@ button.conversation-plan-header {
 }
 
 .conversation-composer-toolbar {
+	flex: 0 0 auto;
 	justify-content: space-between;
 	gap: var(--vscode-agents-space-12);
 	height: var(--vscode-agents-size-composer-toolbarHeight);
@@ -1319,7 +1322,8 @@ button.conversation-plan-header {
 	border-radius: var(--vscode-agents-radius-control);
 }
 
-.conversation-access {
+/* Color follows risk, not the button — see .new-session-access[data-mode='full']. */
+.conversation-access[data-mode='full'] {
 	color: var(--vscode-agents-color-warning);
 }
 
