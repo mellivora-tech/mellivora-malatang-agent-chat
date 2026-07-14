@@ -206,19 +206,40 @@ export interface IEnvironmentInput {
 /** Upsert payload for a data source (same shape as {@link IDataSource} but id optional). Credentials go via {@link IDataSourceSecret}, never here. */
 export type IDataSourceInput = DistributiveOmit<IDataSource, 'id'> & { readonly id?: string };
 
+/** Payload for a connectivity test: the coordinates as currently typed in the form (NOT necessarily saved). */
+export interface IDataSourceTestPayload {
+	readonly label: string;
+	readonly coordinates: IDatabaseCoordinates;
+	/** When set and `secret` is absent, the test falls back to this data source's stored credential. */
+	readonly dataSourceId?: string;
+	/** Form-typed credential; wins over the stored one when any field is non-empty. */
+	readonly secret?: IDataSourceSecret;
+}
+
+/** Outcome of a connectivity test — `message` is ready to render (includes the failure hint). */
+export interface IDataSourceTestResult {
+	readonly ok: boolean;
+	readonly message: string;
+	readonly durationMs: number;
+}
+
 /**
  * The shape exposed on `agentWindow.environments` by the preload script. All
  * calls are scoped by projectId (the main process resolves its workspacePath).
- * Returns redacted views; secrets only travel renderer→main via setDataSourceCredential.
+ * Returns redacted views; secrets only travel renderer→main via
+ * setDataSourceCredential / upsertDataSource's secret / testDataSource.
  */
 export interface IEnvironmentsBridge {
 	get(projectId: string): Promise<IWorkspaceConfigView>;
 	upsertEnvironment(projectId: string, input: IEnvironmentInput): Promise<IWorkspaceConfigView>;
 	removeEnvironment(projectId: string, environmentId: string): Promise<IWorkspaceConfigView>;
-	upsertDataSource(projectId: string, input: IDataSourceInput): Promise<IWorkspaceConfigView>;
+	/** Upsert the definition; a `secret` with any non-empty field is stored for the (new or existing) data source in the same call. */
+	upsertDataSource(projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret): Promise<IWorkspaceConfigView>;
 	removeDataSource(projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView>;
 	/** Set or clear (all-empty ⇒ clear) a data source's credential. Returns the refreshed view (hasCredential updated). */
 	setDataSourceCredential(projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView>;
+	/** Try to connect (database kinds only) with the given coordinates/credential — nothing is saved. */
+	testDataSource(projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult>;
 }
 
 /**

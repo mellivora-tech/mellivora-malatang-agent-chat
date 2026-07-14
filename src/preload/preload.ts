@@ -18,7 +18,7 @@ import type { IGitBridge } from '../sessions/services/git/common/git.js';
 import type { IProjectInput, IProjectsBridge, IRemoteRepoInput } from '../sessions/services/projects/common/projects.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
-import type { IDataSourceInput, IDataSourceSecret, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
+import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -77,9 +77,10 @@ const environments: IEnvironmentsBridge = {
 	get: (projectId: string) => ipcRenderer.invoke('environments:get', projectId),
 	upsertEnvironment: (projectId: string, input: IEnvironmentInput) => ipcRenderer.invoke('environments:upsertEnvironment', projectId, input),
 	removeEnvironment: (projectId: string, environmentId: string) => ipcRenderer.invoke('environments:removeEnvironment', projectId, environmentId),
-	upsertDataSource: (projectId: string, input: IDataSourceInput) => ipcRenderer.invoke('environments:upsertDataSource', projectId, input),
+	upsertDataSource: (projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret) => ipcRenderer.invoke('environments:upsertDataSource', projectId, input, secret),
 	removeDataSource: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:removeDataSource', projectId, dataSourceId),
 	setDataSourceCredential: (projectId: string, dataSourceId: string, secret: IDataSourceSecret) => ipcRenderer.invoke('environments:setDataSourceCredential', projectId, dataSourceId, secret),
+	testDataSource: (projectId: string, payload: IDataSourceTestPayload) => ipcRenderer.invoke('environments:testDataSource', projectId, payload),
 };
 
 const git: IGitBridge = {

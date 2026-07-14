@@ -2530,6 +2530,22 @@
 	color: var(--vscode-agents-color-danger);
 }
 
+/* Inline connectivity-test outcome next to the editor actions. */
+.sessions-env-test-result {
+	align-self: center;
+	font-size: 0.85em;
+	color: var(--vscode-agents-color-text-muted);
+	white-space: pre-line;
+}
+
+.sessions-env-test-result.ok {
+	color: var(--vscode-agents-color-success);
+}
+
+.sessions-env-test-result.fail {
+	color: var(--vscode-agents-color-danger);
+}
+
 /* Two-column form grid for the connection editors. */
 .sessions-form {
 	display: grid;

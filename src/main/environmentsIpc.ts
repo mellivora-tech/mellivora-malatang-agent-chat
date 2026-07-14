@@ -4,8 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ipcMain } from 'electron';
-import type { IDataSourceInput, IDataSourceSecret, IDataSourceView, IEnvironmentInput, IWorkspaceConfig, IWorkspaceConfigView } from '../sessions/services/environments/common/environments.js';
-import { deleteCredential, hasCredential, setCredential } from './credentialStorage.js';
+import type {
+	IDataSourceInput,
+	IDataSourceSecret,
+	IDataSourceTestPayload,
+	IDataSourceTestResult,
+	IDataSourceView,
+	IEnvironmentInput,
+	IWorkspaceConfig,
+	IWorkspaceConfigView,
+} from '../sessions/services/environments/common/environments.js';
+import { explainQueryError } from './agent/tools/dataSourceTools.js';
+import { runDbQuery } from './agent/dbQuery.js';
+import { deleteCredential, getCredential, hasCredential, setCredential } from './credentialStorage.js';
 import { getProject } from './projectsStorage.js';
 import { createSafeStorageCipher } from './secretCipher.js';
 import { readOrSeedWorkspaceConfig, readWorkspaceConfig, removeDataSource, removeEnvironment, upsertDataSource, upsertEnvironment, writeWorkspaceConfig } from './workspaceConfigStorage.js';
@@ -69,13 +80,19 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		return toView(config);
 	});
 
-	ipcMain.handle('environments:upsertDataSource', async (_event, projectId: string, input: IDataSourceInput): Promise<IWorkspaceConfigView> => {
+	ipcMain.handle('environments:upsertDataSource', async (_event, projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
 			return emptyView;
 		}
-		const { config } = upsertDataSource(await readWorkspaceConfig(workspacePath), input);
+		const { config, id } = upsertDataSource(await readWorkspaceConfig(workspacePath), input);
 		await writeWorkspaceConfig(workspacePath, config);
+		// Credential typed alongside the connection form: store it in the same
+		// call so a NEW data source never needs a second id-hunting round trip.
+		// An absent/empty secret leaves any stored credential untouched.
+		if (secret && hasSecretContent(secret)) {
+			await setCredential(dataRoot, id, secret, cipher);
+		}
 		return toView(config);
 	});
 
@@ -102,4 +119,35 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		}
 		return toView(config);
 	});
+
+	// Connectivity test straight from the form — nothing is persisted. Database
+	// drivers only (the query runner supports mysql/postgres); the credential is
+	// the form-typed one, falling back to the stored secret so "test" works on a
+	// saved source without retyping the password.
+	ipcMain.handle('environments:testDataSource', async (_event, _projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult> => {
+		const { coordinates, label } = payload;
+		if (coordinates.driver !== 'mysql' && coordinates.driver !== 'postgres') {
+			return { ok: false, message: `暂不支持测试 ${String(coordinates.driver)} 连接。`, durationMs: 0 };
+		}
+		const typed = payload.secret && hasSecretContent(payload.secret) ? payload.secret : undefined;
+		const stored = !typed && payload.dataSourceId ? await getCredential(dataRoot, payload.dataSourceId, cipher) : undefined;
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+		const started = Date.now();
+		try {
+			await runDbQuery(coordinates, typed ?? stored, 'SELECT 1', { rowLimit: 1, signal: controller.signal });
+			return { ok: true, message: `连接成功（${Date.now() - started}ms）`, durationMs: Date.now() - started };
+		} catch (error) {
+			return { ok: false, message: explainQueryError({ label, coordinates }, error), durationMs: Date.now() - started };
+		} finally {
+			clearTimeout(timeout);
+		}
+	});
+}
+
+const TEST_TIMEOUT_MS = 12_000;
+
+/** A secret counts as provided only when some field is non-empty — an untouched form must not clobber the stored credential. */
+function hasSecretContent(secret: IDataSourceSecret): boolean {
+	return Boolean(secret.username?.trim() || secret.password || secret.token || secret.privateKey);
 }

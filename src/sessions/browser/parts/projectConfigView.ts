@@ -896,6 +896,14 @@ export class ProjectConfigView extends Disposable {
 
 		// Kind-specific extra fields.
 		const dbInput = kind === 'database' ? formInput(form, 'Database', dataSource?.kind === 'database' ? dataSource.coordinates.database : '', { full: true, placeholder: '如 orders' }) : undefined;
+		// Database credentials live in the SAME form as the connection (they still
+		// go to the credential store, never into the workspace config). An existing
+		// credential is kept when both fields are left blank.
+		const credUserInput = kind === 'database' ? formInput(form, '用户名', '', { placeholder: dataSource?.hasCredential ? '留空则保持不变' : '建议只读账号' }) : undefined;
+		const credPassInput = kind === 'database' ? formInput(form, '密码', '', { placeholder: dataSource?.hasCredential ? '留空则保持不变' : '' }) : undefined;
+		if (credPassInput) {
+			credPassInput.type = 'password';
+		}
 		const redisDbInput = kind === 'redis' ? formInput(form, 'DB(库序号)', dataSource?.kind === 'redis' ? String(dataSource.coordinates.db) : '0', { placeholder: '0' }) : undefined;
 		if (redisDbInput) {
 			redisDbInput.type = 'number';
@@ -958,9 +966,48 @@ export class ProjectConfigView extends Disposable {
 				auth: authSelect?.value ?? 'password',
 			});
 			const input = { ...(dataSource ? { id: dataSource.id } : {}), kind, environmentId, label, access, coordinates } as IDataSourceInput;
-			void this.mutate(() => this.service.upsertDataSource(this.projectId, input));
+			void this.mutate(() => this.service.upsertDataSource(this.projectId, input, readTypedSecret()));
 		});
+		// A connectivity test runs on the CURRENT form values (nothing saved):
+		// typo'd hosts surface here, not in the agent's first failing query.
+		if (kind === 'database') {
+			const testStatus = document.createElement('span');
+			testStatus.className = 'sessions-env-test-result';
+			settingsButton(actions, '测试连接', () => {
+				const driver = driverSelect?.value === 'postgres' ? 'postgres' : 'mysql';
+				const parsedPort = Number.parseInt(portInput.value, 10);
+				const payload = {
+					label: nameInput.value.trim() || `${hostInput.value.trim() || 'localhost'}`,
+					coordinates: {
+						driver: driver as 'mysql' | 'postgres',
+						host: hostInput.value.trim(),
+						port: Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : defaultPort(kind, driver),
+						database: dbInput?.value.trim() ?? '',
+					},
+					...(dataSource ? { dataSourceId: dataSource.id } : {}),
+					...(readTypedSecret() ? { secret: readTypedSecret()! } : {}),
+				};
+				testStatus.textContent = '测试中…';
+				testStatus.classList.remove('ok', 'fail');
+				void this.service.testDataSource(this.projectId, payload).then(result => {
+					testStatus.textContent = result.message;
+					testStatus.classList.toggle('ok', result.ok);
+					testStatus.classList.toggle('fail', !result.ok);
+				});
+			});
+			actions.appendChild(testStatus);
+		}
 		settingsButton(actions, '取消', () => this.beginEdit({ kind: 'none' }));
+
+		// The form-typed credential, or undefined when both fields are blank (keep the stored one).
+		function readTypedSecret(): { username?: string; password?: string } | undefined {
+			const username = credUserInput?.value.trim() ?? '';
+			const password = credPassInput?.value ?? '';
+			if (username === '' && password === '') {
+				return undefined;
+			}
+			return { ...(username !== '' ? { username } : {}), ...(password !== '' ? { password } : {}) };
+		}
 		nameInput.focus();
 	}
 

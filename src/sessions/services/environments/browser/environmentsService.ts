@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
-import type { IDataSourceInput, IDataSourceSecret, IEnvironmentInput, IEnvironmentsBridge, IWorkspaceConfigView } from '../common/environments.js';
+import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IDataSourceTestResult, IEnvironmentInput, IEnvironmentsBridge, IWorkspaceConfigView } from '../common/environments.js';
 
 export const IEnvironmentsService = createDecorator<IEnvironmentsService>('environmentsService');
 
@@ -20,9 +20,10 @@ export interface IEnvironmentsService {
 	get(projectId: string): Promise<IWorkspaceConfigView>;
 	upsertEnvironment(projectId: string, input: IEnvironmentInput): Promise<IWorkspaceConfigView>;
 	removeEnvironment(projectId: string, environmentId: string): Promise<IWorkspaceConfigView>;
-	upsertDataSource(projectId: string, input: IDataSourceInput): Promise<IWorkspaceConfigView>;
+	upsertDataSource(projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret): Promise<IWorkspaceConfigView>;
 	removeDataSource(projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView>;
 	setDataSourceCredential(projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView>;
+	testDataSource(projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult>;
 }
 
 const EMPTY_VIEW: IWorkspaceConfigView = { environments: [], dataSources: [] };
@@ -46,8 +47,8 @@ export class EnvironmentsService implements IEnvironmentsService {
 		return this.bridge?.removeEnvironment(projectId, environmentId) ?? Promise.resolve(EMPTY_VIEW);
 	}
 
-	upsertDataSource(projectId: string, input: IDataSourceInput): Promise<IWorkspaceConfigView> {
-		return this.bridge?.upsertDataSource(projectId, input) ?? Promise.resolve(EMPTY_VIEW);
+	upsertDataSource(projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret): Promise<IWorkspaceConfigView> {
+		return this.bridge?.upsertDataSource(projectId, input, secret) ?? Promise.resolve(EMPTY_VIEW);
 	}
 
 	removeDataSource(projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView> {
@@ -56,5 +57,9 @@ export class EnvironmentsService implements IEnvironmentsService {
 
 	setDataSourceCredential(projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView> {
 		return this.bridge?.setDataSourceCredential(projectId, dataSourceId, secret) ?? Promise.resolve(EMPTY_VIEW);
+	}
+
+	testDataSource(projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult> {
+		return this.bridge?.testDataSource(projectId, payload) ?? Promise.resolve({ ok: false, message: 'Environments bridge unavailable.', durationMs: 0 });
 	}
 }
