@@ -652,7 +652,10 @@ export class SessionsList extends Disposable {
 		mainStatus.setAttribute('aria-hidden', 'true');
 		main.appendChild(mainStatus);
 
-		if (row.status === SessionStatus.InProgress && row.isActive) {
+		// EVERY in-progress session spins, active or not — gating this on
+		// isActive made background runs invisible the moment the user switched
+		// away, hiding how many sessions were still working.
+		if (row.status === SessionStatus.InProgress) {
 			const spinner = document.createElement('span');
 			spinner.className = 'codicon codicon-loading codicon-modifier-spin sessions-project-task-spinner';
 			spinner.setAttribute('aria-hidden', 'true');
