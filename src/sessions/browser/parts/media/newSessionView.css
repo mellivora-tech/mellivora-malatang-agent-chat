@@ -199,8 +199,12 @@
 	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
 }
 
-.new-session-send-button:hover {
+.new-session-send-button:hover:not(:disabled) {
 	background: var(--vscode-agents-color-text-primary);
+}
+
+.new-session-send-button:disabled {
+	opacity: 0.42;
 }
 
 .new-session-project-menu {

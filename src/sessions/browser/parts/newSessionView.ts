@@ -90,7 +90,7 @@ export class NewSessionView extends Disposable {
 				},
 			}),
 		);
-		const images = this._register(installImageAttachments({ input, dropTarget: composer }));
+		const images = this._register(installImageAttachments({ input, dropTarget: composer, onDidChange: () => updateSendState() }));
 		const skills = this._register(
 			installSkillMentions({
 				host: content,
@@ -177,6 +177,12 @@ export class NewSessionView extends Disposable {
 		sendIcon.className = 'codicon codicon-arrow-up';
 		sendIcon.setAttribute('aria-hidden', 'true');
 
+		const updateSendState = () => {
+			sendButton.disabled = input.value.trim().length === 0 && !images.hasImages();
+		};
+		input.addEventListener('input', updateSendState);
+		updateSendState();
+
 		// Registered after the pickers exist (their triggers back the action
 		// commands) but before the Enter-to-send handler below, so a
 		// command-picking Enter never also submits.
@@ -191,18 +197,19 @@ export class NewSessionView extends Disposable {
 		composer.addEventListener('submit', event => {
 			event.preventDefault();
 			const query = input.value.trim();
-			if (!query) {
+			const pendingImages = images.getImages();
+			if (!query && pendingImages.length === 0) {
 				input.focus();
 				return;
 			}
 
 			const attachments = [...mentions.collectAttachments(query), ...skills.collectAttachments(query), ...sessionRefs.collectAttachments(query)];
-			const pendingImages = images.getImages();
 			input.value = '';
 			mentions.reset();
 			skills.reset();
 			sessionRefs.reset();
 			images.reset();
+			updateSendState();
 			void this.options.onStartSession?.(query, attachments.length > 0 ? attachments : undefined, pendingImages.length > 0 ? pendingImages : undefined);
 		});
 
