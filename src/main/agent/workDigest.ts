@@ -160,7 +160,11 @@ export function buildWorkDigestText(digest: IWorkDigest): string | undefined {
 	if (lines.length === 0) {
 		return undefined;
 	}
-	return `${DIGEST_OPEN}\nFiles I have already explored this session — no need to re-read them unless they may have changed:\n${lines.join('\n')}\n${DIGEST_CLOSE}`;
+	// Wording matters (learned from a real failure): the digest reaches the
+	// model in a LATER run, after the boundary dropped every tool result — so it
+	// must read as a map, never as "content you already have". An earlier
+	// "no need to re-read" phrasing made the model quote code from memory.
+	return `${DIGEST_OPEN}\nFiles explored earlier in this session — NAMES ONLY, their contents are no longer in your context. Use this list to go straight to the right files, but re-read a file before quoting it or making claims about its details:\n${lines.join('\n')}\n${DIGEST_CLOSE}`;
 }
 
 /**

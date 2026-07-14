@@ -89,6 +89,15 @@ const readFileTool = defineTool({
 	call: async () => ({ content: 'file contents' }),
 });
 
+const queryDataSourceStub = defineTool({
+	name: 'query_data_source',
+	description: 'Run a read-only query.',
+	inputSchema: { type: 'object' },
+	isReadOnly: () => true,
+	validateInput: input => ({ ok: true, value: input }),
+	call: async () => ({ content: 'col\n1' }),
+});
+
 function workDigestEvent(events: readonly IAgentEvent[]): Extract<IAgentEvent, { type: 'work_digest' }> | undefined {
 	return events.find((event): event is Extract<IAgentEvent, { type: 'work_digest' }> => event.type === 'work_digest');
 }
@@ -1124,6 +1133,124 @@ test('work digest: a purely conversational run emits none, letting the prior dig
 			runAgentLoop([userMessage('a question'), priorDigest], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }),
 		);
 		assert.equal(workDigestEvent(events), undefined, 'no digest re-emitted when the run did no tracked work');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('grounding nudge: quoting code with zero tool calls in a digest-seeded run forces one re-grounded turn', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const priorDigest = { role: 'assistant' as const, content: [{ type: 'text' as const, text: '<work-digest>\nRead: src/old.ts\n</work-digest>' }] };
+		const { client, requests } = capturingModelClient([
+			{ emit: [{ type: 'text', text: 'The bug is here:\n```java\nfoo.selectById(x);\n```' }] }, // answers from digest memory
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: { path: 'src/old.ts' } }] }, // re-grounds after the nudge
+			{ emit: [{ type: 'text', text: 'Corrected: the real call is different.' }] },
+		]);
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('why does the query fail'), priorDigest], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+
+		assert.equal(terminal.reason, 'completed');
+		assert.ok(terminal.turns >= 3, `expected a forced re-grounded turn, got ${terminal.turns}`);
+		assert.ok(events.some(event => event.type === 'grounding_nudge'), 'a grounding_nudge event was emitted');
+		assert.match(lastUserText(requests[1]!), /made no tool calls/, 'the nudge reminder was injected');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('grounding nudge: does NOT fire without a seeded digest (fresh session)', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client } = capturingModelClient([{ emit: [{ type: 'text', text: 'Example:\n```ts\nconst a = 1;\n```' }] }]);
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('show me an example')], { system: 's', tools: [readFileTool], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(terminal.turns, 1, 'a fresh session answers code questions without a forced turn');
+		assert.ok(!events.some(event => event.type === 'grounding_nudge'), 'no grounding_nudge emitted');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('grounding nudge: does NOT fire when the run actually read files or the reply has no code block', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const priorDigest = { role: 'assistant' as const, content: [{ type: 'text' as const, text: '<work-digest>\nRead: src/old.ts\n</work-digest>' }] };
+		// Grounded run: reads first, then quotes code — no nudge.
+		const grounded = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: { path: 'src/old.ts' } }] },
+			{ emit: [{ type: 'text', text: 'Verified:\n```ts\nreal();\n```' }] },
+		]);
+		const groundedRun = await drive(
+			runAgentLoop([userMessage('check the code'), priorDigest], { system: 's', tools: [readFileTool], modelClient: grounded.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(groundedRun.terminal.turns, 2, 'a grounded run stops naturally');
+		assert.ok(!groundedRun.events.some(event => event.type === 'grounding_nudge'), 'no nudge after real reads');
+
+		// Prose-only reply: no code fence, nothing to misquote — no nudge.
+		const prose = capturingModelClient([{ emit: [{ type: 'text', text: 'That depends on the runtime data; check the logs.' }] }]);
+		const proseRun = await drive(
+			runAgentLoop([userMessage('why is it slow'), priorDigest], { system: 's', tools: [readFileTool], modelClient: prose.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(proseRun.terminal.turns, 1, 'a prose reply stops naturally');
+		assert.ok(!proseRun.events.some(event => event.type === 'grounding_nudge'), 'no nudge for prose replies');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('stale-claim nudge: asserting a connection failure with no data-source call forces one real test', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		const { client, requests } = capturingModelClient([
+			{ emit: [{ type: 'text', text: '数据库当前连不上（报 ETIMEDOUT），基于代码分析如下。' }] }, // claims failure from memory
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'query_data_source', input: { source: 's', sql: 'SELECT 1' } }] }, // actually tests
+			{ emit: [{ type: 'text', text: '连接正常，查询结果如下。' }] },
+		]);
+		const { events, terminal } = await drive(
+			runAgentLoop([userMessage('查一下表结构')], { system: 's', tools: [queryDataSourceStub], modelClient: client, permissionGate: allowAllPermissionGate }),
+		);
+
+		assert.equal(terminal.reason, 'completed');
+		assert.ok(terminal.turns >= 3, `expected a forced test turn, got ${terminal.turns}`);
+		assert.ok(events.some(event => event.type === 'stale_claim_nudge'), 'a stale_claim_nudge event was emitted');
+		assert.match(lastUserText(requests[1]!), /did not call any data-source tool/, 'the nudge reminder was injected');
+	} finally {
+		delete process.env['MELLIVORA_REPLY_VERIFIER'];
+	}
+});
+
+test('stale-claim nudge: does NOT fire when the run tested the connection or made no failure claim', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	try {
+		// Grounded: the run called the data-source tool before claiming failure.
+		const grounded = capturingModelClient([
+			{ emit: [{ type: 'tool_use', id: 't1', name: 'query_data_source', input: { source: 's', sql: 'SELECT 1' } }] },
+			{ emit: [{ type: 'text', text: '连接失败：connect ETIMEDOUT（本轮实测）。' }] },
+		]);
+		const groundedRun = await drive(
+			runAgentLoop([userMessage('查库')], { system: 's', tools: [queryDataSourceStub], modelClient: grounded.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(groundedRun.terminal.turns, 2, 'a tested claim stops naturally');
+		assert.ok(!groundedRun.events.some(event => event.type === 'stale_claim_nudge'), 'no nudge after a real test');
+
+		// No failure claim in the reply — nothing to ground.
+		const calm = capturingModelClient([{ emit: [{ type: 'text', text: '表结构如下……' }] }]);
+		const calmRun = await drive(
+			runAgentLoop([userMessage('查库')], { system: 's', tools: [queryDataSourceStub], modelClient: calm.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(calmRun.terminal.turns, 1);
+		assert.ok(!calmRun.events.some(event => event.type === 'stale_claim_nudge'), 'no nudge without a failure claim');
+
+		// No data-source tools in the session — the claim cannot be tested, so no forced turn.
+		const toolless = capturingModelClient([{ emit: [{ type: 'text', text: 'cannot connect to the database from here.' }] }]);
+		const toollessRun = await drive(
+			runAgentLoop([userMessage('查库')], { system: 's', tools: [echoTool], modelClient: toolless.client, permissionGate: allowAllPermissionGate }),
+		);
+		assert.equal(toollessRun.terminal.turns, 1);
+		assert.ok(!toollessRun.events.some(event => event.type === 'stale_claim_nudge'), 'no nudge when the tools are absent');
 	} finally {
 		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}

@@ -31,6 +31,32 @@ const SOFT_BRAKE_REMINDER =
 const HARD_BRAKE_REMINDER =
 	'<system-reminder>Step budget reached. Tools are no longer available this turn — give your final answer now from what you already know, and state plainly anything you could not verify (e.g. it depends on runtime data).</system-reminder>';
 
+/**
+ * Injected once when a run finishes a reply that quotes code while having made
+ * ZERO tool calls, in a session whose digest names previously-explored files.
+ * That combination means the model is reconstructing code from digest memory —
+ * the run boundary dropped the actual file contents — which produced confident
+ * but wrong "current code" quotes in real logs (2026-07-14). CC's counterpart
+ * is the loop-exit verification nudge ("you cannot self-assign PARTIAL").
+ */
+const GROUNDING_NUDGE =
+	'<system-reminder>Your reply quotes or describes code, but you made no tool calls in this run. The work digest carries only file NAMES from earlier runs — the file contents are no longer in your context, so code quoted from memory may be wrong. Re-read the relevant files now (read-only tools never need approval), verify every code-level claim against the actual source, then give your corrected answer. Ask the user only for runtime data the code cannot show.</system-reminder>';
+
+/**
+ * Injected once when a reply asserts a connection/availability failure while
+ * this run never touched a data-source tool. Observed failure (2026-07-14): an
+ * earlier run's "connect ETIMEDOUT" rode the transcript as prose, the user
+ * fixed the config, and the next run declared the database unreachable —
+ * quoting a fabricated error — without ever retrying. Environment state is
+ * transient; only a THIS-run tool call may ground such a claim.
+ */
+const STALE_CLAIM_NUDGE =
+	'<system-reminder>Your reply claims a connection or availability failure, but you did not call any data-source tool in this run. An earlier failure may have been fixed since — configurations change between runs. Test it NOW: call query_data_source (or list_data_sources), report what actually happens, and quote only errors produced in this run. If the connection works, answer the user with real data instead.</system-reminder>';
+/** Connection-failure assertions that must be grounded by a this-run tool call (zh + en + raw error codes). */
+const CONNECTION_CLAIM = /连不上|连接不上|无法连接|连接失败|连接超时|数据库.{0,8}不可用|cannot connect|can't connect|connection (?:failed|refused|timed out)|unreachable|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|UnknownHostException/i;
+/** The tools whose absence makes a connection claim ungrounded. */
+const DATA_SOURCE_TOOLS: ReadonlySet<string> = new Set(['query_data_source', 'list_data_sources']);
+
 /** Injected once when a file-changing run ends without a walkthrough — forces one. */
 const WALKTHROUGH_NUDGE =
 	'<system-reminder>You changed files in this task but have not recorded a walkthrough. Call write_walkthrough now with a short sectioned report — what changed (files) and how to verify it (verify) — then close with one short sentence. Do not repeat the edits; just summarize.</system-reminder>';
@@ -140,6 +166,17 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// Did THIS run touch a tracked tool? A conversational run leaves the seeded
 	// (previous) digest to ride forward untouched instead of re-emitting it.
 	let digestWorkedThisRun = false;
+	// Grounding nudge state: fires only when the seeded digest proves earlier
+	// runs explored files (so there IS dropped content to misremember), and at
+	// most once per run.
+	const seededDigestHasFiles = workDigest.filesRead.size + workDigest.filesEdited.size + workDigest.filesWritten.size > 0;
+	let anyToolCallThisRun = false;
+	let groundingNudged = false;
+	// Stale-claim nudge state: only meaningful when the session actually has
+	// data-source tools to test a connection claim with; at most once per run.
+	const dataSourceToolsAvailable = config.tools.some(tool => DATA_SOURCE_TOOLS.has(tool.name));
+	let dataSourceToolCalledThisRun = false;
+	let staleClaimNudged = false;
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -338,6 +375,12 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 
 		// Track file-changing activity and whether the walkthrough was written,
 		// across all turns of this run (drives the nudge at convergence).
+		if (toolUses.length > 0) {
+			anyToolCallThisRun = true;
+		}
+		if (toolUses.some(toolUse => DATA_SOURCE_TOOLS.has(toolUse.name))) {
+			dataSourceToolCalledThisRun = true;
+		}
 		for (const toolUse of toolUses) {
 			if (toolUse.name === 'write_file' || toolUse.name === 'edit_file') {
 				filesChangedThisRun = true;
@@ -355,6 +398,28 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// 'completed' would hide that from logs and the UI.
 		if (toolUses.length === 0) {
 			const reason = stopReason === 'refusal' ? 'refusal' : stopReason === 'max_tokens' ? 'max_output_tokens' : 'completed';
+
+			// Grounding nudge: a fenced code block in the reply of a run that never
+			// called a tool can only be reconstructed from digest memory — force one
+			// re-grounded turn BEFORE the verifier so the verifier judges the
+			// corrected answer. Deterministic; fires at most once per run.
+			if (reason === 'completed' && seededDigestHasFiles && !anyToolCallThisRun && !groundingNudged && assistantText.includes('```')) {
+				groundingNudged = true;
+				yield { type: 'grounding_nudge' };
+				messages.push({ role: 'user', content: [{ type: 'text', text: GROUNDING_NUDGE }] });
+				continue;
+			}
+
+			// Stale-claim nudge: a connection-failure assertion is only credible if a
+			// data-source tool produced it THIS run — otherwise force one real test.
+			// Deterministic; fires at most once per run, before the verifier so the
+			// verifier judges the grounded answer.
+			if (reason === 'completed' && dataSourceToolsAvailable && !dataSourceToolCalledThisRun && !staleClaimNudged && CONNECTION_CLAIM.test(assistantText)) {
+				staleClaimNudged = true;
+				yield { type: 'stale_claim_nudge' };
+				messages.push({ role: 'user', content: [{ type: 'text', text: STALE_CLAIM_NUDGE }] });
+				continue;
+			}
 
 			// Reply verifier: at the moment of a genuine submission, one cheap judge
 			// call checks the reply addresses the question. A 'fail' feeds the

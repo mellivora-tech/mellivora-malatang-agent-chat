@@ -180,6 +180,10 @@ export type IAgentEvent =
 	| { readonly type: 'loop_guard'; readonly toolUseId: string; readonly name: string; readonly repeatCount: number }
 	/** The reply verifier judged the final answer. verdict 'fail' means a single retry follows — the renderer replaces the rejected reply instead of appending. */
 	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
+	/** A zero-tool-call run quoted code with only digest memory to go on; one forced re-grounded turn follows. The renderer may ignore it. */
+	| { readonly type: 'grounding_nudge' }
+	/** The reply asserted a connection failure without any this-run data-source call; one forced real test follows. The renderer may ignore it. */
+	| { readonly type: 'stale_claim_nudge' }
 	/** Old tool outputs aged out of the request view (history/UI keep full text). Emitted only when the pruned set grows — roughly once per quantum. */
 	| { readonly type: 'tool_prune'; readonly prunedResults: number; readonly prunedChars: number }
 	/** A run's deterministic work digest (files read/changed + activity counts). `text` is persisted as a hidden message and carried on the next run's transcript to pay down the re-exploration tax; the counts are export-safe telemetry. Emitted once at run end, only when the run touched something. */

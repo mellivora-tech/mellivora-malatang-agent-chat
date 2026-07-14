@@ -152,6 +152,12 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 						...(event.reason ? { detail: { reason: event.reason } } : {}),
 					});
 					break;
+				case 'grounding_nudge':
+					agentLog.emit({ ts: now(), ...base, type: 'grounding_nudge' });
+					break;
+				case 'stale_claim_nudge':
+					agentLog.emit({ ts: now(), ...base, type: 'stale_claim_nudge' });
+					break;
 				case 'compaction_anchor':
 					agentLog.emit({ ts: now(), ...base, type: 'compaction_anchor', covered: event.covered, summaryChars: event.summaryChars, accepted: event.accepted });
 					break;

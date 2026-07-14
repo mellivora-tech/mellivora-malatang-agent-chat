@@ -32,6 +32,38 @@ function describe(source: IQueryableSource): string {
 	return `- ${source.label} (env: ${source.environmentName}, ${c.driver} ${c.host}:${c.port}/${c.database}, id: ${source.id})`;
 }
 
+/**
+ * Turn a driver error into a message the model (and the user reading the tool
+ * card) can act on: WHERE it failed (source, driver, host:port/db), WHAT the
+ * driver said (message + code), and the likely fix. A bare "connect ETIMEDOUT"
+ * caused a real failure chain: the model could not tell config typo from
+ * network outage, gave up, and later asserted the failure as permanent.
+ */
+export function explainQueryError(source: Pick<IQueryableSource, 'label' | 'coordinates'>, error: unknown): string {
+	const c = source.coordinates;
+	const message = error instanceof Error ? error.message : String(error);
+	const code = typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : undefined;
+	const where = `"${source.label}" (${c.driver} ${c.host}:${c.port}${c.database ? `/${c.database}` : ''})`;
+	const probe = `${code ?? ''} ${message}`.toLowerCase();
+
+	let hint: string | undefined;
+	if (probe.includes('etimedout') || probe.includes('ehostunreach')) {
+		hint = `No response from ${c.host}:${c.port} — wrong host/IP, unreachable network, or VPN required. Verify the host in the data source configuration before retrying; more queries against this source will hang the same way until it is fixed.`;
+	} else if (probe.includes('enotfound') || probe.includes('eai_again')) {
+		hint = `The hostname "${c.host}" does not resolve — check the host in the data source configuration (and DNS/VPN).`;
+	} else if (probe.includes('econnrefused')) {
+		hint = `${c.host} is reachable but refused port ${c.port} — the database server may be down or the port wrong.`;
+	} else if (probe.includes('access denied') || probe.includes('authentication failed') || probe.includes('28p01')) {
+		hint = 'The credentials were rejected — the username/password stored for this data source are wrong or expired.';
+	} else if (probe.includes('no database selected') || probe.includes('er_no_db')) {
+		hint = `This data source has no default database configured — qualify table names (e.g. \`mydb.my_table\`) or set the database in the data source configuration.`;
+	} else if (probe.includes('unknown database') || probe.includes('3d000')) {
+		hint = `The configured database "${c.database}" does not exist on this server — check the database name in the data source configuration.`;
+	}
+
+	return `Query failed against ${where}: ${message}${code ? ` [${code}]` : ''}${hint ? `\n${hint}` : ''}`;
+}
+
 function formatCell(value: unknown): string {
 	if (value === null || value === undefined) {
 		return 'NULL';
@@ -123,7 +155,7 @@ export function createDataSourceTools(deps: IDataSourceToolDeps): readonly IAgen
 				const result = await run(match.coordinates, secret, sql, { rowLimit: ROW_LIMIT, signal: context.signal });
 				return { content: formatResult(result) };
 			} catch (error) {
-				return { content: `Query failed: ${error instanceof Error ? error.message : String(error)}`, isError: true };
+				return { content: explainQueryError(match, error), isError: true };
 			}
 		},
 	});

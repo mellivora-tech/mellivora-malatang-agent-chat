@@ -64,6 +64,10 @@ export type AgentLogEvent =
 	 * stays under detail. Watch fail rates in real logs to tune or disable.
 	 */
 	| (IBaseEvent & { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly detail?: { readonly reason?: string } })
+	/** A zero-tool-call run quoted code from digest memory and was forced to re-ground. Watch the rate: frequent firing means models keep skipping re-reads. */
+	| (IBaseEvent & { readonly type: 'grounding_nudge' })
+	/** A reply asserted a connection failure with no this-run data-source call and was forced to actually test. Watch alongside grounding_nudge. */
+	| (IBaseEvent & { readonly type: 'stale_claim_nudge' })
 	/** Real provider token counts for one turn — the ground truth the compaction threshold and the UI meter read. True prompt size = input + cacheRead + cacheWrite. */
 	| (IBaseEvent & { readonly type: 'usage'; readonly turn: number; readonly inputTokens: number; readonly outputTokens?: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number })
 	/** A persisted cross-run anchor arrived; watch the rejected rate — it should be ≈0 outside history edits. */
