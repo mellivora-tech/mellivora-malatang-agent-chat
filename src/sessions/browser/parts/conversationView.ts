@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../common/i18n/i18n.js';
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
@@ -129,7 +130,7 @@ export class ConversationView extends Disposable {
 		this.timeline = append(bodyWrap, document.createElement('div'));
 		this.timeline.className = 'conversation-timeline';
 		this.timeline.setAttribute('role', 'navigation');
-		this.timeline.setAttribute('aria-label', 'Conversation timeline');
+		this.timeline.setAttribute('aria-label', localize('conv.timeline'));
 
 		this.transcript = append(bodyWrap, document.createElement('div'));
 		this.transcript.className = 'conversation-transcript';
@@ -145,7 +146,7 @@ export class ConversationView extends Disposable {
 		this.input = append(inputWrap, document.createElement('textarea')) as HTMLTextAreaElement;
 		this.input.className = 'conversation-input';
 		this.input.rows = 1;
-		this.input.placeholder = 'Ask Mellivora';
+		this.input.placeholder = localize('conv.placeholder');
 		this.input.spellcheck = true;
 
 		// Installed before _registerEventListeners so a mention-picking Enter
@@ -185,7 +186,7 @@ export class ConversationView extends Disposable {
 		const access = append(leftControls, document.createElement('button')) as HTMLButtonElement;
 		access.className = 'conversation-access';
 		access.type = 'button';
-		access.title = 'Approvals';
+		access.title = localize('conv.approvals');
 		const accessIcon = appendCodicon(access, 'codicon-shield');
 		const accessLabel = append(access, document.createElement('span'));
 		appendCodicon(access, 'codicon-chevron-down');
@@ -238,9 +239,9 @@ export class ConversationView extends Disposable {
 		const model = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		model.className = 'conversation-model';
 		model.type = 'button';
-		model.title = 'Pick model';
+		model.title = localize('conv.pickModel');
 		const modelLabel = append(model, document.createElement('span'));
-		modelLabel.textContent = 'No model';
+		modelLabel.textContent = localize('picker.noModel');
 		appendCodicon(model, 'codicon-chevron-down');
 		const effort = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		effort.className = 'conversation-effort';
@@ -260,15 +261,15 @@ export class ConversationView extends Disposable {
 		this.stopButton = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		this.stopButton.className = 'conversation-stop-button';
 		this.stopButton.type = 'button';
-		this.stopButton.title = 'Stop';
-		this.stopButton.setAttribute('aria-label', 'Stop');
+		this.stopButton.title = localize('conv.stop');
+		this.stopButton.setAttribute('aria-label', localize('conv.stop'));
 		appendCodicon(this.stopButton, 'codicon-debug-stop');
 
 		this.sendButton = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		this.sendButton.className = 'conversation-send-button';
 		this.sendButton.type = 'submit';
-		this.sendButton.title = 'Send';
-		this.sendButton.setAttribute('aria-label', 'Send');
+		this.sendButton.title = localize('conv.send');
+		this.sendButton.setAttribute('aria-label', localize('conv.send'));
 		appendCodicon(this.sendButton, 'codicon-arrow-up');
 
 		this.sendError = append(this.composer, document.createElement('div'));
@@ -287,20 +288,20 @@ export class ConversationView extends Disposable {
 					const session = this.session;
 					const lastMessage = session?.messages.get().at(-1);
 					return [
-						{ name: 'model', kind: 'action', description: 'Pick the model', run: () => model.click() },
-						{ name: 'permission', kind: 'action', description: 'Pick the approval mode', run: () => access.click() },
+						{ name: 'model', kind: 'action', description: localize('conv.action.pickModel'), run: () => model.click() },
+						{ name: 'permission', kind: 'action', description: localize('conv.action.pickPermission'), run: () => access.click() },
 						...(session && lastMessage && this.messageSender?.forkSession
 							? [
 									{
 										name: 'fork',
 										kind: 'action' as const,
-										description: 'Fork this conversation from its latest message',
+										description: localize('conv.action.fork'),
 										run: () => void this.messageSender!.forkSession!(session.sessionId, lastMessage.id),
 									},
 								]
 							: []),
 						...(session?.status.get() === SessionStatus.InProgress
-							? [{ name: 'stop', kind: 'action' as const, description: 'Stop the current run', run: () => void this.stop() }]
+							? [{ name: 'stop', kind: 'action' as const, description: localize('conv.action.stop'), run: () => void this.stop() }]
 							: []),
 						...TEMPLATE_COMMANDS,
 					];
@@ -436,7 +437,7 @@ export class ConversationView extends Disposable {
 	private updateReconnectStatus(): void {
 		const reconnect = this.session?.reconnect.get();
 		this.reconnectStatus.hidden = !reconnect;
-		this.reconnectLabel.textContent = reconnect ? `Reconnecting… ${reconnect.attempt}/${reconnect.maxAttempts}` : '';
+		this.reconnectLabel.textContent = reconnect ? localize('conv.reconnecting', reconnect.attempt, reconnect.maxAttempts) : '';
 	}
 
 	private _registerEventListeners(): void {
@@ -569,7 +570,7 @@ export class ConversationView extends Disposable {
 			if (!this.transcript.querySelector('.conversation-empty')) {
 				const empty = append(this.transcript, document.createElement('div'));
 				empty.className = 'conversation-empty';
-				empty.textContent = this.session ? 'No messages yet' : 'No session selected';
+				empty.textContent = this.session ? localize('conv.noMessages') : localize('conv.noSession');
 			}
 			return;
 		}
@@ -707,12 +708,12 @@ export class ConversationView extends Disposable {
 		icon.setAttribute('aria-hidden', 'true');
 		const title = append(header, document.createElement('span'));
 		title.className = 'conversation-plan-title';
-		title.textContent = plan ? plan.title : 'Implementation plan';
+		title.textContent = plan ? plan.title : localize('plan.title.fallback');
 		if (plan) {
 			if (isWalkthrough) {
 				const tag = append(header, document.createElement('span'));
 				tag.className = 'conversation-plan-state walkthrough';
-				tag.textContent = '完成小结';
+				tag.textContent = localize('plan.tag.walkthrough');
 			} else {
 				const version = append(header, document.createElement('span'));
 				version.className = 'conversation-plan-version';
@@ -720,7 +721,7 @@ export class ConversationView extends Disposable {
 				if (plan.state !== 'draft') {
 					const state = append(header, document.createElement('span'));
 					state.className = `conversation-plan-state ${plan.state}`;
-					state.textContent = plan.state === 'approved' ? '已批准' : '已过期';
+					state.textContent = plan.state === 'approved' ? localize('plan.state.approved') : localize('plan.state.superseded');
 				}
 			}
 		}
@@ -781,8 +782,8 @@ export class ConversationView extends Disposable {
 				// Hover gutter: opens the inline comment editor for this section.
 				const gutter = append(kicker, document.createElement('button'));
 				gutter.className = 'conversation-plan-gutter codicon codicon-comment-add';
-				gutter.title = '对这一节留批注';
-				gutter.setAttribute('aria-label', `批注:${section.heading}`);
+				gutter.title = localize('plan.comment.gutter');
+				gutter.setAttribute('aria-label', localize('plan.comment.aria', section.heading));
 				gutter.addEventListener('click', () => {
 					this.planCommentEditor.add(editorKey);
 					this.planCommentFocus = editorKey;
@@ -816,11 +817,11 @@ export class ConversationView extends Disposable {
 					if (comment.resolved) {
 						const tag = append(row, document.createElement('span'));
 						tag.className = 'conversation-plan-comment-tag';
-						tag.textContent = '已解决';
+						tag.textContent = localize('plan.comment.resolved');
 					} else if (commentable && sessionIdForComments) {
 						const resolve = append(row, document.createElement('button'));
 						resolve.className = 'conversation-plan-comment-resolve';
-						resolve.textContent = '解决';
+						resolve.textContent = localize('plan.comment.resolve');
 						resolve.addEventListener('click', () => {
 							void this.messageSender?.setPlanComment?.(sessionIdForComments, { ...comment, resolved: true });
 						});
@@ -833,7 +834,7 @@ export class ConversationView extends Disposable {
 				editor.className = 'conversation-plan-comment-editor';
 				const input = append(editor, document.createElement('textarea'));
 				input.className = 'conversation-plan-comment-input';
-				input.placeholder = `批注「${section.heading}」…`;
+				input.placeholder = localize('plan.comment.placeholder', section.heading);
 				input.rows = 2;
 				input.value = this.planCommentDraft.get(editorKey) ?? '';
 				input.addEventListener('input', () => this.planCommentDraft.set(editorKey, input.value));
@@ -841,10 +842,10 @@ export class ConversationView extends Disposable {
 				buttons.className = 'conversation-plan-comment-buttons';
 				const submit = append(buttons, document.createElement('button'));
 				submit.className = 'conversation-plan-approve';
-				submit.textContent = '提交';
+				submit.textContent = localize('plan.comment.submit');
 				const cancel = append(buttons, document.createElement('button'));
 				cancel.className = 'conversation-plan-revise';
-				cancel.textContent = '取消';
+				cancel.textContent = localize('sidebar.cancel');
 				submit.addEventListener('click', () => {
 					const body = input.value.trim();
 					if (body === '') {
@@ -887,17 +888,17 @@ export class ConversationView extends Disposable {
 			actions.className = 'conversation-plan-actions';
 			const approve = append(actions, document.createElement('button'));
 			approve.className = 'conversation-plan-approve';
-			approve.textContent = '按此执行';
+			approve.textContent = localize('plan.approve');
 			const revise = append(actions, document.createElement('button'));
 			revise.className = 'conversation-plan-revise';
-			revise.textContent = '让它改';
+			revise.textContent = localize('plan.revise');
 			approve.addEventListener('click', () => {
 				approve.disabled = true;
 				revise.disabled = true;
 				void (async () => {
 					await sender.setPlanState?.(sessionId, message.id, 'approved');
 					await sender.setSessionPermissionMode?.(sessionId, 'auto-edit');
-					await sender.sendMessage(sessionId, '按已批准的实现方案执行。');
+					await sender.sendMessage(sessionId, localize('plan.approve.message'));
 				})().catch(() => {
 					approve.disabled = false;
 					revise.disabled = false;
@@ -946,8 +947,8 @@ export class ConversationView extends Disposable {
 		const title = block.querySelector<HTMLElement>('.conversation-work-title');
 		if (title) {
 			title.textContent = live
-				? `Working for ${formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now()))}`
-				: `Worked for ${formatDurationMs(message.durationMs ?? 0)}`;
+				? localize('conv.workingFor', formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now())))
+				: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
 		}
 		if (header) {
 			header.setAttribute('aria-expanded', String(expanded));
@@ -1020,7 +1021,7 @@ export class ConversationView extends Disposable {
 			// The turn's member ids, so the scroll marker can map any visible
 			// message back to its tick.
 			tick.dataset.blockIds = turn.blocks.map(block => block.id).join(' ');
-			tick.setAttribute('aria-label', 'Jump to turn');
+			tick.setAttribute('aria-label', localize('conv.jumpToTurn'));
 			tick.addEventListener('click', () => {
 				this.transcript.querySelector(`[data-message-id="${firstBlock.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 			});
@@ -1115,7 +1116,7 @@ export class ConversationView extends Disposable {
 
 		const excerpt = append(card, document.createElement('div'));
 		excerpt.className = 'conversation-timeline-preview-text';
-		excerpt.textContent = turn.assistant ? turn.assistant.text.slice(0, 240) : 'Working…';
+		excerpt.textContent = turn.assistant ? turn.assistant.text.slice(0, 240) : localize('conv.workingEllipsis');
 
 		const files = extractWorkFiles(turn.work);
 		if (files.length > 0) {
@@ -1181,8 +1182,8 @@ export class ConversationView extends Disposable {
 		const title = append(header, document.createElement('span'));
 		title.className = 'conversation-work-title';
 		title.textContent = live
-			? `Working for ${formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now()))}`
-			: `Worked for ${formatDurationMs(message.durationMs ?? 0)}`;
+			? localize('conv.workingFor', formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now())))
+			: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
 		const chevron = append(header, document.createElement('span'));
 		chevron.className = `codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`;
 		chevron.setAttribute('aria-hidden', 'true');
@@ -1223,7 +1224,7 @@ export class ConversationView extends Disposable {
 		const label = append(row, document.createElement('span'));
 		label.className = 'conversation-work-step-label';
 		if (step.kind === 'thinking') {
-			label.textContent = `Thought for ${thinkingDurationText(step.durationMs)}`;
+			label.textContent = localize('conv.thoughtFor', thinkingDurationText(step.durationMs));
 		} else if (step.kind === 'narration') {
 			// The model's own words, verbatim — an announcement, not a timed
 			// activity, so no duration chip.
@@ -1233,7 +1234,7 @@ export class ConversationView extends Disposable {
 			if (step.running) {
 				const spinner = append(row, document.createElement('span'));
 				spinner.className = 'codicon codicon-loading codicon-modifier-spin conversation-work-step-duration';
-				spinner.setAttribute('aria-label', '进行中');
+				spinner.setAttribute('aria-label', localize('conv.running'));
 			} else {
 				const duration = append(row, document.createElement('span'));
 				duration.className = 'conversation-work-step-duration';
@@ -1248,9 +1249,9 @@ export class ConversationView extends Disposable {
 			const openButton = append(row, document.createElement('button')) as HTMLButtonElement;
 			openButton.className = 'conversation-work-step-browse';
 			openButton.type = 'button';
-			openButton.title = '在数据浏览器打开这个查询';
+			openButton.title = localize('appr.openInBrowserTitle');
 			appendCodicon(openButton, 'codicon-database');
-			append(openButton, document.createElement('span')).textContent = '在数据浏览器打开';
+			append(openButton, document.createElement('span')).textContent = localize('appr.openInBrowser');
 			openButton.addEventListener('click', event => {
 				// The row itself may be an expand toggle — don't trip it.
 				event.stopPropagation();
@@ -1349,8 +1350,8 @@ export class ConversationView extends Disposable {
 		// text carries the same tags so a plausible number is never mistaken for
 		// a fresh measurement.
 		const totalSuffix = totalSource === 'real' ? '' : totalSource === 'restored' ? ' (last run)' : ' (estimated)';
-		value.textContent = `${usedPct}% used (${100 - usedPct}% left)${totalSuffix}`;
-		this.contextRing.setAttribute('aria-label', `Context window: ${usedPct}% used, ~${formatTokens(tokens)} of ${formatTokens(contextLength)} tokens${totalSuffix}`);
+		value.textContent = localize('conv.contextUsed', usedPct, 100 - usedPct, totalSuffix);
+		this.contextRing.setAttribute('aria-label', localize('conv.contextAria', usedPct, formatTokens(tokens), formatTokens(contextLength), totalSuffix));
 
 		// The breakdown can populate BEFORE the total is real — a run's first
 		// context_breakdown event fires ahead of its usage event, so the panel
@@ -1461,7 +1462,7 @@ export class ConversationView extends Disposable {
 		spinner.setAttribute('aria-hidden', 'true');
 
 		const label = append(row, document.createElement('span'));
-		label.textContent = 'Thinking';
+		label.textContent = localize('conv.thinking');
 
 		return row;
 	}
@@ -1483,11 +1484,11 @@ export class ConversationView extends Disposable {
 		this.stopButton.hidden = !isRunning;
 		this.input.placeholder = isRunning
 			? this.queuedFollowUp
-				? `Queued: ${this.queuedFollowUp}`
-				: 'Working… your next message will be queued'
+				? localize('conv.placeholder.queued', this.queuedFollowUp)
+				: localize('conv.placeholder.working')
 			: interactivity === SessionInteractivity.ReadOnly
-				? 'Session is read-only'
-				: 'Ask Mellivora, @ for files, / for commands, $ for skills, # for conversations';
+				? localize('conv.placeholder.readOnly')
+				: localize('conv.placeholder.full');
 	}
 
 	/** Send a queued follow-up once the current run has settled. */
@@ -1591,13 +1592,13 @@ export class ConversationView extends Disposable {
 function describeApproval(toolName: string, detail: string): { icon: string; title: string; chip: string; command?: string; path?: string } {
 	switch (toolName) {
 		case 'bash':
-			return { icon: 'codicon-terminal', title: '运行命令', chip: 'bash', command: detail };
+			return { icon: 'codicon-terminal', title: localize('appr.runCommand'), chip: 'bash', command: detail };
 		case 'write_file':
-			return { icon: 'codicon-new-file', title: '写入文件', chip: 'write_file', path: detail.replace(/^write /, '') };
+			return { icon: 'codicon-new-file', title: localize('appr.writeFile'), chip: 'write_file', path: detail.replace(/^write /, '') };
 		case 'edit_file':
-			return { icon: 'codicon-edit', title: '修改文件', chip: 'edit_file', path: detail.replace(/^edit /, '') };
+			return { icon: 'codicon-edit', title: localize('appr.editFile'), chip: 'edit_file', path: detail.replace(/^edit /, '') };
 		default:
-			return { icon: 'codicon-shield', title: '批准此操作', chip: toolName };
+			return { icon: 'codicon-shield', title: localize('appr.generic'), chip: toolName };
 	}
 }
 
@@ -1639,7 +1640,7 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
 	allow.className = 'conversation-approval-allow';
 	allow.type = 'button';
-	append(allow, document.createElement('span')).textContent = '允许';
+	append(allow, document.createElement('span')).textContent = localize('appr.allow');
 	if (!compact) {
 		const allowKey = append(allow, document.createElement('kbd'));
 		allowKey.className = 'conversation-approval-key';
@@ -1654,8 +1655,8 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 		const always = append(actions, document.createElement('button')) as HTMLButtonElement;
 		always.className = 'conversation-approval-always';
 		always.type = 'button';
-		always.title = `本会话不再询问：${approval.alwaysAllow}`;
-		append(always, document.createElement('span')).textContent = '始终允许';
+		always.title = localize('appr.alwaysTitle', approval.alwaysAllow);
+		append(always, document.createElement('span')).textContent = localize('appr.always');
 		const pattern = append(always, document.createElement('code'));
 		pattern.className = 'conversation-approval-pattern';
 		pattern.textContent = approval.alwaysAllow;
@@ -1668,8 +1669,8 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 			const forever = append(actions, document.createElement('button')) as HTMLButtonElement;
 			forever.className = 'conversation-approval-always conversation-approval-always-project';
 			forever.type = 'button';
-			forever.title = `本项目永久放行：${approval.alwaysAllow}（可在项目配置 › 工具授权中删除）`;
-			append(forever, document.createElement('span')).textContent = '本项目';
+			forever.title = localize('appr.projectTitle', approval.alwaysAllow);
+			append(forever, document.createElement('span')).textContent = localize('appr.project');
 			forever.addEventListener('click', () => approval.respond(true, true, 'project'));
 		}
 	}
@@ -1677,7 +1678,7 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
 	deny.className = 'conversation-approval-deny';
 	deny.type = 'button';
-	append(deny, document.createElement('span')).textContent = '拒绝';
+	append(deny, document.createElement('span')).textContent = localize('appr.deny');
 	if (!compact) {
 		const denyKey = append(deny, document.createElement('kbd'));
 		denyKey.className = 'conversation-approval-key';
@@ -1690,7 +1691,7 @@ function createApprovalCard(approval: ISessionPendingApproval, compact = false):
 	const card = document.createElement('div');
 	card.className = compact ? 'conversation-approval conversation-approval-compact' : 'conversation-approval';
 	card.setAttribute('role', 'alertdialog');
-	card.setAttribute('aria-label', 'Approval required');
+	card.setAttribute('aria-label', localize('appr.aria'));
 	// Esc denies. The focused Allow button (a child) bubbles the keydown up here,
 	// and the listener dies with the card — no document-level leak.
 	card.addEventListener('keydown', event => {
@@ -2032,7 +2033,7 @@ function createMessageActionBar(message: ISessionMessage, actions: IMessageActio
 		});
 	}
 	if (actions.fork) {
-		addAction('codicon-git-branch', 'Fork from here', actions.fork);
+		addAction('codicon-git-branch', localize('conv.forkFromHere'), actions.fork);
 	}
 
 	if (message.timestamp) {
@@ -2063,10 +2064,10 @@ function formatWorkingDuration(startedAt: Date | undefined): string {
 	const minutes = Math.floor(totalSeconds / 60);
 	const seconds = totalSeconds % 60;
 	if (minutes > 0) {
-		return `Working for ${minutes}m ${seconds}s`;
+		return localize('conv.workingForMS', minutes, seconds);
 	}
 
-	return `Working for ${seconds}s`;
+	return localize('conv.workingForS', seconds);
 }
 
 function messageIcon(role: ISessionMessage['role']): string {

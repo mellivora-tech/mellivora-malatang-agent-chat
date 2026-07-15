@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../common/i18n/i18n.js';
 import { append } from '../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
@@ -14,6 +15,7 @@ import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from '
 import { installImageAttachments } from './composerImages.js';
 import { installFileMentions, installSessionMentions, installSkillMentions, type IEntityMentionEntry } from './composerMentions.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
+import { greetingBucketLabel, pickGreeting } from './newSessionGreetings.js';
 
 export interface INewSessionViewOptions {
 	readonly onStartSession?: (query: string, attachments?: readonly ISessionAttachment[], images?: readonly IPendingImage[]) => Promise<unknown>;
@@ -42,11 +44,11 @@ export class NewSessionView extends Disposable {
 
 		const heading = append(content, document.createElement('h1'));
 		heading.className = 'new-session-heading';
-		let headingBucket = greetingBucket(new Date().getHours());
+		let headingBucket = greetingBucketLabel(new Date().getHours());
 		heading.textContent = pickGreeting(new Date().getHours());
 		// Follow the clock: re-greet only when the hour crosses into a new bucket, so the tail doesn't churn within a time-of-day.
 		const greetingTimer = setInterval(() => {
-			const bucket = greetingBucket(new Date().getHours());
+			const bucket = greetingBucketLabel(new Date().getHours());
 			if (bucket !== headingBucket) {
 				headingBucket = bucket;
 				heading.textContent = pickGreeting(new Date().getHours());
@@ -60,13 +62,13 @@ export class NewSessionView extends Disposable {
 		const context = append(composer, document.createElement('button')) as HTMLButtonElement;
 		context.className = 'new-session-composer-context';
 		context.type = 'button';
-		context.title = 'Pick project';
+		context.title = localize('ns.pickProject');
 		const contextIcon = append(context, document.createElement('span'));
 		contextIcon.className = 'codicon codicon-folder';
 		contextIcon.setAttribute('aria-hidden', 'true');
 		const contextLabel = append(context, document.createElement('span'));
 		contextLabel.className = 'new-session-composer-context-label';
-		contextLabel.textContent = 'Select project';
+		contextLabel.textContent = localize('ns.pickProject');
 		const contextChevron = append(context, document.createElement('span'));
 		contextChevron.className = 'codicon codicon-chevron-down';
 		contextChevron.setAttribute('aria-hidden', 'true');
@@ -75,7 +77,7 @@ export class NewSessionView extends Disposable {
 		const input = append(composer, document.createElement('textarea')) as HTMLTextAreaElement;
 		input.className = 'new-session-input';
 		input.rows = 2;
-		input.placeholder = 'Ask Mellivora anything, @ for files, / for commands, $ for skills, # for related conversations, paste or drop images';
+		input.placeholder = localize('ns.placeholder');
 		input.spellcheck = true;
 
 		// Installed before the Enter-to-send handler below — an Enter that picks
@@ -115,8 +117,8 @@ export class NewSessionView extends Disposable {
 		const addButton = append(leftControls, document.createElement('button')) as HTMLButtonElement;
 		addButton.className = 'new-session-toolbar-button';
 		addButton.type = 'button';
-		addButton.title = 'Attach images';
-		addButton.setAttribute('aria-label', 'Attach images');
+		addButton.title = localize('ns.attachImages');
+		addButton.setAttribute('aria-label', localize('ns.attachImages'));
 		const addIcon = append(addButton, document.createElement('span'));
 		addIcon.className = 'codicon codicon-add';
 		addIcon.setAttribute('aria-hidden', 'true');
@@ -125,7 +127,7 @@ export class NewSessionView extends Disposable {
 		const access = append(leftControls, document.createElement('button')) as HTMLButtonElement;
 		access.className = 'new-session-access';
 		access.type = 'button';
-		access.title = 'Approvals';
+		access.title = localize('conv.approvals');
 		const accessIcon = append(access, document.createElement('span'));
 		accessIcon.className = 'codicon codicon-shield';
 		accessIcon.setAttribute('aria-hidden', 'true');
@@ -142,12 +144,12 @@ export class NewSessionView extends Disposable {
 		const model = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		model.className = 'new-session-model';
 		model.type = 'button';
-		model.title = 'Pick model';
+		model.title = localize('conv.pickModel');
 		const modelIndicator = append(model, document.createElement('span'));
 		modelIndicator.className = 'new-session-model-indicator';
 		modelIndicator.setAttribute('aria-hidden', 'true');
 		const modelLabel = append(model, document.createElement('span'));
-		modelLabel.textContent = 'No model';
+		modelLabel.textContent = localize('picker.noModel');
 		const modelChevron = append(model, document.createElement('span'));
 		modelChevron.className = 'codicon codicon-chevron-down';
 		modelChevron.setAttribute('aria-hidden', 'true');
@@ -171,8 +173,8 @@ export class NewSessionView extends Disposable {
 		const sendButton = append(rightControls, document.createElement('button')) as HTMLButtonElement;
 		sendButton.className = 'new-session-send-button';
 		sendButton.type = 'submit';
-		sendButton.title = 'Start session';
-		sendButton.setAttribute('aria-label', 'Start session');
+		sendButton.title = localize('ns.start');
+		sendButton.setAttribute('aria-label', localize('ns.start'));
 		const sendIcon = append(sendButton, document.createElement('span'));
 		sendIcon.className = 'codicon codicon-arrow-up';
 		sendIcon.setAttribute('aria-hidden', 'true');
@@ -231,11 +233,11 @@ export class NewSessionView extends Disposable {
 
 		this._register(
 			projectsService.activeProject.subscribe(project => {
-				label.textContent = project?.name ?? 'Select project';
+				label.textContent = project?.name ?? localize('ns.pickProject');
 				trigger.title = project ? `Project: ${project.path}` : 'Pick project';
 			}),
 		);
-		label.textContent = projectsService.activeProject.get()?.name ?? 'Select project';
+		label.textContent = projectsService.activeProject.get()?.name ?? localize('ns.pickProject');
 
 		let menu: HTMLElement | undefined;
 
@@ -302,7 +304,7 @@ export class NewSessionView extends Disposable {
 			addIcon.setAttribute('aria-hidden', 'true');
 			const addLabel = append(addItem, document.createElement('span'));
 			addLabel.className = 'new-session-project-item-label';
-			addLabel.textContent = 'Add project…';
+			addLabel.textContent = localize('ns.addProject');
 			addItem.addEventListener('click', () => {
 				closeMenu();
 				void projectsService.addProjectViaDialog();
@@ -324,53 +326,4 @@ export class NewSessionView extends Disposable {
 	}
 }
 
-const LATE_NIGHT_TAILS: readonly string[] = [
-	'凌晨的班加了，凌晨的钱一分没见',
-	'你在拉磨，老板在睡觉，这就是分工',
-	'猝死名单在排队，你这是在插队',
-	'这个点干活，图啥？图老板换新车吗',
-	'命是自己的，磨是老板的，掂量掂量',
-];
 
-/** The landing heading's time-of-day half, each paired with a pool of 牛马 tails — bitter about the system, never about the user; dark humor keeps the floor. */
-const GREETING_BUCKETS: readonly { readonly maxHour: number; readonly label: string; readonly tails: readonly string[] }[] = [
-	{ maxHour: 5, label: '凌晨好', tails: LATE_NIGHT_TAILS },
-	{
-		maxHour: 11,
-		label: '早上好',
-		tails: [
-			'打卡机不认人，只认牛马',
-			'又是替老板圆梦的一天',
-			'通勤两小时，上班如上坟，说吧',
-			'晨会画的饼，够你饿一天',
-			'太阳照常升起，工资照常不涨',
-		],
-	},
-	{
-		maxHour: 13,
-		label: '中午好',
-		tails: ['吃快点，磨不等牛', '午饭是成本，你也是成本', '这顿外卖，是你今天唯一的福利', '午休二十分钟，资本家已经觉得亏了', '嚼着预制菜，干着预制的人生'],
-	},
-	{
-		maxHour: 18,
-		label: '下午好',
-		tails: ['下午三点，灵魂已死，肉体营业', 'KPI 不会疼你，我也只能听你说说', '你困不困老板不管，磨停没停他真管', '咖啡续不动命了，那就续需求吧', '再撑三小时，回棚吃草'],
-	},
-	{
-		maxHour: 23,
-		label: '晚上好',
-		tails: ['下班是违章行为，加班是企业文化', '你加的每一个班，都是老板游艇的一块板', '晚上十点，灯火通明，全是不敢走的', '工资是月抛的，健康是一次性的', '这个点还在干，明天老板夸你两句，就两句'],
-	},
-	{ maxHour: 24, label: '凌晨好', tails: LATE_NIGHT_TAILS },
-];
-
-function greetingBucket(hour: number): (typeof GREETING_BUCKETS)[number] {
-	return GREETING_BUCKETS.find(candidate => hour < candidate.maxHour) ?? GREETING_BUCKETS[GREETING_BUCKETS.length - 1]!;
-}
-
-/** e.g. "下午好，下午三点魂飞天，说说你想干啥" — the greeting for this exact hour, tail picked fresh each time the view mounts or the clock enters a new bucket. */
-function pickGreeting(hour: number): string {
-	const bucket = greetingBucket(hour);
-	const tail = bucket.tails[Math.floor(Math.random() * bucket.tails.length)]!;
-	return `${bucket.label}，${tail}`;
-}

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { append, clearNode } from '../../../base/browser/dom.js';
 import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChanges, type ISearchPaletteTask } from '../../search/browser/searchPalette.js';
@@ -70,10 +71,10 @@ interface ISidebarProjectGroup {
 }
 
 const SETTINGS_PLACEHOLDERS: Readonly<Record<string, { readonly icon: string; readonly title: string; readonly description: string }>> = {
-	agents: { icon: 'codicon-extensions', title: 'Agents', description: 'Define reusable agent personas with their own model, prompt, and tools.' },
-	skills: { icon: 'codicon-lightbulb', title: 'Skills', description: 'Package task-specific instructions the agent loads on demand.' },
-	'mcp-servers': { icon: 'codicon-server', title: 'MCP Servers', description: 'Connect external tools and services over the Model Context Protocol.' },
-	tools: { icon: 'codicon-tools', title: 'Tools', description: 'Manage the built-in tools and their approval policy.' },
+	agents: { icon: 'codicon-extensions', title: localize('settings.agents'), description: localize('settings.placeholder.agents.desc') },
+	skills: { icon: 'codicon-lightbulb', title: localize('sidebar.skills'), description: localize('settings.placeholder.skills.desc') },
+	'mcp-servers': { icon: 'codicon-server', title: localize('settings.mcpServers'), description: localize('settings.placeholder.mcp.desc') },
+	tools: { icon: 'codicon-tools', title: localize('settings.tools'), description: localize('settings.placeholder.tools.desc') },
 };
 
 export class SessionsList extends Disposable {
@@ -120,13 +121,13 @@ export class SessionsList extends Disposable {
 	private buildPaletteActions(): readonly ISearchPaletteAction[] {
 		const partService = this.options.sessionsPartService;
 		const actions: ISearchPaletteAction[] = [
-			{ id: 'new-task', label: 'New task', icon: 'codicon-add', group: 'suggested', keybinding: '⌘ N', run: () => partService?.showNewSession() },
-			{ id: 'settings', label: 'Settings', icon: 'codicon-settings-gear', group: 'suggested', run: () => this.openSettingsDialog() },
+			{ id: 'new-task', label: localize('sidebar.newTask'), icon: 'codicon-add', group: 'suggested', keybinding: '⌘ N', run: () => partService?.showNewSession() },
+			{ id: 'settings', label: localize('sidebar.settings'), icon: 'codicon-settings-gear', group: 'suggested', run: () => this.openSettingsDialog() },
 		];
 		if (this.options.onToggleSidebar) {
 			actions.push({
 				id: 'toggle-sidebar',
-				label: 'Toggle sidebar',
+				label: localize('sidebar.toggle'),
 				icon: 'codicon-layout-sidebar-left',
 				group: 'panels',
 				keybinding: '⌘ B',
@@ -222,16 +223,16 @@ export class SessionsList extends Disposable {
 		return [
 			{
 				id: 'sessions.sidebar.new',
-				label: 'New task',
+				label: localize('sidebar.newTask'),
 				icon: 'codicon-new-session',
 				class: `sessions-sidebar-menu-action${newTaskActive ? ' active' : ''}`,
 				keybinding: '⌘ N',
-				tooltip: 'New task',
+				tooltip: localize('sidebar.newTask'),
 				run: () => this.options.sessionsPartService?.showNewSession(),
 			},
 			{
 				id: 'sessions.sidebar.search',
-				label: 'Search',
+				label: localize('sidebar.search'),
 				icon: 'codicon-search',
 				class: 'sessions-sidebar-menu-action',
 				keybinding: '⌘ K',
@@ -239,7 +240,7 @@ export class SessionsList extends Disposable {
 			},
 			{
 				id: 'sessions.sidebar.skills',
-				label: 'Skills',
+				label: localize('sidebar.skills'),
 				icon: 'codicon-wand',
 				class: 'sessions-sidebar-menu-action',
 				run: () => this.openSettingsDialog('skills'),
@@ -311,7 +312,7 @@ export class SessionsList extends Disposable {
 	}
 
 	private renderChatSection(container: HTMLElement, rows: readonly ISessionListRow[]): void {
-		this.renderRowsSection(container, 'chat', 'Chat', rows, 'No chats yet');
+		this.renderRowsSection(container, 'chat', localize('sidebar.chat'), rows, localize('sidebar.noChats'));
 	}
 
 	private renderRowsSection(container: HTMLElement, id: SidebarTreeSectionId, title: string, rows: readonly ISessionListRow[], emptyText: string): void {
@@ -344,7 +345,7 @@ export class SessionsList extends Disposable {
 			list.appendChild(this.renderProjectGroup(project));
 		}
 
-		this.renderSidebarTreeSection(container, 'projects', 'Projects', browser);
+		this.renderSidebarTreeSection(container, 'projects', localize('sidebar.projects'), browser);
 	}
 
 	private renderProjectGroup(project: ISidebarProjectGroup): HTMLElement {
@@ -382,8 +383,8 @@ export class SessionsList extends Disposable {
 		const addTask = document.createElement('button');
 		addTask.className = 'sessions-project-add-task';
 		addTask.type = 'button';
-		addTask.title = `New task in ${project.name}`;
-		addTask.setAttribute('aria-label', `New task in ${project.name}`);
+		addTask.title = localize('sidebar.newTaskIn', project.name);
+		addTask.setAttribute('aria-label', localize('sidebar.newTaskIn', project.name));
 		addTask.addEventListener('click', event => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -400,7 +401,7 @@ export class SessionsList extends Disposable {
 		more.className = 'sessions-project-more';
 		more.type = 'button';
 		more.title = `${project.name} actions`;
-		more.setAttribute('aria-label', `${project.name} actions`);
+		more.setAttribute('aria-label', localize('sidebar.projectActions', project.name));
 		const moreIcon = document.createElement('span');
 		moreIcon.className = 'codicon codicon-ellipsis';
 		moreIcon.setAttribute('aria-hidden', 'true');
@@ -417,7 +418,7 @@ export class SessionsList extends Disposable {
 		if (project.rows.length === 0) {
 			const empty = document.createElement('div');
 			empty.className = 'sessions-project-empty';
-			empty.textContent = 'No tasks yet';
+			empty.textContent = localize('sidebar.noTasks');
 			rows.appendChild(empty);
 		} else {
 			for (const row of project.rows) {
@@ -474,12 +475,12 @@ export class SessionsList extends Disposable {
 			});
 		};
 
-		addItem('codicon-settings-gear', '项目配置', () => this.openProjectConfig(projectId, projectName));
+		addItem('codicon-settings-gear', localize('sidebar.projectConfig'), () => this.openProjectConfig(projectId, projectName));
 		if (this.options.projectsService?.revealInFolder) {
-			addItem('codicon-folder-opened', '在 Finder 中显示', () => void this.options.projectsService!.revealInFolder!(projectId));
+			addItem('codicon-folder-opened', localize('sidebar.revealInFinder'), () => void this.options.projectsService!.revealInFolder!(projectId));
 		}
 		if (this.options.projectsService?.deleteProject) {
-			addItem('codicon-trash', '删除项目', () => this.confirmDeleteProject(projectId, projectName));
+			addItem('codicon-trash', localize('sidebar.deleteProject'), () => this.confirmDeleteProject(projectId, projectName));
 		}
 
 		host.appendChild(menu);
@@ -503,13 +504,13 @@ export class SessionsList extends Disposable {
 		dialog.className = 'sessions-discover-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', '删除项目');
+		dialog.setAttribute('aria-label', localize('sidebar.deleteProject'));
 		const header = append(dialog, document.createElement('div'));
 		header.className = 'sessions-discover-header';
-		append(header, document.createElement('span')).textContent = '删除项目';
+		append(header, document.createElement('span')).textContent = localize('sidebar.deleteProject');
 		const body = append(dialog, document.createElement('div'));
 		body.className = 'sessions-discover-body';
-		body.textContent = `确定删除项目 “${projectName}” 吗?这将移除该项目及其所有会话与配置。本地代码不受影响,不会被删除。`;
+		body.textContent = localize('sidebar.deleteProjectConfirm', projectName);
 
 		const close = (): void => {
 			backdrop.remove();
@@ -532,7 +533,7 @@ export class SessionsList extends Disposable {
 		const confirmButton = append(footer, document.createElement('button')) as HTMLButtonElement;
 		confirmButton.className = 'sessions-settings-btn sessions-danger-btn';
 		confirmButton.type = 'button';
-		confirmButton.textContent = '删除';
+		confirmButton.textContent = localize('sidebar.delete');
 		confirmButton.addEventListener('click', () => {
 			close();
 			void service.deleteProject(projectId);
@@ -540,7 +541,7 @@ export class SessionsList extends Disposable {
 		const cancelButton = append(footer, document.createElement('button')) as HTMLButtonElement;
 		cancelButton.className = 'sessions-settings-btn';
 		cancelButton.type = 'button';
-		cancelButton.textContent = '取消';
+		cancelButton.textContent = localize('sidebar.cancel');
 		cancelButton.addEventListener('click', close);
 
 		host.appendChild(backdrop);
@@ -678,8 +679,8 @@ export class SessionsList extends Disposable {
 			const rename = document.createElement('button');
 			rename.className = 'sessions-project-task-action sessions-project-task-rename';
 			rename.type = 'button';
-			rename.title = 'Rename task';
-			rename.setAttribute('aria-label', `Rename ${row.title}`);
+			rename.title = localize('sidebar.renameTask');
+			rename.setAttribute('aria-label', localize('sidebar.renameNamed', row.title));
 			rename.addEventListener('click', event => {
 				event.preventDefault();
 				event.stopPropagation();
@@ -696,8 +697,8 @@ export class SessionsList extends Disposable {
 			const archive = document.createElement('button');
 			archive.className = 'sessions-project-task-action';
 			archive.type = 'button';
-			archive.title = 'Archive task';
-			archive.setAttribute('aria-label', `Archive ${row.title}`);
+			archive.title = localize('sidebar.archiveTask');
+			archive.setAttribute('aria-label', localize('sidebar.archiveNamed', row.title));
 			archive.addEventListener('click', event => {
 				event.preventDefault();
 				event.stopPropagation();
@@ -718,8 +719,8 @@ export class SessionsList extends Disposable {
 			const remove = document.createElement('button');
 			remove.className = 'sessions-project-task-delete';
 			remove.type = 'button';
-			remove.title = 'Delete task';
-			remove.setAttribute('aria-label', `Delete ${row.title}`);
+			remove.title = localize('sidebar.deleteTask');
+			remove.setAttribute('aria-label', localize('sidebar.deleteNamed', row.title));
 			remove.addEventListener('click', event => {
 				event.preventDefault();
 				event.stopPropagation();
@@ -754,18 +755,18 @@ export class SessionsList extends Disposable {
 		dialog.className = 'sessions-rename-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', 'Rename task');
+		dialog.setAttribute('aria-label', localize('sidebar.renameTask'));
 		backdrop.appendChild(dialog);
 
 		const heading = document.createElement('h3');
 		heading.className = 'sessions-rename-title';
-		heading.textContent = 'Rename task';
+		heading.textContent = localize('sidebar.renameTask');
 		dialog.appendChild(heading);
 
 		const input = document.createElement('input');
 		input.className = 'sessions-rename-input';
 		input.value = row.title;
-		input.setAttribute('aria-label', 'Task name');
+		input.setAttribute('aria-label', localize('sidebar.taskName'));
 		dialog.appendChild(input);
 
 		const actions = document.createElement('div');
@@ -784,14 +785,14 @@ export class SessionsList extends Disposable {
 		const cancel = document.createElement('button');
 		cancel.className = 'sessions-settings-btn';
 		cancel.type = 'button';
-		cancel.textContent = 'Cancel';
+		cancel.textContent = localize('sidebar.cancel');
 		cancel.addEventListener('click', close);
 		actions.appendChild(cancel);
 
 		const save = document.createElement('button');
 		save.className = 'sessions-settings-btn sessions-rename-save';
 		save.type = 'button';
-		save.textContent = 'Rename';
+		save.textContent = localize('sidebar.rename');
 		save.addEventListener('click', commit);
 		actions.appendChild(save);
 
@@ -825,8 +826,8 @@ export class SessionsList extends Disposable {
 		const userButton = document.createElement('button');
 		userButton.className = 'sessions-sidebar-user-button';
 		userButton.type = 'button';
-		userButton.title = 'Account';
-		userButton.setAttribute('aria-label', 'Account');
+		userButton.title = localize('sidebar.account');
+		userButton.setAttribute('aria-label', localize('sidebar.account'));
 		const avatar = document.createElement('span');
 		avatar.className = 'sessions-sidebar-avatar';
 		avatar.textContent = 'C';
@@ -841,8 +842,8 @@ export class SessionsList extends Disposable {
 		const settings = document.createElement('button');
 		settings.className = 'sessions-sidebar-settings-button';
 		settings.type = 'button';
-		settings.title = 'Settings';
-		settings.setAttribute('aria-label', 'Settings');
+		settings.title = localize('sidebar.settings');
+		settings.setAttribute('aria-label', localize('sidebar.settings'));
 		settings.addEventListener('click', () => this.openSettingsDialog());
 		const icon = document.createElement('span');
 		icon.className = 'codicon codicon-settings-gear';
@@ -884,7 +885,7 @@ export class SessionsList extends Disposable {
 		dialog.className = 'sessions-settings-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', 'Settings');
+		dialog.setAttribute('aria-label', localize('settings.aria'));
 		backdrop.appendChild(dialog);
 
 		const close = (): void => backdrop.remove();
@@ -899,8 +900,8 @@ export class SessionsList extends Disposable {
 		const closeButton = document.createElement('button');
 		closeButton.className = 'sessions-settings-close';
 		closeButton.type = 'button';
-		closeButton.title = 'Close';
-		closeButton.setAttribute('aria-label', 'Close');
+		closeButton.title = localize('sidebar.close');
+		closeButton.setAttribute('aria-label', localize('sidebar.close'));
 		closeButton.addEventListener('click', close);
 		const closeIcon = document.createElement('span');
 		closeIcon.className = 'codicon codicon-close';
@@ -912,7 +913,7 @@ export class SessionsList extends Disposable {
 		body.className = 'sessions-settings-body';
 		const nav = document.createElement('nav');
 		nav.className = 'sessions-settings-nav';
-		nav.setAttribute('aria-label', 'Settings');
+		nav.setAttribute('aria-label', localize('settings.aria'));
 		const main = document.createElement('main');
 		main.className = 'sessions-settings-main';
 		this.settingsNavElement = nav;
@@ -941,18 +942,18 @@ export class SessionsList extends Disposable {
 		backIcon.className = 'codicon codicon-arrow-left';
 		backIcon.setAttribute('aria-hidden', 'true');
 		back.appendChild(backIcon);
-		back.appendChild(document.createTextNode('Back'));
+		back.appendChild(document.createTextNode(localize('settings.back')));
 		back.addEventListener('click', () => this.closeSettings?.());
 		nav.appendChild(back);
 
 		const rows: readonly { id: string; icon: string; label: string; group: number; placeholder?: boolean }[] = [
-			{ id: 'general', icon: 'codicon-settings-gear', label: 'General', group: 1 },
-			{ id: 'appearance', icon: 'codicon-color-mode', label: 'Appearance', group: 1 },
-			{ id: 'models', icon: 'codicon-server-environment', label: 'Models', group: 2 },
-			{ id: 'agents', icon: 'codicon-extensions', label: 'Agents', group: 3, placeholder: true },
-			{ id: 'skills', icon: 'codicon-lightbulb', label: 'Skills', group: 3 },
-			{ id: 'mcp-servers', icon: 'codicon-server', label: 'MCP Servers', group: 3, placeholder: true },
-			{ id: 'tools', icon: 'codicon-tools', label: 'Tools', group: 3, placeholder: true },
+			{ id: 'general', icon: 'codicon-settings-gear', label: localize('settings.general'), group: 1 },
+			{ id: 'appearance', icon: 'codicon-color-mode', label: localize('settings.appearance'), group: 1 },
+			{ id: 'models', icon: 'codicon-server-environment', label: localize('settings.models'), group: 2 },
+			{ id: 'agents', icon: 'codicon-extensions', label: localize('settings.agents'), group: 3, placeholder: true },
+			{ id: 'skills', icon: 'codicon-lightbulb', label: localize('sidebar.skills'), group: 3 },
+			{ id: 'mcp-servers', icon: 'codicon-server', label: localize('settings.mcpServers'), group: 3, placeholder: true },
+			{ id: 'tools', icon: 'codicon-tools', label: localize('settings.tools'), group: 3, placeholder: true },
 		];
 
 		let previousGroup: number | undefined;
@@ -1008,11 +1009,11 @@ export class SessionsList extends Disposable {
 		page.className = 'sessions-settings-page';
 		const title = page.appendChild(document.createElement('h2'));
 		title.className = 'sessions-settings-page-title';
-		title.textContent = 'General';
+		title.textContent = localize('settings.general');
 
 		const prefs = readPreferences();
-		const card = settingsSection(page, 'Behavior');
-		const motion = settingsRow(card, { title: 'Reduce motion', description: 'Minimize animations and transitions across the app.' });
+		const card = settingsSection(page, localize('settings.behavior'));
+		const motion = settingsRow(card, { title: localize('settings.reduceMotion'), description: localize('settings.reduceMotion.desc') });
 		settingsToggle(motion, prefs.reduceMotion, value => updatePreferences({ reduceMotion: value }));
 
 		return page;
@@ -1023,17 +1024,17 @@ export class SessionsList extends Disposable {
 		page.className = 'sessions-settings-page';
 		const title = page.appendChild(document.createElement('h2'));
 		title.className = 'sessions-settings-page-title';
-		title.textContent = 'Appearance';
+		title.textContent = localize('settings.appearance');
 
 		const prefs = readPreferences();
-		const card = settingsSection(page, 'Theme');
-		const theme = settingsRow(card, { title: 'Color theme', description: 'Choose how the app looks.' });
+		const card = settingsSection(page, localize('settings.theme'));
+		const theme = settingsRow(card, { title: localize('settings.colorTheme'), description: localize('settings.colorTheme.desc') });
 		settingsDropdown(
 			theme,
 			[
-				{ value: 'dark', label: 'Dark' },
-				{ value: 'light', label: 'Light' },
-				{ value: 'highContrast', label: 'High Contrast' },
+				{ value: 'dark', label: localize('settings.theme.dark') },
+				{ value: 'light', label: localize('settings.theme.light') },
+				{ value: 'highContrast', label: localize('settings.theme.highContrast') },
 			],
 			prefs.theme,
 			value => updatePreferences({ theme: value as ThemeId }),
@@ -1046,7 +1047,7 @@ export class SessionsList extends Disposable {
 		if (!this.options.modelsService) {
 			const placeholder = document.createElement('div');
 			placeholder.className = 'sessions-settings-main-content';
-			placeholder.textContent = 'Model management is unavailable.';
+			placeholder.textContent = localize('settings.modelUnavailable');
 			return placeholder;
 		}
 
@@ -1061,7 +1062,7 @@ export class SessionsList extends Disposable {
 		if (!this.options.skillsService) {
 			const placeholder = document.createElement('div');
 			placeholder.className = 'sessions-settings-main-content';
-			placeholder.textContent = 'Skill management is unavailable.';
+			placeholder.textContent = localize('settings.skillUnavailable');
 			return placeholder;
 		}
 
@@ -1099,7 +1100,7 @@ export class SessionsList extends Disposable {
 
 		const badge = document.createElement('span');
 		badge.className = 'sessions-settings-coming-soon-badge';
-		badge.textContent = 'Coming soon';
+		badge.textContent = localize('settings.comingSoon');
 		empty.appendChild(badge);
 
 		content.appendChild(empty);
@@ -1161,15 +1162,15 @@ export class SessionsList extends Disposable {
 function getStatusLabel(status: SessionStatus): string {
 	switch (status) {
 		case SessionStatus.Untitled:
-			return 'Untitled';
+			return localize('status.untitled');
 		case SessionStatus.InProgress:
-			return 'In progress';
+			return localize('status.inProgress');
 		case SessionStatus.NeedsInput:
-			return 'Needs input';
+			return localize('status.needsInput');
 		case SessionStatus.Completed:
-			return 'Completed';
+			return localize('status.completed');
 		case SessionStatus.Error:
-			return 'Error';
+			return localize('status.error');
 	}
 }
 
@@ -1178,20 +1179,20 @@ function formatTimestamp(date: Date): string {
 	const diff = Date.now() - date.getTime();
 	const minutes = Math.max(0, Math.floor(diff / 60000));
 	if (minutes < 1) {
-		return 'now';
+		return localize('time.now');
 	}
 	if (minutes < 60) {
-		return `${minutes}m`;
+		return localize('time.minutes', minutes);
 	}
 
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) {
-		return `${hours}h`;
+		return localize('time.hours', hours);
 	}
 
 	const days = Math.floor(hours / 24);
 	if (days < 7) {
-		return `${days}d`;
+		return localize('time.days', days);
 	}
 
 	return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });

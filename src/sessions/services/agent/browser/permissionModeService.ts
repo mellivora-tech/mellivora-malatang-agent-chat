@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
 import { observableValue } from '../../../base/common/observable.js';
 import type { PermissionMode } from '../common/agent.js';
 
@@ -15,10 +16,10 @@ export interface IPermissionModeInfo {
 
 /** Composer menu entries, in display order. */
 export const PERMISSION_MODES: readonly IPermissionModeInfo[] = [
-	{ mode: 'ask', label: 'Ask before changes', description: 'Ask before file changes.', icon: 'codicon-shield' },
-	{ mode: 'auto-edit', label: 'Edit automatically', description: 'Edit files automatically.', icon: 'codicon-edit' },
-	{ mode: 'plan', label: 'Plan mode', description: 'Plan before editing.', icon: 'codicon-checklist' },
-	{ mode: 'full', label: 'Full access', description: 'Run with fewer confirmations.', icon: 'codicon-unlock' },
+	{ mode: 'ask', label: localize('perm.ask'), description: localize('perm.ask.desc'), icon: 'codicon-shield' },
+	{ mode: 'auto-edit', label: localize('perm.autoEdit'), description: localize('perm.autoEdit.desc'), icon: 'codicon-edit' },
+	{ mode: 'plan', label: localize('perm.plan'), description: localize('perm.plan.desc'), icon: 'codicon-checklist' },
+	{ mode: 'full', label: localize('perm.full'), description: localize('perm.full.desc'), icon: 'codicon-unlock' },
 ];
 
 export function permissionModeInfo(mode: PermissionMode): IPermissionModeInfo {

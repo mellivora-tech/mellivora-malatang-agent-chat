@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../common/i18n/i18n.js';
 import { append } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import type { IGitBridge } from '../../services/git/common/git.js';
@@ -82,7 +83,7 @@ export class ConversationContext extends Disposable {
 		left.className = 'conversation-context-left';
 
 		const workspace = this.session?.workspace.get();
-		const workspacePill = createPill('conversation-context-workspace', 'codicon-folder', workspace?.label ?? 'No workspace');
+		const workspacePill = createPill('conversation-context-workspace', 'codicon-folder', workspace?.label ?? localize('ctx.noWorkspace'));
 		// The pill truncates; a custom tooltip reveals the full name (and path)
 		// on hover — native title tooltips are unreliable in frameless windows.
 		if (workspace) {
@@ -95,7 +96,7 @@ export class ConversationContext extends Disposable {
 		// The branch pill exists only for sessions whose project is a git repo.
 		if (this.branchCurrent !== undefined) {
 			const branchPill = createPill('conversation-context-branch', 'codicon-git-branch', this.branchCurrent, { chevron: true });
-			branchPill.title = this.branchError ?? `Branch: ${this.branchCurrent}`;
+			branchPill.title = this.branchError ?? localize('ctx.branch', this.branchCurrent);
 			branchPill.classList.toggle('has-error', this.branchError !== undefined);
 			branchPill.addEventListener('click', () => this.toggleBranchMenu(branchPill));
 			left.appendChild(branchPill);
@@ -104,8 +105,8 @@ export class ConversationContext extends Disposable {
 		const more = append(left, document.createElement('button')) as HTMLButtonElement;
 		more.className = 'conversation-context-more';
 		more.type = 'button';
-		more.title = 'More actions';
-		more.setAttribute('aria-label', 'More actions');
+		more.title = localize('ctx.moreActions');
+		more.setAttribute('aria-label', localize('ctx.moreActions'));
 		more.addEventListener('click', () => this.toggleMoreMenu(more));
 
 		const moreIcon = append(more, document.createElement('span'));
@@ -174,7 +175,7 @@ export class ConversationContext extends Disposable {
 		icon.setAttribute('aria-hidden', 'true');
 		const label = append(item, document.createElement('span'));
 		label.className = 'conversation-branch-menu-label';
-		label.textContent = 'Open project folder';
+		label.textContent = localize('ctx.openProjectFolder');
 		item.addEventListener('click', () => {
 			this.closeBranchMenu();
 			if (projectId) {

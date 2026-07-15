@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../common/i18n/i18n.js';
 import { append } from '../../base/browser/dom.js';
 import { DisposableStore, toDisposable, type IDisposable } from '../../base/common/lifecycle.js';
 import { PERMISSION_MODES, permissionMode, permissionModeInfo } from '../../services/agent/browser/permissionModeService.js';
@@ -32,8 +33,8 @@ export function installModelPicker(options: IComposerPickerOptions): IDisposable
 
 	const updateLabel = (): void => {
 		const selected = modelsService.selectedModel.get();
-		label.textContent = selected?.label ?? 'No model';
-		trigger.title = selected ? `Model: ${selected.label} (${selected.providerName})` : 'No models enabled — add one in Settings › Models';
+		label.textContent = selected?.label ?? localize('picker.noModel');
+		trigger.title = selected ? localize('picker.modelTitle', selected.label, selected.providerName) : localize('picker.noModelsEnabled');
 	};
 	disposables.add(modelsService.selectedModel.subscribe(updateLabel));
 	updateLabel();
@@ -44,7 +45,7 @@ export function installModelPicker(options: IComposerPickerOptions): IDisposable
 			if (enabled.length === 0) {
 				const empty = append(menu, document.createElement('div'));
 				empty.className = 'sessions-model-menu-empty';
-				empty.textContent = 'No models enabled — add one in Settings › Models.';
+				empty.textContent = localize('picker.noModelsEnabled');
 			}
 
 			const selectedId = modelsService.selectedModel.get()?.id;
@@ -74,8 +75,8 @@ export function installEffortPicker(options: IComposerPickerOptions): IDisposabl
 		const selected = modelsService.selectedModel.get();
 		const efforts = selected?.efforts ?? [];
 		trigger.hidden = efforts.length === 0;
-		label.textContent = selected?.effort ?? 'Effort';
-		trigger.title = selected?.effort ? `Reasoning effort: ${selected.effort}` : 'Reasoning effort (provider default)';
+		label.textContent = selected?.effort ?? localize('picker.effort');
+		trigger.title = selected?.effort ? localize('picker.effortTitle', selected.effort) : localize('picker.effortDefaultTitle');
 	};
 	disposables.add(modelsService.selectedModel.subscribe(update));
 	update();
@@ -88,7 +89,7 @@ export function installEffortPicker(options: IComposerPickerOptions): IDisposabl
 			}
 			const pick = (effort: ModelEffort | undefined) => () => void modelsService.setModelEffort(selected.id, effort);
 			return [
-				{ label: 'Auto', detail: 'provider default', checked: !selected.effort, pick: pick(undefined) },
+				{ label: localize('picker.effortAuto'), detail: localize('picker.effortAutoDetail'), checked: !selected.effort, pick: pick(undefined) },
 				...(selected.efforts ?? []).map(effort => ({ label: effort, checked: selected.effort === effort, pick: pick(effort) })),
 			];
 		}),
@@ -128,7 +129,7 @@ export function installPermissionPicker(options: IPermissionPickerOptions, sourc
 	const updateLabel = (): void => {
 		const info = permissionModeInfo(source.get());
 		label.textContent = info.label;
-		trigger.title = `Approvals: ${info.label} — ${info.description}`;
+		trigger.title = localize('picker.approvalsTitle', info.label, info.description);
 		// CSS colors the trigger by risk (warning tint on 'full' only).
 		trigger.dataset['mode'] = info.mode;
 		if (icon) {
