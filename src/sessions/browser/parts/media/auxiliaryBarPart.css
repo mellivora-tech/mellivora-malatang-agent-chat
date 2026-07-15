@@ -175,14 +175,20 @@
 /* Grid-style views (data) manage their own internal scrolling. */
 .auxiliary-view.auxiliary-view-fill {
 	overflow: hidden;
+	padding: var(--vscode-agents-space-10);
 }
 
+/* The body's card chrome (border/radius/backdrop) suits the placeholder blurbs
+   (Terminal/Browser); a full-height tool view must not sit inside a card. */
 .auxiliary-view-fill .auxiliary-view-body {
 	display: flex;
 	flex-direction: column;
 	flex: 1 1 auto;
 	min-height: 0;
-	padding: var(--vscode-agents-space-8);
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
 }
 
 .auxiliary-view-body {
