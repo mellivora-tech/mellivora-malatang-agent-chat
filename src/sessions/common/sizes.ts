@@ -8,6 +8,8 @@ import { registerSize } from '../platform/theme/theme.js';
 export const agentsFontSizeHeading1 = registerSize('agents.fontSize.heading1', '26px');
 export const agentsFontSizeHeading2 = registerSize('agents.fontSize.heading2', '18px');
 export const agentsFontSizeHeading3 = registerSize('agents.fontSize.heading3', '13px');
+export const agentsFontUi = registerSize('agents.font.ui', "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif");
+export const agentsFontMono = registerSize('agents.font.mono', "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace");
 export const agentsFontSizeBody1 = registerSize('agents.fontSize.body1', '13px');
 export const agentsFontSizeBody2 = registerSize('agents.fontSize.body2', '11px');
 export const agentsFontSizeLabel1 = registerSize('agents.fontSize.label1', '12px');
@@ -15,6 +17,7 @@ export const agentsFontSizeLabel2 = registerSize('agents.fontSize.label2', '11px
 export const agentsFontSizeLabel3 = registerSize('agents.fontSize.label3', '10px');
 export const agentsFontWeightRegular = registerSize('agents.fontWeight.regular', '400');
 export const agentsFontWeightSemiBold = registerSize('agents.fontWeight.semiBold', '600');
+export const agentsFontWeightMedium = registerSize('agents.fontWeight.medium', '500');
 
 export const agentsSpace0 = registerSize('agents.space.0', '0px');
 export const agentsSpace1 = registerSize('agents.space.1', '1px');
@@ -65,6 +68,7 @@ export const agentsRadiusComposer = registerSize('agents.radius.composer', '9px'
 export const agentsRadiusCard = registerSize('agents.radius.card', '7px');
 export const agentsRadiusRound = registerSize('agents.radius.round', '999px');
 export const agentsRadiusCircle = registerSize('agents.radius.circle', '50%');
+export const agentsRadiusContainer = registerSize('agents.radius.container', '10px');
 
 export const agentsSizeIcon = registerSize('agents.size.icon', '16px');
 export const agentsSizeStatusDot = registerSize('agents.size.statusDot', '8px');

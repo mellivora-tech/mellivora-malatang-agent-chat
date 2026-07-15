@@ -49,6 +49,10 @@ export function applyUiPreferences(prefs: IUiPreferences = readPreferences()): v
 		return;
 	}
 
+	// Document root first (html/body base styles consume tokens), then the
+	// workbench root (keeps data-agents-theme where the e2e — and CSS scoping —
+	// expect it).
+	applyThemeTokens(document.documentElement, prefs.theme);
 	applyThemeTokens(root, prefs.theme);
 	root.classList.toggle('reduce-motion', prefs.reduceMotion);
 }

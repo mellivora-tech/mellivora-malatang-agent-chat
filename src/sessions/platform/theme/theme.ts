@@ -68,6 +68,11 @@ export function resolveThemeTokenValue(id: string, themeId: string | undefined =
 	return colorTokens.get(id)?.value ?? sizeTokens.get(id)?.value;
 }
 
+/** Every registered token id (colors + sizes) — the audit test's ground truth. */
+export function getRegisteredTokenIds(): readonly string[] {
+	return [...colorTokens.keys(), ...sizeTokens.keys()];
+}
+
 export function getTokenCssVariableName(id: string): string {
 	return toCssVariableName(id);
 }

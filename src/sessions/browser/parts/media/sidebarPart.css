@@ -125,7 +125,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-family: var(--vscode-agents-font-ui);
 }
 
 .sessions-sidebar-keybinding {
@@ -133,7 +133,7 @@
 	border-radius: 0;
 	background: transparent;
 	color: var(--vscode-agents-color-text-subtle);
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-family: var(--vscode-agents-font-ui);
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-weight: var(--vscode-agents-fontWeight-regular);
 }
@@ -1155,7 +1155,7 @@
 }
 
 .sessions-models-provider-dot.on {
-	background: var(--vscode-agents-color-success, #3fb950);
+	background: var(--vscode-agents-color-success);
 }
 
 /* Built-in provider that has no configuration yet. */
@@ -1217,8 +1217,8 @@
 }
 
 .sessions-models-enabled-badge.on {
-	background: color-mix(in srgb, var(--vscode-agents-color-success, #3fb950) 22%, transparent);
-	color: var(--vscode-agents-color-success, #3fb950);
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 22%, transparent);
+	color: var(--vscode-agents-color-success);
 }
 
 .sessions-models-detail-actions {
@@ -1283,7 +1283,7 @@
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
 	border-radius: var(--vscode-agents-radius-control);
 	color: var(--vscode-agents-color-text-muted);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label2);
 }
 
@@ -1452,7 +1452,7 @@
 	color: var(--vscode-agents-color-text-secondary);
 	font: inherit;
 	font-size: var(--vscode-agents-fontSize-label1);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-family: var(--vscode-agents-font-mono);
 	cursor: default;
 }
 
@@ -1464,7 +1464,7 @@
 .sessions-models-field-baseurl,
 .sessions-models-field-model,
 .sessions-models-field-apikey {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
@@ -1641,7 +1641,7 @@
 }
 
 .sessions-settings-toggle.on {
-	background: var(--vscode-agents-color-success, #3fb950);
+	background: var(--vscode-agents-color-success);
 }
 
 .sessions-settings-toggle-knob {
@@ -1651,7 +1651,7 @@
 	width: 18px;
 	height: 18px;
 	border-radius: var(--vscode-agents-radius-round);
-	background: #ffffff;
+	background: var(--vscode-agents-color-text-inverse);
 	transition: transform 120ms ease;
 }
 
@@ -1978,7 +1978,7 @@
 }
 
 .sessions-env-role.role-writable {
-	background: color-mix(in srgb, #3fb950 20%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 20%, transparent);
 	color: inherit;
 }
 
@@ -2248,7 +2248,7 @@
 }
 
 .sessions-code-pill-state.is-cloned {
-	color: color-mix(in srgb, #3fb950 90%, var(--vscode-agents-color-text-muted));
+	color: color-mix(in srgb, var(--vscode-agents-color-success) 90%, var(--vscode-agents-color-text-muted));
 }
 
 .sessions-code-pill-remove {

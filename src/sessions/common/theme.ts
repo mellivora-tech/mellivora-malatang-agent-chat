@@ -47,6 +47,8 @@ export const semanticColorTokenIds = [
 	'agents.color.scrollbar.thumbHover',
 	'agents.color.divider',
 	'agents.color.modal.background',
+	'agents.color.menu.background',
+	'agents.color.menu.border',
 ] as const;
 
 type SemanticColorTokenId = (typeof semanticColorTokenIds)[number];
@@ -82,6 +84,8 @@ const legacyAliases: Record<LegacyColorTokenId, SemanticColorTokenId> = {
 };
 
 const darkColors: SemanticColorMap = {
+	'agents.color.menu.background': '#1b1d22',
+	'agents.color.menu.border': 'rgba(255, 255, 255, 0.08)',
 	'agents.color.background': '#111111',
 	'agents.color.gradient.tint': '#0078d4',
 	'agents.color.sidebar.background': '#24343a',
@@ -126,6 +130,8 @@ const darkColors: SemanticColorMap = {
 };
 
 const lightColors: SemanticColorMap = {
+	'agents.color.menu.background': '#ffffff',
+	'agents.color.menu.border': 'rgba(31, 35, 40, 0.15)',
 	'agents.color.background': '#f6f8fa',
 	'agents.color.gradient.tint': '#0969da',
 	'agents.color.sidebar.background': '#edf4f7',
@@ -170,6 +176,8 @@ const lightColors: SemanticColorMap = {
 };
 
 const highContrastColors: SemanticColorMap = {
+	'agents.color.menu.background': '#000000',
+	'agents.color.menu.border': '#6fc3df',
 	'agents.color.background': '#000000',
 	'agents.color.gradient.tint': '#f38518',
 	'agents.color.sidebar.background': '#000000',

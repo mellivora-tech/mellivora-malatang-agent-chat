@@ -134,7 +134,7 @@
 	border: 0;
 	border-radius: 50%;
 	background: color-mix(in srgb, var(--vscode-agents-color-shadow) 70%, transparent);
-	color: #fff;
+	color: var(--vscode-agents-color-text-inverse);
 	font-size: 12px;
 	line-height: 1;
 	cursor: pointer;

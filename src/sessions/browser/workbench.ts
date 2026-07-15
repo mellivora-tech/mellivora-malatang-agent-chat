@@ -141,6 +141,9 @@ export class Workbench {
 		}
 
 		this.container.replaceChildren(this.root);
+		// Tokens go to the document root too: the html/body base styles (font,
+		// background) consume them, and variables only resolve downward.
+		applyThemeTokens(document.documentElement);
 		applyThemeTokens(this.root);
 		// Re-apply persisted UI preferences (theme, reduced motion) over the default.
 		applyUiPreferences();

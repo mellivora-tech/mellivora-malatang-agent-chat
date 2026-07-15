@@ -78,9 +78,9 @@
 .auxiliary-tab-close {
 	margin-left: var(--vscode-agents-space-2);
 	padding: var(--vscode-agents-space-1);
-	border-radius: var(--vscode-agents-radius-control, 4px);
+	border-radius: var(--vscode-agents-radius-control);
 	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-size: var(--vscode-agents-fontSize-label2);
 }
 
 .auxiliary-tab-close:hover {
@@ -129,7 +129,7 @@
 	min-width: 160px;
 	padding: var(--vscode-agents-space-4);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
-	border-radius: var(--vscode-agents-radius-card, 8px);
+	border-radius: var(--vscode-agents-radius-card);
 	background: var(--vscode-agents-color-panel-background);
 	box-shadow: 0 4px 16px var(--vscode-agents-color-shadow);
 }
@@ -141,7 +141,7 @@
 	height: 28px;
 	padding: 0 var(--vscode-agents-space-8);
 	border: 0;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-primary);
 	font: inherit;

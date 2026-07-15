@@ -21,11 +21,11 @@
 }
 
 .data-browser-select {
-	height: var(--vscode-agents-space-24, 24px);
+	height: var(--vscode-agents-space-24);
 	min-width: 0;
 	padding: 0 var(--vscode-agents-space-4);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-control-background);
 	color: var(--vscode-agents-color-text-primary);
 	font: inherit;
@@ -63,11 +63,11 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: var(--vscode-agents-space-24, 24px);
-	height: var(--vscode-agents-space-24, 24px);
+	width: var(--vscode-agents-space-24);
+	height: var(--vscode-agents-space-24);
 	flex: 0 0 auto;
 	border: none;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-secondary);
 	cursor: default;
@@ -121,10 +121,10 @@
 	min-width: 0;
 	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-input-background);
 	color: var(--vscode-agents-color-input-foreground);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 	line-height: 1.5;
 	resize: vertical;
@@ -181,7 +181,7 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	color: var(--vscode-agents-color-text-muted);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	cursor: pointer;
 }
 
@@ -198,7 +198,7 @@
 
 .data-browser .tabulator {
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	font-size: var(--vscode-agents-fontSize-label1);
 }
@@ -230,7 +230,7 @@
 
 .data-browser .tabulator .tabulator-row {
 	background: transparent;
-	min-height: var(--vscode-agents-space-24, 24px);
+	min-height: var(--vscode-agents-space-24);
 }
 
 .data-browser .tabulator .tabulator-row.tabulator-row-even {
@@ -243,20 +243,20 @@
 
 .data-browser .tabulator .tabulator-row .tabulator-cell {
 	border-right: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-panel-border) 45%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
 /* Header filter boxes: theme-token inputs instead of Tabulator's white default. */
 .data-browser .tabulator .tabulator-header-filter input {
-	height: var(--vscode-agents-space-20, 20px);
+	height: var(--vscode-agents-space-20);
 	padding: 0 var(--vscode-agents-space-4);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
-	border-radius: var(--vscode-agents-radius-control, 4px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-input-background);
 	color: var(--vscode-agents-color-input-foreground);
 	font-family: inherit;
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-size: var(--vscode-agents-fontSize-label2);
 }
 
 .data-browser .tabulator .tabulator-header-filter input:focus-visible {

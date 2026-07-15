@@ -272,7 +272,7 @@
 	width: 300px;
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
-	border-radius: var(--vscode-agents-radius-container, 10px);
+	border-radius: var(--vscode-agents-radius-container);
 	background: var(--vscode-agents-color-panel-background);
 	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
 	pointer-events: none;
@@ -305,7 +305,7 @@
 }
 
 .conversation-timeline-preview-time {
-	color: var(--vscode-agents-color-text-subtle, var(--vscode-agents-color-text-muted));
+	color: var(--vscode-agents-color-text-subtle);
 	font-size: var(--vscode-agents-fontSize-label2);
 }
 
@@ -333,10 +333,10 @@
 	gap: var(--vscode-agents-space-3);
 	max-width: 120px;
 	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-6);
-	border-radius: var(--vscode-agents-radius-control, 4px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 	color: var(--vscode-agents-color-text-muted);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label2);
 }
 
@@ -391,7 +391,7 @@
 .conversation-message-time {
 	align-self: center;
 	margin-left: var(--vscode-agents-space-6);
-	color: var(--vscode-agents-color-text-subtle, var(--vscode-agents-color-text-muted));
+	color: var(--vscode-agents-color-text-subtle);
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-variant-numeric: tabular-nums;
 }
@@ -422,7 +422,7 @@
 	height: var(--vscode-agents-space-24);
 	padding: 0;
 	border: 0;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-muted);
 	cursor: default;
@@ -434,7 +434,7 @@
 }
 
 .conversation-message-action.active {
-	color: var(--vscode-agents-color-info, #4daafc);
+	color: var(--vscode-agents-color-info);
 }
 
 .conversation-message-action .codicon {
@@ -499,9 +499,9 @@
 
 .conversation-markdown .md-inline-code {
 	padding: 0 var(--vscode-agents-space-4);
-	border-radius: var(--vscode-agents-radius-control, 4px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: 0.92em;
 }
 
@@ -509,9 +509,9 @@
 	margin: 0 0 var(--vscode-agents-space-10);
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
 	overflow-x: auto;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 	line-height: 1.5;
 }
@@ -550,7 +550,7 @@
 }
 
 .conversation-markdown .md-link {
-	color: var(--vscode-agents-color-info, #4daafc);
+	color: var(--vscode-agents-color-info);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 }
@@ -636,10 +636,10 @@ button.conversation-work-step-row:hover {
 	overflow-x: auto;
 	max-height: 260px;
 	overflow-y: auto;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
 	color: var(--vscode-agents-color-text-secondary);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 	line-height: 1.5;
 	white-space: pre-wrap;
@@ -653,13 +653,13 @@ button.conversation-work-step-row:hover {
 }
 
 .conversation-work-step.tool .conversation-work-step-label {
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
 .conversation-work-step-duration {
 	flex: 0 0 auto;
-	color: var(--vscode-agents-color-text-subtle, var(--vscode-agents-color-text-muted));
+	color: var(--vscode-agents-color-text-subtle);
 	font-variant-numeric: tabular-nums;
 }
 
@@ -672,14 +672,14 @@ button.conversation-work-step-row:hover {
 	gap: var(--vscode-agents-space-4);
 	flex: 0 0 auto;
 	margin-left: var(--vscode-agents-space-6);
-	height: var(--vscode-agents-space-20, 20px);
+	height: var(--vscode-agents-space-20);
 	padding: 0 var(--vscode-agents-space-6);
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
-	border-radius: var(--vscode-agents-radius-control, 5px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-secondary);
 	font: inherit;
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-size: var(--vscode-agents-fontSize-label2);
 	cursor: default;
 }
 
@@ -689,7 +689,7 @@ button.conversation-work-step-row:hover {
 }
 
 .conversation-work-step-browse .codicon {
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-size: var(--vscode-agents-fontSize-label2);
 }
 
 /* The reviewable plan artifact card (role:'plan'): sectioned implementation
@@ -700,7 +700,7 @@ button.conversation-work-step-row:hover {
 	max-width: var(--vscode-agents-size-conversation-width);
 	margin: 0 auto var(--vscode-agents-space-18);
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
-	border-radius: var(--vscode-agents-radius-container, 10px);
+	border-radius: var(--vscode-agents-radius-container);
 	overflow: hidden;
 }
 
@@ -731,7 +731,7 @@ button.conversation-work-step-row:hover {
 
 .conversation-plan-state {
 	padding: 0 var(--vscode-agents-space-6);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-label1);
@@ -817,7 +817,7 @@ button.conversation-work-step-row:hover {
 	gap: var(--vscode-agents-space-4);
 	margin-top: var(--vscode-agents-space-8);
 	padding-left: var(--vscode-agents-space-10);
-	border-left: var(--vscode-agents-space-2) solid color-mix(in srgb, var(--vscode-agents-color-focusBorder, #3794ff) 45%, transparent);
+	border-left: var(--vscode-agents-space-2) solid color-mix(in srgb, var(--vscode-agents-color-focusBorder) 45%, transparent);
 }
 
 .conversation-plan-comment {
@@ -843,7 +843,7 @@ button.conversation-work-step-row:hover {
 	flex: 0 0 auto;
 	padding: 0 var(--vscode-agents-space-6);
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 24%, transparent);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-secondary);
 	font: inherit;
@@ -865,7 +865,7 @@ button.conversation-work-step-row:hover {
 .conversation-plan-comment-input {
 	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-8);
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 18%, transparent);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-primary);
 	font: inherit;
@@ -875,7 +875,7 @@ button.conversation-work-step-row:hover {
 
 .conversation-plan-comment-input:focus {
 	outline: none;
-	border-color: var(--vscode-agents-color-focusBorder, #3794ff);
+	border-color: var(--vscode-agents-color-focusBorder);
 }
 
 .conversation-plan-comment-buttons {
@@ -886,7 +886,7 @@ button.conversation-work-step-row:hover {
 .conversation-plan-comment-buttons button {
 	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-10);
 	border: var(--vscode-agents-space-1) solid transparent;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	font: inherit;
 	font-size: var(--vscode-agents-fontSize-label1);
 	font-weight: var(--vscode-agents-fontWeight-medium);
@@ -917,8 +917,8 @@ button.conversation-plan-header {
 }
 
 .conversation-plan-state.walkthrough {
-	background: color-mix(in srgb, var(--vscode-agents-color-focusBorder, #3794ff) 16%, transparent);
-	color: var(--vscode-agents-color-focusBorder, #3794ff);
+	background: color-mix(in srgb, var(--vscode-agents-color-focusBorder) 16%, transparent);
+	color: var(--vscode-agents-color-focusBorder);
 }
 
 .conversation-plan-actions {
@@ -931,7 +931,7 @@ button.conversation-plan-header {
 .conversation-plan-actions button {
 	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-14);
 	border: var(--vscode-agents-space-1) solid transparent;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	font: inherit;
 	font-weight: var(--vscode-agents-fontWeight-medium);
 	cursor: default;
@@ -971,7 +971,7 @@ button.conversation-plan-header {
 	   wash. The "needs you" signal lives on the header icon alone, so an approval
 	   reads as part of the conversation instead of an alarm block. */
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
-	border-radius: var(--vscode-agents-radius-container, 10px);
+	border-radius: var(--vscode-agents-radius-container);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
 }
 
@@ -988,17 +988,17 @@ button.conversation-plan-header {
 }
 
 .conversation-approval-title {
-	font-size: var(--vscode-agents-fontSize-body1, 14px);
+	font-size: var(--vscode-agents-fontSize-body1);
 }
 
 /* Tool-name chip, pinned right of the title. */
 .conversation-approval-chip {
 	margin-left: auto;
 	padding: var(--vscode-agents-space-1) var(--vscode-agents-space-6);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 	color: var(--vscode-agents-color-text-secondary);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 	font-weight: var(--vscode-agents-fontWeight-medium);
 }
@@ -1008,14 +1008,14 @@ button.conversation-plan-header {
 	display: flex;
 	gap: var(--vscode-agents-space-8);
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
 }
 
 .conversation-approval-prompt {
 	flex: 0 0 auto;
 	color: var(--vscode-agents-color-success);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-body2);
 	user-select: none;
 }
@@ -1024,7 +1024,7 @@ button.conversation-plan-header {
 	flex: 1 1 auto;
 	min-width: 0;
 	color: var(--vscode-agents-color-text-primary);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-body2);
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -1037,9 +1037,9 @@ button.conversation-plan-header {
 	align-items: baseline;
 	gap: var(--vscode-agents-space-6);
 	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-12);
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-body2);
 	word-break: break-all;
 }
@@ -1069,10 +1069,10 @@ button.conversation-plan-header {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--vscode-agents-space-8);
-	height: var(--vscode-agents-space-28, 28px);
+	height: var(--vscode-agents-space-28);
 	padding: 0 var(--vscode-agents-space-12);
 	border: var(--vscode-agents-space-1) solid transparent;
-	border-radius: var(--vscode-agents-radius-control, 6px);
+	border-radius: var(--vscode-agents-radius-control);
 	font: inherit;
 	font-size: var(--vscode-agents-fontSize-body2);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
@@ -1091,15 +1091,15 @@ button.conversation-plan-header {
 .conversation-approval-key {
 	display: inline-flex;
 	align-items: center;
-	min-width: var(--vscode-agents-space-16, 16px);
-	height: var(--vscode-agents-space-16, 16px);
+	min-width: var(--vscode-agents-space-16);
+	height: var(--vscode-agents-space-16);
 	padding: 0 var(--vscode-agents-space-4);
 	justify-content: center;
-	border-radius: var(--vscode-agents-radius-control, 4px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, currentColor 18%, transparent);
 	color: inherit;
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label2);
 	font-weight: var(--vscode-agents-fontWeight-medium);
 	line-height: 1;
 }
@@ -1146,10 +1146,10 @@ button.conversation-plan-header {
 
 .conversation-approval-pattern {
 	padding: 0 var(--vscode-agents-space-4);
-	border-radius: var(--vscode-agents-radius-control, 4px);
+	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, currentColor 14%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label2);
 }
 
 /* Compact density (#3 style 03): once a session has answered a few full cards,
@@ -1175,7 +1175,7 @@ button.conversation-plan-header {
 	gap: var(--vscode-agents-space-6);
 	overflow: hidden;
 	white-space: nowrap;
-	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-body2);
 }
 
@@ -1205,7 +1205,7 @@ button.conversation-plan-header {
 }
 
 .conversation-approval-compact .conversation-approval-actions button {
-	height: var(--vscode-agents-space-24, 24px);
+	height: var(--vscode-agents-space-24);
 	padding: 0 var(--vscode-agents-space-10);
 	font-size: var(--vscode-agents-fontSize-label1);
 }
@@ -1282,7 +1282,7 @@ button.conversation-plan-header {
 	border-radius: 6px;
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 5%, transparent);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 72%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
@@ -1440,8 +1440,8 @@ button.conversation-plan-header {
 }
 
 .conversation-context-ring svg {
-	width: var(--vscode-agents-space-16, 16px);
-	height: var(--vscode-agents-space-16, 16px);
+	width: var(--vscode-agents-space-16);
+	height: var(--vscode-agents-space-16);
 	flex: 0 0 auto;
 }
 
@@ -1482,11 +1482,11 @@ button.conversation-plan-header {
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
-	gap: var(--vscode-agents-space-4, 4px);
+	gap: var(--vscode-agents-space-4);
 	width: 15rem;
 	max-height: calc(100vh - 2rem);
 	overflow-y: auto;
-	padding: var(--vscode-agents-space-8, 8px) var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
@@ -1505,12 +1505,12 @@ button.conversation-plan-header {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: var(--vscode-agents-space-2, 2px);
+	gap: var(--vscode-agents-space-2);
 	white-space: nowrap;
 }
 
 .conversation-context-popover-caption {
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	font-size: var(--vscode-agents-fontSize-label2);
 	color: var(--vscode-agents-color-text-secondary);
 }
 
@@ -1527,8 +1527,8 @@ button.conversation-plan-header {
 .conversation-context-breakdown {
 	display: flex;
 	flex-direction: column;
-	gap: var(--vscode-agents-space-2, 2px);
-	padding-top: var(--vscode-agents-space-4, 4px);
+	gap: var(--vscode-agents-space-2);
+	padding-top: var(--vscode-agents-space-4);
 	border-top: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 }
 
@@ -1540,8 +1540,8 @@ button.conversation-plan-header {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
-	gap: var(--vscode-agents-space-10, 10px);
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	gap: var(--vscode-agents-space-10);
+	font-size: var(--vscode-agents-fontSize-label2);
 	white-space: nowrap;
 }
 
