@@ -8,7 +8,7 @@
 	color: var(--vscode-agents-color-text-primary);
 	overflow: hidden;
 	opacity: 0.64;
-	transition: opacity 120ms ease-out;
+	transition: opacity var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
 }
 
 .session-view + .session-view {
@@ -111,7 +111,7 @@
 	position: absolute;
 	top: calc(100% + var(--vscode-agents-space-4));
 	left: 0;
-	z-index: 6;
+	z-index: var(--vscode-agents-z-tooltip);
 	max-width: 420px;
 	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-8);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
@@ -124,7 +124,7 @@
 	text-overflow: ellipsis;
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 80ms ease-out 300ms;
+	transition: opacity var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing) var(--vscode-agents-motion-delay-tooltip);
 }
 
 .conversation-context-pill:hover .conversation-context-tooltip {
@@ -139,7 +139,7 @@
 /* Branch picker anchored under the branch pill. */
 .conversation-branch-menu {
 	position: absolute;
-	z-index: 3;
+	z-index: var(--vscode-agents-z-menu);
 	display: flex;
 	flex-direction: column;
 	min-width: 200px;
@@ -150,7 +150,7 @@
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	box-sizing: border-box;
 }
 
@@ -222,7 +222,7 @@
 
 /* Timeline rail — the conversation's map: one tick per turn. */
 .conversation-timeline {
-	z-index: 2; /* magnified ticks stretch over the transcript */
+	z-index: var(--vscode-agents-z-float); /* magnified ticks stretch over the transcript */
 	display: flex;
 	flex: 0 0 auto;
 	flex-direction: column;
@@ -252,7 +252,7 @@
 	cursor: default;
 	/* Dock-style magnification: JS drives transform; the transition smooths both grow and relax. */
 	transform-origin: left center;
-	transition: transform 90ms ease-out;
+	transition: transform var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing);
 	will-change: transform;
 }
 
@@ -268,13 +268,13 @@
 /* Hover preview card next to the rail. */
 .conversation-timeline-preview {
 	position: absolute;
-	z-index: 5;
+	z-index: var(--vscode-agents-z-preview);
 	width: 300px;
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-12);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-container);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	pointer-events: none;
 }
 
@@ -402,7 +402,7 @@
 	gap: var(--vscode-agents-space-2);
 	margin-top: var(--vscode-agents-space-4);
 	opacity: 0;
-	transition: opacity 100ms ease-out;
+	transition: opacity var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
 }
 
 .conversation-message:hover .conversation-message-actions,
@@ -1078,8 +1078,8 @@ button.conversation-plan-header {
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 	cursor: default;
 	transition:
-		background 80ms ease-out,
-		border-color 80ms ease-out;
+		background var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing),
+		border-color var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing);
 }
 
 .conversation-approval-actions button:focus-visible {
@@ -1338,7 +1338,7 @@ button.conversation-plan-header {
 	border-radius: var(--vscode-agents-radius-composer);
 	background: var(--vscode-agents-color-input-background);
 	color: var(--vscode-agents-color-input-foreground);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-24) color-mix(in srgb, var(--vscode-agents-color-shadow) 38%, transparent);
+	box-shadow: var(--vscode-agents-elevation-dialog);
 	overflow: hidden;
 }
 
@@ -1456,7 +1456,7 @@ button.conversation-plan-header {
 	stroke: currentColor;
 	stroke-width: 2.5;
 	stroke-linecap: round;
-	transition: stroke-dashoffset 160ms ease-out;
+	transition: stroke-dashoffset var(--vscode-agents-motion-duration-slow) var(--vscode-agents-motion-easing);
 }
 
 .conversation-context-ring[data-level='warn'] .ring-fill {
@@ -1478,7 +1478,7 @@ button.conversation-plan-header {
    toggle, not `:hover` — the popover is no longer a CSS descendant of the ring. */
 .conversation-context-popover {
 	position: fixed;
-	z-index: 100;
+	z-index: var(--vscode-agents-z-flyout);
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
@@ -1490,15 +1490,15 @@ button.conversation-plan-header {
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 80ms ease-out;
+	transition: opacity var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing);
 }
 
 .conversation-context-popover.is-visible {
 	opacity: 1;
-	transition-delay: 200ms;
+	transition-delay: var(--vscode-agents-motion-delay-hover);
 }
 
 .conversation-context-popover-header {

@@ -594,7 +594,7 @@
 	position: absolute;
 	top: calc(100% + var(--vscode-agents-space-4));
 	right: 0;
-	z-index: 6;
+	z-index: var(--vscode-agents-z-tooltip);
 	max-width: var(--vscode-agents-space-102);
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -604,7 +604,7 @@
 	border-radius: var(--vscode-agents-radius-compact);
 	background: color-mix(in srgb, var(--vscode-agents-color-panel-background) 92%, var(--vscode-agents-color-stage-background));
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-4) var(--vscode-agents-space-10) var(--vscode-agents-color-shadow);
+	box-shadow: var(--vscode-agents-elevation-card);
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 	line-height: var(--vscode-agents-space-16);
@@ -843,7 +843,7 @@
 .sessions-settings-dialog-backdrop {
 	position: fixed;
 	inset: 0;
-	z-index: 100;
+	z-index: var(--vscode-agents-z-flyout);
 	background: var(--vscode-agents-color-modal-background);
 }
 
@@ -867,14 +867,14 @@
 	right: 0;
 	height: var(--vscode-agents-space-32);
 	-webkit-app-region: drag;
-	z-index: 1;
+	z-index: var(--vscode-agents-z-raised);
 }
 
 .sessions-settings-close {
 	position: absolute;
 	top: var(--vscode-agents-space-8);
 	right: var(--vscode-agents-space-12);
-	z-index: 2;
+	z-index: var(--vscode-agents-z-float);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1637,7 +1637,7 @@
 	border-radius: var(--vscode-agents-radius-round);
 	background: var(--vscode-agents-color-control-border);
 	cursor: default;
-	transition: background 120ms ease;
+	transition: background var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
 }
 
 .sessions-settings-toggle.on {
@@ -1652,7 +1652,7 @@
 	height: 18px;
 	border-radius: var(--vscode-agents-radius-round);
 	background: var(--vscode-agents-color-text-inverse);
-	transition: transform 120ms ease;
+	transition: transform var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
 }
 
 .sessions-settings-toggle.on .sessions-settings-toggle-knob {
@@ -1720,7 +1720,7 @@
 .sessions-rename-backdrop {
 	position: absolute;
 	inset: 0;
-	z-index: 30;
+	z-index: var(--vscode-agents-z-chrome);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1738,7 +1738,7 @@
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	box-sizing: border-box;
 }
 
@@ -1865,7 +1865,7 @@
 /* Anchored project actions menu. */
 .sessions-project-menu {
 	position: absolute;
-	z-index: 40;
+	z-index: var(--vscode-agents-z-chromeFloat);
 	display: flex;
 	flex-direction: column;
 	gap: var(--vscode-agents-space-1);
@@ -1875,7 +1875,7 @@
 	border-radius: var(--vscode-agents-radius-card);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-10) var(--vscode-agents-space-24) color-mix(in srgb, var(--vscode-agents-color-shadow) 40%, transparent);
+	box-shadow: var(--vscode-agents-elevation-dialog);
 	box-sizing: border-box;
 }
 
@@ -1912,7 +1912,7 @@
 .sessions-env-dialog-backdrop {
 	position: absolute;
 	inset: 0;
-	z-index: 30;
+	z-index: var(--vscode-agents-z-chrome);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1929,7 +1929,7 @@
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	box-sizing: border-box;
 	overflow: hidden;
 }
@@ -2283,7 +2283,7 @@
 .sessions-discover-backdrop {
 	position: absolute;
 	inset: 0;
-	z-index: 400;
+	z-index: var(--vscode-agents-z-dialog);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -2300,7 +2300,7 @@
 	border-radius: var(--vscode-agents-radius-card);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-10) var(--vscode-agents-space-24) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-dialog);
 	overflow: hidden;
 }
 
@@ -2366,7 +2366,7 @@
 .sessions-env-manager-backdrop {
 	position: absolute;
 	inset: 0;
-	z-index: 400;
+	z-index: var(--vscode-agents-z-dialog);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -2383,7 +2383,7 @@
 	border-radius: var(--vscode-agents-radius-card);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
-	box-shadow: 0 var(--vscode-agents-space-10) var(--vscode-agents-space-24) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-dialog);
 	overflow: hidden;
 }
 
@@ -2641,7 +2641,7 @@
 .sessions-dropdown-menu {
 	position: fixed;
 	/* Above the modals (z 400) so a dropdown opened inside a modal isn't hidden behind it. */
-	z-index: 500;
+	z-index: var(--vscode-agents-z-dialogRaised);
 	display: flex;
 	flex-direction: column;
 	gap: var(--vscode-agents-space-1);
@@ -2651,7 +2651,7 @@
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 }
 
 .sessions-dropdown-item {

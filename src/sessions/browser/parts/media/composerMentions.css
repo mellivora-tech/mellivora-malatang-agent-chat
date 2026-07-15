@@ -7,7 +7,7 @@
 
 .composer-mention-menu {
 	position: absolute;
-	z-index: 4;
+	z-index: var(--vscode-agents-z-popover);
 	display: flex;
 	flex-direction: column;
 	max-height: 320px;
@@ -16,7 +16,7 @@
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	box-sizing: border-box;
 }
 

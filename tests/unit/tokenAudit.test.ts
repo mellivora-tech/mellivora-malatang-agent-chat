@@ -82,3 +82,29 @@ test('agents variables carry no fallbacks — tokens are always injected', () =>
 	}
 	assert.deepEqual(offenders, []);
 });
+
+test('z-index values route through the z scale — no bare numbers', () => {
+	const offenders: string[] = [];
+	for (const sheet of stylesheets) {
+		sheet.text.split('\n').forEach((line, index) => {
+			if (/z-index:\s*-?\d/.test(line)) {
+				offenders.push(`${sheet.path}:${index + 1}: ${line.trim()}`);
+			}
+		});
+	}
+	assert.deepEqual(offenders, []);
+});
+
+test('transition timings route through the motion tokens — no literal durations', () => {
+	const offenders: string[] = [];
+	for (const sheet of stylesheets) {
+		// Whole-declaration scan: multi-line transitions carry the duration on
+		// continuation lines, so a line-based check would miss them.
+		for (const match of sheet.text.matchAll(/transition[a-z-]*\s*:[^;{}]*/g)) {
+			if (/\d+\s*m?s\b/.test(match[0])) {
+				offenders.push(`${sheet.path}: ${match[0].replaceAll('\n', ' ').trim()}`);
+			}
+		}
+	}
+	assert.deepEqual(offenders, []);
+});

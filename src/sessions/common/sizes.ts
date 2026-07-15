@@ -70,6 +70,41 @@ export const agentsRadiusRound = registerSize('agents.radius.round', '999px');
 export const agentsRadiusCircle = registerSize('agents.radius.circle', '50%');
 export const agentsRadiusContainer = registerSize('agents.radius.container', '10px');
 
+// Z-index scale — one token per stacking tier actually in use. Values preserve
+// today's exact numbers (merging tiers risks reordering overlaps inside a
+// shared stacking context); the win is the semantic name + the audit rule.
+export const agentsZBase = registerSize('agents.z.base', '0');
+export const agentsZRaised = registerSize('agents.z.raised', '1');
+export const agentsZFloat = registerSize('agents.z.float', '2');
+export const agentsZMenu = registerSize('agents.z.menu', '3');
+export const agentsZPopover = registerSize('agents.z.popover', '4');
+export const agentsZPreview = registerSize('agents.z.preview', '5');
+export const agentsZTooltip = registerSize('agents.z.tooltip', '6');
+export const agentsZSash = registerSize('agents.z.sash', '25');
+export const agentsZChrome = registerSize('agents.z.chrome', '30');
+export const agentsZChromeFloat = registerSize('agents.z.chromeFloat', '40');
+export const agentsZFlyout = registerSize('agents.z.flyout', '100');
+export const agentsZDialog = registerSize('agents.z.dialog', '400');
+export const agentsZDialogRaised = registerSize('agents.z.dialogRaised', '500');
+export const agentsZOverlay = registerSize('agents.z.overlay', '1000');
+
+// Motion — two durations cover the UI (fast: hovers/reveals, base: state
+// changes, slow: draw-in), one easing, one tooltip delay.
+export const agentsMotionDurationFast = registerSize('agents.motion.duration.fast', '80ms');
+export const agentsMotionDurationBase = registerSize('agents.motion.duration.base', '120ms');
+export const agentsMotionDurationSlow = registerSize('agents.motion.duration.slow', '160ms');
+export const agentsMotionDelayTooltip = registerSize('agents.motion.delay.tooltip', '300ms');
+export const agentsMotionDelayHover = registerSize('agents.motion.delay.hover', '200ms');
+export const agentsMotionEasing = registerSize('agents.motion.easing', 'ease-out');
+
+// Elevation — complete box-shadow values (they reference the themed shadow
+// color, so they follow the theme like any color token).
+export const agentsElevationCard = registerSize('agents.elevation.card', '0 4px 10px var(--vscode-agents-color-shadow)');
+export const agentsElevationMenu = registerSize('agents.elevation.menu', '0 8px 18px color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent)');
+export const agentsElevationDialog = registerSize('agents.elevation.dialog', '0 10px 24px color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent)');
+export const agentsElevationProminent = registerSize('agents.elevation.prominent', '0 18px 30px color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent)');
+export const agentsElevationOverlay = registerSize('agents.elevation.overlay', '0 24px 64px color-mix(in srgb, var(--vscode-agents-color-shadow) 45%, transparent)');
+
 export const agentsSizeIcon = registerSize('agents.size.icon', '16px');
 export const agentsSizeStatusDot = registerSize('agents.size.statusDot', '8px');
 export const agentsSizeStatusDotLarge = registerSize('agents.size.statusDotLarge', '9px');
