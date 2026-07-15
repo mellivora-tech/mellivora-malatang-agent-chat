@@ -80,7 +80,6 @@
 	flex-wrap: wrap;
 	gap: var(--vscode-agents-space-4);
 	margin-top: var(--vscode-agents-space-4);
-	justify-content: flex-end;
 }
 
 .conversation-message-attachment {

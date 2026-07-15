@@ -137,6 +137,7 @@ export const agentsSizeSidebarListTitleOffset = registerSize('agents.size.sideba
 export const agentsSizeSidebarFooter = registerSize('agents.size.sidebar.footer', '48px');
 export const agentsSizeStageMargin = registerSize('agents.size.stage.margin', '4px');
 export const agentsSizeConversationWidth = registerSize('agents.size.conversation.width', `${conversationWidthPx}px`);
+export const agentsSizeMessageBubbleMaxHeight = registerSize('agents.size.message.bubbleMaxHeight', '320px');
 export const agentsSizeComposerWidth = registerSize('agents.size.composer.width', '640px');
 export const agentsSizeComposerContextHeight = registerSize('agents.size.composer.contextHeight', '28px');
 export const agentsSizeComposerInputHeight = registerSize('agents.size.composer.inputHeight', '106px');

@@ -1907,10 +1907,10 @@ async function assertRunningConversationMessageLayout(page: Page): Promise<void>
 	expect(metrics.status).toBe('in-progress');
 	expect(metrics.interactivity).toBe('full');
 	expect(metrics.userRole).toBe('user');
-	// User bubble right-aligns to the message column, and the composer now
-	// matches that same column width (agents.size.conversation.width) instead
-	// of the narrower, separate composer.width — it reads as a continuation
-	// of the conversation, not a visibly narrower floating input.
+	// User bubble now fills the full message column (left-aligned, colored by
+	// background tint rather than position), and the composer matches that
+	// same column width (agents.size.conversation.width) instead of the
+	// narrower, separate composer.width — both edges land on the same right x.
 	expect(metrics.userBubbleRight).toBe(metrics.messageColumnRight);
 	expect(metrics.userBubbleRight).toBe(metrics.inputRight);
 	expect(metrics.workingLabelLeft).toBe(metrics.thinkingLabelLeft);
@@ -1974,7 +1974,7 @@ async function assertHistoricalConversationMessageLayout(page: Page, expectedSta
 	expect(metrics.status).toBe(expectedStatus);
 	expect(metrics.interactivity).toBe(expectedInteractivity);
 	expect(metrics.roles).toEqual(['user', 'assistant', 'tool']);
-	// User bubble right-aligns to the message column (same right edge as the assistant row), not the narrower composer.
+	// User bubble now fills the full message column, same right edge as the assistant row, not the narrower composer.
 	expect(metrics.user.rowRight).toBe(metrics.assistant.rowRight);
 	expect(metrics.user.bubbleRight).toBe(metrics.user.rowRight);
 	// Assistant rows are full-width prose (no avatar column); tool rows keep the

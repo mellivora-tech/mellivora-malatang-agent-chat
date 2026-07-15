@@ -424,10 +424,6 @@
 	opacity: 1;
 }
 
-.conversation-message.user .conversation-message-actions {
-	justify-content: flex-end;
-}
-
 .conversation-message-action {
 	display: inline-flex;
 	align-items: center;
@@ -1252,9 +1248,7 @@ button.conversation-plan-header {
 }
 
 .conversation-message.user {
-	display: flex;
-	justify-content: flex-end;
-	max-width: var(--vscode-agents-size-conversation-width);
+	grid-template-columns: minmax(0, 1fr);
 }
 
 .conversation-message.user .conversation-message-avatar,
@@ -1287,16 +1281,32 @@ button.conversation-plan-header {
 }
 
 .conversation-message-bubble {
-	max-width: min(var(--vscode-agents-size-composer-width), 62vw);
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-card);
-	background: var(--vscode-agents-color-panel-background);
+	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 6%, var(--vscode-agents-color-panel-background));
 	color: var(--vscode-agents-color-text-primary);
 	font-size: var(--vscode-agents-fontSize-body1);
 	line-height: 1.45;
 	overflow-wrap: anywhere;
 	white-space: pre-wrap;
+	user-select: text;
+	cursor: text;
+}
+
+/* Long pastes start clamped to the composer's own input height — same
+   visual weight as what you typed. A click reveals the rest, up to the
+   bubble's max height, with an internal scrollbar past that. */
+.conversation-message-bubble[data-collapse='collapsed'] {
+	max-height: var(--vscode-agents-size-composer-inputHeight);
+	overflow: hidden;
+	cursor: pointer;
+}
+
+.conversation-message-bubble[data-collapse='expanded'] {
+	max-height: var(--vscode-agents-size-message-bubbleMaxHeight);
+	overflow-y: auto;
+	cursor: pointer;
 }
 
 .conversation-tool-detail {

@@ -638,6 +638,9 @@ export class ConversationView extends Disposable {
 				textEl.appendChild(renderMarkdown(message.text));
 			} else {
 				textEl.textContent = message.text;
+				if (textEl.classList.contains('conversation-message-bubble')) {
+					measureUserBubbleCollapse(textEl);
+				}
 			}
 		}
 
@@ -1902,6 +1905,7 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions, r
 		bubble.textContent = message.text;
 		// An image-only message has no text — don't render an empty bubble.
 		bubble.hidden = message.text.trim() === '';
+		attachUserBubbleCollapse(bubble);
 		if (message.attachments && message.attachments.length > 0) {
 			const chips = append(body, document.createElement('div'));
 			chips.className = 'conversation-message-attachments';
@@ -1957,6 +1961,46 @@ function createMessageRow(message: ISessionMessage, actions?: IMessageActions, r
 	}
 
 	return row;
+}
+
+/** Binds the click-to-expand toggle once per bubble, then runs the initial measurement. */
+function attachUserBubbleCollapse(bubble: HTMLElement): void {
+	bubble.addEventListener('click', () => {
+		if (bubble.dataset['collapsible'] !== 'true') {
+			return;
+		}
+		// A click that ends a text-drag selection shouldn't also toggle the bubble.
+		if (window.getSelection()?.toString()) {
+			return;
+		}
+		bubble.dataset['collapse'] = bubble.dataset['collapse'] === 'expanded' ? 'collapsed' : 'expanded';
+	});
+	measureUserBubbleCollapse(bubble);
+}
+
+/**
+ * Long pastes start clamped to the composer's own input height; short ones
+ * render at their natural height with no click affordance at all. Whether a
+ * bubble clips only shows up after layout, so this measures on the next
+ * frame and only then decides.
+ */
+function measureUserBubbleCollapse(bubble: HTMLElement): void {
+	delete bubble.dataset['collapse'];
+	delete bubble.dataset['collapsible'];
+	if (bubble.hidden) {
+		return;
+	}
+	bubble.dataset['collapse'] = 'collapsed';
+	requestAnimationFrame(() => {
+		if (!bubble.isConnected) {
+			return;
+		}
+		if (bubble.scrollHeight > bubble.clientHeight) {
+			bubble.dataset['collapsible'] = 'true';
+		} else {
+			delete bubble.dataset['collapse'];
+		}
+	});
 }
 
 const PLAN_SECTION_ICONS: Readonly<Record<string, string>> = {
