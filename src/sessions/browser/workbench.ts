@@ -75,7 +75,6 @@ export class Workbench {
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
-		onLayoutChange: () => this.layout(),
 	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();

@@ -115,14 +115,14 @@ test('capped sessions hands the surplus to the auxiliary bar (open tab, wide win
 	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 664, height: 900, top: 0, left: 1256 });
 });
 
-test('when every view is capped the high-priority one absorbs the leftover (empty side pane)', () => {
+test('when every view is capped the high-priority one absorbs the leftover', () => {
 	const { grid, sessions, auxiliaryBar } = createGrid();
 	sessions.setMaximumWidth(986);
 	auxiliaryBar.setMaximumWidth(340);
 
 	grid.layout(1920, 900);
 
-	// The empty tab picker must not balloon — the chat column eats the surplus as gutters.
+	// The row must fill: with all caps exhausted the surplus lands on the High view.
 	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 340, height: 900, top: 0, left: 1580 });
 	assert.deepEqual(sessions.calls.at(-1), { width: 1310, height: 900, top: 0, left: 270 });
 });
