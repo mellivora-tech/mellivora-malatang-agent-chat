@@ -78,6 +78,8 @@ export class ConversationView extends Disposable {
 	private readonly workExpandOverride = new Map<string, boolean>();
 	/** The approval request whose Allow button already got initial focus (re-render guard). */
 	private focusedApprovalId: string | undefined;
+	/** Approval request ids seen per session — drives the compact-density switch. */
+	private readonly approvalsSeen = new Map<string, Set<string>>();
 	/** Superseded plan cards a click expanded back open (they collapse by default). */
 	private readonly planExpand = new Set<string>();
 	/** Sections with an open comment editor (`messageId:sectionId`) and their unsent drafts. */
@@ -499,7 +501,7 @@ export class ConversationView extends Disposable {
 		this.transcript.querySelector('.conversation-working-row')?.remove();
 		this.transcript.querySelector('.conversation-thinking-row')?.remove();
 		if (approval) {
-			const card = createApprovalCard(approval);
+			const card = createApprovalCard(approval, this.useCompactApproval(approval));
 			this.transcript.appendChild(card);
 			// The card is re-created on every render (incl. the 1s live ticker), so
 			// focus the Allow button ONCE per request — not every second — and never
@@ -1527,6 +1529,24 @@ export class ConversationView extends Disposable {
 		this.sendError.textContent = message ?? '';
 		this.sendError.hidden = !message;
 	}
+
+	/** Count this request against its session and decide the card's density. */
+	private useCompactApproval(approval: ISessionPendingApproval): boolean {
+		const sessionId = this.session?.sessionId;
+		if (sessionId === undefined) {
+			return false;
+		}
+		let seen = this.approvalsSeen.get(sessionId);
+		if (!seen) {
+			seen = new Set();
+			this.approvalsSeen.set(sessionId, seen);
+		}
+		// The card re-renders every second (live ticker) — a request must count
+		// once, not once per render, or the threshold would trip on a single prompt.
+		const prior = seen.has(approval.requestId) ? seen.size - 1 : seen.size;
+		seen.add(approval.requestId);
+		return shouldRenderCompactApproval(prior, approval.toolName);
+	}
 }
 
 /** The gate paused on a mutating tool: say what it wants and offer Allow / Deny. */
@@ -1544,9 +1564,82 @@ function describeApproval(toolName: string, detail: string): { icon: string; tit
 	}
 }
 
-function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
+/** Full cards a session answers before the density drops to compact single-row. */
+const COMPACT_APPROVAL_AFTER = 3;
+
+/**
+ * Whether an approval renders as the compact single-row variant: once a session
+ * has already been through a few full cards, later prompts shrink to one line so
+ * an approval-dense run stops eating the transcript. Only tools with a guard
+ * BEHIND the prompt (bash sandbox, file-tool code root) may shrink —
+ * run_on_server's only gate is the prompt itself, so it always gets the full card.
+ */
+export function shouldRenderCompactApproval(priorPrompts: number, toolName: string): boolean {
+	if (toolName !== 'bash' && toolName !== 'write_file' && toolName !== 'edit_file') {
+		return false;
+	}
+	return priorPrompts >= COMPACT_APPROVAL_AFTER;
+}
+
+/** Muted-dir + bold-filename path spans, shared by the full and compact bodies. */
+function appendApprovalPath(row: HTMLElement, path: string): void {
+	const slash = path.lastIndexOf('/');
+	if (slash >= 0) {
+		const dir = append(row, document.createElement('span'));
+		dir.className = 'conversation-approval-path-dir';
+		dir.textContent = path.slice(0, slash + 1);
+	}
+	const base = append(row, document.createElement('span'));
+	base.className = 'conversation-approval-path-base';
+	base.textContent = slash >= 0 ? path.slice(slash + 1) : path;
+}
+
+/** Allow / always-allow / deny row. Compact drops the key hints, not the keys. */
+function appendApprovalActions(card: HTMLElement, approval: ISessionPendingApproval, compact: boolean): void {
+	const actions = append(card, document.createElement('div'));
+	actions.className = 'conversation-approval-actions';
+
+	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
+	allow.className = 'conversation-approval-allow';
+	allow.type = 'button';
+	append(allow, document.createElement('span')).textContent = '允许';
+	if (!compact) {
+		const allowKey = append(allow, document.createElement('kbd'));
+		allowKey.className = 'conversation-approval-key';
+		allowKey.textContent = '⏎';
+	}
+	allow.addEventListener('click', () => approval.respond(true));
+
+	// "Always allow [pattern]" — offered only for safe, always-allowable tools
+	// (main-side deriveGrant gates this; run_on_server never gets a label). The
+	// pattern is shown verbatim so the user sees exactly what they're granting.
+	if (approval.alwaysAllow !== undefined) {
+		const always = append(actions, document.createElement('button')) as HTMLButtonElement;
+		always.className = 'conversation-approval-always';
+		always.type = 'button';
+		always.title = `本会话不再询问：${approval.alwaysAllow}`;
+		append(always, document.createElement('span')).textContent = '始终允许';
+		const pattern = append(always, document.createElement('code'));
+		pattern.className = 'conversation-approval-pattern';
+		pattern.textContent = approval.alwaysAllow;
+		always.addEventListener('click', () => approval.respond(true, true));
+	}
+
+	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
+	deny.className = 'conversation-approval-deny';
+	deny.type = 'button';
+	append(deny, document.createElement('span')).textContent = '拒绝';
+	if (!compact) {
+		const denyKey = append(deny, document.createElement('kbd'));
+		denyKey.className = 'conversation-approval-key';
+		denyKey.textContent = 'Esc';
+	}
+	deny.addEventListener('click', () => approval.respond(false));
+}
+
+function createApprovalCard(approval: ISessionPendingApproval, compact = false): HTMLElement {
 	const card = document.createElement('div');
-	card.className = 'conversation-approval';
+	card.className = compact ? 'conversation-approval conversation-approval-compact' : 'conversation-approval';
 	card.setAttribute('role', 'alertdialog');
 	card.setAttribute('aria-label', 'Approval required');
 	// Esc denies. The focused Allow button (a child) bubbles the keydown up here,
@@ -1559,6 +1652,31 @@ function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 	});
 
 	const spec = describeApproval(approval.toolName, approval.detail);
+
+	if (compact) {
+		// One line: icon · detail (ellipsized, full text on hover) · small actions.
+		// The session has already read a few full cards — density over ceremony.
+		appendCodicon(card, spec.icon);
+		const body = append(card, document.createElement('span'));
+		body.className = 'conversation-approval-compact-detail';
+		body.title = spec.command ?? spec.path ?? approval.detail;
+		if (spec.command !== undefined) {
+			const marker = append(body, document.createElement('span'));
+			marker.className = 'conversation-approval-prompt';
+			marker.textContent = '$';
+			const cmd = append(body, document.createElement('code'));
+			cmd.className = 'conversation-approval-compact-command';
+			cmd.textContent = spec.command;
+		} else if (spec.path !== undefined) {
+			appendApprovalPath(body, spec.path);
+		} else {
+			const detail = append(body, document.createElement('code'));
+			detail.className = 'conversation-approval-compact-command';
+			detail.textContent = approval.detail;
+		}
+		appendApprovalActions(card, approval, true);
+		return card;
+	}
 
 	const header = append(card, document.createElement('div'));
 	header.className = 'conversation-approval-header';
@@ -1586,58 +1704,14 @@ function createApprovalCard(approval: ISessionPendingApproval): HTMLElement {
 		const row = append(card, document.createElement('div'));
 		row.className = 'conversation-approval-path';
 		appendCodicon(row, 'codicon-file');
-		const slash = spec.path.lastIndexOf('/');
-		if (slash >= 0) {
-			const dir = append(row, document.createElement('span'));
-			dir.className = 'conversation-approval-path-dir';
-			dir.textContent = spec.path.slice(0, slash + 1);
-		}
-		const base = append(row, document.createElement('span'));
-		base.className = 'conversation-approval-path-base';
-		base.textContent = slash >= 0 ? spec.path.slice(slash + 1) : spec.path;
+		appendApprovalPath(row, spec.path);
 	} else {
 		const detail = append(card, document.createElement('code'));
 		detail.className = 'conversation-approval-command';
 		detail.textContent = approval.detail;
 	}
 
-	const actions = append(card, document.createElement('div'));
-	actions.className = 'conversation-approval-actions';
-
-	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
-	allow.className = 'conversation-approval-allow';
-	allow.type = 'button';
-	allow.innerHTML = '';
-	append(allow, document.createElement('span')).textContent = '允许';
-	const allowKey = append(allow, document.createElement('kbd'));
-	allowKey.className = 'conversation-approval-key';
-	allowKey.textContent = '⏎';
-	allow.addEventListener('click', () => approval.respond(true));
-
-	// "Always allow [pattern]" — offered only for safe, always-allowable tools
-	// (main-side deriveGrant gates this; run_on_server never gets a label). The
-	// pattern is shown verbatim so the user sees exactly what they're granting.
-	if (approval.alwaysAllow !== undefined) {
-		const always = append(actions, document.createElement('button')) as HTMLButtonElement;
-		always.className = 'conversation-approval-always';
-		always.type = 'button';
-		always.title = `本会话不再询问：${approval.alwaysAllow}`;
-		append(always, document.createElement('span')).textContent = '始终允许';
-		const pattern = append(always, document.createElement('code'));
-		pattern.className = 'conversation-approval-pattern';
-		pattern.textContent = approval.alwaysAllow;
-		always.addEventListener('click', () => approval.respond(true, true));
-	}
-
-	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
-	deny.className = 'conversation-approval-deny';
-	deny.type = 'button';
-	append(deny, document.createElement('span')).textContent = '拒绝';
-	const denyKey = append(deny, document.createElement('kbd'));
-	denyKey.className = 'conversation-approval-key';
-	denyKey.textContent = 'Esc';
-	deny.addEventListener('click', () => approval.respond(false));
-
+	appendApprovalActions(card, approval, false);
 	return card;
 }
 

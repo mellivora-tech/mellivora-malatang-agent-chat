@@ -1123,6 +1123,72 @@ button.conversation-plan-header {
 	font-size: var(--vscode-agents-fontSize-label2, 11px);
 }
 
+/* Compact density (#3 style 03): once a session has answered a few full cards,
+   later prompts collapse to one line — icon · detail (ellipsized, full text on
+   hover) · small actions. Approval-dense runs stop eating the transcript. */
+.conversation-approval-compact {
+	flex-direction: row;
+	align-items: center;
+	gap: var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
+}
+
+.conversation-approval-compact > .codicon {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-approval-compact-detail {
+	display: flex;
+	flex: 1 1 auto;
+	min-width: 0;
+	align-items: baseline;
+	gap: var(--vscode-agents-space-6);
+	overflow: hidden;
+	white-space: nowrap;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-approval-compact-command {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--vscode-agents-color-text-primary);
+	font-family: inherit;
+	font-size: inherit;
+}
+
+/* Path in one line: the muted directory yields first; the filename stays visible. */
+.conversation-approval-compact-detail .conversation-approval-path-dir {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.conversation-approval-compact-detail .conversation-approval-path-base {
+	flex: 0 0 auto;
+}
+
+.conversation-approval-compact .conversation-approval-actions {
+	flex: 0 0 auto;
+	gap: var(--vscode-agents-space-6);
+}
+
+.conversation-approval-compact .conversation-approval-actions button {
+	height: var(--vscode-agents-space-24, 24px);
+	padding: 0 var(--vscode-agents-space-10);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+/* The grant pattern still shows, but never wide enough to crowd the command out. */
+.conversation-approval-compact .conversation-approval-pattern {
+	max-width: 96px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .conversation-message.user .conversation-message-avatar {
 	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 22%, transparent);
 	color: var(--vscode-agents-color-badge-foreground);
