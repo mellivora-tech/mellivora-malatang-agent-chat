@@ -104,11 +104,21 @@
 	cursor: default;
 }
 
+/* Same weight/color hierarchy as .sessions-settings-nav-row: regular weight
+   always (bold never signals "clickable" here — background + color do),
+   secondary at rest, primary only on hover/active. Previously this was
+   permanently primary+semiBold, so it read visibly heavier/darker than the
+   equivalent settings sidebar row even though both used the same token. */
 .sessions-sidebar-toolbar .sessions-sidebar-menu-action {
 	background: transparent;
-	color: var(--vscode-agents-color-text-primary);
+	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-body1);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	font-weight: var(--vscode-agents-fontWeight-regular);
+}
+
+.sessions-sidebar-toolbar .sessions-sidebar-menu-action:hover,
+.sessions-sidebar-toolbar .sessions-sidebar-menu-action.active {
+	color: var(--vscode-agents-color-text-primary);
 }
 
 .sessions-sidebar-toolbar .sessions-sidebar-menu-action.active {
