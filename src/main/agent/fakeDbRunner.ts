@@ -22,6 +22,52 @@ const DATASET = Array.from({ length: TOTAL_ROWS }, (_, index) => [
 	new Date(Date.UTC(2026, 0, 1 + (index % 28), 12)),
 ] as const);
 
+const COLUMN_INDEX: Record<string, number> = { id: 0, name: 1, amount: 2, created_at: 3 };
+
+/** Just enough WHERE evaluation (LIKE / comparisons / IS [NOT] NULL on the fixed
+ *  columns) to exercise the panel's server-side filter pipeline in e2e. */
+function applyWhere(sql: string, source: readonly (readonly unknown[])[]): readonly (readonly unknown[])[] {
+	const where = /WHERE (.+?)(?: ORDER BY | LIMIT )/.exec(sql)?.[1];
+	if (!where) {
+		return source;
+	}
+	let rows = source;
+	const clausePattern = /\(`(\w+)` (?:(LIKE) '%(.*?)%'|(IS NULL)|(IS NOT NULL)|(>=|<=|<>|=|>|<) (?:'(.*?)'|(-?[\d.]+)))\)/g;
+	for (const clause of where.matchAll(clausePattern)) {
+		const index = COLUMN_INDEX[clause[1] ?? ''];
+		if (index === undefined) {
+			continue;
+		}
+		rows = rows.filter(row => {
+			const cell = row[index];
+			if (clause[2]) {
+				return cell !== null && cell !== undefined && String(cell).includes(clause[3] ?? '');
+			}
+			if (clause[4]) {
+				return cell === null || cell === undefined;
+			}
+			if (clause[5]) {
+				return cell !== null && cell !== undefined;
+			}
+			if (cell === null || cell === undefined) {
+				return false;
+			}
+			const operand: string | number = clause[8] !== undefined ? Number(clause[8]) : (clause[7] ?? '');
+			const left = typeof operand === 'number' ? Number(cell) : String(cell);
+			switch (clause[6]) {
+				case '=': return left === operand;
+				case '<>': return left !== operand;
+				case '>': return left > operand;
+				case '>=': return left >= operand;
+				case '<': return left < operand;
+				case '<=': return left <= operand;
+				default: return false;
+			}
+		});
+	}
+	return rows;
+}
+
 export const fakeDbRunner: DbQueryRunner = async (_coordinates, _secret, sql, { rowLimit }) => {
 	if (sql.includes('pg_class') || sql.includes('information_schema.tables')) {
 		return {
@@ -41,7 +87,7 @@ export const fakeDbRunner: DbQueryRunner = async (_coordinates, _secret, sql, { 
 	const descending = /ORDER BY .*DESC/i.test(sql);
 	const sortColumn = /ORDER BY [`"](\w+)[`"]/i.exec(sql)?.[1];
 	const offset = Number(/OFFSET (\d+)/i.exec(sql)?.[1] ?? 0);
-	let rows: (readonly unknown[])[] = [...DATASET];
+	let rows: (readonly unknown[])[] = [...applyWhere(sql, DATASET)];
 	if (sortColumn) {
 		const index = ['id', 'name', 'amount', 'created_at'].indexOf(sortColumn);
 		if (index >= 0) {

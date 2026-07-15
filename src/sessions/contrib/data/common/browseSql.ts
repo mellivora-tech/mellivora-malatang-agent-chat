@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { DatabaseDriver, IDbTable } from '../../../services/environments/common/environments.js';
+import type { DatabaseDriver, DbColumnCategory, IDbTable } from '../../../services/environments/common/environments.js';
 
 /**
  * Grid state → SQL, compiled renderer-side. The main process stays a pure
@@ -18,6 +18,8 @@ export interface IBrowseSort {
 
 export interface IBrowseState {
 	readonly sort?: IBrowseSort;
+	/** Pre-compiled WHERE clauses ({@link compileColumnFilter}), ANDed together. */
+	readonly filters?: readonly string[];
 	readonly pageSize: number;
 	/** Zero-based. */
 	readonly page: number;
@@ -52,7 +54,57 @@ export function compileQueryBrowseSql(driver: DatabaseDriver, baseSql: string, s
 }
 
 function compilePageClauses(driver: DatabaseDriver, state: IBrowseState): string {
+	const where = state.filters && state.filters.length > 0 ? ` WHERE ${state.filters.map(clause => `(${clause})`).join(' AND ')}` : '';
 	const orderBy = state.sort ? ` ORDER BY ${quoteIdentifier(driver, state.sort.column)} ${state.sort.direction === 'desc' ? 'DESC' : 'ASC'}` : '';
 	const offset = state.page > 0 ? ` OFFSET ${state.page * state.pageSize}` : '';
-	return `${orderBy} LIMIT ${state.pageSize + 1}${offset}`;
+	return `${where}${orderBy} LIMIT ${state.pageSize + 1}${offset}`;
+}
+
+/**
+ * One header-filter box → one WHERE clause. The tiny grammar mirrors what a
+ * DataGrip filter row does:
+ *
+ *   `>= 100` / `< 2026-01-01` / `!= x` — comparison, quoted unless numeric
+ *   `NULL` / `!NULL`                   — IS NULL / IS NOT NULL
+ *   `100` on a number column           — equality
+ *   anything else                      — contains (LIKE %…%)
+ *
+ * Literals ride single quotes with '' escaping (plus \\ for mysql); anything
+ * still hostile is over-rejected downstream by isReadOnlySql — the clause never
+ * reaches a driver unless the WHOLE statement stays a pure read.
+ */
+export function compileColumnFilter(driver: DatabaseDriver, column: { readonly name: string; readonly category: DbColumnCategory }, raw: string): string | undefined {
+	const value = raw.trim();
+	if (value === '') {
+		return undefined;
+	}
+	const ident = quoteIdentifier(driver, column.name);
+	if (/^!?null$/i.test(value)) {
+		return `${ident} IS${value.startsWith('!') ? ' NOT' : ''} NULL`;
+	}
+	const comparison = /^(>=|<=|!=|<>|=|>|<)\s*(.+)$/.exec(value);
+	if (comparison) {
+		const operator = comparison[1] === '!=' ? '<>' : comparison[1]!;
+		return `${ident} ${operator} ${literal(driver, comparison[2]!.trim())}`;
+	}
+	if (column.category === 'number' && isNumericLiteral(value)) {
+		return `${ident} = ${value}`;
+	}
+	if (column.category === 'boolean' && /^(true|false)$/i.test(value)) {
+		return `${ident} = ${value.toUpperCase()}`;
+	}
+	return `${ident} LIKE ${quoteLiteral(driver, `%${value}%`)}`;
+}
+
+function literal(driver: DatabaseDriver, operand: string): string {
+	return isNumericLiteral(operand) ? operand : quoteLiteral(driver, operand);
+}
+
+function isNumericLiteral(value: string): boolean {
+	return /^-?\d+(\.\d+)?$/.test(value);
+}
+
+function quoteLiteral(driver: DatabaseDriver, text: string): string {
+	const escaped = driver === 'mysql' ? text.replaceAll('\\', '\\\\').replaceAll("'", "''") : text.replaceAll("'", "''");
+	return `'${escaped}'`;
 }

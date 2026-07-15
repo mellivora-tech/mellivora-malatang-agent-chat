@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { compileBrowseSql, compileQueryBrowseSql, quoteIdentifier } from '../../src/sessions/contrib/data/common/browseSql.js';
+import { compileBrowseSql, compileColumnFilter, compileQueryBrowseSql, quoteIdentifier } from '../../src/sessions/contrib/data/common/browseSql.js';
 import { isReadOnlySql } from '../../src/main/agent/dbQuery.js';
 
 test('quoteIdentifier escapes per driver', () => {
@@ -60,4 +60,33 @@ test('the wrapped query passes the read-only gate iff the inner one does', () =>
 	assert.ok(isReadOnlySql(compileQueryBrowseSql('mysql', 'SELECT * FROM t WHERE x = 1', { pageSize: 10, page: 0 })));
 	// A write smuggled in stays rejected — the wrapper adds no laundering.
 	assert.equal(isReadOnlySql(compileQueryBrowseSql('mysql', 'DELETE FROM t', { pageSize: 10, page: 0 })), false);
+});
+
+test('compileColumnFilter: the DataGrip-style filter grammar', () => {
+	const name = { name: 'name', category: 'text' as const };
+	const amount = { name: 'amount', category: 'number' as const };
+	const active = { name: 'active', category: 'boolean' as const };
+	// contains / equality / comparison / NULL forms
+	assert.equal(compileColumnFilter('mysql', name, 'item-1'), "`name` LIKE '%item-1%'");
+	assert.equal(compileColumnFilter('postgres', amount, '100'), '"amount" = 100');
+	assert.equal(compileColumnFilter('mysql', amount, '>= 1000'), '`amount` >= 1000');
+	assert.equal(compileColumnFilter('mysql', amount, '!= 5'), '`amount` <> 5');
+	assert.equal(compileColumnFilter('mysql', name, '= exact'), "`name` = 'exact'");
+	assert.equal(compileColumnFilter('mysql', amount, 'NULL'), '`amount` IS NULL');
+	assert.equal(compileColumnFilter('mysql', amount, '!null'), '`amount` IS NOT NULL');
+	assert.equal(compileColumnFilter('postgres', active, 'true'), '"active" = TRUE');
+	// empty → no clause; quotes escape; mysql doubles backslashes
+	assert.equal(compileColumnFilter('mysql', name, '   '), undefined);
+	assert.equal(compileColumnFilter('postgres', name, "o'brien"), '"name" LIKE \'%o\'\'brien%\'');
+	assert.equal(compileColumnFilter('mysql', name, 'a\\b'), "`name` LIKE '%a\\\\b%'");
+});
+
+test('filters land as ANDed WHERE clauses before ORDER BY/LIMIT', () => {
+	const sql = compileBrowseSql(
+		'mysql',
+		{ schema: 'shop', name: 'orders' },
+		{ pageSize: 100, page: 1, sort: { column: 'id', direction: 'asc' }, filters: ['`amount` >= 1000', "`name` LIKE '%item%'"] },
+	);
+	assert.equal(sql, 'SELECT * FROM `shop`.`orders` WHERE (`amount` >= 1000) AND (`name` LIKE \'%item%\') ORDER BY `id` ASC LIMIT 101 OFFSET 100');
+	assert.ok(isReadOnlySql(sql));
 });

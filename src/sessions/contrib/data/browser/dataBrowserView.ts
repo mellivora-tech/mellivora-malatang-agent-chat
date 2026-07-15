@@ -11,7 +11,7 @@ import type { DbColumnCategory, IDatabaseSource, IDbColumn, IDbTable } from '../
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import type { ISessionDataBrowse } from '../../../services/sessions/common/session.js';
-import { compileBrowseSql, compileQueryBrowseSql, type IBrowseSort } from '../common/browseSql.js';
+import { compileBrowseSql, compileColumnFilter, compileQueryBrowseSql, type IBrowseSort } from '../common/browseSql.js';
 
 export interface IDataBrowserViewOptions {
 	readonly environmentsService?: IEnvironmentsService;
@@ -64,6 +64,13 @@ export class DataBrowserView extends Disposable {
 	private lastCell: { column: string; value: unknown; anchor?: { column: string; value: unknown } } | undefined;
 	/** Resolves when the initial source list has loaded (browse requests await it). */
 	private sourcesReady: Promise<void>;
+	/** Header-filter values by field (`c0`…): raw user text, compiled to WHERE per query. */
+	private columnFilters = new Map<string, string>();
+	/** Columns behind the current grid — filter fields translate through it. */
+	private gridColumns: readonly IDbColumn[] = [];
+	/** Column signature of the live Tabulator: matching results only replace data, keeping filter focus. */
+	private gridSignature: string | undefined;
+	private filterDebounce: ReturnType<typeof setTimeout> | undefined;
 
 	constructor(container: HTMLElement, private readonly options: IDataBrowserViewOptions = {}) {
 		super();
@@ -214,6 +221,7 @@ export class DataBrowserView extends Disposable {
 		this.baseQuery = request.sql;
 		this.sort = undefined;
 		this.page = 0;
+		this.columnFilters.clear();
 		await this.loadTables(source);
 	}
 
@@ -232,6 +240,7 @@ export class DataBrowserView extends Disposable {
 	}
 
 	override dispose(): void {
+		clearTimeout(this.filterDebounce);
 		this.resizeObserver.disconnect();
 		this.table?.destroy();
 		this.table = undefined;
@@ -335,6 +344,7 @@ export class DataBrowserView extends Disposable {
 		this.baseQuery = undefined;
 		this.sort = undefined;
 		this.page = 0;
+		this.columnFilters.clear();
 		await this.loadTables(this.selectedSource);
 	}
 
@@ -383,6 +393,7 @@ export class DataBrowserView extends Disposable {
 		}
 		this.sort = undefined;
 		this.page = 0;
+		this.columnFilters.clear();
 		void this.runQueryNow();
 	}
 
@@ -394,7 +405,8 @@ export class DataBrowserView extends Disposable {
 			return;
 		}
 		this.reportContext();
-		const state = { pageSize: this.pageSize, page: this.page, ...(this.sort ? { sort: this.sort } : {}) };
+		const filters = this.compiledFilters(source.coordinates.driver);
+		const state = { pageSize: this.pageSize, page: this.page, ...(this.sort ? { sort: this.sort } : {}), ...(filters.length > 0 ? { filters } : {}) };
 		const sql = this.baseQuery !== undefined
 			? compileQueryBrowseSql(source.coordinates.driver, this.baseQuery, state)
 			: compileBrowseSql(source.coordinates.driver, table!, state);
@@ -465,15 +477,35 @@ export class DataBrowserView extends Disposable {
 	}
 
 	private buildGrid(columns: readonly IDbColumn[], rows: readonly (readonly unknown[])[]): void {
+		this.lastCell = undefined;
+		this.gridColumns = columns;
+		const data = rows.map(row => Object.fromEntries(row.map((value, index) => [`c${index}`, value])));
+		const signature = JSON.stringify(columns);
+
+		// Same column set → replace the data in place: the header (and the filter
+		// box the user is typing into) survives, focus intact.
+		if (this.table && signature === this.gridSignature) {
+			void this.table.replaceData(data).then(() => this.syncSortIndicators());
+			return;
+		}
+
+		this.gridSignature = signature;
 		this.table?.destroy();
 		this.gridHost.textContent = '';
-		this.lastCell = undefined;
 		const anchorColumn = columns[0];
 		const definitions: ColumnDefinition[] = columns.map((column, index) => ({
-			title: this.columnTitle(column.name),
+			title: column.name,
 			field: `c${index}`,
 			headerSort: false,
-			headerClick: () => this.cycleSort(column.name),
+			// Filter boxes live inside the header — a click there must not cycle the sort.
+			headerClick: (event: UIEvent) => {
+				if (!(event.target instanceof HTMLElement) || !event.target.closest('.tabulator-header-filter')) {
+					this.cycleSort(column.name);
+				}
+			},
+			// The filter UI is Tabulator's; the FILTERING is ours (server-side WHERE).
+			headerFilter: 'input' as const,
+			headerFilterFunc: () => true,
 			...(column.category === 'number' ? { hozAlign: 'right' as const } : {}),
 			formatter: (cell: CellComponent) => formatCellValue(cell.getValue(), column.category),
 			// Precise coordinates for "问 AI": the clicked cell, anchored by the
@@ -487,7 +519,6 @@ export class DataBrowserView extends Disposable {
 				};
 			},
 		}));
-		const data = rows.map(row => Object.fromEntries(row.map((value, index) => [`c${index}`, value])));
 		this.table = new TabulatorFull(this.gridHost, {
 			data,
 			columns: definitions,
@@ -495,19 +526,67 @@ export class DataBrowserView extends Disposable {
 			height: '100%',
 			placeholder: '0 行',
 		});
+		this.table.on('dataFiltering', () => this.scheduleFilterSync());
+		this.table.on('tableBuilt', () => {
+			// A rebuild (new column set after sort/table change) restores the values
+			// the user had typed — they still apply to the query being shown.
+			for (const [field, value] of this.columnFilters) {
+				this.table?.setHeaderFilterValue(field, value);
+			}
+			this.syncSortIndicators();
+		});
 	}
 
-	/** Column header text with the server-side sort direction stitched in. */
-	private columnTitle(name: string): string {
-		if (this.sort?.column !== name) {
-			return name;
+	/** Debounce typing, then re-query iff the filter set actually changed. */
+	private scheduleFilterSync(): void {
+		clearTimeout(this.filterDebounce);
+		this.filterDebounce = setTimeout(() => {
+			if (!this.table) {
+				return;
+			}
+			const next = new Map<string, string>();
+			for (const filter of this.table.getHeaderFilters()) {
+				const value = typeof filter.value === 'string' ? filter.value.trim() : '';
+				if (value !== '' && typeof filter.field === 'string') {
+					next.set(filter.field, value);
+				}
+			}
+			const changed = next.size !== this.columnFilters.size || [...next].some(([field, value]) => this.columnFilters.get(field) !== value);
+			if (changed) {
+				this.columnFilters = next;
+				this.page = 0;
+				void this.runQueryNow();
+			}
+		}, 350);
+	}
+
+	/** The header-filter values → compiled WHERE clauses for the current columns. */
+	private compiledFilters(driver: 'mysql' | 'postgres'): string[] {
+		const clauses: string[] = [];
+		for (const [field, value] of this.columnFilters) {
+			const column = this.gridColumns[Number(field.slice(1))];
+			const clause = column ? compileColumnFilter(driver, column, value) : undefined;
+			if (clause) {
+				clauses.push(clause);
+			}
 		}
-		return `${name} ${this.sort.direction === 'asc' ? '▲' : '▼'}`;
+		return clauses;
+	}
+
+	/** Server-side sort direction, painted onto the live header titles. */
+	private syncSortIndicators(): void {
+		this.gridColumns.forEach((column, index) => {
+			const title = this.gridHost.querySelector<HTMLElement>(`.tabulator-col[tabulator-field="c${index}"] .tabulator-col-title`);
+			if (title) {
+				title.textContent = this.sort?.column === column.name ? `${column.name} ${this.sort.direction === 'asc' ? '▲' : '▼'}` : column.name;
+			}
+		});
 	}
 
 	private resetGrid(): void {
 		this.table?.destroy();
 		this.table = undefined;
+		this.gridSignature = undefined;
 		this.gridHost.textContent = '';
 		this.hasNext = false;
 		this.updatePager();

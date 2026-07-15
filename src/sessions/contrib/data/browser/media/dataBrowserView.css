@@ -192,6 +192,23 @@
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
+/* Header filter boxes: theme-token inputs instead of Tabulator's white default. */
+.data-browser .tabulator .tabulator-header-filter input {
+	height: var(--vscode-agents-space-20, 20px);
+	padding: 0 var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
+	border-radius: var(--vscode-agents-radius-control, 4px);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	font-family: inherit;
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+}
+
+.data-browser .tabulator .tabulator-header-filter input:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: 0;
+}
+
 .data-browser .tabulator .tabulator-placeholder .tabulator-placeholder-contents {
 	color: var(--vscode-agents-color-text-muted);
 	font-size: var(--vscode-agents-fontSize-label1);

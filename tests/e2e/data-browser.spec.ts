@@ -347,3 +347,48 @@ test('panel → chat: 问 AI drops a structured reference into the composer', as
 		await app?.close();
 	}
 });
+
+test('header filters compile to server-side WHERE and survive sorting', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await openDataTab(page);
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('1');
+
+		// Type an operator filter into the amount column: the panel re-queries
+		// with a WHERE — the fake db evaluates it — and paging resets.
+		const amountFilter = grid.locator('.tabulator-col[tabulator-field="c2"] .tabulator-header-filter input');
+		await amountFilter.click();
+		await amountFilter.pressSequentially('>= 1000');
+		await expect(page.locator('.data-browser-status-sql')).toContainText('WHERE (`amount` >= 1000)');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('101');
+		await expect(page.locator('.data-browser-page')).toHaveText('第 1 页');
+		await expect(page.locator('.data-browser-button[title="下一页"]')).toBeDisabled();
+
+		// A second filter ANDs in; the first survives (input value intact).
+		const nameFilter = grid.locator('.tabulator-col[tabulator-field="c1"] .tabulator-header-filter input');
+		await nameFilter.click();
+		await nameFilter.pressSequentially('item-11');
+		await expect(page.locator('.data-browser-status-sql')).toContainText("WHERE (`amount` >= 1000) AND (`name` LIKE '%item-11%')");
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-110');
+		await expect(amountFilter).toHaveValue('>= 1000');
+
+		// Sorting rebuilds the header — the typed filters come back and still apply.
+		await grid.locator('.tabulator-col-title', { hasText: 'id' }).click();
+		await grid.locator('.tabulator-col-title', { hasText: 'id' }).click();
+		await expect(page.locator('.data-browser-status-sql')).toContainText('ORDER BY `id` DESC');
+		await expect(page.locator('.data-browser-status-sql')).toContainText('WHERE (`amount` >= 1000)');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-119');
+		await expect(grid.locator('.tabulator-col[tabulator-field="c2"] .tabulator-header-filter input')).toHaveValue('>= 1000');
+	} finally {
+		await app?.close();
+	}
+});
