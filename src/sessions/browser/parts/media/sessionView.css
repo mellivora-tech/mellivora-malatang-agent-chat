@@ -32,7 +32,11 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	max-width: var(--vscode-agents-size-composer-width);
+	/* Matches the transcript column (agents.size.conversation.width), not the
+	   old, narrower composer.width — the composer column reads as a
+	   continuation of the conversation, not a separate, visibly narrower
+	   floating pill. */
+	max-width: var(--vscode-agents-size-conversation-width);
 	min-height: var(--vscode-agents-size-composer-contextHeight);
 	margin: 0 auto var(--vscode-agents-space-composer-contextGap);
 	padding: 0;
@@ -1326,7 +1330,7 @@ button.conversation-plan-header {
 
 .conversation-composer {
 	flex: 0 0 auto;
-	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-composer-width)) / 2)) var(--vscode-agents-space-22);
+	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-22);
 	box-sizing: border-box;
 }
 
@@ -1340,7 +1344,7 @@ button.conversation-plan-header {
 	   toolbar's row when it appeared (same bug as .new-session-composer). */
 	display: flex;
 	flex-direction: column;
-	max-width: var(--vscode-agents-size-composer-width);
+	max-width: var(--vscode-agents-size-conversation-width);
 	min-height: var(--vscode-agents-size-composer-inputHeight);
 	margin: 0 auto;
 	box-sizing: border-box;
@@ -1658,7 +1662,7 @@ button.conversation-plan-header {
 
 .conversation-send-error {
 	margin: 4px auto 0;
-	max-width: var(--vscode-agents-size-composer-width);
+	max-width: var(--vscode-agents-size-conversation-width);
 	color: var(--vscode-agents-color-danger);
 	font-size: 12px;
 }

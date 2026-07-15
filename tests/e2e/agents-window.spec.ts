@@ -1907,9 +1907,12 @@ async function assertRunningConversationMessageLayout(page: Page): Promise<void>
 	expect(metrics.status).toBe('in-progress');
 	expect(metrics.interactivity).toBe('full');
 	expect(metrics.userRole).toBe('user');
-	// User bubble right-aligns to the message column (wider than the composer).
+	// User bubble right-aligns to the message column, and the composer now
+	// matches that same column width (agents.size.conversation.width) instead
+	// of the narrower, separate composer.width — it reads as a continuation
+	// of the conversation, not a visibly narrower floating input.
 	expect(metrics.userBubbleRight).toBe(metrics.messageColumnRight);
-	expect(metrics.userBubbleRight).toBeGreaterThan(metrics.inputRight);
+	expect(metrics.userBubbleRight).toBe(metrics.inputRight);
 	expect(metrics.workingLabelLeft).toBe(metrics.thinkingLabelLeft);
 	expect(metrics.thinkingSpinnerLeft).toBeLessThan(metrics.thinkingLabelLeft);
 }
