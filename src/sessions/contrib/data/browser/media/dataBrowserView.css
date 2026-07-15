@@ -13,8 +13,9 @@
 
 .data-browser-toolbar {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: var(--vscode-agents-space-6);
+	gap: var(--vscode-agents-space-4) var(--vscode-agents-space-6);
 	min-width: 0;
 	flex: 0 0 auto;
 }
@@ -36,13 +37,16 @@
 	outline-offset: var(--vscode-agents-space-1);
 }
 
+/* Both selects share the row proportionally — never a hard clip. Native
+   selects can't ellipsize, so generous minimums + title tooltips instead. */
 .data-browser-source {
-	flex: 0 1 auto;
-	max-width: 40%;
+	flex: 1 1 120px;
+	min-width: 96px;
 }
 
 .data-browser-table {
-	flex: 1 1 auto;
+	flex: 1.4 1 140px;
+	min-width: 104px;
 }
 
 .data-browser-page-size {
@@ -153,10 +157,12 @@
 	min-width: 0;
 }
 
+/* Bottom bar: result info on the left, result navigation on the right. The
+   SQL snippet is the flexible middle — it ellipsizes, the pager never does. */
 .data-browser-status {
 	display: flex;
 	align-items: center;
-	gap: var(--vscode-agents-space-8);
+	gap: var(--vscode-agents-space-6);
 	min-width: 0;
 	flex: 0 0 auto;
 	color: var(--vscode-agents-color-text-secondary);
@@ -169,7 +175,8 @@
 }
 
 .data-browser-status-sql {
-	flex: 0 1 auto;
+	flex: 1 1 auto;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

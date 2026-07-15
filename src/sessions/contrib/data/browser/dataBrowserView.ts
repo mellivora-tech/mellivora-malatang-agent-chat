@@ -107,41 +107,6 @@ export class DataBrowserView extends Disposable {
 		spacer.className = 'data-browser-spacer';
 		toolbar.appendChild(spacer);
 
-		this.pageSizeSelect = document.createElement('select');
-		this.pageSizeSelect.className = 'data-browser-select data-browser-page-size';
-		this.pageSizeSelect.title = '每页行数';
-		for (const size of PAGE_SIZES) {
-			const option = document.createElement('option');
-			option.value = String(size);
-			option.textContent = `${size} 行`;
-			this.pageSizeSelect.appendChild(option);
-		}
-		this.pageSizeSelect.value = String(this.pageSize);
-		this.pageSizeSelect.addEventListener('change', () => {
-			this.pageSize = Number(this.pageSizeSelect.value) || 100;
-			this.page = 0;
-			void this.runQueryNow();
-		});
-		toolbar.appendChild(this.pageSizeSelect);
-
-		this.prevButton = this.createIconButton(toolbar, 'codicon-chevron-left', '上一页');
-		this.prevButton.addEventListener('click', () => {
-			if (this.page > 0) {
-				this.page -= 1;
-				void this.runQueryNow();
-			}
-		});
-		this.pageLabel = document.createElement('span');
-		this.pageLabel.className = 'data-browser-page';
-		toolbar.appendChild(this.pageLabel);
-		this.nextButton = this.createIconButton(toolbar, 'codicon-chevron-right', '下一页');
-		this.nextButton.addEventListener('click', () => {
-			if (this.hasNext) {
-				this.page += 1;
-				void this.runQueryNow();
-			}
-		});
-
 		// Panel → composer: the current view (source, table/query, SQL, selected
 		// cell) lands in the chat input as a structured reference.
 		if (this.options.sessionsPartService) {
@@ -204,6 +169,8 @@ export class DataBrowserView extends Disposable {
 		this.gridHost.className = 'data-browser-grid';
 		root.appendChild(this.gridHost);
 
+		// Result info AND result navigation share the bottom bar (DataGrip-style);
+		// the top toolbar stays "what am I looking at + actions" only.
 		const status = document.createElement('div');
 		status.className = 'data-browser-status';
 		root.appendChild(status);
@@ -220,6 +187,41 @@ export class DataBrowserView extends Disposable {
 			}
 		});
 		status.appendChild(this.statusSql);
+
+		this.pageSizeSelect = document.createElement('select');
+		this.pageSizeSelect.className = 'data-browser-select data-browser-page-size';
+		this.pageSizeSelect.title = '每页行数';
+		for (const size of PAGE_SIZES) {
+			const option = document.createElement('option');
+			option.value = String(size);
+			option.textContent = `${size} 行`;
+			this.pageSizeSelect.appendChild(option);
+		}
+		this.pageSizeSelect.value = String(this.pageSize);
+		this.pageSizeSelect.addEventListener('change', () => {
+			this.pageSize = Number(this.pageSizeSelect.value) || 100;
+			this.page = 0;
+			void this.runQueryNow();
+		});
+		status.appendChild(this.pageSizeSelect);
+
+		this.prevButton = this.createIconButton(status, 'codicon-chevron-left', '上一页');
+		this.prevButton.addEventListener('click', () => {
+			if (this.page > 0) {
+				this.page -= 1;
+				void this.runQueryNow();
+			}
+		});
+		this.pageLabel = document.createElement('span');
+		this.pageLabel.className = 'data-browser-page';
+		status.appendChild(this.pageLabel);
+		this.nextButton = this.createIconButton(status, 'codicon-chevron-right', '下一页');
+		this.nextButton.addEventListener('click', () => {
+			if (this.hasNext) {
+				this.page += 1;
+				void this.runQueryNow();
+			}
+		});
 
 		// The panel follows the active session's project; switching projects reloads sources.
 		const activeSession = this.options.sessionsService?.activeSession ?? this.options.sessionsPartService?.activeSession;
@@ -489,7 +491,7 @@ export class DataBrowserView extends Disposable {
 		if (this.baseQuery !== undefined) {
 			const option = document.createElement('option');
 			option.value = QUERY_OPTION;
-			option.textContent = '（查询结果）';
+			option.textContent = '查询结果';
 			this.tableSelect.appendChild(option);
 		}
 		this.tables.forEach((table, index) => {

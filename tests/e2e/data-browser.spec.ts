@@ -294,7 +294,7 @@ test('chat → panel: a query step opens in the data browser as a paged derived 
 		await expect(page.locator('.part.auxiliarybar')).toBeVisible();
 		await expect(page.locator('.auxiliary-view[data-tab-id="data"] .data-browser')).toBeVisible();
 		await expect(page.locator('.data-browser-table')).toHaveValue('query');
-		await expect(page.locator('.data-browser-table option').first()).toHaveText('（查询结果）');
+		await expect(page.locator('.data-browser-table option').first()).toHaveText('查询结果');
 		await expect(page.locator('.data-browser-status-sql')).toContainText('AS `_browse` LIMIT 101');
 		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
 		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-001');
@@ -308,7 +308,7 @@ test('chat → panel: a query step opens in the data browser as a paged derived 
 		// Picking a real table leaves query mode: the synthetic entry disappears.
 		await page.locator('.data-browser-table').selectOption('0');
 		await expect(page.locator('.data-browser-status-sql')).toContainText('SELECT * FROM `shop`.`orders` LIMIT 101');
-		await expect(page.locator('.data-browser-table option').first()).not.toHaveText('（查询结果）');
+		await expect(page.locator('.data-browser-table option').first()).not.toHaveText('查询结果');
 	} finally {
 		await app?.close();
 	}
