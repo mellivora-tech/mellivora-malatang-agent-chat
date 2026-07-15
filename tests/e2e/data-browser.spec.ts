@@ -131,8 +131,10 @@ test('data tab: grid renders rows, pages, and server-side sort (MELLIVORA_FAKE_D
 		const page = await app.firstWindow();
 		await openDataTab(page);
 
-		// Table list comes from the (fake) catalog with row estimates.
+		// Table list comes from the (fake) catalog with row estimates, and the tab
+		// chip picks up the browse context as its label.
 		await expect(page.locator('.data-browser-table option')).toHaveText(['shop.orders（约 120 行）', 'shop.users（约 7 行）']);
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('dev·orders');
 
 		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
 		await expect(grid.locator('.tabulator-col-title').nth(0)).toHaveText('id');
@@ -158,6 +160,51 @@ test('data tab: grid renders rows, pages, and server-side sort (MELLIVORA_FAKE_D
 		await expect(page.locator('.data-browser-page')).toHaveText('第 1 页');
 		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-120');
 		await page.screenshot({ path: 'test-results/data-browser-grid.png', fullPage: true });
+	} finally {
+		await app?.close();
+	}
+});
+
+test('side pane tabs are instances: + menu, close, and view keep-alive', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await openDataTab(page);
+
+		// Put the grid in a non-default state: page 2.
+		await expect(page.locator('.data-browser-status-text')).toContainText('100 行+');
+		await page.locator('.data-browser-button[title="下一页"]').click();
+		await expect(page.locator('.data-browser-page')).toHaveText('第 2 页');
+
+		// Open a second tab through the "+" menu.
+		await page.locator('.auxiliary-tab-add').click();
+		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
+		await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
+		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['dev·orders', 'Terminal']);
+		await expect(page.locator('.auxiliary-view[data-tab-id="data"]')).toBeHidden();
+
+		// Switch back: the data view was kept mounted — still page 2, no requery,
+		// and the rows actually PAINT (Tabulator redraws after being display:none).
+		await page.locator('.auxiliary-tab[data-tab-id="data"]').click();
+		await expect(page.locator('.data-browser-page')).toHaveText('第 2 页');
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-101');
+		await expect(grid.locator('.tabulator-row').first()).toBeVisible();
+		await page.screenshot({ path: 'test-results/data-browser-tabs.png', fullPage: true });
+
+		// Close the active data tab: terminal takes over; closing it re-opens the picker.
+		await page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-close').click();
+		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['Terminal']);
+		await expect(page.locator('.auxiliary-view[data-tab-id="terminal"]')).toBeVisible();
+		await page.locator('.auxiliary-tab[data-tab-id="terminal"] .auxiliary-tab-close').click();
+		await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
 	} finally {
 		await app?.close();
 	}

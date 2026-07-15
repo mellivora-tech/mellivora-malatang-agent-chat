@@ -1985,10 +1985,11 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
 	await expect(page.locator('.auxiliary-empty-description')).toHaveText('Choose a tab to open in the side pane.');
 	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
-	await expect(page.locator('.auxiliary-tabs')).toHaveCount(0);
+	await expect(page.locator('.auxiliary-tabs')).toBeHidden();
 
+	// Opening from the picker creates ONE tab — instances, not fixed destinations.
 	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
-	await assertSidePaneTab(page, 'review', 'Review');
+	await assertSidePaneTab(page, 'review', ['Review']);
 	const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
 	await expect(changesView).toBeVisible();
 	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
@@ -1998,11 +1999,23 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await assertSidePaneDockedToStage(page);
 	await page.screenshot({ path: 'test-results/agents-window-side-pane.png', fullPage: true });
 
-	await page.locator('.auxiliary-tab[data-tab-id="terminal"]').click();
-	await assertSidePaneTab(page, 'terminal', 'Terminal', 'No terminal session started');
+	// "+" menu opens further tabs; a review tab stays open (and alive) behind it.
+	await page.locator('.auxiliary-tab-add').click();
+	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
+	await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
+	await assertSidePaneTab(page, 'terminal', ['Review', 'Terminal'], 'No terminal session started');
 
-	await page.locator('.auxiliary-tab[data-tab-id="browser"]').click();
-	await assertSidePaneTab(page, 'browser', 'Browser', 'No browser preview open');
+	// Switching back needs no rebuild — the review view was kept mounted.
+	await page.locator('.auxiliary-tab[data-tab-id="review"]').click();
+	await assertSidePaneTab(page, 'review', ['Review', 'Terminal']);
+	await expect(changesView).toBeVisible();
+
+	// Closing the active tab falls back to a neighbor; closing the last one
+	// returns to the picker.
+	await page.locator('.auxiliary-tab[data-tab-id="review"] .auxiliary-tab-close').click();
+	await assertSidePaneTab(page, 'terminal', ['Terminal'], 'No terminal session started');
+	await page.locator('.auxiliary-tab[data-tab-id="terminal"] .auxiliary-tab-close').click();
+	await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
 
 	await toggle.click();
 	await expect(page.locator('.part.auxiliarybar')).toBeHidden();
@@ -2036,19 +2049,20 @@ async function assertSidePaneDockedToStage(page: Page): Promise<void> {
 	expect(Math.abs(geometry!.stageBottom - geometry!.auxBottom)).toBeLessThanOrEqual(1);
 }
 
-async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyText?: string): Promise<void> {
+async function assertSidePaneTab(page: Page, tabId: string, openTabs: readonly string[], bodyText?: string): Promise<void> {
 	const root = page.locator('.auxiliary-bar');
 	await expect(root).toBeVisible();
 	await expect(root).not.toHaveClass(/auxiliary-empty/);
-	await expect(page.locator('.auxiliary-empty-content')).toHaveCount(0);
+	await expect(page.locator('.auxiliary-empty-content')).toBeHidden();
 	await expect(page.locator('.auxiliary-tabs')).toBeVisible();
-	await expect(page.locator('.auxiliary-tab')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
+	// The strip shows ONLY the open instances (plus the "+" opener).
+	await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText([...openTabs]);
+	await expect(page.locator('.auxiliary-tab-add')).toBeVisible();
 
 	const activeTab = page.locator(`.auxiliary-tab[data-tab-id="${tabId}"]`);
 	await expect(activeTab).toHaveAttribute('aria-selected', 'true');
 	await expect(activeTab).toHaveClass(/active/);
 	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"]`)).toBeVisible();
-	await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-title`)).toHaveText(title);
 	if (bodyText !== undefined) {
 		await expect(page.locator(`.auxiliary-view[data-tab-id="${tabId}"] .auxiliary-view-body`)).toContainText(bodyText);
 	}

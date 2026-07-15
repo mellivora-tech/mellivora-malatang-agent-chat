@@ -60,10 +60,103 @@
 	outline-offset: var(--vscode-agents-space-2);
 }
 
+/* Instance context can make labels long (dev·orders) — clamp, full text in title. */
+.auxiliary-tab-label {
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.auxiliary-tab-close {
+	margin-left: var(--vscode-agents-space-2);
+	padding: var(--vscode-agents-space-1);
+	border-radius: var(--vscode-agents-radius-control, 4px);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+}
+
+.auxiliary-tab-close:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+/* The "+" opener: an icon-only chip at the end of the strip. */
+.auxiliary-tab-add {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	flex: 0 0 auto;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 74%, transparent);
+	font: inherit;
+	cursor: default;
+}
+
+.auxiliary-tab-add:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.auxiliary-tab-add:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-badge-background);
+	outline-offset: var(--vscode-agents-space-2);
+}
+
+.auxiliary-add-menu {
+	position: fixed;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	min-width: 160px;
+	padding: var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-card, 8px);
+	background: var(--vscode-agents-color-panel-background);
+	box-shadow: 0 4px 16px var(--vscode-agents-color-shadow);
+}
+
+.auxiliary-add-menu-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	height: 28px;
+	padding: 0 var(--vscode-agents-space-8);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	text-align: left;
+	cursor: default;
+}
+
+.auxiliary-add-menu-item:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+}
+
+.auxiliary-add-menu-item .codicon {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+/* `hidden` must win over the display rules below (tabs bar is display:flex). */
+.auxiliary-tabs[hidden],
+.auxiliary-content[hidden],
+.auxiliary-empty-content[hidden] {
+	display: none;
+}
+
+/* Hosts every OPEN tab's view simultaneously (inactive ones display:none) —
+   views stay alive across switches, so each view scrolls itself. */
 .auxiliary-content {
 	min-width: 0;
 	min-height: 0;
-	overflow: auto;
+	overflow: hidden;
 }
 
 .auxiliary-view {
@@ -71,16 +164,23 @@
 	flex-direction: column;
 	gap: var(--vscode-agents-space-12);
 	min-width: 0;
+	height: 100%;
+	overflow: auto;
 	padding: var(--vscode-agents-space-14);
 	box-sizing: border-box;
 }
 
-.auxiliary-view-title {
-	margin: 0;
-	color: var(--vscode-agents-color-text-primary);
-	font-size: var(--vscode-agents-fontSize-heading3);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
-	line-height: var(--vscode-agents-space-20);
+/* Grid-style views (data) manage their own internal scrolling. */
+.auxiliary-view.auxiliary-view-fill {
+	overflow: hidden;
+}
+
+.auxiliary-view-fill .auxiliary-view-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: var(--vscode-agents-space-8);
 }
 
 .auxiliary-view-body {
@@ -274,7 +374,7 @@
 
 .auxiliary-empty-cards {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: var(--vscode-agents-space-8);
 	width: 100%;
 }

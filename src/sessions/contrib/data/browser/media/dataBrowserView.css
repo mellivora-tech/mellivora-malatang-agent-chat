@@ -2,25 +2,6 @@
    tokens. One mapping serves both themes — every color routes through
    --vscode-agents-* variables, never a hardcoded hex. */
 
-/* The data tab needs the full pane height (the grid scrolls internally). */
-.auxiliary-content-fill {
-	overflow: hidden;
-	min-height: 0;
-}
-
-.auxiliary-content-fill .auxiliary-view {
-	height: 100%;
-	box-sizing: border-box;
-}
-
-.auxiliary-content-fill .auxiliary-view-body {
-	display: flex;
-	flex-direction: column;
-	flex: 1 1 auto;
-	min-height: 0;
-	padding: var(--vscode-agents-space-8);
-}
-
 .data-browser {
 	display: flex;
 	flex-direction: column;

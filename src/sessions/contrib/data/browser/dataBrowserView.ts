@@ -16,6 +16,8 @@ export interface IDataBrowserViewOptions {
 	readonly environmentsService?: IEnvironmentsService;
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
+	/** Reports the current browse context (e.g. `dev·orders`) — the host renames the tab chip with it. */
+	readonly onContextChange?: (label: string) => void;
 }
 
 type BrowsableSource = IDatabaseSource & { readonly hasCredential: boolean };
@@ -41,6 +43,7 @@ export class DataBrowserView extends Disposable {
 	private readonly statusSql: HTMLElement;
 
 	private table: TabulatorFull | undefined;
+	private readonly resizeObserver: ResizeObserver;
 	private projectId: string | undefined;
 	private sources: readonly BrowsableSource[] = [];
 	private environmentNames = new Map<string, string>();
@@ -150,11 +153,22 @@ export class DataBrowserView extends Disposable {
 			}));
 			this.projectId = activeSession.get()?.projectId;
 		}
+		// The tab host keeps this view mounted but display:none while another tab
+		// is active. Tabulator can't measure a hidden host, so rows built (or kept)
+		// while hidden render blank — redraw whenever the host regains real size.
+		this.resizeObserver = new ResizeObserver(() => {
+			if (this.table && this.gridHost.clientHeight > 0) {
+				this.table.redraw(true);
+			}
+		});
+		this.resizeObserver.observe(this.gridHost);
+
 		this.updatePager();
 		void this.loadSources();
 	}
 
 	override dispose(): void {
+		this.resizeObserver.disconnect();
 		this.table?.destroy();
 		this.table = undefined;
 		super.dispose();
@@ -176,6 +190,18 @@ export class DataBrowserView extends Disposable {
 
 	private get selectedSource(): BrowsableSource | undefined {
 		return this.sources.find(source => source.id === this.sourceSelect.value);
+	}
+
+	/** Tell the host what we're looking at (`dev·orders`) so the tab chip can say so. */
+	private reportContext(): void {
+		const source = this.selectedSource;
+		if (!source) {
+			this.options.onContextChange?.('数据');
+			return;
+		}
+		const scope = this.environmentNames.get(source.environmentId) ?? source.label;
+		const table = this.selectedTable;
+		this.options.onContextChange?.(table ? `${scope}·${table.name}` : scope);
 	}
 
 	private get selectedTable(): IDbTable | undefined {
@@ -203,6 +229,7 @@ export class DataBrowserView extends Disposable {
 		this.renderSelects();
 		if (this.sources.length === 0) {
 			this.setStatus('项目还没有数据库数据源 — 在项目配置里添加一个。', '');
+			this.reportContext();
 			return;
 		}
 		await this.onSourceChanged();
@@ -230,6 +257,7 @@ export class DataBrowserView extends Disposable {
 		}
 		this.tables = result.tables;
 		this.renderTableOptions();
+		this.reportContext();
 		if (this.tables.length === 0) {
 			this.setStatus('这个数据源里没有可见的表。', '');
 			return;
@@ -250,6 +278,7 @@ export class DataBrowserView extends Disposable {
 		if (!this.projectId || !source || !table || !this.options.environmentsService) {
 			return;
 		}
+		this.reportContext();
 		const sql = compileBrowseSql(source.coordinates.driver, table, { pageSize: this.pageSize, page: this.page, ...(this.sort ? { sort: this.sort } : {}) });
 		this.setStatus('查询中…', sql);
 		const result = await this.options.environmentsService.runQuery(this.projectId, source.id, sql, { rowLimit: this.pageSize });
