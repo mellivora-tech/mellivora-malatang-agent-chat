@@ -354,11 +354,21 @@
 	white-space: nowrap;
 }
 
+/* This element's own percentage padding resolves against its CONTAINING BLOCK
+   (.conversation-body's content width), which still includes the 44px the
+   40px-flex-sibling .conversation-timeline consumes — NOT against this
+   element's own (already timeline-reduced) rendered width. Left uncorrected,
+   the gutter is sized for the un-reduced width, then applied atop a box
+   that's already 44px narrower — so the centered content column landed at
+   only 906px, never actually reaching its intended 950px cap. Subtracting
+   the timeline's width from the basis here fixes that (and composer, which
+   has no such sibling, compensates with a matching left-inset — see
+   .conversation-composer). */
 .conversation-transcript {
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: auto;
-	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-18);
+	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-18);
 	box-sizing: border-box;
 }
 
@@ -1328,9 +1338,18 @@ button.conversation-plan-header {
 	justify-self: center;
 }
 
+/* The composer sits OUTSIDE .conversation-body, so unlike .conversation-transcript
+   it never loses width to the 44px timeline rail (a sibling of the transcript,
+   inside .conversation-body) — centering both within their own "100%" landed
+   their content columns 44px apart on the left edge even at matching max-width.
+   The left inset below reproduces the timeline's one-sided space reservation so
+   the composer's children (context bar, input, send-error — all margin:0 auto
+   at the SAME conversation.width here) land flush with the transcript's actual
+   message column instead of the stage's raw center. */
 .conversation-composer {
 	flex: 0 0 auto;
-	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-22);
+	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-22)
+		calc(var(--vscode-agents-space-44) + max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2)));
 	box-sizing: border-box;
 }
 
