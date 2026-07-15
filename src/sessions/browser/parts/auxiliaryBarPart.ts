@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../common/i18n/i18n.js';
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
@@ -30,25 +31,25 @@ const tabKinds: readonly {
 }[] = [
 	{
 		kind: 'review',
-		label: 'Review',
+		label: localize('aux.tab.review'),
 		icon: 'codicon-diff',
 	},
 	{
 		kind: 'data',
-		label: '数据',
+		label: localize('aux.tab.data'),
 		icon: 'codicon-database',
 	},
 	{
 		kind: 'terminal',
-		label: 'Terminal',
+		label: localize('aux.tab.terminal'),
 		icon: 'codicon-terminal',
-		body: 'No terminal session started',
+		body: localize('aux.terminal.empty'),
 	},
 	{
 		kind: 'browser',
-		label: 'Browser',
+		label: localize('aux.tab.browser'),
 		icon: 'codicon-globe',
-		body: 'No browser preview open',
+		body: localize('aux.browser.empty'),
 	},
 ];
 
@@ -143,12 +144,12 @@ export class AuxiliaryBarPart extends Part {
 
 		const title = document.createElement('h2');
 		title.className = 'auxiliary-empty-title';
-		title.textContent = 'Open tab';
+		title.textContent = localize('aux.empty.title');
 		empty.appendChild(title);
 
 		const description = document.createElement('p');
 		description.className = 'auxiliary-empty-description';
-		description.textContent = 'Choose a tab to open in the side pane.';
+		description.textContent = localize('aux.empty.description');
 		empty.appendChild(description);
 
 		const cards = document.createElement('div');
@@ -302,7 +303,7 @@ export class AuxiliaryBarPart extends Part {
 			const close = document.createElement('span');
 			close.className = 'codicon codicon-close auxiliary-tab-close';
 			close.setAttribute('role', 'button');
-			close.setAttribute('aria-label', `关闭 ${tab.label}`);
+			close.setAttribute('aria-label', localize('aux.tab.close', tab.label));
 			close.addEventListener('click', event => {
 				event.stopPropagation();
 				this.closeTab(tab.id);
@@ -315,8 +316,8 @@ export class AuxiliaryBarPart extends Part {
 		const add = document.createElement('button');
 		add.className = 'auxiliary-tab-add';
 		add.type = 'button';
-		add.title = '打开…';
-		add.setAttribute('aria-label', '打开新 tab');
+		add.title = localize('aux.tab.add');
+		add.setAttribute('aria-label', localize('aux.tab.addAria'));
 		add.setAttribute('aria-haspopup', 'menu');
 		const addIcon = document.createElement('span');
 		addIcon.className = 'codicon codicon-add';
@@ -339,8 +340,8 @@ export class AuxiliaryBarPart extends Part {
 			const maximize = document.createElement('button');
 			maximize.className = 'auxiliary-tab-maximize';
 			maximize.type = 'button';
-			maximize.title = maximized ? '恢复布局' : '最大化面板';
-			maximize.setAttribute('aria-label', maximized ? '恢复布局' : '最大化面板');
+			maximize.title = maximized ? localize('aux.restore') : localize('aux.maximize');
+			maximize.setAttribute('aria-label', maximized ? localize('aux.restore') : localize('aux.maximize'));
 			maximize.setAttribute('aria-pressed', String(maximized));
 			const maximizeIcon = document.createElement('span');
 			maximizeIcon.className = `codicon ${maximized ? 'codicon-screen-normal' : 'codicon-screen-full'}`;

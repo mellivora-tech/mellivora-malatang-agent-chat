@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
 import type { IEnvironmentsService } from '../../../services/environments/browser/environmentsService.js';
 import type { IDataColumn, IDatabaseSource, IDbTable } from '../../../services/environments/common/environments.js';
 import { compileBrowseSql, compileColumnFilter, compileQueryBrowseSql, type IBrowseState } from '../common/browseSql.js';
@@ -42,7 +43,7 @@ export class SqlDataProvider implements IDataProvider {
 		const source = this.deps.getSource();
 		const sql = this.compile(state);
 		if (!projectId || !source || sql === undefined) {
-			return { ok: false, message: '没有可查询的目标。' };
+			return { ok: false, message: localize('data.noTarget') };
 		}
 		const result = await this.deps.service.runQuery(projectId, source.id, sql, { rowLimit: state.pageSize });
 		if (!result.ok) {
@@ -50,18 +51,18 @@ export class SqlDataProvider implements IDataProvider {
 		}
 		this.lastColumns = result.columns;
 		const table = this.deps.getTable();
-		const estimate = this.deps.getBaseQuery() === undefined && table?.estimatedRows !== undefined ? { note: `约 ${table.estimatedRows} 行` } : {};
+		const estimate = this.deps.getBaseQuery() === undefined && table?.estimatedRows !== undefined ? { note: localize('data.rowsApprox', table.estimatedRows) } : {};
 		return { ok: true, columns: result.columns, rows: result.rows, hasNext: result.truncated, durationMs: result.durationMs, ...estimate };
 	}
 
 	contextLabel(): string {
 		const source = this.deps.getSource();
 		if (!source) {
-			return '数据';
+			return localize('data.tabFallback');
 		}
 		const scope = this.deps.getEnvironmentName(source.environmentId) ?? source.label;
 		if (this.deps.getBaseQuery() !== undefined) {
-			return `${scope}·查询`;
+			return `${scope}·${localize('data.querySuffix')}`;
 		}
 		const table = this.deps.getTable();
 		return table ? `${scope}·${table.name}` : scope;
@@ -74,17 +75,17 @@ export class SqlDataProvider implements IDataProvider {
 		}
 		const scope = this.deps.getEnvironmentName(source.environmentId);
 		const lines: string[] = [];
-		lines.push(`- 数据源: ${scope ? `${scope} · ` : ''}${source.label}（${source.coordinates.driver} ${source.coordinates.database}）`);
+		lines.push(localize('data.ref.source', scope ? `${scope} · ` : '', source.label, source.coordinates.driver, source.coordinates.database));
 		const baseQuery = this.deps.getBaseQuery();
 		const table = this.deps.getTable();
 		if (baseQuery !== undefined) {
-			lines.push(`- 查询: ${baseQuery}`);
+			lines.push(localize('data.ref.query', baseQuery));
 		} else if (table) {
-			lines.push(`- 表: ${table.schema ? `${table.schema}.` : ''}${table.name}${table.estimatedRows !== undefined ? `（约 ${table.estimatedRows} 行）` : ''}`);
+			lines.push(localize('data.ref.table', `${table.schema ? `${table.schema}.` : ''}${table.name}`, table.estimatedRows !== undefined ? localize('data.rowsApproxSuffix', table.estimatedRows) : ''));
 		}
 		const sql = this.describeQuery(state);
 		if (sql) {
-			lines.push(`- 当前 SQL: ${sql}`);
+			lines.push(localize('data.ref.sql', sql));
 		}
 		return lines;
 	}

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
 import { FILE_ROW_CAP, type FileTableResult, type IDataFilesBridge, type IPickedDataFile } from '../../../services/dataFiles/common/dataFiles.js';
 import type { IDataColumn } from '../../../services/environments/common/environments.js';
 import type { DataFetchResult, IDataProvider, IDataViewState } from '../common/dataProvider.js';
@@ -41,7 +42,7 @@ export class FileDataProvider implements IDataProvider {
 	/** Parse (or re-parse) a sheet; on success the provider holds the dataset. */
 	async open(file: IPickedDataFile, sheet?: string): Promise<FileTableResult> {
 		if (!this.bridge) {
-			return { ok: false, message: '文件桥不可用。' };
+			return { ok: false, message: localize('data.noFileBridge') };
 		}
 		const result = await this.bridge.readTable(file.path, sheet);
 		if (result.ok) {
@@ -66,7 +67,7 @@ export class FileDataProvider implements IDataProvider {
 
 	fetch(state: IDataViewState): Promise<DataFetchResult> {
 		if (!this.file) {
-			return Promise.resolve({ ok: false, message: '没有打开的文件。' });
+			return Promise.resolve({ ok: false, message: localize('data.noFile') });
 		}
 		const started = Date.now();
 		const { rows, hasNext, totalMatched } = sliceLocalData(this.columns, this.allRows, state, sort => this.columns.findIndex(column => column.name === sort.column));
@@ -76,7 +77,7 @@ export class FileDataProvider implements IDataProvider {
 			rows,
 			hasNext,
 			durationMs: Date.now() - started,
-			note: `共 ${totalMatched} 行${this.truncated ? `（仅加载前 ${FILE_ROW_CAP} 行）` : ''}`,
+			note: localize('data.fileRows', totalMatched, this.truncated ? localize('data.fileRowsCapNote', FILE_ROW_CAP) : ''),
 		});
 	}
 
@@ -89,7 +90,7 @@ export class FileDataProvider implements IDataProvider {
 
 	contextLabel(): string {
 		if (!this.file) {
-			return '数据';
+			return localize('data.tabFallback');
 		}
 		return this.sheets.length > 1 ? `${this.file.name}·${this.sheet}` : this.file.name;
 	}
@@ -98,11 +99,11 @@ export class FileDataProvider implements IDataProvider {
 		if (!this.file) {
 			return [];
 		}
-		const lines = [`- 文件: ${this.file.path}`];
+		const lines = [localize('data.ref.file', this.file.path)];
 		if (this.sheets.length > 1) {
-			lines.push(`- 工作表: ${this.sheet}`);
+			lines.push(localize('data.ref.sheet', this.sheet ?? ''));
 		}
-		lines.push(`- 共 ${this.allRows.length} 行${this.truncated ? `（文件更长，仅加载前 ${FILE_ROW_CAP} 行）` : ''}`);
+		lines.push(localize('data.ref.fileRows', this.allRows.length, this.truncated ? localize('data.fileLongerNote', FILE_ROW_CAP) : ''));
 		return lines;
 	}
 }

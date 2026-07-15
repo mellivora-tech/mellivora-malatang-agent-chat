@@ -4,20 +4,25 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { applyThemeTokens, type ThemeId } from '../../platform/theme/theme.js';
+import { LOCALE_PREFERENCES, type LocalePreference } from '../../common/i18n/i18n.js';
 
 /**
  * Renderer-side UI preferences, persisted to localStorage and applied to the
- * workbench root. These are real, effective settings (theme, motion) — no
- * backing IPC is required because they only affect the renderer.
+ * workbench root. These are real, effective settings (theme, motion, locale)
+ * — no backing IPC is required because they only affect the renderer.
  */
 export interface IUiPreferences {
 	readonly theme: ThemeId;
 	readonly reduceMotion: boolean;
+	/** #9: 'system' follows the OS; a pinned locale takes effect on next reload
+	 *  (i18n.ts resolves the active locale once at module load — same model
+	 *  the theme preference uses in practice for a full restyle). */
+	readonly locale: LocalePreference;
 }
 
 const STORAGE_KEY = 'agentChat.preferences';
 const THEMES: readonly ThemeId[] = ['dark', 'light', 'highContrast'];
-const DEFAULTS: IUiPreferences = { theme: 'dark', reduceMotion: false };
+const DEFAULTS: IUiPreferences = { theme: 'dark', reduceMotion: false, locale: 'system' };
 
 export function readPreferences(): IUiPreferences {
 	try {
@@ -25,6 +30,7 @@ export function readPreferences(): IUiPreferences {
 		return {
 			theme: THEMES.includes(raw['theme'] as ThemeId) ? (raw['theme'] as ThemeId) : DEFAULTS.theme,
 			reduceMotion: typeof raw['reduceMotion'] === 'boolean' ? raw['reduceMotion'] : DEFAULTS.reduceMotion,
+			locale: LOCALE_PREFERENCES.includes(raw['locale'] as LocalePreference) ? (raw['locale'] as LocalePreference) : DEFAULTS.locale,
 		};
 	} catch {
 		return DEFAULTS;

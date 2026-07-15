@@ -179,9 +179,9 @@ test('starting a conversation creates a running session shell', async () => {
 
 		// A session with no workspace lands in the Chat section — a top-level peer of Pinned and Projects.
 		const chatSection = page.locator('[data-session-group="chat"]');
-		await expect(chatSection.locator('.sessions-tree-section-label')).toHaveText('Chat');
+		await expect(chatSection.locator('.sessions-tree-section-label')).toHaveText('聊天');
 		await expect(chatSection.locator('.sessions-project-task-title')).toHaveText('hello');
-		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Projects', 'Chat']);
+		await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['项目', '聊天']);
 
 		await assertRightSidePaneInteraction(page);
 		await page.screenshot({ path: 'test-results/agents-window-running-session.png', fullPage: true });
@@ -230,7 +230,7 @@ test('project picker threads the seeded project into a new session', async () =>
 		const seededItem = page.locator('.new-session-project-item').filter({ hasText: 'Seeded Project' });
 		await expect(seededItem).toBeVisible();
 		await expect(seededItem.locator('.codicon-check')).not.toHaveClass(/project-check-hidden/);
-		await expect(page.locator('.new-session-project-add')).toContainText('Add project');
+		await expect(page.locator('.new-session-project-add')).toContainText('添加项目');
 		await page.keyboard.press('Escape');
 		await expect(page.locator('.new-session-project-menu')).toHaveCount(0);
 
@@ -266,7 +266,7 @@ test('first launch creates the projects root and shows the empty picker state', 
 		page.on('pageerror', error => rendererErrors.push(error.message));
 
 		await page.waitForSelector('.sessions-new-session-view');
-		await expect(page.locator('.new-session-composer-context')).toContainText('Select project');
+		await expect(page.locator('.new-session-composer-context')).toContainText('选择项目');
 
 		const stats = await stat(join(dataDir, 'projects'));
 		expect(stats.isDirectory()).toBe(true);
@@ -426,8 +426,8 @@ test('pin and archive survive an app relaunch', async () => {
 
 		const zcodeRow = first.page.locator('[data-project-id="zcodeproject"] .sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' });
 		await zcodeRow.hover();
-		await zcodeRow.locator('.sessions-project-task-action[title="Archive task"]').click();
-		await expect(first.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('No tasks yet');
+		await zcodeRow.locator('.sessions-project-task-action[title="归档任务"]').click();
+		await expect(first.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('暂无任务');
 
 		await first.app.close();
 		app = undefined;
@@ -436,8 +436,8 @@ test('pin and archive survive an app relaunch', async () => {
 		app = second.app;
 
 		await expect(second.page.locator('[data-session-group="pinned"] .sessions-project-task-title')).toHaveText('梳理下文档');
-		await expect(second.page.locator('[data-project-id="obsidian"] .sessions-project-empty')).toHaveText('No tasks yet');
-		await expect(second.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('No tasks yet');
+		await expect(second.page.locator('[data-project-id="obsidian"] .sessions-project-empty')).toHaveText('暂无任务');
+		await expect(second.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('暂无任务');
 		await expect(second.page.locator('.sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' })).toHaveCount(0);
 
 		expect(rendererErrors).toEqual([]);
@@ -476,7 +476,7 @@ test('deleting a session removes its transcript', async () => {
 		await row.hover();
 		await row.locator('.sessions-project-task-delete').click();
 
-		await expect(page.locator('[data-project-id="obsidian"] .sessions-project-empty')).toHaveText('No tasks yet');
+		await expect(page.locator('[data-project-id="obsidian"] .sessions-project-empty')).toHaveText('暂无任务');
 		await expect
 			.poll(async () => {
 				const files = await readdir(join(dataDir, 'projects', 'obsidian', 'sessions'));
@@ -683,7 +683,7 @@ test('starting multiple conversations keeps a single active conversation page', 
 		await expect(page.locator('.session-view')).toHaveCount(1);
 		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'first task' })).toBeVisible();
 
-		await page.locator('.sessions-sidebar-header .action-item').filter({ hasText: 'New task' }).click();
+		await page.locator('.sessions-sidebar-header .action-item').filter({ hasText: '新任务' }).click();
 		await expect(page.locator('.sessions-new-session-view')).toBeVisible();
 
 		await page.locator('.new-session-input').fill('second task');
@@ -769,7 +769,7 @@ test('completed conversation shows read-only idle message state', async () => {
 		await expect(page.locator('.conversation-thinking-row')).toHaveCount(0);
 		await expect(page.locator('.conversation-composer')).toHaveAttribute('data-state', 'idle');
 		await expect(page.locator('.conversation-composer')).not.toHaveClass(/running/);
-		await expect(page.locator('.conversation-input')).toHaveAttribute('placeholder', 'Session is read-only');
+		await expect(page.locator('.conversation-input')).toHaveAttribute('placeholder', '会话为只读');
 		await expect(page.locator('.conversation-input')).toBeDisabled();
 		await expect(page.locator('.conversation-reconnect-status')).toBeHidden();
 		await expect(page.locator('.conversation-stop-button')).toBeHidden();
@@ -1027,7 +1027,7 @@ test('a configured model streams a real reply into the conversation', async () =
 		// GPT-5.4 Mini declares an effort knob: pick "high" (Auto + 4 levels).
 		const effortButton = page.locator('.new-session-effort');
 		await expect(effortButton).toBeVisible();
-		await expect(effortButton).toContainText('Effort');
+		await expect(effortButton).toContainText('推理力度');
 		await effortButton.click();
 		const effortItems = page.locator('.sessions-model-menu-item');
 		await expect(effortItems).toHaveCount(5);
@@ -1053,7 +1053,7 @@ test('a configured model streams a real reply into the conversation', async () =
 		// reading — 4000 / 400000 = 1%.
 		const ring = page.locator('.conversation-context-ring');
 		await expect(ring).toBeVisible();
-		await expect(ring).toHaveAttribute('aria-label', 'Context window: 1% used, ~4K of 400K tokens');
+		await expect(ring).toHaveAttribute('aria-label', '上下文窗口: 已用 1%，约 4K / 400K tokens');
 
 		// The conversation composer hugs the window bottom — its picker must
 		// flip upward and stay fully inside the viewport.
@@ -1093,11 +1093,11 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await expect(page.locator('.new-session-heading')).toHaveText(/^(早上好|中午好|下午好|晚上好|凌晨好)，.+/);
 	// The shell test seeds two projects; the first becomes active by default.
 	await expect(page.locator('.new-session-composer-context')).toContainText('Obsidian');
-	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask Mellivora anything/);
+	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /问 Mellivora 任何问题/);
 	await expect(page.locator('.new-session-input')).toBeVisible();
-	await expect(page.locator('.new-session-access')).toContainText('Ask before changes');
+	await expect(page.locator('.new-session-access')).toContainText('询问后修改');
 	// No provider is configured in this fixture, so the picker shows the empty label.
-	await expect(page.locator('.new-session-model')).toContainText('No model');
+	await expect(page.locator('.new-session-model')).toContainText('未配置模型');
 	// The agent-picker placeholder is gone until agents ship.
 	await expect(page.locator('.new-session-agent')).toHaveCount(0);
 	// No configured model -> no effort knob; the hidden attribute must win over the class display.
@@ -1253,14 +1253,14 @@ async function assertSidebarHeaderToolbar(page: Page): Promise<void> {
 	await expect(toolbar).toBeVisible();
 	await expect(actionBar).toBeVisible();
 	await expect(actionItems).toHaveCount(3);
-	await expect(actionItems.nth(0).locator('.action-label')).toContainText('New task');
+	await expect(actionItems.nth(0).locator('.action-label')).toContainText('新任务');
 	await expect(actionItems.nth(0).locator('.action-icon')).toHaveClass(/codicon-new-session/);
 	await expect(actionItems.nth(0).locator('.action-icon')).not.toHaveClass(/codicon-circle-add/);
 	await expect(actionItems.nth(0).locator('.keybinding')).toHaveText('⌘ N');
-	await expect(actionItems.nth(1).locator('.action-label')).toContainText('Search');
+	await expect(actionItems.nth(1).locator('.action-label')).toContainText('搜索');
 	await expect(actionItems.nth(1).locator('.action-icon')).toHaveClass(/codicon-search/);
 	await expect(actionItems.nth(1).locator('.keybinding')).toHaveText('⌘ K');
-	await expect(actionItems.nth(2).locator('.action-label')).toContainText('Skills');
+	await expect(actionItems.nth(2).locator('.action-label')).toContainText('技能');
 	await expect(actionItems.nth(2).locator('.action-icon')).toHaveClass(/codicon-wand/);
 	await expect(page.locator('.sessions-sidebar-new-button')).toHaveCount(0);
 	await expect(page.locator('.sessions-sidebar-icon-button')).toHaveCount(0);
@@ -1339,10 +1339,10 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 
 	// Pinned and Chat sections stay hidden while empty; only Projects shows here.
 	await expect(page.locator('.sessions-sidebar-tree-section')).toHaveCount(1);
-	await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['Projects']);
+	await expect(page.locator('.sessions-sidebar-tree-section > .sessions-tree-section-toggle')).toHaveText(['项目']);
 	await expect(page.locator('[data-session-group="chat"]')).toHaveCount(0);
 	await expect(pinned).toHaveCount(0);
-	await assertCollapsibleSidebarSection(projectsSection, 'Projects');
+	await assertCollapsibleSidebarSection(projectsSection, '项目');
 
 	await expect(projects.locator('.sessions-project-group')).toHaveCount(2);
 	await expect(projects.locator('[data-project-id="obsidian"] .sessions-project-name')).toHaveText('Obsidian');
@@ -1454,17 +1454,17 @@ async function assertCollapsibleSidebarSection(section: Locator, title: string):
 async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<void> {
 	const taskRow = firstProject.locator('.sessions-project-task-row').first();
 	// Rename shares the action class — pin to the archive button explicitly.
-	const action = taskRow.locator('.sessions-project-task-action[title="Archive task"]');
+	const action = taskRow.locator('.sessions-project-task-action[title="归档任务"]');
 	const deleteAction = taskRow.locator('.sessions-project-task-delete');
 	const time = taskRow.locator('.sessions-project-task-time');
 
 	await expect(taskRow).toBeVisible();
 	await expect(time).toHaveText('2h');
-	await expect(action).toHaveAttribute('title', 'Archive task');
-	await expect(action).toHaveAttribute('aria-label', 'Archive 梳理下文档');
+	await expect(action).toHaveAttribute('title', '归档任务');
+	await expect(action).toHaveAttribute('aria-label', '归档 梳理下文档');
 	await expect(action.locator('.sessions-project-task-tooltip')).toHaveText('梳理下文档');
-	await expect(deleteAction).toHaveAttribute('title', 'Delete task');
-	await expect(deleteAction).toHaveAttribute('aria-label', 'Delete 梳理下文档');
+	await expect(deleteAction).toHaveAttribute('title', '删除任务');
+	await expect(deleteAction).toHaveAttribute('aria-label', '删除 梳理下文档');
 
 	const beforeHover = await taskRow.evaluate(row => {
 		const action = row.querySelector<HTMLElement>('.sessions-project-task-action');
@@ -1530,7 +1530,7 @@ async function assertPinMovesProjectTaskToPinned(page: Page): Promise<void> {
 	await expect(pinned.locator('.sessions-project-task-row')).toHaveCount(1);
 	await expect(pinned.locator('.sessions-project-task-title')).toHaveText('梳理下文档');
 	await expect(obsidian.locator('.sessions-project-task-row')).toHaveCount(0);
-	await expect(obsidian.locator('.sessions-project-empty')).toHaveText('No tasks yet');
+	await expect(obsidian.locator('.sessions-project-empty')).toHaveText('暂无任务');
 	await assertSidebarListTitleAlignment(page);
 
 	await pinned.locator('.sessions-project-task-row').hover();
@@ -1594,15 +1594,15 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 
 	// General is the default section, rendered with the settings-row language.
 	await expect(dialog.locator('[data-settings-nav-id="general"]')).toHaveClass(/active/);
-	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('General');
-	await expect(dialog.locator('.sessions-settings-row-title').first()).toHaveText('Reduce motion');
+	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('通用');
+	await expect(dialog.locator('.sessions-settings-row-title').first()).toHaveText('减少动效');
 	await expect(dialog.locator('.sessions-settings-toggle')).toBeVisible();
 	// The main pane scrolls when content overflows.
 	await expect(dialog.locator('.sessions-settings-main')).toHaveCSS('overflow-y', 'auto');
 
 	// Appearance offers a real theme control that re-themes the app live.
 	await dialog.locator('[data-settings-nav-id="appearance"]').click();
-	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('Appearance');
+	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('外观');
 	await expect(dialog.locator('.sessions-settings-dropdown')).toBeVisible();
 	await dialog.locator('.sessions-settings-dropdown').selectOption('light');
 	await expect(page.locator('.agent-sessions-workbench')).toHaveAttribute('data-agents-theme', 'light');
@@ -1621,8 +1621,8 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await dialog.locator('[data-settings-nav-id="mcp-servers"]').click();
 	await expect(dialog.locator('[data-settings-nav-id="mcp-servers"]')).toHaveClass(/active/);
 	const placeholder = dialog.locator('.sessions-settings-coming-soon');
-	await expect(placeholder.locator('h2')).toHaveText('MCP Servers');
-	await expect(placeholder.locator('.sessions-settings-coming-soon-badge')).toHaveText('Coming soon');
+	await expect(placeholder.locator('h2')).toHaveText('MCP 服务器');
+	await expect(placeholder.locator('.sessions-settings-coming-soon-badge')).toHaveText('即将推出');
 	await assertSettingsDialogThemeTokens(page);
 
 	await dialog.locator('.sessions-settings-close').click();
@@ -1741,7 +1741,7 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	// The conversation header carries context pills only — the title lives in
 	// the sidebar row (asserted above). No git repo behind the fixture → no
 	// branch pill either.
-	await expect(page.locator('.conversation-context-workspace').first()).toContainText('No workspace');
+	await expect(page.locator('.conversation-context-workspace').first()).toContainText('无工作目录');
 	await expect(page.locator('.conversation-context-branch')).toHaveCount(0);
 	await expect(page.locator('.conversation-context-more')).toBeVisible();
 	await expect(page.locator('.conversation-composer > .conversation-context-bar')).toHaveCount(1);
@@ -1803,15 +1803,15 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	expect(headerPosition.borderBottomWidth).toBe('0px');
 
 	await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('hello');
-	await expect(page.locator('.conversation-working-label')).toHaveText(/Working for \d+s|Working for \d+m \d+s/);
-	await expect(page.locator('.conversation-thinking-row')).toContainText('Thinking');
+	await expect(page.locator('.conversation-working-label')).toHaveText(/处理中 \d+s|处理中 \d+m \d+s/);
+	await expect(page.locator('.conversation-thinking-row')).toContainText('思考中');
 	await assertRunningConversationMessageLayout(page);
 
 	const composer = page.locator('.conversation-composer.running');
 	await expect(composer).toBeVisible();
-	await expect(composer.locator('.conversation-input')).toHaveAttribute('placeholder', 'Working… your next message will be queued');
-	await expect(composer.locator('.conversation-access')).toContainText('Ask before changes');
-	await expect(composer.locator('.conversation-model')).toContainText('No model');
+	await expect(composer.locator('.conversation-input')).toHaveAttribute('placeholder', '处理中… 你的下一条消息将排队发送');
+	await expect(composer.locator('.conversation-access')).toContainText('询问后修改');
+	await expect(composer.locator('.conversation-model')).toContainText('未配置模型');
 	await expect(composer.locator('.conversation-agent')).toHaveCount(0);
 	// A missing model fails fast with a friendly reply — no reconnect loop runs.
 	await expect(composer.locator('.conversation-reconnect-status')).toBeHidden();
@@ -2001,14 +2001,14 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await toggle.click();
 	await expect(page.locator('.part.auxiliarybar')).toBeVisible();
 	await expect(toggle).toHaveClass(/active/);
-	await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
-	await expect(page.locator('.auxiliary-empty-description')).toHaveText('Choose a tab to open in the side pane.');
-	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
+	await expect(page.locator('.auxiliary-empty-title')).toHaveText('打开标签页');
+	await expect(page.locator('.auxiliary-empty-description')).toHaveText('选择要在侧栏打开的标签页。');
+	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['评审', '数据', '终端', '浏览器']);
 	await expect(page.locator('.auxiliary-tabs')).toBeHidden();
 
 	// Opening from the picker creates ONE tab — instances, not fixed destinations.
-	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
-	await assertSidePaneTab(page, 'review', ['Review']);
+	await page.locator('.auxiliary-empty-card').filter({ hasText: '评审' }).click();
+	await assertSidePaneTab(page, 'review', ['评审']);
 	const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
 	await expect(changesView).toBeVisible();
 	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
@@ -2021,21 +2021,21 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 
 	// "+" menu opens further tabs; a review tab stays open (and alive) behind it.
 	await page.locator('.auxiliary-tab-add').click();
-	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
+	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '终端', '浏览器']);
 	await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
-	await assertSidePaneTab(page, 'terminal', ['Review', 'Terminal'], 'No terminal session started');
+	await assertSidePaneTab(page, 'terminal', ['评审', '终端'], '终端会话尚未启动');
 
 	// Switching back needs no rebuild — the review view was kept mounted.
 	await page.locator('.auxiliary-tab[data-tab-id="review"]').click();
-	await assertSidePaneTab(page, 'review', ['Review', 'Terminal']);
+	await assertSidePaneTab(page, 'review', ['评审', '终端']);
 	await expect(changesView).toBeVisible();
 
 	// Closing the active tab falls back to a neighbor; closing the last one
 	// returns to the picker.
 	await page.locator('.auxiliary-tab[data-tab-id="review"] .auxiliary-tab-close').click();
-	await assertSidePaneTab(page, 'terminal', ['Terminal'], 'No terminal session started');
+	await assertSidePaneTab(page, 'terminal', ['终端'], '终端会话尚未启动');
 	await page.locator('.auxiliary-tab[data-tab-id="terminal"] .auxiliary-tab-close').click();
-	await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
+	await expect(page.locator('.auxiliary-empty-title')).toHaveText('打开标签页');
 
 	await toggle.click();
 	await expect(page.locator('.part.auxiliarybar')).toBeHidden();

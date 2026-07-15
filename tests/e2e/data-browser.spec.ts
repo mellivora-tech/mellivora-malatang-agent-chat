@@ -185,9 +185,9 @@ test('side pane tabs are instances: + menu, close, and view keep-alive', async (
 
 		// Open a second tab through the "+" menu.
 		await page.locator('.auxiliary-tab-add').click();
-		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
+		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '终端', '浏览器']);
 		await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
-		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['dev·orders', 'Terminal']);
+		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['dev·orders', '终端']);
 		await expect(page.locator('.auxiliary-view[data-tab-id="data"]')).toBeHidden();
 
 		// Switch back: the data view was kept mounted — still page 2, no requery,
@@ -201,10 +201,10 @@ test('side pane tabs are instances: + menu, close, and view keep-alive', async (
 
 		// Close the active data tab: terminal takes over; closing it re-opens the picker.
 		await page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-close').click();
-		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['Terminal']);
+		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['终端']);
 		await expect(page.locator('.auxiliary-view[data-tab-id="terminal"]')).toBeVisible();
 		await page.locator('.auxiliary-tab[data-tab-id="terminal"] .auxiliary-tab-close').click();
-		await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
+		await expect(page.locator('.auxiliary-empty-title')).toHaveText('打开标签页');
 	} finally {
 		await app?.close();
 	}

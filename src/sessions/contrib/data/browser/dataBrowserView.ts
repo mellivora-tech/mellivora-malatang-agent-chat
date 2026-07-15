@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
 import 'tabulator-tables/dist/css/tabulator.min.css';
 import { TabulatorFull, type CellComponent, type ColumnDefinition } from 'tabulator-tables';
 import { Disposable } from '../../../base/common/lifecycle.js';
@@ -100,28 +101,28 @@ export class DataBrowserView extends Disposable {
 
 		this.sourceSelect = document.createElement('select');
 		this.sourceSelect.className = 'data-browser-select data-browser-source';
-		this.sourceSelect.title = '数据源';
+		this.sourceSelect.title = localize('data.source');
 		this.sourceSelect.addEventListener('change', () => void this.onSourceChanged());
 		toolbar.appendChild(this.sourceSelect);
 
 		this.tableSelect = document.createElement('select');
 		this.tableSelect.className = 'data-browser-select data-browser-table';
-		this.tableSelect.title = '表 / 视图';
+		this.tableSelect.title = localize('data.table');
 		this.tableSelect.addEventListener('change', () => this.onTableChanged());
 		toolbar.appendChild(this.tableSelect);
 
-		this.refreshButton = this.createIconButton(toolbar, 'codicon-refresh', '刷新');
+		this.refreshButton = this.createIconButton(toolbar, 'codicon-refresh', localize('data.refresh'));
 		this.refreshButton.addEventListener('click', () => {
 			// File mode re-parses from disk; SQL mode re-runs the query.
 			const target = this.fileMode ? this.fileProvider.target : undefined;
 			void (target ? this.openFile(target, this.fileProvider.activeSheet) : this.runQueryNow());
 		});
 
-		this.sqlToggle = this.createIconButton(toolbar, 'codicon-code', 'SQL 控制台');
+		this.sqlToggle = this.createIconButton(toolbar, 'codicon-code', localize('data.sqlConsole'));
 		this.sqlToggle.addEventListener('click', () => this.toggleSqlConsole());
 
 		if (this.options.dataFiles) {
-			const openFile = this.createIconButton(toolbar, 'codicon-folder-opened', '打开数据文件（csv / xlsx）');
+			const openFile = this.createIconButton(toolbar, 'codicon-folder-opened', localize('data.openFile'));
 			openFile.addEventListener('click', () => void this.pickFile());
 		}
 
@@ -135,14 +136,14 @@ export class DataBrowserView extends Disposable {
 			const ask = document.createElement('button');
 			ask.className = 'data-browser-button data-browser-ask';
 			ask.type = 'button';
-			ask.title = '把当前视图作为引用发给 AI';
-			ask.setAttribute('aria-label', '问 AI');
+			ask.title = localize('data.askAiTitle');
+			ask.setAttribute('aria-label', localize('data.askAi'));
 			const glyph = document.createElement('span');
 			glyph.className = 'codicon codicon-comment-discussion';
 			glyph.setAttribute('aria-hidden', 'true');
 			ask.appendChild(glyph);
 			const label = document.createElement('span');
-			label.textContent = '问 AI';
+			label.textContent = localize('data.askAi');
 			ask.appendChild(label);
 			ask.addEventListener('click', () => {
 				const reference = this.composeAskReference();
@@ -164,7 +165,7 @@ export class DataBrowserView extends Disposable {
 		this.sqlInput.className = 'data-browser-sql-input';
 		this.sqlInput.rows = 3;
 		this.sqlInput.spellcheck = false;
-		this.sqlInput.placeholder = '只读 SQL（SELECT …）· ⌘⏎ / Ctrl+Enter 运行';
+		this.sqlInput.placeholder = localize('data.sqlPlaceholder');
 		this.sqlInput.addEventListener('keydown', event => {
 			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
 				event.preventDefault();
@@ -175,14 +176,14 @@ export class DataBrowserView extends Disposable {
 		const runSql = document.createElement('button');
 		runSql.className = 'data-browser-button data-browser-sql-run';
 		runSql.type = 'button';
-		runSql.title = '运行（⌘⏎）';
-		runSql.setAttribute('aria-label', '运行 SQL');
+		runSql.title = localize('data.runTitle');
+		runSql.setAttribute('aria-label', localize('data.runAria'));
 		const runIcon = document.createElement('span');
 		runIcon.className = 'codicon codicon-play';
 		runIcon.setAttribute('aria-hidden', 'true');
 		runSql.appendChild(runIcon);
 		const runLabel = document.createElement('span');
-		runLabel.textContent = '运行';
+		runLabel.textContent = localize('data.run');
 		runSql.appendChild(runLabel);
 		runSql.addEventListener('click', () => this.runConsoleSql());
 		this.sqlConsole.appendChild(runSql);
@@ -201,7 +202,7 @@ export class DataBrowserView extends Disposable {
 		status.appendChild(this.statusText);
 		this.statusSql = document.createElement('code');
 		this.statusSql.className = 'data-browser-status-sql';
-		this.statusSql.title = '点击复制 SQL';
+		this.statusSql.title = localize('data.copySql');
 		this.statusSql.addEventListener('click', () => {
 			const sql = this.statusSql.textContent;
 			if (sql) {
@@ -212,11 +213,11 @@ export class DataBrowserView extends Disposable {
 
 		this.pageSizeSelect = document.createElement('select');
 		this.pageSizeSelect.className = 'data-browser-select data-browser-page-size';
-		this.pageSizeSelect.title = '每页行数';
+		this.pageSizeSelect.title = localize('data.pageSize');
 		for (const size of PAGE_SIZES) {
 			const option = document.createElement('option');
 			option.value = String(size);
-			option.textContent = `${size} 行`;
+			option.textContent = localize('data.pageSizeRows', size);
 			this.pageSizeSelect.appendChild(option);
 		}
 		this.pageSizeSelect.value = String(this.pageSize);
@@ -227,7 +228,7 @@ export class DataBrowserView extends Disposable {
 		});
 		status.appendChild(this.pageSizeSelect);
 
-		this.prevButton = this.createIconButton(status, 'codicon-chevron-left', '上一页');
+		this.prevButton = this.createIconButton(status, 'codicon-chevron-left', localize('data.prevPage'));
 		this.prevButton.addEventListener('click', () => {
 			if (this.page > 0) {
 				this.page -= 1;
@@ -237,7 +238,7 @@ export class DataBrowserView extends Disposable {
 		this.pageLabel = document.createElement('span');
 		this.pageLabel.className = 'data-browser-page';
 		status.appendChild(this.pageLabel);
-		this.nextButton = this.createIconButton(status, 'codicon-chevron-right', '下一页');
+		this.nextButton = this.createIconButton(status, 'codicon-chevron-right', localize('data.nextPage'));
 		this.nextButton.addEventListener('click', () => {
 			if (this.hasNext) {
 				this.page += 1;
@@ -312,7 +313,7 @@ export class DataBrowserView extends Disposable {
 		const source = this.resolveSourceRef(request.source);
 		if (!source) {
 			this.baseQuery = undefined;
-			this.setStatus(`找不到数据源 “${request.source}” — 可能已被删除或不属于当前项目。`, '');
+			this.setStatus(localize('data.sourceMissing', request.source), '');
 			return;
 		}
 		this.sourceSelect.value = source.id;
@@ -367,7 +368,7 @@ export class DataBrowserView extends Disposable {
 
 	/** Tell the host what we're looking at (`dev·orders`) so the tab chip can say so. */
 	private reportContext(): void {
-		this.options.onContextChange?.(this.provider?.contextLabel() ?? '数据');
+		this.options.onContextChange?.(this.provider?.contextLabel() ?? localize('data.tabFallback'));
 	}
 
 	/** The current view as precise, structured reference text for the composer:
@@ -377,11 +378,11 @@ export class DataBrowserView extends Disposable {
 		if (!this.provider || !this.selectedSource) {
 			return undefined;
 		}
-		const lines = ['引用数据浏览器当前视图：', ...this.provider.referenceLines(this.viewState())];
-		lines.push(`- 位置: 第 ${this.page + 1} 页 · 每页 ${this.pageSize} 行`);
+		const lines = [localize('data.ref.header'), ...this.provider.referenceLines(this.viewState())];
+		lines.push(localize('data.ref.position', this.page + 1, this.pageSize));
 		if (this.lastCell) {
-			const anchor = this.lastCell.anchor ? `（该行 ${this.lastCell.anchor.column}=${formatReferenceValue(this.lastCell.anchor.value)}）` : '';
-			lines.push(`- 选中单元格: ${this.lastCell.column} = ${formatReferenceValue(this.lastCell.value)}${anchor}`);
+			const anchor = this.lastCell.anchor ? localize('data.ref.cellAnchor', this.lastCell.anchor.column, formatReferenceValue(this.lastCell.anchor.value)) : '';
+			lines.push(localize('data.ref.cell', this.lastCell.column, formatReferenceValue(this.lastCell.value), anchor));
 		}
 		return `${lines.join('\n')}\n`;
 	}
@@ -398,10 +399,10 @@ export class DataBrowserView extends Disposable {
 		this.resetGrid();
 		if (!this.projectId || !this.options.environmentsService?.available) {
 			this.renderSelects();
-			this.setStatus(this.projectId ? '环境服务不可用。' : '当前会话没有关联项目 — 打开一个项目会话后这里会列出它的数据库。', '');
+			this.setStatus(this.projectId ? localize('data.noEnvService') : localize('data.noProject'), '');
 			return;
 		}
-		this.setStatus('加载数据源…', '');
+		this.setStatus(localize('data.loadingSources'), '');
 		const view = await this.options.environmentsService.get(this.projectId);
 		if (stamp !== this.requestStamp) {
 			return;
@@ -410,7 +411,7 @@ export class DataBrowserView extends Disposable {
 		this.sources = view.dataSources.filter((source): source is BrowsableSource => source.kind === 'database');
 		this.renderSelects();
 		if (this.sources.length === 0) {
-			this.setStatus('项目还没有数据库数据源 — 在项目配置里添加一个。', '');
+			this.setStatus(localize('data.noSources'), '');
 			this.reportContext();
 			return;
 		}
@@ -442,7 +443,7 @@ export class DataBrowserView extends Disposable {
 		if (!this.projectId || !source || !this.options.environmentsService) {
 			return;
 		}
-		this.setStatus('加载表清单…', '');
+		this.setStatus(localize('data.loadingTables'), '');
 		const result = await this.options.environmentsService.listTables(this.projectId, source.id);
 		if (stamp !== this.requestStamp) {
 			return;
@@ -460,7 +461,7 @@ export class DataBrowserView extends Disposable {
 		this.renderTableOptions();
 		this.reportContext();
 		if (this.baseQuery === undefined && this.tables.length === 0) {
-			this.setStatus('这个数据源里没有可见的表。', '');
+			this.setStatus(localize('data.noTables'), '');
 			return;
 		}
 		await this.runQueryNow();
@@ -512,7 +513,7 @@ export class DataBrowserView extends Disposable {
 
 	private async openFile(file: IPickedDataFile, sheet?: string): Promise<void> {
 		const stamp = ++this.requestStamp;
-		this.setStatus('读取文件…', '');
+		this.setStatus(localize('data.readingFile'), '');
 		const result = await this.fileProvider.open(file, sheet);
 		if (stamp !== this.requestStamp) {
 			return;
@@ -556,7 +557,7 @@ export class DataBrowserView extends Disposable {
 		this.reportContext();
 		const state = this.viewState();
 		const description = this.provider.describeQuery(state);
-		this.setStatus('查询中…', description);
+		this.setStatus(localize('data.querying'), description);
 		const result = await this.provider.fetch(state);
 		if (stamp !== this.requestStamp) {
 			return;
@@ -570,7 +571,7 @@ export class DataBrowserView extends Disposable {
 		}
 		this.hasNext = result.hasNext;
 		this.buildGrid(result.columns, result.rows);
-		this.setStatus(`${result.rows.length} 行${result.hasNext ? '+' : ''}${result.note ? ` / ${result.note}` : ''} · ${result.durationMs}ms`, description);
+		this.setStatus(localize('data.status', result.rows.length, result.hasNext ? '+' : '', result.note ? ` / ${result.note}` : '', result.durationMs), description);
 		this.updatePager();
 	}
 
@@ -618,14 +619,14 @@ export class DataBrowserView extends Disposable {
 		if (this.baseQuery !== undefined) {
 			const option = document.createElement('option');
 			option.value = QUERY_OPTION;
-			option.textContent = '查询结果';
+			option.textContent = localize('data.queryResult');
 			this.tableSelect.appendChild(option);
 		}
 		this.tables.forEach((table, index) => {
 			const option = document.createElement('option');
 			option.value = String(index);
 			const qualified = table.schema ? `${table.schema}.${table.name}` : table.name;
-			option.textContent = table.estimatedRows !== undefined ? `${qualified}（约 ${table.estimatedRows} 行）` : qualified;
+			option.textContent = table.estimatedRows !== undefined ? `${qualified}${localize('data.rowsApproxSuffix', table.estimatedRows)}` : qualified;
 			this.tableSelect.appendChild(option);
 		});
 		this.tableSelect.disabled = this.tables.length === 0 && this.baseQuery === undefined;
@@ -698,7 +699,7 @@ export class DataBrowserView extends Disposable {
 			columns: definitions,
 			layout: 'fitDataFill',
 			height: '100%',
-			placeholder: '0 行',
+			placeholder: localize('data.zeroRows'),
 		});
 		this.table.on('dataFiltering', () => this.scheduleFilterSync());
 		this.table.on('tableBuilt', () => {
@@ -780,7 +781,7 @@ export class DataBrowserView extends Disposable {
 	}
 
 	private updatePager(): void {
-		this.pageLabel.textContent = `第 ${this.page + 1} 页`;
+		this.pageLabel.textContent = localize('data.pageN', this.page + 1);
 		this.prevButton.disabled = this.page === 0;
 		this.nextButton.disabled = !this.hasNext;
 	}
