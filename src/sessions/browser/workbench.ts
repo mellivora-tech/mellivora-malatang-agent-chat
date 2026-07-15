@@ -193,6 +193,10 @@ export class Workbench {
 		const width = this.root.clientWidth || window.innerWidth;
 		const height = this.root.clientHeight || window.innerHeight;
 		this.grid.layout(width, height);
+		// The titlebar's drag overlay retreats from the side pane's tab strip
+		// (titlebarpart.css) — keep its width current across every relayout.
+		const auxWidth = this.grid.isPartVisible('auxiliaryBar') ? this.auxiliaryBarPart.element.offsetWidth : 0;
+		this.root.style.setProperty('--workbench-aux-width', `${auxWidth}px`);
 	}
 
 	private toggleSidebar(): void {

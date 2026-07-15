@@ -11,17 +11,19 @@
 	min-height: 0;
 }
 
-.auxiliary-bar:not(.auxiliary-empty) {
-	padding-top: var(--vscode-agents-size-titlebar-height);
-	box-sizing: border-box;
-}
-
+/* The tab strip IS the pane's top row: it shares the titlebar band (Codex-style)
+   instead of leaving it empty and spending a second row below. The titlebar's
+   drag overlay retreats from the pane (titlebarpart.css, --workbench-aux-width)
+   so the chips are clickable; the right padding clears the titlebar icons
+   (side-pane toggle, help) that live in that same band. */
 .auxiliary-tabs {
+	-webkit-app-region: no-drag;
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 4px;
 	min-width: 0;
-	padding: 8px;
+	height: var(--vscode-agents-size-titlebar-height);
+	padding: var(--vscode-agents-space-7) var(--vscode-agents-space-84) 0 var(--vscode-agents-space-8);
 	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	box-sizing: border-box;
 }
