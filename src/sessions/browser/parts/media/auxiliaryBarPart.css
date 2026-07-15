@@ -22,11 +22,13 @@
 	align-items: flex-start;
 	gap: 4px;
 	min-width: 0;
-	height: var(--vscode-agents-size-titlebar-height);
-	/* 4px top, not the titlebar's 7px: our controls are 28px tall vs the
-	   titlebar icons' 22px — aligning CENTERS (both at y=18), not top edges,
-	   is what puts the ⤢ on one line with the pane-toggle/help icons. */
-	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-84) 0 var(--vscode-agents-space-8);
+	/* The pane sits 5px below the window top (4px stage margin + 1px part
+	   border), so this strip lives in a shifted coordinate space. To put our
+	   controls' CENTERS on the titlebar icons' line (absolute y=18): zero top
+	   padding + 26px controls → 5 + 13 = 18. The height sheds those same 5px
+	   so the strip's bottom border still lands on the titlebar band's edge. */
+	height: calc(var(--vscode-agents-size-titlebar-height) - var(--vscode-agents-size-stage-margin) - var(--vscode-agents-space-1));
+	padding: 0 var(--vscode-agents-space-84) 0 var(--vscode-agents-space-8);
 	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	box-sizing: border-box;
 }
@@ -36,7 +38,7 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	height: 28px;
+	height: 26px;
 	min-width: 0;
 	padding: 0 10px;
 	white-space: nowrap;
@@ -96,8 +98,8 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 28px;
+	width: 26px;
+	height: 26px;
 	flex: 0 0 auto;
 	border: 1px solid transparent;
 	border-radius: 6px;
