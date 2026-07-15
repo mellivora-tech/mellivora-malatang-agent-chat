@@ -498,9 +498,16 @@
 	outline-offset: var(--vscode-agents-space-1);
 }
 
+/* Full opaque text-primary read as too harsh here: this is a tightly packed
+   list of small-size rows, not a single heading, and EVERY row (not just the
+   open one) was shouting at full strength. Softened slightly so it still
+   reads as the darkest tier under the project name (72%), while the actually
+   OPEN session (.active, below) keeps the full-strength color as the one
+   real "you are here" signal. */
 .sessions-project-task-title {
 	flex: 1 1 auto;
 	min-width: 0;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 85%, transparent);
 	text-align: left;
 }
 
