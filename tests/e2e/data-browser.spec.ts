@@ -392,3 +392,40 @@ test('header filters compile to server-side WHERE and survive sorting', async ()
 		await app?.close();
 	}
 });
+
+test('SQL console: run a read-only statement, writes are refused by the gate', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await openDataTab(page);
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first()).toBeVisible();
+
+		// Opening the console prefills the selected table's SELECT — edit and run.
+		await page.locator('.data-browser-button[title="SQL 控制台"]').click();
+		const input = page.locator('.data-browser-sql-input');
+		await expect(input).toHaveValue('SELECT * FROM shop.orders');
+		await input.fill('SELECT id, name, amount, created_at FROM shop.orders WHERE (`amount` >= 1100)');
+		await page.locator('.data-browser-sql-run').click();
+
+		// Query mode: derived-table wrap, filtered rows, synthetic table entry.
+		await expect(page.locator('.data-browser-status-sql')).toContainText('AS `_browse` LIMIT 101');
+		await expect(page.locator('.data-browser-table')).toHaveValue('query');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('110');
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('dev·查询');
+
+		// A write statement never reaches a driver — the gate answers instead.
+		await input.fill('DELETE FROM shop.orders');
+		await input.press('Meta+Enter');
+		await expect(page.locator('.data-browser-status-text')).toContainText('只允许单条只读查询');
+	} finally {
+		await app?.close();
+	}
+});

@@ -45,6 +45,8 @@ export class DataBrowserView extends Disposable {
 	private readonly gridHost: HTMLElement;
 	private readonly statusText: HTMLElement;
 	private readonly statusSql: HTMLElement;
+	private readonly sqlConsole: HTMLElement;
+	private readonly sqlInput: HTMLTextAreaElement;
 
 	private table: TabulatorFull | undefined;
 	private readonly resizeObserver: ResizeObserver;
@@ -97,6 +99,9 @@ export class DataBrowserView extends Disposable {
 
 		this.refreshButton = this.createIconButton(toolbar, 'codicon-refresh', '刷新');
 		this.refreshButton.addEventListener('click', () => void this.runQueryNow());
+
+		const sqlToggle = this.createIconButton(toolbar, 'codicon-code', 'SQL 控制台');
+		sqlToggle.addEventListener('click', () => this.toggleSqlConsole());
 
 		const spacer = document.createElement('span');
 		spacer.className = 'data-browser-spacer';
@@ -161,6 +166,40 @@ export class DataBrowserView extends Disposable {
 			toolbar.appendChild(ask);
 		}
 
+		// The SQL console (P2): an editable strip between toolbar and grid. Runs
+		// enter query mode — the same derived-table paging/sorting/filtering as a
+		// chat hand-off, behind the same main-side read-only gate.
+		this.sqlConsole = document.createElement('div');
+		this.sqlConsole.className = 'data-browser-sql';
+		this.sqlConsole.hidden = true;
+		root.appendChild(this.sqlConsole);
+		this.sqlInput = document.createElement('textarea');
+		this.sqlInput.className = 'data-browser-sql-input';
+		this.sqlInput.rows = 3;
+		this.sqlInput.spellcheck = false;
+		this.sqlInput.placeholder = '只读 SQL（SELECT …）· ⌘⏎ / Ctrl+Enter 运行';
+		this.sqlInput.addEventListener('keydown', event => {
+			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+				event.preventDefault();
+				this.runConsoleSql();
+			}
+		});
+		this.sqlConsole.appendChild(this.sqlInput);
+		const runSql = document.createElement('button');
+		runSql.className = 'data-browser-button data-browser-sql-run';
+		runSql.type = 'button';
+		runSql.title = '运行（⌘⏎）';
+		runSql.setAttribute('aria-label', '运行 SQL');
+		const runIcon = document.createElement('span');
+		runIcon.className = 'codicon codicon-play';
+		runIcon.setAttribute('aria-hidden', 'true');
+		runSql.appendChild(runIcon);
+		const runLabel = document.createElement('span');
+		runLabel.textContent = '运行';
+		runSql.appendChild(runLabel);
+		runSql.addEventListener('click', () => this.runConsoleSql());
+		this.sqlConsole.appendChild(runSql);
+
 		this.gridHost = document.createElement('div');
 		this.gridHost.className = 'data-browser-grid';
 		root.appendChild(this.gridHost);
@@ -219,6 +258,8 @@ export class DataBrowserView extends Disposable {
 		}
 		this.sourceSelect.value = source.id;
 		this.baseQuery = request.sql;
+		// The console (opened or not) picks up the hand-off so it's editable.
+		this.sqlInput.value = request.sql;
 		this.sort = undefined;
 		this.page = 0;
 		this.columnFilters.clear();
@@ -537,6 +578,32 @@ export class DataBrowserView extends Disposable {
 		});
 	}
 
+	private toggleSqlConsole(): void {
+		this.sqlConsole.hidden = !this.sqlConsole.hidden;
+		if (!this.sqlConsole.hidden) {
+			// Something editable to start from: the active hand-off query, or the
+			// selected table's SELECT.
+			if (this.sqlInput.value.trim() === '') {
+				const table = this.selectedTable;
+				this.sqlInput.value = this.baseQuery ?? (table ? compileSelectAll(table) : '');
+			}
+			this.sqlInput.focus();
+		}
+	}
+
+	private runConsoleSql(): void {
+		const sql = this.sqlInput.value.trim();
+		if (sql === '' || !this.selectedSource) {
+			return;
+		}
+		this.baseQuery = sql;
+		this.sort = undefined;
+		this.page = 0;
+		this.columnFilters.clear();
+		this.renderTableOptions();
+		void this.runQueryNow();
+	}
+
 	/** Debounce typing, then re-query iff the filter set actually changed. */
 	private scheduleFilterSync(): void {
 		clearTimeout(this.filterDebounce);
@@ -632,6 +699,11 @@ export function formatCellValue(value: unknown, category: DbColumnCategory): HTM
 	}
 	span.textContent = String(value);
 	return span;
+}
+
+/** The console's starting point for a table: its plain SELECT (identifiers unquoted for editability). */
+function compileSelectAll(table: IDbTable): string {
+	return `SELECT * FROM ${table.schema ? `${table.schema}.` : ''}${table.name}`;
 }
 
 /** Cell value → inline reference text (bounded; NULL/dates/objects readable). */
