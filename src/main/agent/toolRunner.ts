@@ -89,7 +89,7 @@ function partitionBySafety(toolUses: readonly IToolUseBlock[], tools: readonly I
 	};
 	for (const use of toolUses) {
 		const tool = tools.find(candidate => candidate.name === use.name);
-		let safe = false;
+		let safe: boolean;
 		try {
 			safe = tool !== undefined && tool.isConcurrencySafe(use.input);
 		} catch {

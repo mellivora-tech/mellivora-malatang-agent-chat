@@ -323,7 +323,7 @@ test('sessions persist across app relaunch', async () => {
 		await expect(row).toBeVisible();
 		await row.click();
 
-		await expect(page.locator('.conversation-context-title')).toHaveText('persist me');
+		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'persist me' })).toBeVisible();
 		await expect(page.locator('.conversation-message')).toHaveCount(2);
 		await expect(page.locator('.conversation-message.user .conversation-message-bubble')).toHaveText('persist me');
 		await expect(page.locator('.conversation-message.assistant .conversation-message-text')).toHaveText(
@@ -426,7 +426,7 @@ test('pin and archive survive an app relaunch', async () => {
 
 		const zcodeRow = first.page.locator('[data-project-id="zcodeproject"] .sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' });
 		await zcodeRow.hover();
-		await zcodeRow.locator('.sessions-project-task-action').click();
+		await zcodeRow.locator('.sessions-project-task-action[title="Archive task"]').click();
 		await expect(first.page.locator('[data-project-id="zcodeproject"] .sessions-project-empty')).toHaveText('No tasks yet');
 
 		await first.app.close();
@@ -566,7 +566,7 @@ test('enter starts a session from the new session landing', async () => {
 		await page.locator('.new-session-input').press('Enter');
 
 		await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/mode-conversation/);
-		await expect(page.locator('.conversation-context-title')).toHaveText('hello enter');
+		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'hello enter' })).toBeVisible();
 
 		expect(rendererErrors).toEqual([]);
 	} finally {
@@ -681,7 +681,7 @@ test('starting multiple conversations keeps a single active conversation page', 
 		await page.locator('.new-session-input').fill('first task');
 		await page.locator('.new-session-send-button').click();
 		await expect(page.locator('.session-view')).toHaveCount(1);
-		await expect(page.locator('.conversation-context-title')).toHaveText('first task');
+		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'first task' })).toBeVisible();
 
 		await page.locator('.sessions-sidebar-header .action-item').filter({ hasText: 'New task' }).click();
 		await expect(page.locator('.sessions-new-session-view')).toBeVisible();
@@ -690,7 +690,6 @@ test('starting multiple conversations keeps a single active conversation page', 
 		await page.locator('.new-session-send-button').click();
 
 		await expect(page.locator('.session-view')).toHaveCount(1);
-		await expect(page.locator('.conversation-context-title')).toHaveText('second task');
 		await expect(page.locator('.sessions-project-task-row').filter({ hasText: 'first task' })).toBeVisible();
 		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'second task' })).toBeVisible();
 
@@ -762,7 +761,7 @@ test('completed conversation shows read-only idle message state', async () => {
 		await page.waitForSelector('.sessions-sidebar');
 		await page.locator('.sessions-project-task-row').filter({ hasText: 'Ship settings sidebar cleanup' }).click();
 
-		await expect(page.locator('.conversation-context-title')).toHaveText('Ship settings sidebar cleanup');
+		await expect(page.locator('.sessions-project-task-row.active').filter({ hasText: 'Ship settings sidebar cleanup' })).toBeVisible();
 		await expect(page.locator('.conversation-view')).toHaveAttribute('data-status', 'completed');
 		await expect(page.locator('.conversation-view')).toHaveAttribute('data-interactivity', 'read-only');
 		await expect(page.locator('.conversation-message')).toHaveCount(3);
@@ -808,7 +807,10 @@ test('empty new-session submit keeps focus in the landing composer', async () =>
 
 		const input = page.locator('.new-session-input');
 		await input.fill('   ');
-		await page.locator('.new-session-send-button').click();
+		// Whitespace-only input can no longer be submitted at all: the send button
+		// disables, and Enter is a no-op — the landing stays put, focus intact.
+		await expect(page.locator('.new-session-send-button')).toBeDisabled();
+		await input.press('Enter');
 
 		await expect(page.locator('.sessions-new-session-view')).toBeVisible();
 		await expect(input).toBeFocused();
@@ -1093,7 +1095,7 @@ async function captureAndAssert(page: Page, screenshot: { readonly width: number
 	await expect(page.locator('.new-session-composer-context')).toContainText('Obsidian');
 	await expect(page.locator('.new-session-input')).toHaveAttribute('placeholder', /Ask Mellivora anything/);
 	await expect(page.locator('.new-session-input')).toBeVisible();
-	await expect(page.locator('.new-session-access')).toContainText('Full access');
+	await expect(page.locator('.new-session-access')).toContainText('Ask before changes');
 	// No provider is configured in this fixture, so the picker shows the empty label.
 	await expect(page.locator('.new-session-model')).toContainText('No model');
 	// The agent-picker placeholder is gone until agents ship.
@@ -1366,7 +1368,7 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 	await expect(secondProject.locator('.sessions-project-empty')).toHaveCount(0);
 	await expect(secondProject.locator('.sessions-project-session-list .sessions-list-row')).toHaveCount(1);
 	await expect(secondProject.locator('.sessions-list-row-title')).toHaveText('Ship settings sidebar cleanup');
-	await expect(secondProject.locator('.sessions-project-task-time')).toHaveText('3h ago');
+	await expect(secondProject.locator('.sessions-project-task-time')).toHaveText('3h');
 
 	const sidebarMetrics = await firstProject
 		.locator('.sessions-list-row')
@@ -1392,8 +1394,9 @@ async function assertSidebarSessionGroups(page: Page): Promise<void> {
 
 	expect(sidebarMetrics.rowHeight).toBeGreaterThanOrEqual(30);
 	expect(sidebarMetrics.rowHeight).toBeLessThanOrEqual(34);
-	expect(sidebarMetrics.titleLeftToSidebar).toBeGreaterThanOrEqual(44);
-	expect(sidebarMetrics.titleLeftToSidebar).toBeLessThanOrEqual(50);
+	// Task titles sit past the 46px name axis plus the row's 16px status icon.
+	expect(sidebarMetrics.titleLeftToSidebar).toBeGreaterThanOrEqual(60);
+	expect(sidebarMetrics.titleLeftToSidebar).toBeLessThanOrEqual(66);
 	expect(sidebarMetrics.titleFontSize).toBe('13px');
 	expect(sidebarMetrics.timeFontSize).toBe('12px');
 	expect(sidebarMetrics.statusDisplay).toBe('none');
@@ -1429,7 +1432,8 @@ async function assertProjectListSpacingAndIconInset(projects: Locator): Promise<
 	expect(metrics.projectListGap).toBe('4px');
 	expect(metrics.projectGroupGap).toBeLessThanOrEqual(6);
 	expect(metrics.projectIconLeft).toBe(22);
-	expect(metrics.projectTitleLeft).toBe(48);
+	// 22px icon inset + 16px icon + 8px gap.
+	expect(metrics.projectTitleLeft).toBe(46);
 }
 
 async function assertCollapsibleSidebarSection(section: Locator, title: string): Promise<void> {
@@ -1449,12 +1453,13 @@ async function assertCollapsibleSidebarSection(section: Locator, title: string):
 
 async function assertProjectTaskRowInteraction(firstProject: Locator): Promise<void> {
 	const taskRow = firstProject.locator('.sessions-project-task-row').first();
-	const action = taskRow.locator('.sessions-project-task-action');
+	// Rename shares the action class — pin to the archive button explicitly.
+	const action = taskRow.locator('.sessions-project-task-action[title="Archive task"]');
 	const deleteAction = taskRow.locator('.sessions-project-task-delete');
 	const time = taskRow.locator('.sessions-project-task-time');
 
 	await expect(taskRow).toBeVisible();
-	await expect(time).toHaveText('2h ago');
+	await expect(time).toHaveText('2h');
 	await expect(action).toHaveAttribute('title', 'Archive task');
 	await expect(action).toHaveAttribute('aria-label', 'Archive 梳理下文档');
 	await expect(action.locator('.sessions-project-task-tooltip')).toHaveText('梳理下文档');
@@ -1559,12 +1564,15 @@ async function assertSidebarListTitleAlignment(page: Page): Promise<void> {
 		};
 	});
 
-	expect(metrics.titleOffsetToken).toBe('48px');
-	expect(metrics.pinnedTitleLeft).toBe(48);
-	expect(metrics.obsidianNameLeft).toBe(metrics.pinnedTitleLeft);
-	expect(metrics.obsidianEmptyLeft).toBe(metrics.pinnedTitleLeft);
-	expect(metrics.zcodeNameLeft).toBe(metrics.pinnedTitleLeft);
-	expect(metrics.zcodeTaskTitleLeft).toBe(metrics.pinnedTitleLeft);
+	// Two axes: project names and pinned titles sit on the token offset; project
+	// task rows carry a leading status icon, so their titles — and the empty
+	// placeholder, which lives on the task axis — indent 16px past the names.
+	expect(metrics.titleOffsetToken).toBe('46px');
+	expect(metrics.obsidianNameLeft).toBe(46);
+	expect(metrics.zcodeNameLeft).toBe(46);
+	expect(metrics.pinnedTitleLeft).toBe(46);
+	expect(metrics.zcodeTaskTitleLeft).toBe(62);
+	expect(metrics.obsidianEmptyLeft).toBe(metrics.zcodeTaskTitleLeft);
 }
 
 async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
@@ -1721,15 +1729,20 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 	const activeRow = page.locator('.sessions-project-task-row.active').filter({ hasText: 'hello' });
 	await expect(activeRow).toBeVisible();
 	await expect(activeRow.locator('.sessions-project-task-title')).toHaveText('hello');
-	await expect(activeRow.locator('.sessions-project-task-time')).toHaveText('just now');
+	// Loose relative-time match: the row was created moments ago ("now", or a
+	// minute-form on a slow run) — the exact copy must not re-break this test.
+	await expect(activeRow.locator('.sessions-project-task-time')).toHaveText(/^(now|\dm)$/);
 	await expect(activeRow.locator('.sessions-project-task-spinner')).toBeVisible();
 	await expect(activeRow.locator('.sessions-project-task-pin')).toHaveCount(1);
-	await expect(activeRow.locator('.sessions-project-task-action')).toHaveCount(1);
+	// Rename + Archive.
+	await expect(activeRow.locator('.sessions-project-task-action')).toHaveCount(2);
 	await expect(activeRow.locator('.sessions-project-task-delete')).toHaveCount(1);
 
-	await expect(page.locator('.conversation-context-title')).toHaveText('hello');
+	// The conversation header carries context pills only — the title lives in
+	// the sidebar row (asserted above). No git repo behind the fixture → no
+	// branch pill either.
 	await expect(page.locator('.conversation-context-workspace').first()).toContainText('No workspace');
-	await expect(page.locator('.conversation-context-branch')).toContainText('main');
+	await expect(page.locator('.conversation-context-branch')).toHaveCount(0);
 	await expect(page.locator('.conversation-context-more')).toBeVisible();
 	await expect(page.locator('.conversation-composer > .conversation-context-bar')).toHaveCount(1);
 	await expect(page.locator('.conversation-transcript > .conversation-context-bar')).toHaveCount(0);
@@ -1796,11 +1809,12 @@ async function assertRunningConversationShell(page: Page): Promise<void> {
 
 	const composer = page.locator('.conversation-composer.running');
 	await expect(composer).toBeVisible();
-	await expect(composer.locator('.conversation-input')).toHaveAttribute('placeholder', 'Keep typing to queue follow-up changes');
-	await expect(composer.locator('.conversation-access')).toContainText('Full access');
+	await expect(composer.locator('.conversation-input')).toHaveAttribute('placeholder', 'Working… your next message will be queued');
+	await expect(composer.locator('.conversation-access')).toContainText('Ask before changes');
 	await expect(composer.locator('.conversation-model')).toContainText('No model');
 	await expect(composer.locator('.conversation-agent')).toHaveCount(0);
-	await expect(composer.locator('.conversation-reconnect-status')).toContainText(/Reconnecting\.\.\. \d+\/10/);
+	// A missing model fails fast with a friendly reply — no reconnect loop runs.
+	await expect(composer.locator('.conversation-reconnect-status')).toBeHidden();
 	await expect(composer.locator('.conversation-stop-button')).toBeVisible();
 	await assertConversationToolbarInteraction(composer);
 }
@@ -1839,7 +1853,8 @@ async function assertConversationToolbarInteraction(composer: Locator): Promise<
 	expect(metrics.rightGap).toBe('4px');
 	const control = (selector: string) => metrics.controls[selector]!;
 	expect(control('.conversation-access').height).toBe(28);
-	expect(control('.conversation-reconnect-status').height).toBe(28);
+	// No reconnect is running in this state — the indicator stays hidden.
+	expect(control('.conversation-reconnect-status').hidden).toBe(true);
 	expect(control('.conversation-model').height).toBe(28);
 	expect(control('.conversation-stop-button').width).toBe(28);
 	expect(control('.conversation-stop-button').height).toBe(28);
@@ -1959,7 +1974,11 @@ async function assertHistoricalConversationMessageLayout(page: Page, expectedSta
 	// User bubble right-aligns to the message column (same right edge as the assistant row), not the narrower composer.
 	expect(metrics.user.rowRight).toBe(metrics.assistant.rowRight);
 	expect(metrics.user.bubbleRight).toBe(metrics.user.rowRight);
-	expect(metrics.assistant.bodyLeft).toBe(metrics.tool.bodyLeft);
+	// Assistant rows are full-width prose (no avatar column); tool rows keep the
+	// 28px avatar + 10px gap, indenting their body by 38.
+	expect(metrics.assistant.avatarLeft).toBeNull();
+	expect(metrics.assistant.bodyLeft).toBe(metrics.assistant.rowLeft);
+	expect(metrics.tool.bodyLeft).toBe(metrics.tool.rowLeft + 38);
 	expect(metrics.assistant.textLeft).toBe(metrics.assistant.bodyLeft);
 	expect(metrics.tool.textLeft).toBe(metrics.tool.bodyLeft);
 	expect(metrics.tool.detailLeft).toBe(metrics.tool.bodyLeft);
@@ -1993,7 +2012,8 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
 	await expect(changesView).toBeVisible();
 	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
-	await expect(changesView.locator('.changes-summary-stat.files .changes-summary-value')).toHaveText('5');
+	// A fresh mock conversation has no changes summary — the empty state shows.
+	await expect(changesView.locator('.changes-empty')).toContainText('No changed files for this session');
 
 	await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/side-pane-open/);
 	await assertSidePaneDockedToStage(page);
