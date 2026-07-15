@@ -458,6 +458,16 @@
 	margin: 0 0 var(--vscode-agents-space-10);
 }
 
+/* **bold** renders as a bare <strong> — with no rule, it falls on the
+   browser's default UA bold (700), a full step heavier than every other
+   "emphasis" tier in this app (headings and table th both use the semiBold
+   token, 600). Two different "boldnesses" ended up coexisting in the same
+   reply — **bold** paragraph text visibly outweighs a heading right above
+   it, though both read as "a section title" to the eye. */
+.conversation-markdown strong {
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
 .conversation-markdown .md-heading {
 	margin: var(--vscode-agents-space-18) 0 var(--vscode-agents-space-8);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
