@@ -225,11 +225,11 @@ export interface IDataSourceTestResult {
 
 /** Broad column type category, normalized main-side from the driver's type code —
  *  the renderer aligns/formats by category and never sees pg OIDs or mysql codes. */
-export type DbColumnCategory = 'text' | 'number' | 'boolean' | 'date' | 'json';
+export type DataColumnCategory = 'text' | 'number' | 'boolean' | 'date' | 'json';
 
-export interface IDbColumn {
+export interface IDataColumn {
 	readonly name: string;
-	readonly category: DbColumnCategory;
+	readonly category: DataColumnCategory;
 }
 
 /** A table (or view) in a database data source's catalog. */
@@ -242,7 +242,7 @@ export interface IDbTable {
 
 /** Outcome of a read-only browse query — errors come back as a renderable message, never a throw. */
 export type IDataQueryResult =
-	| { readonly ok: true; readonly columns: readonly IDbColumn[]; readonly rows: readonly (readonly unknown[])[]; readonly truncated: boolean; readonly durationMs: number }
+	| { readonly ok: true; readonly columns: readonly IDataColumn[]; readonly rows: readonly (readonly unknown[])[]; readonly truncated: boolean; readonly durationMs: number }
 	| { readonly ok: false; readonly message: string; readonly durationMs: number };
 
 export type IDbTablesResult =

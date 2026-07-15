@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { DatabaseDriver, DbColumnCategory, IDbTable } from '../../../services/environments/common/environments.js';
+import type { DatabaseDriver, DataColumnCategory, IDbTable } from '../../../services/environments/common/environments.js';
 
 /**
  * Grid state → SQL, compiled renderer-side. The main process stays a pure
@@ -73,7 +73,7 @@ function compilePageClauses(driver: DatabaseDriver, state: IBrowseState): string
  * still hostile is over-rejected downstream by isReadOnlySql — the clause never
  * reaches a driver unless the WHOLE statement stays a pure read.
  */
-export function compileColumnFilter(driver: DatabaseDriver, column: { readonly name: string; readonly category: DbColumnCategory }, raw: string): string | undefined {
+export function compileColumnFilter(driver: DatabaseDriver, column: { readonly name: string; readonly category: DataColumnCategory }, raw: string): string | undefined {
 	const value = raw.trim();
 	if (value === '') {
 		return undefined;

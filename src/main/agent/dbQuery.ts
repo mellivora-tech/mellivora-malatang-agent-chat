@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { DbColumnCategory, IDatabaseCoordinates, IDataSourceSecret, IDbColumn, IDbTable } from '../../sessions/services/environments/common/environments.js';
+import type { DataColumnCategory, IDatabaseCoordinates, IDataSourceSecret, IDataColumn, IDbTable } from '../../sessions/services/environments/common/environments.js';
 
 export interface IQueryResult {
-	readonly columns: readonly IDbColumn[];
+	readonly columns: readonly IDataColumn[];
 	readonly rows: readonly (readonly unknown[])[];
 	readonly truncated: boolean;
 }
@@ -41,7 +41,7 @@ const PG_DATE_OIDS = new Set([1082, 1083, 1114, 1184, 1266]);
 const PG_JSON_OIDS = new Set([114, 3802]);
 
 /** Broad category for a Postgres `dataTypeID` (exported for tests). */
-export function pgColumnCategory(dataTypeID: number): DbColumnCategory {
+export function pgColumnCategory(dataTypeID: number): DataColumnCategory {
 	if (PG_NUMBER_OIDS.has(dataTypeID)) {
 		return 'number';
 	}
@@ -64,7 +64,7 @@ const MYSQL_NUMBER_TYPES = new Set([0, 1, 2, 3, 4, 5, 8, 9, 13, 16, 246]);
 const MYSQL_DATE_TYPES = new Set([7, 10, 11, 12, 14]);
 
 /** Broad category for a mysql2 field type code (exported for tests). */
-export function mysqlColumnCategory(type: number): DbColumnCategory {
+export function mysqlColumnCategory(type: number): DataColumnCategory {
 	if (MYSQL_NUMBER_TYPES.has(type)) {
 		return 'number';
 	}

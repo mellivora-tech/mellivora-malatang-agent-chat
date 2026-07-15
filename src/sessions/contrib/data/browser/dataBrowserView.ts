@@ -7,11 +7,12 @@ import 'tabulator-tables/dist/css/tabulator.min.css';
 import { TabulatorFull, type CellComponent, type ColumnDefinition } from 'tabulator-tables';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import type { IEnvironmentsService } from '../../../services/environments/browser/environmentsService.js';
-import type { DbColumnCategory, IDatabaseSource, IDbColumn, IDbTable } from '../../../services/environments/common/environments.js';
+import type { DataColumnCategory, IDatabaseSource, IDataColumn, IDbTable } from '../../../services/environments/common/environments.js';
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import type { ISessionDataBrowse } from '../../../services/sessions/common/session.js';
-import { compileBrowseSql, compileColumnFilter, compileQueryBrowseSql, type IBrowseSort } from '../common/browseSql.js';
+import type { IDataProvider, IDataSort, IDataViewState } from '../common/dataProvider.js';
+import { SqlDataProvider } from './sqlDataProvider.js';
 
 export interface IDataBrowserViewOptions {
 	readonly environmentsService?: IEnvironmentsService;
@@ -50,11 +51,13 @@ export class DataBrowserView extends Disposable {
 
 	private table: TabulatorFull | undefined;
 	private readonly resizeObserver: ResizeObserver;
+	/** The source-specific brain (#7): SQL today; files/Redis/ES slot in beside it. */
+	private readonly provider: IDataProvider | undefined;
 	private projectId: string | undefined;
 	private sources: readonly BrowsableSource[] = [];
 	private environmentNames = new Map<string, string>();
 	private tables: readonly IDbTable[] = [];
-	private sort: IBrowseSort | undefined;
+	private sort: IDataSort | undefined;
 	private page = 0;
 	private pageSize = 100;
 	private hasNext = false;
@@ -69,7 +72,7 @@ export class DataBrowserView extends Disposable {
 	/** Header-filter values by field (`c0`…): raw user text, compiled to WHERE per query. */
 	private columnFilters = new Map<string, string>();
 	/** Columns behind the current grid — filter fields translate through it. */
-	private gridColumns: readonly IDbColumn[] = [];
+	private gridColumns: readonly IDataColumn[] = [];
 	/** Column signature of the live Tabulator: matching results only replace data, keeping filter focus. */
 	private gridSignature: string | undefined;
 	private filterDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -245,8 +248,28 @@ export class DataBrowserView extends Disposable {
 		});
 		this.resizeObserver.observe(this.gridHost);
 
+		this.provider = this.options.environmentsService
+			? new SqlDataProvider({
+					service: this.options.environmentsService,
+					getProjectId: () => this.projectId,
+					getSource: () => this.selectedSource,
+					getTable: () => this.selectedTable,
+					getBaseQuery: () => this.baseQuery,
+					getEnvironmentName: environmentId => this.environmentNames.get(environmentId),
+				})
+			: undefined;
+
 		this.updatePager();
 		this.sourcesReady = this.loadSources();
+	}
+
+	/** The grid's interaction state, in the provider contract's terms. */
+	private viewState(): IDataViewState {
+		const filters = new Map<number, string>();
+		for (const [field, value] of this.columnFilters) {
+			filters.set(Number(field.slice(1)), value);
+		}
+		return { page: this.page, pageSize: this.pageSize, ...(this.sort ? { sort: this.sort } : {}), filters };
 	}
 
 	/** Chat → panel hand-off: run the agent's query here and keep exploring it. */
@@ -310,39 +333,17 @@ export class DataBrowserView extends Disposable {
 
 	/** Tell the host what we're looking at (`dev·orders`) so the tab chip can say so. */
 	private reportContext(): void {
-		const source = this.selectedSource;
-		if (!source) {
-			this.options.onContextChange?.('数据');
-			return;
-		}
-		const scope = this.environmentNames.get(source.environmentId) ?? source.label;
-		if (this.baseQuery !== undefined) {
-			this.options.onContextChange?.(`${scope}·查询`);
-			return;
-		}
-		const table = this.selectedTable;
-		this.options.onContextChange?.(table ? `${scope}·${table.name}` : scope);
+		this.options.onContextChange?.(this.provider?.contextLabel() ?? '数据');
 	}
 
-	/** The current view as precise, structured reference text for the composer. */
+	/** The current view as precise, structured reference text for the composer:
+	 *  identity lines come from the provider; position and cell selection are
+	 *  renderer-side and appended here. */
 	private composeAskReference(): string | undefined {
-		const source = this.selectedSource;
-		if (!source) {
+		if (!this.provider || !this.selectedSource) {
 			return undefined;
 		}
-		const scope = this.environmentNames.get(source.environmentId);
-		const lines = ['引用数据浏览器当前视图：'];
-		lines.push(`- 数据源: ${scope ? `${scope} · ` : ''}${source.label}（${source.coordinates.driver} ${source.coordinates.database}）`);
-		const table = this.selectedTable;
-		if (this.baseQuery !== undefined) {
-			lines.push(`- 查询: ${this.baseQuery}`);
-		} else if (table) {
-			lines.push(`- 表: ${table.schema ? `${table.schema}.` : ''}${table.name}${table.estimatedRows !== undefined ? `（约 ${table.estimatedRows} 行）` : ''}`);
-		}
-		const sql = this.statusSql.textContent;
-		if (sql) {
-			lines.push(`- 当前 SQL: ${sql}`);
-		}
+		const lines = ['引用数据浏览器当前视图：', ...this.provider.referenceLines(this.viewState())];
 		lines.push(`- 位置: 第 ${this.page + 1} 页 · 每页 ${this.pageSize} 行`);
 		if (this.lastCell) {
 			const anchor = this.lastCell.anchor ? `（该行 ${this.lastCell.anchor.column}=${formatReferenceValue(this.lastCell.anchor.value)}）` : '';
@@ -444,31 +445,27 @@ export class DataBrowserView extends Disposable {
 		const stamp = ++this.requestStamp;
 		const source = this.selectedSource;
 		const table = this.selectedTable;
-		if (!this.projectId || !source || !this.options.environmentsService || (this.baseQuery === undefined && !table)) {
+		if (!this.provider || !this.projectId || !source || (this.baseQuery === undefined && !table)) {
 			return;
 		}
 		this.reportContext();
-		const filters = this.compiledFilters(source.coordinates.driver);
-		const state = { pageSize: this.pageSize, page: this.page, ...(this.sort ? { sort: this.sort } : {}), ...(filters.length > 0 ? { filters } : {}) };
-		const sql = this.baseQuery !== undefined
-			? compileQueryBrowseSql(source.coordinates.driver, this.baseQuery, state)
-			: compileBrowseSql(source.coordinates.driver, table!, state);
-		this.setStatus('查询中…', sql);
-		const result = await this.options.environmentsService.runQuery(this.projectId, source.id, sql, { rowLimit: this.pageSize });
+		const state = this.viewState();
+		const description = this.provider.describeQuery(state);
+		this.setStatus('查询中…', description);
+		const result = await this.provider.fetch(state);
 		if (stamp !== this.requestStamp) {
 			return;
 		}
 		if (!result.ok) {
 			this.hasNext = false;
 			this.resetGrid();
-			this.setStatus(result.message, sql);
+			this.setStatus(result.message, description);
 			this.updatePager();
 			return;
 		}
-		this.hasNext = result.truncated;
+		this.hasNext = result.hasNext;
 		this.buildGrid(result.columns, result.rows);
-		const estimate = this.baseQuery === undefined && table?.estimatedRows !== undefined ? ` / 约 ${table.estimatedRows} 行` : '';
-		this.setStatus(`${result.rows.length} 行${result.truncated ? '+' : ''}${estimate} · ${result.durationMs}ms`, sql);
+		this.setStatus(`${result.rows.length} 行${result.hasNext ? '+' : ''}${result.note ? ` / ${result.note}` : ''} · ${result.durationMs}ms`, description);
 		this.updatePager();
 	}
 
@@ -519,7 +516,7 @@ export class DataBrowserView extends Disposable {
 		void this.runQueryNow();
 	}
 
-	private buildGrid(columns: readonly IDbColumn[], rows: readonly (readonly unknown[])[]): void {
+	private buildGrid(columns: readonly IDataColumn[], rows: readonly (readonly unknown[])[]): void {
 		this.lastCell = undefined;
 		this.gridColumns = columns;
 		const data = rows.map(row => Object.fromEntries(row.map((value, index) => [`c${index}`, value])));
@@ -536,18 +533,22 @@ export class DataBrowserView extends Disposable {
 		this.table?.destroy();
 		this.gridHost.textContent = '';
 		const anchorColumn = columns[0];
+		// Capabilities gate the interactions: a provider without server-side sort
+		// gets no sort cycling, one without filter gets no filter boxes.
+		const canSort = this.provider?.capabilities.sort ?? false;
+		const canFilter = this.provider?.capabilities.filter ?? false;
 		const definitions: ColumnDefinition[] = columns.map((column, index) => ({
 			title: column.name,
 			field: `c${index}`,
 			headerSort: false,
 			// Filter boxes live inside the header — a click there must not cycle the sort.
 			headerClick: (event: UIEvent) => {
-				if (!(event.target instanceof HTMLElement) || !event.target.closest('.tabulator-header-filter')) {
+				if (canSort && (!(event.target instanceof HTMLElement) || !event.target.closest('.tabulator-header-filter'))) {
 					this.cycleSort(column.name);
 				}
 			},
-			// The filter UI is Tabulator's; the FILTERING is ours (server-side WHERE).
-			headerFilter: 'input' as const,
+			// The filter UI is Tabulator's; the FILTERING is ours (provider-compiled).
+			...(canFilter ? { headerFilter: 'input' as const } : {}),
 			headerFilterFunc: () => true,
 			...(column.category === 'number' ? { hozAlign: 'right' as const } : {}),
 			formatter: (cell: CellComponent) => formatCellValue(cell.getValue(), column.category),
@@ -629,19 +630,6 @@ export class DataBrowserView extends Disposable {
 		}, 350);
 	}
 
-	/** The header-filter values → compiled WHERE clauses for the current columns. */
-	private compiledFilters(driver: 'mysql' | 'postgres'): string[] {
-		const clauses: string[] = [];
-		for (const [field, value] of this.columnFilters) {
-			const column = this.gridColumns[Number(field.slice(1))];
-			const clause = column ? compileColumnFilter(driver, column, value) : undefined;
-			if (clause) {
-				clauses.push(clause);
-			}
-		}
-		return clauses;
-	}
-
 	/** Server-side sort direction, painted onto the live header titles. */
 	private syncSortIndicators(): void {
 		this.gridColumns.forEach((column, index) => {
@@ -675,7 +663,7 @@ export class DataBrowserView extends Disposable {
 }
 
 /** Render a cell value safely (always textContent, never innerHTML). */
-export function formatCellValue(value: unknown, category: DbColumnCategory): HTMLElement {
+export function formatCellValue(value: unknown, category: DataColumnCategory): HTMLElement {
 	const span = document.createElement('span');
 	if (value === null || value === undefined) {
 		span.className = 'data-browser-null';
