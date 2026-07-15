@@ -209,3 +209,45 @@ test('side pane tabs are instances: + menu, close, and view keep-alive', async (
 		await app?.close();
 	}
 });
+
+test('side pane sash: drag pins a user width, double-click returns to automatic', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await openDataTab(page);
+
+		const pane = page.locator('.part.auxiliarybar');
+		const sash = page.locator('.workbench-sash');
+		await expect(sash).toBeVisible();
+		const before = (await pane.boundingBox())!.width;
+
+		// Drag the seam 120px to the left → the pane widens by 120 (pinned).
+		const box = (await sash.boundingBox())!;
+		const centerX = box.x + box.width / 2;
+		const centerY = box.y + box.height / 2;
+		await page.mouse.move(centerX, centerY);
+		await page.mouse.down();
+		await page.mouse.move(centerX - 120, centerY, { steps: 6 });
+		await page.mouse.up();
+		const pinned = (await pane.boundingBox())!.width;
+		expect(Math.round(pinned - before)).toBe(120);
+		// The persisted value lives in the grid's width domain (visual + part margins).
+		const stored = await page.evaluate(() => localStorage.getItem('agentChat.sidePaneWidth'));
+		expect(Math.abs(Number(stored) - pinned)).toBeLessThanOrEqual(8);
+
+		// Double-click the sash: back to automatic allocation, persistence cleared.
+		await sash.dblclick();
+		const reset = (await pane.boundingBox())!.width;
+		expect(Math.round(reset)).toBe(Math.round(before));
+		expect(await page.evaluate(() => localStorage.getItem('agentChat.sidePaneWidth'))).toBeNull();
+	} finally {
+		await app?.close();
+	}
+});

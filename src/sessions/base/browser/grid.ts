@@ -52,11 +52,14 @@ interface IHorizontalEntry {
 	readonly name: HorizontalViewName;
 	readonly view: IGridView;
 	readonly preferredWidth: number;
+	/** Entry-level cap that beats the view's own maximumWidth (user override). */
+	readonly maximumWidth?: number;
 }
 
 export class WorkbenchGrid {
 	private visibility: IWorkbenchGridVisibility;
 	private readonly dimensions: IWorkbenchGridDimensions;
+	private auxiliaryBarWidthOverride: number | undefined;
 
 	constructor(
 		private readonly parts: IWorkbenchGridParts,
@@ -73,6 +76,20 @@ export class WorkbenchGrid {
 
 	isPartVisible(part: keyof IWorkbenchGridVisibility): boolean {
 		return this.visibility[part];
+	}
+
+	/**
+	 * User-dragged side pane width (the sash). While set, the pane is sized to
+	 * exactly this (clamped to its minimum; shrunk only when the window can't
+	 * fit it) instead of absorbing the automatic surplus. `undefined` returns
+	 * to automatic allocation.
+	 */
+	setAuxiliaryBarWidthOverride(width: number | undefined): void {
+		this.auxiliaryBarWidthOverride = width === undefined ? undefined : Math.max(this.parts.auxiliaryBar.minimumWidth, Math.round(width));
+	}
+
+	get auxiliaryBarWidthOverrideValue(): number | undefined {
+		return this.auxiliaryBarWidthOverride;
 	}
 
 	layout(width: number, height: number): void {
@@ -123,10 +140,14 @@ export class WorkbenchGrid {
 		}
 
 		if (this.visibility.auxiliaryBar) {
+			const override = this.auxiliaryBarWidthOverride;
 			entries.push({
 				name: 'auxiliaryBar',
 				view: this.parts.auxiliaryBar,
-				preferredWidth: Math.max(this.parts.auxiliaryBar.minimumWidth, this.dimensions.auxiliaryBarWidth),
+				preferredWidth: Math.max(this.parts.auxiliaryBar.minimumWidth, override ?? this.dimensions.auxiliaryBarWidth),
+				// An override pins the pane: preferred AND maximum, so it neither
+				// absorbs surplus nor exceeds what the user chose.
+				...(override !== undefined ? { maximumWidth: override } : {}),
 			});
 		}
 
@@ -230,7 +251,7 @@ function growWidths(entries: readonly IHorizontalEntry[], widths: number[], surp
 				continue;
 			}
 
-			const maximum = entry.view.maximumWidth ?? Number.POSITIVE_INFINITY;
+			const maximum = entry.maximumWidth ?? entry.view.maximumWidth ?? Number.POSITIVE_INFINITY;
 			const growth = Math.min(Math.max(0, maximum - currentWidth), remaining);
 			widths[index] = currentWidth + growth;
 			remaining -= growth;

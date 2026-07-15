@@ -158,3 +158,36 @@ test('hidden editor and panel stay hidden and receive no layout', () => {
 	assert.equal(editor.calls.length, 0);
 	assert.equal(panel.calls.length, 0);
 });
+
+test('a user width override pins the auxiliary bar instead of the automatic surplus', () => {
+	const { grid, sessions, auxiliaryBar } = createGrid();
+	sessions.setMaximumWidth(986);
+
+	grid.setAuxiliaryBarWidthOverride(500);
+	grid.layout(1920, 900);
+
+	// Pinned at exactly 500: no surplus absorption; the leftover returns to the
+	// chat column as gutters (its cap yields via the High fallback).
+	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 500, height: 900, top: 0, left: 1420 });
+	assert.deepEqual(sessions.calls.at(-1), { width: 1150, height: 900, top: 0, left: 270 });
+
+	// Clearing the override returns to automatic surplus allocation.
+	grid.setAuxiliaryBarWidthOverride(undefined);
+	grid.layout(1920, 900);
+	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 664, height: 900, top: 0, left: 1256 });
+});
+
+test('the override clamps to the pane minimum and yields when the window cannot fit it', () => {
+	const { grid, sessions, auxiliaryBar } = createGrid();
+
+	grid.setAuxiliaryBarWidthOverride(100);
+	grid.layout(1600, 900);
+	// 100 < minimum 260 → pinned at the minimum.
+	assert.equal(auxiliaryBar.calls.at(-1)?.width, 260);
+
+	grid.setAuxiliaryBarWidthOverride(800);
+	grid.layout(1200, 900);
+	// rightWidth 930 can't host 640 + 800: the pane (Low priority) shrinks first.
+	assert.equal(sessions.calls.at(-1)?.width, 640);
+	assert.equal(auxiliaryBar.calls.at(-1)?.width, 290);
+});

@@ -108,6 +108,7 @@ export class Workbench {
 
 	private resizeListener: IDisposable | undefined;
 	private sidebarVisible = true;
+	private readonly sash = document.createElement('div');
 
 	constructor(private readonly container: HTMLElement) {
 		this.root.classList.add('monaco-workbench', 'agent-sessions-workbench', 'shell-gradient-background', `platform-${getPlatform()}`);
@@ -153,6 +154,83 @@ export class Workbench {
 		this.auxiliaryBarPart.create(this.root);
 		this.editorPart.create(this.root);
 		this.panelPart.create(this.root);
+		this.createSash();
+	}
+
+	/**
+	 * The draggable divider on the side pane's left seam. Automatic width
+	 * allocation stays the default; a drag pins the pane to a user width
+	 * (persisted), and a double-click returns to automatic.
+	 */
+	private createSash(): void {
+		this.sash.className = 'workbench-sash';
+		this.sash.style.display = 'none';
+		const handle = document.createElement('span');
+		handle.className = 'codicon codicon-arrow-both workbench-sash-handle';
+		handle.setAttribute('aria-hidden', 'true');
+		this.sash.appendChild(handle);
+		this.sash.title = '拖动调整宽度 · 双击恢复自动';
+		this.root.appendChild(this.sash);
+
+		this.sash.addEventListener('pointerdown', event => {
+			event.preventDefault();
+			this.sash.setPointerCapture(event.pointerId);
+			this.sash.classList.add('dragging');
+			this.root.classList.add('sash-dragging');
+			const startX = event.clientX;
+			// The override lives in the GRID's width domain; the element is smaller
+			// by its part margins (Part.layout subtracts them) — convert, or every
+			// drag would drift by the margin.
+			const auxStyle = getComputedStyle(this.auxiliaryBarPart.element);
+			const auxMargins = (Number.parseFloat(auxStyle.getPropertyValue('--part-margin-left')) || 0) + (Number.parseFloat(auxStyle.getPropertyValue('--part-margin-right')) || 0);
+			const startWidth = this.auxiliaryBarPart.element.offsetWidth + auxMargins;
+			const maxWidth = this.root.clientWidth - (this.sidebarVisible ? this.sidebarPart.element.offsetWidth : 0) - this.sessionsPart.minimumWidth;
+
+			const onMove = (move: PointerEvent): void => {
+				const width = Math.min(maxWidth, Math.max(this.auxiliaryBarPart.minimumWidth, startWidth + (startX - move.clientX)));
+				this.grid.setAuxiliaryBarWidthOverride(width);
+				this.layout();
+			};
+			const onUp = (): void => {
+				this.sash.removeEventListener('pointermove', onMove);
+				this.sash.removeEventListener('pointerup', onUp);
+				this.sash.removeEventListener('pointercancel', onUp);
+				this.sash.classList.remove('dragging');
+				this.root.classList.remove('sash-dragging');
+				const override = this.grid.auxiliaryBarWidthOverrideValue;
+				try {
+					if (override === undefined) {
+						localStorage.removeItem(SIDE_PANE_WIDTH_KEY);
+					} else {
+						localStorage.setItem(SIDE_PANE_WIDTH_KEY, String(override));
+					}
+				} catch {
+					// Persistence is best-effort; the width still applies this session.
+				}
+			};
+			this.sash.addEventListener('pointermove', onMove);
+			this.sash.addEventListener('pointerup', onUp);
+			this.sash.addEventListener('pointercancel', onUp);
+		});
+		this.sash.addEventListener('dblclick', () => {
+			this.grid.setAuxiliaryBarWidthOverride(undefined);
+			try {
+				localStorage.removeItem(SIDE_PANE_WIDTH_KEY);
+			} catch {
+				// Best-effort.
+			}
+			this.layout();
+		});
+
+		// A width the user pinned in an earlier session comes back on launch.
+		try {
+			const persisted = Number(localStorage.getItem(SIDE_PANE_WIDTH_KEY));
+			if (Number.isFinite(persisted) && persisted > 0) {
+				this.grid.setAuxiliaryBarWidthOverride(persisted);
+			}
+		} catch {
+			// Best-effort.
+		}
 	}
 
 	private bindPartServices(): void {
@@ -195,8 +273,16 @@ export class Workbench {
 		this.grid.layout(width, height);
 		// The titlebar's drag overlay retreats from the side pane's tab strip
 		// (titlebarpart.css) — keep its width current across every relayout.
-		const auxWidth = this.grid.isPartVisible('auxiliaryBar') ? this.auxiliaryBarPart.element.offsetWidth : 0;
-		this.root.style.setProperty('--workbench-aux-width', `${auxWidth}px`);
+		const auxVisible = this.grid.isPartVisible('auxiliaryBar');
+		const auxElement = this.auxiliaryBarPart.element;
+		this.root.style.setProperty('--workbench-aux-width', `${auxVisible ? auxElement.offsetWidth : 0}px`);
+		// The sash rides the pane's left seam.
+		this.sash.style.display = auxVisible ? '' : 'none';
+		if (auxVisible) {
+			this.sash.style.left = `${auxElement.offsetLeft - 4}px`;
+			this.sash.style.top = auxElement.style.top;
+			this.sash.style.height = `${auxElement.offsetHeight}px`;
+		}
 	}
 
 	private toggleSidebar(): void {
@@ -206,6 +292,9 @@ export class Workbench {
 		this.layout();
 	}
 }
+
+/** The user-pinned side pane width survives restarts (same store as the theme pref). */
+const SIDE_PANE_WIDTH_KEY = 'agentChat.sidePaneWidth';
 
 function getPlatform(): NodeJS.Platform {
 	return (globalThis as AgentWindowGlobals).agentWindow?.platform ?? 'linux';
