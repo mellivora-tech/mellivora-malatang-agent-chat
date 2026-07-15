@@ -360,19 +360,18 @@
 	font-size: var(--vscode-agents-size-icon);
 }
 
-/* Three-tier scan hierarchy in the sidebar tree: section labels (Pinned/项目/
-   Chat, text-muted) < project group names (here, text-secondary) < individual
-   session/task titles (.sessions-project-task-title, unset → inherits
-   text-primary). Previously this sat at the SAME primary tone as the actual
-   session titles beneath it, so a project folder and the chat inside it read
-   as equally prominent — nothing marked "this is a grouping label" versus
-   "this is the thing you'd click into". */
+/* Container-over-content hierarchy (Codex-style): the project folder is the
+   scan anchor for its group, so it stays at full text-primary — darker than
+   the session titles nested under it (.sessions-project-task-title, below).
+   A flat-listed session with no folder around it (Pinned, Chat) still reads
+   at full strength too, since THERE it's the most specific clickable thing;
+   the dimming only applies to a session once something else is anchoring it. */
 .sessions-project-name {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: var(--vscode-agents-color-text-secondary);
+	color: var(--vscode-agents-color-text-primary);
 	font-size: var(--vscode-agents-fontSize-body1);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
@@ -498,19 +497,24 @@
 	outline-offset: var(--vscode-agents-space-1);
 }
 
-/* Full opaque text-primary read as too harsh here: this is a tightly packed
-   list of small-size rows, not a single heading, and EVERY row (not just the
-   open one) was shouting at full strength. Softened slightly so it still
-   reads as the darkest tier under the project name (72%), while the actually
-   OPEN session (.active, below) keeps the full-strength color as the one
-   real "you are here" signal. */
 .sessions-project-task-title {
 	flex: 1 1 auto;
 	min-width: 0;
-	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 85%, transparent);
 	text-align: left;
 }
 
+/* Container-over-content (Codex-style, matches .sessions-project-name above):
+   a session nested under a project folder is supporting detail for that
+   folder, not the scan anchor, so it dims relative to it. A session with NO
+   folder wrapping it (Pinned/Chat — the base rule above, unset → inherits
+   full text-primary) IS the most specific clickable thing in its context and
+   stays at full strength; the dimming is conditional on having a container. */
+.sessions-project-session-list .sessions-project-task-title {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+/* The session that's actually open wins over both the flat and nested
+   defaults — the one real "you are here" signal. */
 .sessions-project-task-row.active .sessions-project-task-title {
 	color: var(--vscode-agents-color-text-primary);
 }
