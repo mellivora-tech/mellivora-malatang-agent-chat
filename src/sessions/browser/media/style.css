@@ -50,7 +50,7 @@ body {
 .agent-sessions-workbench .part {
 	position: absolute;
 	box-sizing: border-box;
-	z-index: 1;
+	z-index: var(--vscode-agents-z-raised);
 }
 
 .agent-sessions-workbench .part.sessionspart,
@@ -148,7 +148,7 @@ body {
    returns to automatic. */
 .agent-sessions-workbench .workbench-sash {
 	position: absolute;
-	z-index: 25;
+	z-index: var(--vscode-agents-z-sash);
 	width: 8px;
 	cursor: col-resize;
 	-webkit-app-region: no-drag;

@@ -25,7 +25,7 @@
 	position: absolute;
 	top: calc(-1 * (var(--vscode-agents-space-180) + var(--vscode-agents-space-8)));
 	left: 50%;
-	z-index: 0;
+	z-index: var(--vscode-agents-z-base);
 	width: min(var(--vscode-agents-size-watermark-width), 78vw);
 	height: var(--vscode-agents-space-180);
 	transform: translateX(-50%);
@@ -39,7 +39,7 @@
 
 .new-session-heading {
 	position: relative;
-	z-index: 1;
+	z-index: var(--vscode-agents-z-raised);
 	margin: 0 0 var(--vscode-agents-space-46);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 92%, transparent);
 	font-size: var(--vscode-agents-fontSize-heading1);
@@ -51,7 +51,7 @@
 
 .new-session-composer {
 	position: relative;
-	z-index: 1;
+	z-index: var(--vscode-agents-z-raised);
 	/* Flex column, not a fixed grid: the image strip (and any future chip row)
 	   is inserted at runtime between context and input — a fixed row template
 	   shifted every child down one row the moment a row appeared. */
@@ -63,7 +63,7 @@
 	border-radius: var(--vscode-agents-radius-composer);
 	background: color-mix(in srgb, var(--vscode-agents-color-panel-background) 82%, var(--vscode-agents-color-stage-background));
 	color: var(--vscode-agents-color-input-foreground);
-	box-shadow: 0 var(--vscode-agents-space-18) var(--vscode-agents-space-30) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-prominent);
 	box-sizing: border-box;
 	overflow: hidden;
 }
@@ -218,7 +218,7 @@
 
 .new-session-project-menu {
 	position: absolute;
-	z-index: 3;
+	z-index: var(--vscode-agents-z-menu);
 	display: flex;
 	flex-direction: column;
 	min-width: 220px;
@@ -227,7 +227,7 @@
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	box-sizing: border-box;
 }
 
@@ -270,7 +270,7 @@
 /* Model picker dropdown — shared by the new-session and conversation composers. */
 .sessions-model-menu {
 	position: absolute;
-	z-index: 3;
+	z-index: var(--vscode-agents-z-menu);
 	display: flex;
 	flex-direction: column;
 	min-width: 220px;
@@ -281,7 +281,7 @@
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
-	box-shadow: 0 var(--vscode-agents-space-8) var(--vscode-agents-space-18) color-mix(in srgb, var(--vscode-agents-color-shadow) 42%, transparent);
+	box-shadow: var(--vscode-agents-elevation-menu);
 	box-sizing: border-box;
 }
 

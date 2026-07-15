@@ -6,7 +6,7 @@
 .search-palette-backdrop {
 	position: fixed;
 	inset: 0;
-	z-index: 1000;
+	z-index: var(--vscode-agents-z-overlay);
 	display: flex;
 	justify-content: center;
 	align-items: flex-start;
@@ -24,7 +24,7 @@
 	background: var(--vscode-agents-color-menu-background);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-menu-border);
 	border-radius: var(--vscode-agents-radius-container);
-	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+	box-shadow: var(--vscode-agents-elevation-overlay);
 }
 
 .search-palette-search {

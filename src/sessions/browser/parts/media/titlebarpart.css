@@ -1,5 +1,5 @@
 .agent-sessions-workbench .part.titlebar {
-	z-index: 30;
+	z-index: var(--vscode-agents-z-chrome);
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -21,7 +21,7 @@
 .titlebar-drag-region {
 	position: absolute;
 	inset: 0;
-	z-index: 0;
+	z-index: var(--vscode-agents-z-base);
 	pointer-events: auto;
 	-webkit-app-region: drag;
 }
@@ -36,7 +36,7 @@
 .titlebar-left,
 .titlebar-right {
 	position: relative;
-	z-index: 1;
+	z-index: var(--vscode-agents-z-raised);
 	display: flex;
 	align-items: center;
 	min-width: 0;
