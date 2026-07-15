@@ -82,6 +82,11 @@ export const sidebarWidthPx = 270;
 export const auxiliaryBarWidthPx = 340;
 export const editorWidthPx = 640;
 export const panelHeightPx = 300;
+export const conversationWidthPx = 950;
+/** The chat column's width cap while the side pane is open: content width plus
+ *  both 18px gutters. Anything wider is empty margin, so the grid hands the
+ *  surplus to the side pane (diff review, terminal, data grid) instead. */
+export const sessionsMaxWidthPx = conversationWidthPx + 2 * 18;
 
 export const agentsSizeTitlebarHeight = registerSize('agents.size.titlebar.height', `${titlebarHeightPx}px`);
 export const agentsSizeSidebarWidth = registerSize('agents.size.sidebar.width', `${sidebarWidthPx}px`);
@@ -92,7 +97,7 @@ export const agentsSizeSidebarMenuRow = registerSize('agents.size.sidebar.menuRo
 export const agentsSizeSidebarListTitleOffset = registerSize('agents.size.sidebar.listTitleOffset', '46px');
 export const agentsSizeSidebarFooter = registerSize('agents.size.sidebar.footer', '48px');
 export const agentsSizeStageMargin = registerSize('agents.size.stage.margin', '4px');
-export const agentsSizeConversationWidth = registerSize('agents.size.conversation.width', '950px');
+export const agentsSizeConversationWidth = registerSize('agents.size.conversation.width', `${conversationWidthPx}px`);
 export const agentsSizeComposerWidth = registerSize('agents.size.composer.width', '640px');
 export const agentsSizeComposerContextHeight = registerSize('agents.size.composer.contextHeight', '28px');
 export const agentsSizeComposerInputHeight = registerSize('agents.size.composer.inputHeight', '106px');

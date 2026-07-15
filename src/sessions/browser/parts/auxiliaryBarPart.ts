@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { LayoutPriority } from '../../base/browser/grid.js';
+import { auxiliaryBarWidthPx } from '../../common/sizes.js';
 import { DisposableStore } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
@@ -13,6 +14,8 @@ import { Part } from '../part.js';
 export interface IAuxiliaryBarPartOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
+	/** Called when this part's layout inputs change (a tab opens → maximumWidth lifts). */
+	readonly onLayoutChange?: () => void;
 }
 
 type AuxiliaryTabId = 'review' | 'terminal' | 'browser';
@@ -50,6 +53,12 @@ export class AuxiliaryBarPart extends Part {
 	readonly minimumWidth = 260;
 	readonly minimumHeight = 0;
 	readonly priority = LayoutPriority.Low;
+
+	/** The empty state (tab picker) never grows past its preferred width; an open
+	 *  tab (diff review, terminal, data…) takes every pixel the capped chat column frees. */
+	get maximumWidth(): number | undefined {
+		return this.activeTab ? undefined : Math.max(this.minimumWidth, auxiliaryBarWidthPx);
+	}
 
 	private container: HTMLElement | undefined;
 	private activeTab: AuxiliaryTabId | undefined;
@@ -182,5 +191,7 @@ export class AuxiliaryBarPart extends Part {
 	private openTab(tabId: AuxiliaryTabId): void {
 		this.activeTab = tabId;
 		this.renderContent();
+		// Opening a tab lifts maximumWidth — the workbench must re-run the grid math.
+		this.options.onLayoutChange?.();
 	}
 }

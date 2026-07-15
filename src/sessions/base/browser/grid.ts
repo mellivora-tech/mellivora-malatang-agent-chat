@@ -13,6 +13,10 @@ export interface IGridView {
 	readonly element: HTMLElement;
 	readonly minimumWidth: number;
 	readonly minimumHeight: number;
+	/** Surplus width stops here and flows to the next view instead (undefined = unbounded).
+	 *  When every visible view is capped, the highest-priority one absorbs the leftover anyway
+	 *  — the row must fill — so a cap only bites while a neighbor can still use the space. */
+	readonly maximumWidth?: number | undefined;
 	readonly priority: LayoutPriority;
 	layout(width: number, height: number, top: number, left: number): void;
 }
@@ -168,17 +172,7 @@ function computeHorizontalWidths(entries: readonly IHorizontalEntry[], available
 	const delta = availableWidth - totalWidth;
 
 	if (delta > 0) {
-		const highPriorityEntries = entries.map((entry, index) => ({ entry, index })).filter(candidate => candidate.entry.view.priority === LayoutPriority.High);
-
-		if (highPriorityEntries.length > 0) {
-			const target = highPriorityEntries[0];
-			if (target) {
-				widths[target.index] = (widths[target.index] ?? 0) + delta;
-			}
-		} else {
-			const lastIndex = widths.length - 1;
-			widths[lastIndex] = (widths[lastIndex] ?? 0) + delta;
-		}
+		growWidths(entries, widths, delta);
 	} else if (delta < 0) {
 		shrinkWidths(entries, widths, -delta);
 		const shrunkTotal = widths.reduce((sum, value) => sum + value, 0);
@@ -216,6 +210,38 @@ function dropLowestPriorityEntry(entries: readonly IHorizontalEntry[], available
 	}
 
 	return widths;
+}
+
+/**
+ * Distribute surplus width by priority (High first), each view growing only up
+ * to its maximumWidth. If every view is capped, the leftover goes to the first
+ * High-priority view (or the last view) regardless — the row must fill, and
+ * extra chat-column width is just symmetric empty gutters.
+ */
+function growWidths(entries: readonly IHorizontalEntry[], widths: number[], surplus: number): void {
+	let remaining = surplus;
+	const priorities = [LayoutPriority.High, LayoutPriority.Normal, LayoutPriority.Low];
+
+	for (const priority of priorities) {
+		for (let index = 0; index < entries.length && remaining > 0; index++) {
+			const entry = entries[index];
+			const currentWidth = widths[index];
+			if (!entry || currentWidth === undefined || entry.view.priority !== priority) {
+				continue;
+			}
+
+			const maximum = entry.view.maximumWidth ?? Number.POSITIVE_INFINITY;
+			const growth = Math.min(Math.max(0, maximum - currentWidth), remaining);
+			widths[index] = currentWidth + growth;
+			remaining -= growth;
+		}
+	}
+
+	if (remaining > 0) {
+		const highIndex = entries.findIndex(entry => entry.view.priority === LayoutPriority.High);
+		const index = highIndex >= 0 ? highIndex : widths.length - 1;
+		widths[index] = (widths[index] ?? 0) + remaining;
+	}
 }
 
 function shrinkWidths(entries: readonly IHorizontalEntry[], widths: number[], overflow: number): void {

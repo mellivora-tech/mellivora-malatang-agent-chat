@@ -19,21 +19,26 @@ interface IFakeView {
 	readonly view: IGridView;
 	readonly calls: ILayoutCall[];
 	readonly element: { readonly style: { display: string } };
+	setMaximumWidth(value: number | undefined): void;
 }
 
 function createFakeView(minimumWidth: number, minimumHeight: number, priority: LayoutPriority): IFakeView {
 	const calls: ILayoutCall[] = [];
 	const element = { style: { display: '' } };
+	let maximumWidth: number | undefined;
 	const view: IGridView = {
 		element: element as unknown as HTMLElement,
 		minimumWidth,
 		minimumHeight,
+		get maximumWidth() {
+			return maximumWidth;
+		},
 		priority,
 		layout: (width, height, top, left) => {
 			calls.push({ width, height, top, left });
 		},
 	};
-	return { view, calls, element };
+	return { view, calls, element, setMaximumWidth: value => { maximumWidth = value; } };
 }
 
 function createGrid() {
@@ -97,6 +102,50 @@ test('editor participates in the content row when visible', () => {
 	assert.deepEqual(sessions.calls.at(-1), { width: 730, height: 900, top: 0, left: 270 });
 	assert.deepEqual(editor.calls.at(-1), { width: 360, height: 900, top: 0, left: 1000 });
 	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 340, height: 900, top: 0, left: 1360 });
+});
+
+test('capped sessions hands the surplus to the auxiliary bar (open tab, wide window)', () => {
+	const { grid, sessions, auxiliaryBar } = createGrid();
+	sessions.setMaximumWidth(986);
+
+	grid.layout(1920, 900);
+
+	// rightWidth 1650: sessions stops at its cap, the side pane takes the rest.
+	assert.deepEqual(sessions.calls.at(-1), { width: 986, height: 900, top: 0, left: 270 });
+	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 664, height: 900, top: 0, left: 1256 });
+});
+
+test('when every view is capped the high-priority one absorbs the leftover (empty side pane)', () => {
+	const { grid, sessions, auxiliaryBar } = createGrid();
+	sessions.setMaximumWidth(986);
+	auxiliaryBar.setMaximumWidth(340);
+
+	grid.layout(1920, 900);
+
+	// The empty tab picker must not balloon — the chat column eats the surplus as gutters.
+	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 340, height: 900, top: 0, left: 1580 });
+	assert.deepEqual(sessions.calls.at(-1), { width: 1310, height: 900, top: 0, left: 270 });
+});
+
+test('a capped view alone in the row still fills it', () => {
+	const { grid, sessions } = createGrid();
+	sessions.setMaximumWidth(986);
+	grid.setPartVisible('auxiliaryBar', false);
+
+	grid.layout(1920, 900);
+
+	assert.deepEqual(sessions.calls.at(-1), { width: 1650, height: 900, top: 0, left: 270 });
+});
+
+test('the cap is inert while the window is too narrow to reach it', () => {
+	const { grid, sessions, auxiliaryBar } = createGrid();
+	sessions.setMaximumWidth(986);
+
+	grid.layout(1440, 900);
+
+	// rightWidth 1170: sessions grows to 830 — under its cap — exactly as before.
+	assert.deepEqual(sessions.calls.at(-1), { width: 830, height: 900, top: 0, left: 270 });
+	assert.deepEqual(auxiliaryBar.calls.at(-1), { width: 340, height: 900, top: 0, left: 1100 });
 });
 
 test('hidden editor and panel stay hidden and receive no layout', () => {

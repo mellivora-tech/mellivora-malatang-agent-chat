@@ -5,6 +5,7 @@
 
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { clearNode } from '../../base/browser/dom.js';
+import { sessionsMaxWidthPx } from '../../common/sizes.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
@@ -19,6 +20,10 @@ import { SessionView } from './sessionView.js';
 export class SessionsPart extends Part {
 	readonly minimumWidth = 640;
 	readonly minimumHeight = 0;
+	// The conversation content is width-capped anyway (agents.size.conversation.width),
+	// so surplus beyond content + gutters flows to the side pane when one is open.
+	// Alone in the row, this part still absorbs the leftover (grid fallback).
+	readonly maximumWidth = sessionsMaxWidthPx;
 	readonly priority = LayoutPriority.High;
 
 	private readonly sessionView: SessionView;
