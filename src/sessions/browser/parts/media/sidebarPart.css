@@ -693,13 +693,19 @@
 	gap: var(--vscode-agents-space-6);
 }
 
+/* Despite the generic-sounding name, this class has exactly one consumer:
+   session/task titles (always paired with .sessions-project-task-title).
+   Was semiBold — bold on top of the color tiering made both the flat
+   (full-strength) and nested (dimmed) rows read heavier than intended; the
+   Codex reference keeps title weight flat/regular everywhere and lets
+   color + the active-row background pill carry all the state signaling. */
 .sessions-list-row-title {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: var(--vscode-agents-fontSize-body1);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	font-weight: var(--vscode-agents-fontWeight-regular);
 	line-height: var(--vscode-agents-space-18);
 }
 
