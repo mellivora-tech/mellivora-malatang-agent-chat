@@ -23,7 +23,10 @@
 	gap: 4px;
 	min-width: 0;
 	height: var(--vscode-agents-size-titlebar-height);
-	padding: var(--vscode-agents-space-7) var(--vscode-agents-space-84) 0 var(--vscode-agents-space-8);
+	/* 4px top, not the titlebar's 7px: our controls are 28px tall vs the
+	   titlebar icons' 22px — aligning CENTERS (both at y=18), not top edges,
+	   is what puts the ⤢ on one line with the pane-toggle/help icons. */
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-84) 0 var(--vscode-agents-space-8);
 	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	box-sizing: border-box;
 }
