@@ -5,7 +5,7 @@
 
 import { dialog, ipcMain } from 'electron';
 import { readFile } from 'node:fs/promises';
-import { basename, extname } from 'node:path';
+import { basename, extname, resolve, sep } from 'node:path';
 import type { FileTableResult, IPickedDataFile } from '../sessions/services/dataFiles/common/dataFiles.js';
 import { parseCsv, toTable } from './dataFiles.js';
 
@@ -17,8 +17,15 @@ const CSV_SHEET = '数据';
  * parses paths the user PICKED this process (or the MELLIVORA_PICK_FILE e2e
  * seam) — the renderer can't point main at arbitrary files.
  */
-export function registerDataFilesIpc(): void {
+export function registerDataFilesIpc(dataRoot: string): void {
 	const pickedPaths = new Set<string>();
+	// Agent-rendered tables live in the app's data dir (session media) — always
+	// readable, so a "在数据浏览器打开" chip still works after a restart.
+	const insideDataRoot = (path: string): boolean => {
+		const resolved = resolve(path);
+		const base = resolve(dataRoot);
+		return resolved === base || resolved.startsWith(base + sep);
+	};
 
 	ipcMain.handle('dataFiles:pick', async (): Promise<IPickedDataFile | undefined> => {
 		// E2E seam: dialogs can't be driven headlessly — the env var IS the pick.
@@ -40,7 +47,7 @@ export function registerDataFilesIpc(): void {
 	});
 
 	ipcMain.handle('dataFiles:readTable', async (_event, path: string, sheet?: string): Promise<FileTableResult> => {
-		if (typeof path !== 'string' || !pickedPaths.has(path)) {
+		if (typeof path !== 'string' || (!pickedPaths.has(path) && !insideDataRoot(path))) {
 			return { ok: false, message: '文件未经选择器打开。' };
 		}
 		try {

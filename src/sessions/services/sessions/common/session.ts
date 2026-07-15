@@ -32,12 +32,26 @@ export interface ISessionChangesSummary {
 	readonly deletions: number;
 }
 
-/** A `query_data_source` call's coordinates, re-runnable in the data browser (chat → panel hand-off). */
-export interface ISessionDataBrowse {
-	/** The source as the model addressed it (id, label, or environment name). */
-	readonly source: string;
-	readonly sql: string;
-}
+/** A chat → data panel hand-off, riding a work step (#4/#7). `kind` absent
+ *  means 'sql' — payloads persisted before the union existed stay valid. */
+export type ISessionDataBrowse =
+	| {
+			readonly kind?: 'sql';
+			/** The source as the model addressed it (id, label, or environment name). */
+			readonly source: string;
+			readonly sql: string;
+	  }
+	| {
+			/** An agent-rendered table (render_data) or any tabular file. */
+			readonly kind: 'file';
+			readonly path: string;
+			readonly name: string;
+	  };
+
+/** render_data's tool result ends with `[table:<absolute csv path>]` — the
+ *  machine-readable tail the renderer lifts the chip payload from (and strips
+ *  from the step detail). Shared here because both sides must agree. */
+export const RENDERED_TABLE_MARKER = /\n\[table:(.+)\]$/;
 
 /** One step inside a work block: a thinking stretch or a tool call. */
 export interface ISessionWorkStep {

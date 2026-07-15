@@ -82,7 +82,7 @@ app.whenReady().then(async () => {
 	registerGitIpc(dataRoot);
 	registerSkillsIpc(dataRoot);
 	registerEnvironmentsIpc(dataRoot);
-	registerDataFilesIpc();
+	registerDataFilesIpc(dataRoot);
 	await createWindow();
 });
 // Flush any buffered agent logs before the process exits.

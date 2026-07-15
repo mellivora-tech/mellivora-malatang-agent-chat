@@ -21,7 +21,7 @@ import type {
 	ISessionWorkStep,
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
-import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
+import { RENDERED_TABLE_MARKER, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionCompactionAnchorData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
@@ -663,8 +663,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const steps: ISessionWorkStep[] = [];
 		let stepStart = workStart;
 		let openToolLabel: string | undefined;
-		// query_data_source only: the call's coordinates ride the step so the UI
-		// can offer "在数据浏览器打开" (chat → data browser hand-off).
+		let openToolName: string | undefined;
+		// query_data_source / render_data: coordinates ride the step so the UI
+		// can offer "在数据浏览器打开" (chat → data panel hand-off).
 		let openToolBrowse: ISessionDataBrowse | undefined;
 		// The run's latest propose_plan / write_walkthrough inputs — last call of
 		// each wins; materialized into role:'plan' messages at finalize
@@ -816,6 +817,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (openToolLabel !== undefined) {
 				closeStep('tool', openToolLabel);
 				openToolLabel = undefined;
+				openToolName = undefined;
 			} else {
 				closeThinkingOrSkip();
 			}
@@ -1003,12 +1005,25 @@ export class FileSessionsProvider implements ISessionsProvider {
 					pendingWalkthroughInput = parsePlanInput(event.input) ?? pendingWalkthroughInput;
 				}
 				openToolLabel = describeWorkTool(event.name, event.input);
+				openToolName = event.name;
 				openToolBrowse = parseBrowsePayload(event.name, event.input);
 				updateWork();
 			} else if (event?.type === 'tool_result') {
 				if (openToolLabel !== undefined) {
-					closeStep('tool', openToolLabel, truncateStepDetail(event.content, event.isError));
+					let content = event.content;
+					// render_data: lift the chip payload from the marker tail, and
+					// keep the marker out of the visible step detail.
+					if (openToolName === 'render_data' && !event.isError) {
+						const rendered = RENDERED_TABLE_MARKER.exec(content);
+						if (rendered?.[1]) {
+							const path = rendered[1];
+							openToolBrowse = { kind: 'file', path, name: path.split('/').pop() ?? path };
+							content = content.replace(RENDERED_TABLE_MARKER, '');
+						}
+					}
+					closeStep('tool', openToolLabel, truncateStepDetail(content, event.isError));
 					openToolLabel = undefined;
+					openToolName = undefined;
 					updateWork();
 				}
 			} else if (event?.type === 'tool_progress') {

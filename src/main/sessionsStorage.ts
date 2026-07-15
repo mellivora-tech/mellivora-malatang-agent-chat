@@ -71,6 +71,18 @@ export async function storeSessionMedia(root: string, ref: ISessionRef, base64: 
 	return `media/${ref.sessionId}/${hash}.${extension}`;
 }
 
+/** Write an agent-rendered table (csv) beside the transcript (#7 P3); returns its absolute path and display name. */
+export async function storeSessionTableCsv(root: string, ref: ISessionRef, title: string, csv: string): Promise<{ readonly path: string; readonly name: string }> {
+	const dir = sessionMediaDir(root, ref);
+	await mkdir(dir, { recursive: true });
+	const safe = title.replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'table';
+	const hash = createHash('sha256').update(csv).digest('hex').slice(0, 8);
+	const name = `${safe}-${hash}.csv`;
+	const file = join(dir, name);
+	await writeFile(file, csv, 'utf8');
+	return { path: file, name };
+}
+
 /** Read a stored image back as raw base64; undefined when missing or the path escapes the media dir. */
 export async function readSessionMedia(root: string, ref: ISessionRef, entryPath: string): Promise<string | undefined> {
 	const mediaRoot = resolve(sessionMediaDir(root, ref));

@@ -563,3 +563,48 @@ test('file provider: xlsx sheets ride the table dropdown and switch', async () =
 		await app?.close();
 	}
 });
+
+test('render_data chip: an agent-rendered table opens in the panel, replayable after restart', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		// The rendered csv lives in the session's media dir — the readTable gate
+		// admits data-dir paths without a picker, so the chip survives restarts.
+		const mediaDir = join(dataDir, 'projects', 'shop', 'sessions', 'media', 'session-render');
+		await mkdir(mediaDir, { recursive: true });
+		const csvPath = join(mediaDir, '汇总-abc123.csv');
+		await writeFile(csvPath, 'region,total\n华东,120\n华北,80\n', 'utf8');
+
+		const dir = join(dataDir, 'projects', 'shop', 'sessions');
+		const createdAt = '2026-01-01T00:00:00.000Z';
+		await writeFile(join(dir, 'session-render.jsonl'), [
+			JSON.stringify({ type: 'session', version: 1, sessionId: 'session-render', sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt, interactivity: 'full', projectId: 'shop' }),
+			JSON.stringify({ type: 'message', timestamp: createdAt, id: 'u1', role: 'user', text: '汇总一下' }),
+			JSON.stringify({
+				type: 'message', timestamp: createdAt, id: 'w1', role: 'work', text: '', durationMs: 3000,
+				steps: [{ kind: 'tool', label: 'render_data', durationMs: 800, detail: '已渲染 2 行 × 2 列到数据面板（汇总-abc123.csv）。', browse: { kind: 'file', path: csvPath, name: '汇总-abc123.csv' } }],
+			}),
+			JSON.stringify({ type: 'state', timestamp: createdAt, status: 3, title: '渲染表格' }),
+		].join('\n') + '\n', 'utf8');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir } });
+		const page = await app.firstWindow();
+		await page.locator('.sessions-list-row').first().click();
+		await expect(page.locator('.session-view')).toBeVisible();
+
+		await page.locator('.conversation-work-header').click();
+		await page.locator('.conversation-work-step-browse').click();
+
+		await expect(page.locator('.part.auxiliarybar')).toBeVisible();
+		await expect(page.locator('.data-browser-source option').first()).toHaveText('汇总-abc123.csv');
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-col-title').nth(0)).toHaveText('region');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('华东');
+		await expect(grid.locator('.tabulator-row').nth(1).locator('.tabulator-cell').nth(1)).toHaveText('80');
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('汇总-abc123.csv');
+	} finally {
+		await app?.close();
+	}
+});

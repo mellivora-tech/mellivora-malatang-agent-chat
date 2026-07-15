@@ -300,6 +300,11 @@ export class DataBrowserView extends Disposable {
 	/** Chat → panel hand-off: run the agent's query here and keep exploring it. */
 	async applyBrowseRequest(request: ISessionDataBrowse): Promise<void> {
 		await this.sourcesReady;
+		// An agent-rendered table (or any file hand-off) goes straight to file mode.
+		if (request.kind === 'file') {
+			await this.openFile({ path: request.path, name: request.name });
+			return;
+		}
 		if (this.fileMode) {
 			this.exitFileMode();
 			this.renderSelects();

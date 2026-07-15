@@ -16,6 +16,8 @@ import { asPermissionMode, createGateForMode, describeToolCall, type PermissionM
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createDataSourceTools, type IQueryableSource } from './agent/tools/dataSourceTools.js';
+import { createRenderDataTool } from './agent/tools/renderDataTool.js';
+import { storeSessionTableCsv } from './sessionsStorage.js';
 import { createSshTools, type ISshServer } from './agent/tools/sshTool.js';
 import { createModelClient } from './agent/createModelClient.js';
 import { createSpawnAgentTool } from './agent/tools/spawnAgentTool.js';
@@ -220,7 +222,12 @@ export function registerAgentIpc(dataRoot: string): void {
 		// One client instance serves the run AND any sub-agent loops it spawns.
 		const modelClient = createModelClient(config);
 
-		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...sshTools];
+		// render_data: the agent pushes tabular results into the data panel; the
+		// csv lands beside the transcript so the chip replays after restarts.
+		const renderDataTool = createRenderDataTool({
+			storeCsv: (title, csv) => storeSessionTableCsv(dataRoot, { sessionId: payload.sessionId, ...(payload.projectId ? { projectId: payload.projectId } : {}) }, title, csv),
+		});
+		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...sshTools, renderDataTool];
 		// spawn_agent (in-process read-only sub-agent, see spawnAgentTool.ts) is
 		// added below, after the run logger exists to receive its telemetry —
 		// it is read-only, so every permission mode admits it.
