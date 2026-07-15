@@ -141,16 +141,15 @@ body {
 	padding: var(--vscode-agents-space-16);
 }
 
-/* The side pane sash: an 8px hit strip straddling the pane's left seam, with a
-   grab handle that fades in on hover (Codex-style). z between parts (1) and the
-   titlebar (30). Drag pins the pane width; double-click returns to automatic. */
+/* The side pane sash: an 8px hit strip straddling the pane's left seam. The
+   seam itself is already the visible divider, so no extra chrome — hover just
+   tints the strip and flips the cursor (VS Code-style). z sits between the
+   parts (1) and the titlebar (30). Drag pins the pane width; double-click
+   returns to automatic. */
 .agent-sessions-workbench .workbench-sash {
 	position: absolute;
 	z-index: 25;
 	width: 8px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
 	cursor: col-resize;
 	-webkit-app-region: no-drag;
 }
@@ -158,27 +157,6 @@ body {
 .agent-sessions-workbench .workbench-sash:hover,
 .agent-sessions-workbench .workbench-sash.dragging {
 	background: color-mix(in srgb, var(--vscode-agents-color-focusBorder) 28%, transparent);
-}
-
-.workbench-sash-handle {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 18px;
-	height: 26px;
-	border-radius: var(--vscode-agents-radius-control, 6px);
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
-	background: var(--vscode-agents-color-panel-background);
-	color: var(--vscode-agents-color-text-secondary);
-	font-size: 12px;
-	opacity: 0;
-	transition: opacity 120ms ease-out;
-	pointer-events: none;
-}
-
-.workbench-sash:hover .workbench-sash-handle,
-.workbench-sash.dragging .workbench-sash-handle {
-	opacity: 1;
 }
 
 /* While dragging, keep the resize cursor and kill text selection everywhere. */

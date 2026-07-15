@@ -165,10 +165,6 @@ export class Workbench {
 	private createSash(): void {
 		this.sash.className = 'workbench-sash';
 		this.sash.style.display = 'none';
-		const handle = document.createElement('span');
-		handle.className = 'codicon codicon-arrow-both workbench-sash-handle';
-		handle.setAttribute('aria-hidden', 'true');
-		this.sash.appendChild(handle);
 		this.sash.title = '拖动调整宽度 · 双击恢复自动';
 		this.root.appendChild(this.sash);
 
