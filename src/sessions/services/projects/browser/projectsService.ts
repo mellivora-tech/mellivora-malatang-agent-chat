@@ -31,6 +31,8 @@ export interface IProjectsService {
 	/** Folder-picker add; resolves to undefined if the user cancels. */
 	pickCodeRoot(projectId: string): Promise<readonly ICodeRootView[] | undefined>;
 	listRemotes(projectId: string): Promise<readonly IRemoteRepoView[]>;
+	listApprovalAllowlist(projectId: string): Promise<readonly string[]>;
+	removeApprovalAllowPattern(projectId: string, pattern: string): Promise<readonly string[]>;
 	addRemote(projectId: string, input: IRemoteRepoInput): Promise<readonly IRemoteRepoView[]>;
 	removeRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]>;
 	cloneRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]>;
@@ -112,6 +114,14 @@ export class ProjectsService implements IProjectsService {
 
 	async listRemotes(projectId: string): Promise<readonly IRemoteRepoView[]> {
 		return (await this.bridge?.listRemotes(projectId)) ?? [];
+	}
+
+	async listApprovalAllowlist(projectId: string): Promise<readonly string[]> {
+		return (await this.bridge?.listApprovalAllowlist(projectId)) ?? [];
+	}
+
+	async removeApprovalAllowPattern(projectId: string, pattern: string): Promise<readonly string[]> {
+		return (await this.bridge?.removeApprovalAllowPattern(projectId, pattern)) ?? [];
 	}
 
 	async addRemote(projectId: string, input: IRemoteRepoInput): Promise<readonly IRemoteRepoView[]> {

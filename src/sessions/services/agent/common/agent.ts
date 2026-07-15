@@ -27,6 +27,8 @@ export interface IApprovalRequestPayload {
 	readonly detail: string;
 	/** Present iff this call is safe to "always allow" this session — the button label (e.g. `mvn *`). */
 	readonly alwaysAllow?: string;
+	/** True when the grant may ALSO be persisted to the project (bash: grants inside a project). */
+	readonly alwaysAllowProject?: boolean;
 }
 
 /** The shape exposed on `agentWindow.agent` by the preload script. */
@@ -47,5 +49,5 @@ export interface IAgentBridge {
 	/** Subscribe to approval requests from the permission gate; returns an unsubscribe function. */
 	onApprovalRequest(listener: (payload: IApprovalRequestPayload) => void): () => void;
 	/** Answer an approval request. `always` adds this call's pattern to the session allowlist (allow-only). Unanswered requests are denied when the run ends. */
-	respondApproval(requestId: string, approved: boolean, always?: boolean): Promise<void>;
+	respondApproval(requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project'): Promise<void>;
 }

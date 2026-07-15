@@ -35,6 +35,8 @@ const projects: IProjectsBridge = {
 	removeCodeRoot: (projectId: string, path: string) => ipcRenderer.invoke('projects:removeCodeRoot', projectId, path),
 	pickCodeRoot: (projectId: string) => ipcRenderer.invoke('projects:pickCodeRoot', projectId),
 	listRemotes: (projectId: string) => ipcRenderer.invoke('projects:listRemotes', projectId),
+	listApprovalAllowlist: (projectId: string) => ipcRenderer.invoke('projects:listApprovalAllowlist', projectId),
+	removeApprovalAllowPattern: (projectId: string, pattern: string) => ipcRenderer.invoke('projects:removeApprovalAllowPattern', projectId, pattern),
 	addRemote: (projectId: string, input: IRemoteRepoInput) => ipcRenderer.invoke('projects:addRemote', projectId, input),
 	removeRemote: (projectId: string, remoteId: string) => ipcRenderer.invoke('projects:removeRemote', projectId, remoteId),
 	cloneRemote: (projectId: string, remoteId: string) => ipcRenderer.invoke('projects:cloneRemote', projectId, remoteId),
@@ -106,7 +108,7 @@ const agent: IAgentBridge = {
 		ipcRenderer.on('agent:approval-request', handler);
 		return () => ipcRenderer.removeListener('agent:approval-request', handler);
 	},
-	respondApproval: (requestId: string, approved: boolean, always?: boolean) => ipcRenderer.invoke('agent:approval-response', { requestId, approved, always }),
+	respondApproval: (requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project') => ipcRenderer.invoke('agent:approval-response', { requestId, approved, always, scope }),
 };
 
 contextBridge.exposeInMainWorld('agentWindow', {

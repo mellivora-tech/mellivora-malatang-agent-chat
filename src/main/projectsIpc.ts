@@ -10,6 +10,7 @@ import type { ICodeRootView, IDiscoveredRepo, IRemoteRepoInput, IRemoteRepoView 
 import { walkFiles, toWorkspacePath } from './agent/tools/workspace.js';
 import type { IProject, IProjectInput } from './projectsStorage.js';
 import { addCodeRoot, addRemote, cloneProjectRemote, createProject, deleteProject, ensureCodeRootsSeeded, ensureProject, getProject, listCodeRoots, listProjects, listRemotes, removeCodeRoot, removeRemote } from './projectsStorage.js';
+import { listProjectAllowPatterns, removeProjectAllowPattern } from './agent/approvalStore.js';
 import { scanRepos } from './repoScan.js';
 
 // Enough for @-mention pickers on real repos; beyond this the fuzzy filter
@@ -81,6 +82,10 @@ export function registerProjectsIpc(dataRoot: string): void {
 	});
 
 	ipcMain.handle('projects:listRemotes', (_event, projectId: string): Promise<readonly IRemoteRepoView[]> => listRemotes(dataRoot, projectId));
+	// The project's persisted "always allow" patterns (#5) — list for the config
+	// UI, remove to revoke. Writes happen on the approval path (agentIpc).
+	ipcMain.handle('projects:listApprovalAllowlist', (_event, projectId: string): Promise<readonly string[]> => listProjectAllowPatterns(dataRoot, projectId));
+	ipcMain.handle('projects:removeApprovalAllowPattern', (_event, projectId: string, pattern: string): Promise<readonly string[]> => removeProjectAllowPattern(dataRoot, projectId, pattern));
 
 	ipcMain.handle('projects:addRemote', async (_event, projectId: string, input: IRemoteRepoInput): Promise<readonly IRemoteRepoView[]> => {
 		await addRemote(dataRoot, projectId, input);

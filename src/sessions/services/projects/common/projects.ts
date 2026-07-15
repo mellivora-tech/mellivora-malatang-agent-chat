@@ -87,6 +87,10 @@ export interface IProjectsBridge {
 	pickCodeRoot(projectId: string): Promise<readonly ICodeRootView[] | undefined>;
 	/** The project's remote repositories, each with its clone location + on-disk state. */
 	listRemotes(projectId: string): Promise<readonly IRemoteRepoView[]>;
+	/** Persisted "always allow" patterns for this project (bash: only). */
+	listApprovalAllowlist(projectId: string): Promise<readonly string[]>;
+	/** Revoke one persisted pattern; resolves to the remaining list. */
+	removeApprovalAllowPattern(projectId: string, pattern: string): Promise<readonly string[]>;
 	/** Register a remote repo (cloned lazily at run time / on demand); returns the refreshed list. */
 	addRemote(projectId: string, input: IRemoteRepoInput): Promise<readonly IRemoteRepoView[]>;
 	/** Remove a remote and delete its clone; returns the refreshed list. */

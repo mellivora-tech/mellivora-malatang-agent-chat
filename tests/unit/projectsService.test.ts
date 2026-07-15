@@ -56,6 +56,8 @@ function createBridge(options: { projects?: IProject[]; picked?: IProject | unde
 		addRemote: async () => [],
 		removeRemote: async () => [],
 		cloneRemote: async () => [],
+		listApprovalAllowlist: async () => [],
+		removeApprovalAllowPattern: async () => [],
 	};
 }
 

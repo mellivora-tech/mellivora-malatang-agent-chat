@@ -193,8 +193,11 @@ export interface ISessionPendingApproval {
 	readonly detail: string;
 	/** Present iff this call can be "always allowed" this session — the button label (e.g. `mvn *`). */
 	readonly alwaysAllow?: string;
-	/** `always` records the pattern so future matching calls skip the prompt. */
-	respond(approved: boolean, always?: boolean): void;
+	/** True when the grant can also be persisted to the project (bash: only). */
+	readonly alwaysAllowProject?: boolean;
+	/** `always` records the pattern so future matching calls skip the prompt;
+	 *  scope 'project' persists it beyond the process (personal, per-machine). */
+	respond(approved: boolean, always?: boolean, scope?: 'session' | 'project'): void;
 }
 
 export interface ISession {

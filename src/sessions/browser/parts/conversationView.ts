@@ -1659,7 +1659,19 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 		const pattern = append(always, document.createElement('code'));
 		pattern.className = 'conversation-approval-pattern';
 		pattern.textContent = approval.alwaysAllow;
-		always.addEventListener('click', () => approval.respond(true, true));
+		always.addEventListener('click', () => approval.respond(true, true, 'session'));
+
+		// The PERMANENT variant (persisted per project, personal & per-machine) —
+		// only ever offered for bash: grants inside a project (main-side gated),
+		// and only on the full card: a durable grant deserves the full ceremony.
+		if (approval.alwaysAllowProject && !compact) {
+			const forever = append(actions, document.createElement('button')) as HTMLButtonElement;
+			forever.className = 'conversation-approval-always conversation-approval-always-project';
+			forever.type = 'button';
+			forever.title = `本项目永久放行：${approval.alwaysAllow}（可在项目配置 › 工具授权中删除）`;
+			append(forever, document.createElement('span')).textContent = '本项目';
+			forever.addEventListener('click', () => approval.respond(true, true, 'project'));
+		}
 	}
 
 	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;

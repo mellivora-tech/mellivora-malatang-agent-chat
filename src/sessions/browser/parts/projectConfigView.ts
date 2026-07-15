@@ -65,7 +65,7 @@ function buildCoordinates(kind: DataSourceSectionId, f: ICoordinateFields): IDat
 }
 
 /** Left-nav sections. `env: true` sections carry the environment tab strip. */
-type SectionId = 'code' | 'knowledge' | 'database' | 'redis' | 'mq' | 'nacos' | 'elasticsearch' | 'server';
+type SectionId = 'code' | 'knowledge' | 'approvals' | 'database' | 'redis' | 'mq' | 'nacos' | 'elasticsearch' | 'server';
 /** The env-scoped section ids are exactly the connection kinds. */
 type DataSourceSectionId = 'database' | 'redis' | 'mq' | 'nacos' | 'elasticsearch' | 'server';
 interface ISectionDef {
@@ -82,6 +82,7 @@ interface ISectionDef {
 const SECTIONS: readonly ISectionDef[] = [
 	{ id: 'code', icon: 'codicon-file-code', label: '代码', group: 1, env: false, description: '代码是环境无关的,跟随项目,不随 dev/test/prod 变化。Agent 的文件工具作用于这些代码来源。' },
 	{ id: 'knowledge', icon: 'codicon-book', label: '知识库', group: 1, env: false, placeholder: true, description: '把项目知识库接入 Agent。与环境无关,跟随项目。' },
+	{ id: 'approvals', icon: 'codicon-shield', label: '工具授权', group: 1, env: false, description: '批准卡上「本项目」授予的永久放行 pattern。存放在本机应用数据里(不进 git),只收 bash 命令前缀;沙箱外执行与文件修改永远不可持久化。' },
 	{ id: 'database', icon: 'codicon-database', label: '数据库', group: 2, env: true, description: '配置各环境下的数据库连接,供 Agent 按环境获取对应的数据。' },
 	{ id: 'redis', icon: 'codicon-server', label: 'Redis', group: 2, env: true, description: '各环境的 Redis 连接。' },
 	{ id: 'mq', icon: 'codicon-broadcast', label: 'MQ', group: 2, env: true, description: '各环境的消息队列连接(Kafka / RabbitMQ)。' },
@@ -120,6 +121,7 @@ export class ProjectConfigView extends Disposable {
 	private config: IWorkspaceConfigView = EMPTY_VIEW;
 	private codeRoots: readonly ICodeRootView[] = [];
 	private remotes: readonly IRemoteRepoView[] = [];
+	private approvalPatterns: readonly string[] = [];
 	private edit: EditState = { kind: 'none' };
 	private error: string | undefined;
 
@@ -173,6 +175,7 @@ export class ProjectConfigView extends Disposable {
 		if (this.projects) {
 			this.codeRoots = await this.projects.listCodeRoots(this.projectId);
 			this.remotes = await this.projects.listRemotes(this.projectId);
+			this.approvalPatterns = await this.projects.listApprovalAllowlist(this.projectId);
 		}
 		this.ensureActiveEnv();
 		this.render();
@@ -278,6 +281,8 @@ export class ProjectConfigView extends Disposable {
 			this.renderEnvSection(page, def);
 		} else if (this.section === 'code') {
 			this.renderCodeSection(page, def);
+		} else if (this.section === 'approvals') {
+			this.renderApprovalsSection(page, def);
 		} else {
 			settingsPageHeader(page, { title: def.label, description: def.description });
 			this.renderError(page);
@@ -318,6 +323,43 @@ export class ProjectConfigView extends Disposable {
 			...(this.projects ? { action: { label: '添加路径', onClick: (): void => void this.reloadCodeRoots(() => this.projects!.pickCodeRoot(this.projectId)) } } : {}),
 		});
 		this.renderRemoteCategory(page);
+	}
+
+	/** Persisted "always allow" patterns (#5): visible, and revocable one by one. */
+	private renderApprovalsSection(page: HTMLElement, def: ISectionDef): void {
+		settingsPageHeader(page, { title: def.label, description: def.description });
+		this.renderError(page);
+
+		if (this.approvalPatterns.length === 0) {
+			settingsEmptyCard(page, { title: '没有永久放行的命令', description: '在批准卡上点「本项目」即可把某类 bash 命令(如 mvn *)永久放行。' });
+			return;
+		}
+		const pills = append(page, document.createElement('div'));
+		pills.className = 'sessions-code-pills';
+		for (const pattern of this.approvalPatterns) {
+			const pill = append(pills, document.createElement('div'));
+			pill.className = 'sessions-code-pill';
+			pill.title = pattern;
+			const glyph = append(pill, document.createElement('span'));
+			glyph.className = 'codicon codicon-terminal sessions-code-pill-icon';
+			glyph.setAttribute('aria-hidden', 'true');
+			// `bash:mvn` shows as the user granted it: `mvn *`.
+			append(pill, document.createElement('span')).textContent = `${pattern.slice('bash:'.length)} *`;
+			if (this.projects) {
+				const remove = append(pill, document.createElement('button')) as HTMLButtonElement;
+				remove.className = 'sessions-code-pill-remove';
+				remove.type = 'button';
+				remove.title = '撤销放行';
+				remove.setAttribute('aria-label', `撤销 ${pattern}`);
+				append(remove, document.createElement('span')).className = 'codicon codicon-close';
+				remove.addEventListener('click', () => {
+					void this.projects!.removeApprovalAllowPattern(this.projectId, pattern).then(next => {
+						this.approvalPatterns = next;
+						this.render();
+					});
+				});
+			}
+		}
 	}
 
 	private renderRemoteCategory(page: HTMLElement): void {

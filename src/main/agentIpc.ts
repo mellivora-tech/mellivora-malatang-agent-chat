@@ -6,6 +6,7 @@
 import { ipcMain } from 'electron';
 import { runAgentLoop } from './agent/agentLoop.js';
 import { deriveGrant, matchesAllowlist, type IAllowlistGrant } from './agent/approvalAllowlist.js';
+import { addProjectAllowPatterns, isPersistablePattern, readProjectAllowlist } from './agent/approvalStore.js';
 import type { IAgentMessage, IAgentTerminal, IAgentTool, ICompactionAnchor } from './agent/agentTypes.js';
 import { restoreAnchor } from './agent/compaction.js';
 import { agentLog } from './agent/observability/agentLog.js';
@@ -95,6 +96,8 @@ interface IApprovalResponsePayload {
 	readonly approved: boolean;
 	/** The user picked "always allow": add the request's grant to the session allowlist. */
 	readonly always?: boolean;
+	/** 'project' persists the grant to the project's approvals.json too (bash: only). */
+	readonly scope?: 'session' | 'project';
 }
 
 interface IAgentTitlePayload {
@@ -125,7 +128,7 @@ export function registerAgentIpc(dataRoot: string): void {
 	// The grant rides the pending entry because the response only carries a
 	// requestId — the tool input (and the pattern derived from it) is long gone
 	// by the time "always" comes back.
-	const pendingApprovals = new Map<string, { readonly sessionId: string; readonly grant?: IAllowlistGrant; resolve(approved: boolean): void }>();
+	const pendingApprovals = new Map<string, { readonly sessionId: string; readonly projectId?: string; readonly grant?: IAllowlistGrant; resolve(approved: boolean): void }>();
 	// Session-level "always allow" patterns. In-memory only (never persisted),
 	// keyed by sessionId like the pending/abort maps, so it survives across runs
 	// of a session but dies with the process — the "会话级、不落盘" contract.
@@ -162,6 +165,10 @@ export function registerAgentIpc(dataRoot: string): void {
 		// Bind file tools to the session's project directory. The workspace root is
 		// resolved here from the stored project — never from a renderer-supplied path.
 		const project = payload.projectId ? await getProject(dataRoot, payload.projectId) : undefined;
+		// The project's PERSISTED "always allow" patterns (bash: only), loaded once
+		// per run. Grants made during the run land in the session set immediately,
+		// so same-run coverage never depends on a re-read.
+		const projectAllowlist = payload.projectId ? await readProjectAllowlist(dataRoot, payload.projectId) : new Set<string>();
 		// The agent operates over ALL the project's code roots: explicit local
 		// codeRoots (else the workspace/path) PLUS any remote repos, cloned now if
 		// not already on disk (best-effort — a clone failure just drops that root).
@@ -241,18 +248,19 @@ export function registerAgentIpc(dataRoot: string): void {
 					resolve(false);
 					return;
 				}
-				// Session-level "always allow": a covered call runs unattended, with
-				// no prompt. Checked here (not in the gate) so permission.ts keeps its
-				// read-only/plan/full semantics untouched.
-				const allowlist = sessionAllowlists.get(payload.sessionId);
-				if (allowlist && matchesAllowlist(tool.name, input, allowlist)) {
+				// "Always allow": session grants ∪ the project's persisted grants —
+				// a covered call runs unattended, with no prompt. Checked here (not in
+				// the gate) so permission.ts keeps its read-only/plan/full semantics.
+				const sessionAllowlist = sessionAllowlists.get(payload.sessionId);
+				const allowlist = sessionAllowlist ? new Set([...sessionAllowlist, ...projectAllowlist]) : projectAllowlist;
+				if (allowlist.size > 0 && matchesAllowlist(tool.name, input, allowlist)) {
 					resolve(true);
 					return;
 				}
 				// Only offer the third button for tools that are safe to always-allow
 				// (deriveGrant returns undefined for run_on_server et al.).
 				const grant = deriveGrant(tool.name, input);
-				pendingApprovals.set(context.toolUseId, { sessionId: payload.sessionId, ...(grant ? { grant } : {}), resolve });
+				pendingApprovals.set(context.toolUseId, { sessionId: payload.sessionId, ...(payload.projectId ? { projectId: payload.projectId } : {}), ...(grant ? { grant } : {}), resolve });
 				controller.signal.addEventListener(
 					'abort',
 					() => {
@@ -268,6 +276,9 @@ export function registerAgentIpc(dataRoot: string): void {
 					toolName: tool.name,
 					detail: describeToolCall(tool.name, input),
 					...(grant ? { alwaysAllow: grant.display } : {}),
+					// The permanent option exists only for persistable grants (bash:)
+					// inside a project — never for sandbox escapes or file edits.
+					...(grant && payload.projectId !== undefined && grant.patterns.every(isPersistablePattern) ? { alwaysAllowProject: true } : {}),
 				});
 			});
 
@@ -417,6 +428,11 @@ export function registerAgentIpc(dataRoot: string): void {
 					allowlist.add(pattern);
 				}
 				sessionAllowlists.set(pending.sessionId, allowlist);
+				// 'project' additionally persists — approvalStore re-filters to bash:
+				// grants, so a stray scope on a non-persistable grant is a no-op.
+				if (payload.scope === 'project' && pending.projectId) {
+					void addProjectAllowPatterns(dataRoot, pending.projectId, pending.grant.patterns).catch(() => {});
+				}
 			}
 			pending.resolve(payload.approved === true);
 		}
