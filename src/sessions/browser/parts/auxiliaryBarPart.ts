@@ -91,6 +91,11 @@ export class AuxiliaryBarPart extends Part {
 				tab.disposables.dispose();
 			}
 		}));
+		// The maximize toggle lives in the tabs bar — its icon must flip with the state.
+		const maximizedState = this.options.sessionsPartService?.sidePaneMaximized;
+		if (maximizedState) {
+			this._register(maximizedState.subscribe(() => this.renderTabsBar()));
+		}
 		// Chat → data browser: consume the request, open (or focus) the data tab,
 		// and hand the query to its view.
 		const request = this.options.sessionsPartService?.dataBrowseRequest;
@@ -319,6 +324,28 @@ export class AuxiliaryBarPart extends Part {
 			this.toggleAddMenu(add);
 		});
 		bar.appendChild(add);
+
+		// Maximize: the pane takes the whole content row (chat column hides).
+		// Rightmost in the strip, just left of the titlebar icons' reserve.
+		const partService = this.options.sessionsPartService;
+		if (partService) {
+			const spacer = document.createElement('span');
+			spacer.className = 'auxiliary-tabs-spacer';
+			bar.appendChild(spacer);
+			const maximized = partService.sidePaneMaximized.get();
+			const maximize = document.createElement('button');
+			maximize.className = 'auxiliary-tab-maximize';
+			maximize.type = 'button';
+			maximize.title = maximized ? '恢复布局' : '最大化面板';
+			maximize.setAttribute('aria-label', maximized ? '恢复布局' : '最大化面板');
+			maximize.setAttribute('aria-pressed', String(maximized));
+			const maximizeIcon = document.createElement('span');
+			maximizeIcon.className = `codicon ${maximized ? 'codicon-screen-normal' : 'codicon-screen-full'}`;
+			maximizeIcon.setAttribute('aria-hidden', 'true');
+			maximize.appendChild(maximizeIcon);
+			maximize.addEventListener('click', () => partService.toggleSidePaneMaximized());
+			bar.appendChild(maximize);
+		}
 	}
 
 	/** The "+" menu: everything the pane can host; picking an open kind focuses it. */

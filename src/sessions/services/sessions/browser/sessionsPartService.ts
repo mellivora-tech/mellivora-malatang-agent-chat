@@ -17,6 +17,9 @@ export interface ISessionsPartService {
 	readonly auxiliaryBarVisible: ReturnType<typeof observableValue<boolean>>;
 	readonly visibleSessions: ReturnType<typeof observableValue<readonly (IActiveSession | undefined)[]>>;
 	readonly activeSession: ReturnType<typeof observableValue<IActiveSession | undefined>>;
+	/** Side pane fills the whole content row (the chat column hides). */
+	readonly sidePaneMaximized: ReturnType<typeof observableValue<boolean>>;
+	toggleSidePaneMaximized(): void;
 	/** Chat → data browser: a query to keep exploring; the side pane consumes it (resets to undefined). */
 	readonly dataBrowseRequest: ReturnType<typeof observableValue<ISessionDataBrowse | undefined>>;
 	/** Data browser → composer: reference text to append; the conversation view consumes it. */
@@ -60,6 +63,15 @@ export class SessionsPartService implements ISessionsPartService {
 
 	hideSidePane(): void {
 		this.sidePaneVisible.set(false);
+		// Closing the pane always restores the chat column — reopening later must
+		// not surprise-maximize.
+		this.sidePaneMaximized.set(false);
+	}
+
+	readonly sidePaneMaximized = observableValue<boolean>(false);
+
+	toggleSidePaneMaximized(): void {
+		this.sidePaneMaximized.set(!this.sidePaneMaximized.get());
 	}
 
 	showSidePane(): void {

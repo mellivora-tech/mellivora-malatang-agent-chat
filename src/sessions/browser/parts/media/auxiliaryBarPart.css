@@ -83,8 +83,13 @@
 	color: var(--vscode-agents-color-text-primary);
 }
 
-/* The "+" opener: an icon-only chip at the end of the strip. */
-.auxiliary-tab-add {
+.auxiliary-tabs-spacer {
+	flex: 1 0 var(--vscode-agents-space-4);
+}
+
+/* The "+" opener and the maximize toggle: icon-only chips in the strip. */
+.auxiliary-tab-add,
+.auxiliary-tab-maximize {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -99,12 +104,14 @@
 	cursor: default;
 }
 
-.auxiliary-tab-add:hover {
+.auxiliary-tab-add:hover,
+.auxiliary-tab-maximize:hover {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
 
-.auxiliary-tab-add:focus-visible {
+.auxiliary-tab-add:focus-visible,
+.auxiliary-tab-maximize:focus-visible {
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-badge-background);
 	outline-offset: var(--vscode-agents-space-2);
 }

@@ -429,3 +429,47 @@ test('SQL console: run a read-only statement, writes are refused by the gate', a
 		await app?.close();
 	}
 });
+
+test('maximize: the pane takes the whole content row and restores cleanly', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await openDataTab(page);
+
+		const chat = page.locator('.part.sessionspart');
+		const pane = page.locator('.part.auxiliarybar');
+		const before = (await pane.boundingBox())!.width;
+
+		await page.locator('.auxiliary-tab-maximize').click();
+		await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/side-pane-maximized/);
+		await expect(chat).toBeHidden();
+		await expect(page.locator('.workbench-sash')).toBeHidden();
+		const maximized = (await pane.boundingBox())!.width;
+		expect(maximized).toBeGreaterThan(before + 200);
+		// The grid survives the resize (keep-alive + redraw-on-size).
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-001');
+
+		// Restore: chat returns at its previous width.
+		await page.locator('.auxiliary-tab-maximize').click();
+		await expect(chat).toBeVisible();
+		await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).not.toHaveClass(/side-pane-maximized/);
+		expect(Math.round((await pane.boundingBox())!.width)).toBe(Math.round(before));
+
+		// Closing the pane while maximized restores the chat column too.
+		await page.locator('.auxiliary-tab-maximize').click();
+		await expect(chat).toBeHidden();
+		await page.locator('.sessions-titlebar-side-pane-toggle').click();
+		await expect(pane).toBeHidden();
+		await expect(chat).toBeVisible();
+	} finally {
+		await app?.close();
+	}
+});

@@ -243,8 +243,13 @@ export class Workbench {
 		};
 		const updateAuxiliaryVisibility = () => {
 			const auxiliaryVisible = this.sessionsPartService.mode.get() === 'conversation' && this.sessionsPartService.sidePaneVisible.get();
+			// Maximized: the side pane takes the whole content row; the chat column
+			// hides (views stay mounted — display only).
+			const maximized = auxiliaryVisible && this.sessionsPartService.sidePaneMaximized.get();
 			this.grid.setPartVisible('auxiliaryBar', auxiliaryVisible);
+			this.grid.setPartVisible('sessions', !maximized);
 			this.root.classList.toggle('side-pane-open', auxiliaryVisible);
+			this.root.classList.toggle('side-pane-maximized', maximized);
 			this.layout();
 		};
 
@@ -252,6 +257,7 @@ export class Workbench {
 		this.partSubscriptions.add(this.sessionsPartService.activeSession.subscribe(updateSessionsPart));
 		this.partSubscriptions.add(this.sessionsPartService.mode.subscribe(updateMode));
 		this.partSubscriptions.add(this.sessionsPartService.sidePaneVisible.subscribe(updateAuxiliaryVisibility));
+		this.partSubscriptions.add(this.sessionsPartService.sidePaneMaximized.subscribe(updateAuxiliaryVisibility));
 		updateSessionsPart();
 		updateMode();
 	}
@@ -272,8 +278,9 @@ export class Workbench {
 		const auxVisible = this.grid.isPartVisible('auxiliaryBar');
 		const auxElement = this.auxiliaryBarPart.element;
 		this.root.style.setProperty('--workbench-aux-width', `${auxVisible ? auxElement.offsetWidth : 0}px`);
-		// The sash rides the pane's left seam.
-		this.sash.style.display = auxVisible ? '' : 'none';
+		// The sash rides the pane's left seam — pointless while maximized (there
+		// is no neighbor to trade width with).
+		this.sash.style.display = auxVisible && this.grid.isPartVisible('sessions') ? '' : 'none';
 		if (auxVisible) {
 			this.sash.style.left = `${auxElement.offsetLeft - 4}px`;
 			this.sash.style.top = auxElement.style.top;
