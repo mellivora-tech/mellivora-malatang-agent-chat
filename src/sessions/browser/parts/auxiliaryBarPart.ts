@@ -7,6 +7,7 @@ import { LayoutPriority } from '../../base/browser/grid.js';
 import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
 import { DataBrowserView } from '../../contrib/data/browser/dataBrowserView.js';
+import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
 import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
@@ -16,6 +17,7 @@ export interface IAuxiliaryBarPartOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly environmentsService?: IEnvironmentsService;
+	readonly dataFiles?: IDataFilesBridge;
 }
 
 type AuxiliaryTabKind = 'review' | 'data' | 'terminal' | 'browser';
@@ -204,6 +206,7 @@ export class AuxiliaryBarPart extends Part {
 		} else if (kind === 'data') {
 			instance.dataView = new DataBrowserView(body, {
 				...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),
+				...(this.options.dataFiles ? { dataFiles: this.options.dataFiles } : {}),
 				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
 				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 				onContextChange: label => this.renameTab(instance.id, label),

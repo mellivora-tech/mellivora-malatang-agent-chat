@@ -31,6 +31,7 @@ import { SkillsService } from '../services/skills/browser/skillsService.js';
 import type { ISkillsBridge } from '../services/skills/common/skills.js';
 import { EnvironmentsService } from '../services/environments/browser/environmentsService.js';
 import type { IEnvironmentsBridge } from '../services/environments/common/environments.js';
+import type { IDataFilesBridge } from '../services/dataFiles/common/dataFiles.js';
 
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
@@ -43,6 +44,7 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly agent?: IAgentBridge;
 		readonly skills?: ISkillsBridge;
 		readonly environments?: IEnvironmentsBridge;
+		readonly dataFiles?: IDataFilesBridge;
 	};
 };
 
@@ -76,6 +78,7 @@ export class Workbench {
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,
 		environmentsService: this.environmentsService,
+		...((globalThis as AgentWindowGlobals).agentWindow?.dataFiles ? { dataFiles: (globalThis as AgentWindowGlobals).agentWindow!.dataFiles! } : {}),
 	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();

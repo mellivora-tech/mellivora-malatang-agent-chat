@@ -19,6 +19,7 @@ import type { IProjectInput, IProjectsBridge, IRemoteRepoInput } from '../sessio
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
 import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
+import type { IDataFilesBridge } from '../sessions/services/dataFiles/common/dataFiles.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -87,6 +88,11 @@ const environments: IEnvironmentsBridge = {
 	listTables: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:listTables', projectId, dataSourceId),
 };
 
+const dataFiles: IDataFilesBridge = {
+	pick: () => ipcRenderer.invoke('dataFiles:pick'),
+	readTable: (path: string, sheet?: string) => ipcRenderer.invoke('dataFiles:readTable', path, sheet),
+};
+
 const git: IGitBridge = {
 	branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId),
 	checkout: (projectId: string, branch: string) => ipcRenderer.invoke('git:checkout', projectId, branch),
@@ -121,5 +127,6 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	git,
 	skills,
 	environments,
+	dataFiles,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });

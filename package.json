@@ -34,7 +34,8 @@
 		"mysql2": "^3.22.6",
 		"pg": "^8.22.0",
 		"ssh2": "^1.17.0",
-		"tabulator-tables": "^6.5.2"
+		"tabulator-tables": "^6.5.2",
+		"xlsx": "^0.18.5"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

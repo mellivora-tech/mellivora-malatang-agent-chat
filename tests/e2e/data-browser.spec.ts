@@ -473,3 +473,93 @@ test('maximize: the pane takes the whole content row and restores cleanly', asyn
 		await app?.close();
 	}
 });
+
+test('file provider: csv opens, filters and sorts locally, and hands back to SQL mode', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+		// A csv fixture: header + 30 rows, with a quoted comma to prove real parsing.
+		const csv = ['id,name,amount', ...Array.from({ length: 30 }, (_, i) => `${i + 1},"row, ${String(i + 1).padStart(2, '0')}",${(i + 1) * 5}`)].join('\n');
+		const csvPath = join(workspace, 'orders.csv');
+		await writeFile(csvPath, `${csv}\n`, 'utf8');
+
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1', MELLIVORA_PICK_FILE: csvPath },
+		});
+		const page = await app.firstWindow();
+		await openDataTab(page);
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first()).toBeVisible();
+
+		// Open the csv (the env seam IS the picker): the file rides the source
+		// dropdown, the status bar shows the path, rows parse with quotes intact.
+		await page.locator('.data-browser-button[title="打开数据文件（csv / xlsx）"]').click();
+		await expect(page.locator('.data-browser-source')).toHaveValue('file');
+		await expect(page.locator('.data-browser-source option').first()).toHaveText('orders.csv');
+		await expect(page.locator('.data-browser-status-text')).toContainText('30 行 / 共 30 行');
+		await expect(page.locator('.data-browser-status-sql')).toContainText('orders.csv');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('row, 01');
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('orders.csv');
+
+		// The SAME filter grammar, evaluated locally: > 100 on amount → 10 rows.
+		const amountFilter = grid.locator('.tabulator-col[tabulator-field="c2"] .tabulator-header-filter input');
+		await amountFilter.click();
+		await amountFilter.pressSequentially('> 100');
+		await expect(page.locator('.data-browser-status-text')).toContainText('10 行 / 共 10 行');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('21');
+
+		// Local server-side-feel sort: id desc puts 30 first.
+		await grid.locator('.tabulator-col-title', { hasText: 'id' }).click();
+		await grid.locator('.tabulator-col-title', { hasText: 'id' }).click();
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('30');
+
+		// Picking a real database source exits file mode back to the table browser.
+		await page.locator('.data-browser-source').selectOption('ds-orders');
+		await expect(page.locator('.data-browser-status-sql')).toContainText('SELECT * FROM `shop`.`orders` LIMIT 101');
+		await expect(page.locator('.data-browser-source option').first()).not.toHaveText('orders.csv');
+	} finally {
+		await app?.close();
+	}
+});
+
+test('file provider: xlsx sheets ride the table dropdown and switch', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeProject(dataDir, 'empty', 'Empty', workspace);
+		await writeSession(dataDir, 'empty', 'session-empty');
+		// Build a two-sheet workbook with the project's own xlsx dependency.
+		const XLSX = await import('xlsx');
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 'x'], [2, 'y']]), '订单');
+		XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['k'], ['only']]), '汇总');
+		const xlsxPath = join(workspace, 'book.xlsx');
+		XLSX.writeFile(workbook, xlsxPath);
+
+		app = await electron.launch({
+			args: ['dist/main/main.js'],
+			env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_PICK_FILE: xlsxPath },
+		});
+		const page = await app.firstWindow();
+		await openDataTab(page);
+
+		await page.locator('.data-browser-button[title="打开数据文件（csv / xlsx）"]').click();
+		await expect(page.locator('.data-browser-table option')).toHaveText(['订单', '汇总']);
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-col-title').nth(0)).toHaveText('a');
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('book.xlsx·订单');
+
+		await page.locator('.data-browser-table').selectOption('汇总');
+		await expect(grid.locator('.tabulator-col-title').nth(0)).toHaveText('k');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(0)).toHaveText('only');
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('book.xlsx·汇总');
+	} finally {
+		await app?.close();
+	}
+});

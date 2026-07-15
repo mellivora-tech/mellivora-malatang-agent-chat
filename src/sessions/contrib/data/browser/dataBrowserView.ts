@@ -11,11 +11,14 @@ import type { DataColumnCategory, IDatabaseSource, IDataColumn, IDbTable } from 
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import type { ISessionDataBrowse } from '../../../services/sessions/common/session.js';
+import type { IDataFilesBridge, IPickedDataFile } from '../../../services/dataFiles/common/dataFiles.js';
 import type { IDataProvider, IDataSort, IDataViewState } from '../common/dataProvider.js';
+import { FileDataProvider } from './fileDataProvider.js';
 import { SqlDataProvider } from './sqlDataProvider.js';
 
 export interface IDataBrowserViewOptions {
 	readonly environmentsService?: IEnvironmentsService;
+	readonly dataFiles?: IDataFilesBridge;
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
 	/** Reports the current browse context (e.g. `dev·orders`) — the host renames the tab chip with it. */
@@ -28,6 +31,9 @@ const PAGE_SIZES = [50, 100, 200, 500];
 
 /** The table dropdown's synthetic value while browsing a hand-off query. */
 const QUERY_OPTION = 'query';
+
+/** The source dropdown's synthetic value while a local file is open. */
+const FILE_OPTION = 'file';
 
 /**
  * Lightweight DataGrip-style table browser (issue #4 P0): pick a database data
@@ -51,8 +57,12 @@ export class DataBrowserView extends Disposable {
 
 	private table: TabulatorFull | undefined;
 	private readonly resizeObserver: ResizeObserver;
-	/** The source-specific brain (#7): SQL today; files/Redis/ES slot in beside it. */
-	private readonly provider: IDataProvider | undefined;
+	/** The source-specific brains (#7): the panel switches between them by mode. */
+	private readonly sqlProvider: IDataProvider | undefined;
+	private readonly fileProvider: FileDataProvider;
+	/** True while a local file is open — the file provider drives the grid. */
+	private fileMode = false;
+	private sqlToggle: HTMLButtonElement | undefined;
 	private projectId: string | undefined;
 	private sources: readonly BrowsableSource[] = [];
 	private environmentNames = new Map<string, string>();
@@ -101,10 +111,19 @@ export class DataBrowserView extends Disposable {
 		toolbar.appendChild(this.tableSelect);
 
 		this.refreshButton = this.createIconButton(toolbar, 'codicon-refresh', '刷新');
-		this.refreshButton.addEventListener('click', () => void this.runQueryNow());
+		this.refreshButton.addEventListener('click', () => {
+			// File mode re-parses from disk; SQL mode re-runs the query.
+			const target = this.fileMode ? this.fileProvider.target : undefined;
+			void (target ? this.openFile(target, this.fileProvider.activeSheet) : this.runQueryNow());
+		});
 
-		const sqlToggle = this.createIconButton(toolbar, 'codicon-code', 'SQL 控制台');
-		sqlToggle.addEventListener('click', () => this.toggleSqlConsole());
+		this.sqlToggle = this.createIconButton(toolbar, 'codicon-code', 'SQL 控制台');
+		this.sqlToggle.addEventListener('click', () => this.toggleSqlConsole());
+
+		if (this.options.dataFiles) {
+			const openFile = this.createIconButton(toolbar, 'codicon-folder-opened', '打开数据文件（csv / xlsx）');
+			openFile.addEventListener('click', () => void this.pickFile());
+		}
 
 		const spacer = document.createElement('span');
 		spacer.className = 'data-browser-spacer';
@@ -248,7 +267,8 @@ export class DataBrowserView extends Disposable {
 		});
 		this.resizeObserver.observe(this.gridHost);
 
-		this.provider = this.options.environmentsService
+		this.fileProvider = new FileDataProvider(this.options.dataFiles);
+		this.sqlProvider = this.options.environmentsService
 			? new SqlDataProvider({
 					service: this.options.environmentsService,
 					getProjectId: () => this.projectId,
@@ -263,6 +283,11 @@ export class DataBrowserView extends Disposable {
 		this.sourcesReady = this.loadSources();
 	}
 
+	/** Whichever brain currently drives the grid. */
+	private get provider(): IDataProvider | undefined {
+		return this.fileMode ? this.fileProvider : this.sqlProvider;
+	}
+
 	/** The grid's interaction state, in the provider contract's terms. */
 	private viewState(): IDataViewState {
 		const filters = new Map<number, string>();
@@ -275,6 +300,10 @@ export class DataBrowserView extends Disposable {
 	/** Chat → panel hand-off: run the agent's query here and keep exploring it. */
 	async applyBrowseRequest(request: ISessionDataBrowse): Promise<void> {
 		await this.sourcesReady;
+		if (this.fileMode) {
+			this.exitFileMode();
+			this.renderSelects();
+		}
 		const source = this.resolveSourceRef(request.source);
 		if (!source) {
 			this.baseQuery = undefined;
@@ -385,6 +414,14 @@ export class DataBrowserView extends Disposable {
 
 	/** User picked a source: table mode, from scratch. */
 	private async onSourceChanged(): Promise<void> {
+		if (this.sourceSelect.value === FILE_OPTION) {
+			return;
+		}
+		if (this.fileMode) {
+			this.exitFileMode();
+			this.renderSelects();
+			this.sourceSelect.value = this.sourceSelect.value || (this.sources[0]?.id ?? '');
+		}
 		this.baseQuery = undefined;
 		this.sort = undefined;
 		this.page = 0;
@@ -425,6 +462,16 @@ export class DataBrowserView extends Disposable {
 	}
 
 	private onTableChanged(): void {
+		if (this.fileMode) {
+			const target = this.fileProvider.target;
+			if (target && this.tableSelect.value !== this.fileProvider.activeSheet) {
+				this.sort = undefined;
+				this.page = 0;
+				this.columnFilters.clear();
+				void this.openFile(target, this.tableSelect.value);
+			}
+			return;
+		}
 		if (this.tableSelect.value === QUERY_OPTION) {
 			return;
 		}
@@ -441,11 +488,64 @@ export class DataBrowserView extends Disposable {
 		void this.runQueryNow();
 	}
 
+	/** Whether the ACTIVE provider has something to fetch. */
+	private hasTarget(): boolean {
+		if (this.fileMode) {
+			return this.fileProvider.target !== undefined;
+		}
+		return Boolean(this.projectId && this.selectedSource && (this.baseQuery !== undefined || this.selectedTable));
+	}
+
+	/** OS picker → file mode. Re-picking while in file mode just swaps the file. */
+	private async pickFile(): Promise<void> {
+		const picked = await this.options.dataFiles?.pick();
+		if (!picked) {
+			return;
+		}
+		await this.openFile(picked);
+	}
+
+	private async openFile(file: IPickedDataFile, sheet?: string): Promise<void> {
+		const stamp = ++this.requestStamp;
+		this.setStatus('读取文件…', '');
+		const result = await this.fileProvider.open(file, sheet);
+		if (stamp !== this.requestStamp) {
+			return;
+		}
+		if (!result.ok) {
+			this.setStatus(result.message, '');
+			return;
+		}
+		this.enterFileMode();
+		await this.runQueryNow();
+	}
+
+	/** File mode: the file rides the source dropdown as a synthetic entry, the
+	 *  sheet list rides the table dropdown, and the SQL console stands down. */
+	private enterFileMode(): void {
+		this.fileMode = true;
+		this.baseQuery = undefined;
+		this.sort = undefined;
+		this.page = 0;
+		this.columnFilters.clear();
+		this.sqlConsole.hidden = true;
+		if (this.sqlToggle) {
+			this.sqlToggle.disabled = true;
+		}
+		this.renderSelects();
+	}
+
+	private exitFileMode(): void {
+		this.fileMode = false;
+		this.fileProvider.clear();
+		if (this.sqlToggle) {
+			this.sqlToggle.disabled = false;
+		}
+	}
+
 	private async runQueryNow(): Promise<void> {
 		const stamp = ++this.requestStamp;
-		const source = this.selectedSource;
-		const table = this.selectedTable;
-		if (!this.provider || !this.projectId || !source || (this.baseQuery === undefined && !table)) {
+		if (!this.provider || !this.hasTarget()) {
 			return;
 		}
 		this.reportContext();
@@ -471,6 +571,14 @@ export class DataBrowserView extends Disposable {
 
 	private renderSelects(): void {
 		this.sourceSelect.textContent = '';
+		// An open file rides the source dropdown as a synthetic entry; picking a
+		// real database source below leaves file mode.
+		if (this.fileMode && this.fileProvider.target) {
+			const option = document.createElement('option');
+			option.value = FILE_OPTION;
+			option.textContent = this.fileProvider.target.name;
+			this.sourceSelect.appendChild(option);
+		}
 		for (const source of this.sources) {
 			const option = document.createElement('option');
 			option.value = source.id;
@@ -478,12 +586,29 @@ export class DataBrowserView extends Disposable {
 			option.textContent = environmentName ? `${environmentName} · ${source.label}` : source.label;
 			this.sourceSelect.appendChild(option);
 		}
-		this.sourceSelect.disabled = this.sources.length === 0;
+		this.sourceSelect.disabled = this.sources.length === 0 && !this.fileMode;
+		if (this.fileMode) {
+			this.sourceSelect.value = FILE_OPTION;
+		}
 		this.renderTableOptions();
 	}
 
 	private renderTableOptions(): void {
 		this.tableSelect.textContent = '';
+		// File mode: the table dropdown lists the workbook's sheets.
+		if (this.fileMode) {
+			for (const sheet of this.fileProvider.sheetNames) {
+				const option = document.createElement('option');
+				option.value = sheet;
+				option.textContent = sheet;
+				this.tableSelect.appendChild(option);
+			}
+			this.tableSelect.disabled = this.fileProvider.sheetNames.length <= 1;
+			if (this.fileProvider.activeSheet) {
+				this.tableSelect.value = this.fileProvider.activeSheet;
+			}
+			return;
+		}
 		// Query mode gets a synthetic entry; picking a real table leaves it.
 		if (this.baseQuery !== undefined) {
 			const option = document.createElement('option');
