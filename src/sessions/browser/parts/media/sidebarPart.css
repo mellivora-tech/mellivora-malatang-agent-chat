@@ -360,11 +360,19 @@
 	font-size: var(--vscode-agents-size-icon);
 }
 
+/* Three-tier scan hierarchy in the sidebar tree: section labels (Pinned/项目/
+   Chat, text-muted) < project group names (here, text-secondary) < individual
+   session/task titles (.sessions-project-task-title, unset → inherits
+   text-primary). Previously this sat at the SAME primary tone as the actual
+   session titles beneath it, so a project folder and the chat inside it read
+   as equally prominent — nothing marked "this is a grouping label" versus
+   "this is the thing you'd click into". */
 .sessions-project-name {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-body1);
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
