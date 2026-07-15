@@ -223,6 +223,32 @@ export interface IDataSourceTestResult {
 	readonly durationMs: number;
 }
 
+/** Broad column type category, normalized main-side from the driver's type code —
+ *  the renderer aligns/formats by category and never sees pg OIDs or mysql codes. */
+export type DbColumnCategory = 'text' | 'number' | 'boolean' | 'date' | 'json';
+
+export interface IDbColumn {
+	readonly name: string;
+	readonly category: DbColumnCategory;
+}
+
+/** A table (or view) in a database data source's catalog. */
+export interface IDbTable {
+	readonly schema: string;
+	readonly name: string;
+	/** Planner estimate (pg reltuples / information_schema.table_rows) — absent when the engine doesn't know. */
+	readonly estimatedRows?: number;
+}
+
+/** Outcome of a read-only browse query — errors come back as a renderable message, never a throw. */
+export type IDataQueryResult =
+	| { readonly ok: true; readonly columns: readonly IDbColumn[]; readonly rows: readonly (readonly unknown[])[]; readonly truncated: boolean; readonly durationMs: number }
+	| { readonly ok: false; readonly message: string; readonly durationMs: number };
+
+export type IDbTablesResult =
+	| { readonly ok: true; readonly tables: readonly IDbTable[] }
+	| { readonly ok: false; readonly message: string };
+
 /**
  * The shape exposed on `agentWindow.environments` by the preload script. All
  * calls are scoped by projectId (the main process resolves its workspacePath).
@@ -240,6 +266,11 @@ export interface IEnvironmentsBridge {
 	setDataSourceCredential(projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView>;
 	/** Try to connect (database kinds only) with the given coordinates/credential — nothing is saved. */
 	testDataSource(projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult>;
+	/** Run a read-only SQL statement against a database data source (the browse panel's query path).
+	 *  Write statements are refused main-side; `rowLimit` is capped by the main process. */
+	runQuery(projectId: string, dataSourceId: string, sql: string, options?: { readonly rowLimit?: number }): Promise<IDataQueryResult>;
+	/** List tables/views (with row estimates where the engine knows them) of a database data source. */
+	listTables(projectId: string, dataSourceId: string): Promise<IDbTablesResult>;
 }
 
 /**

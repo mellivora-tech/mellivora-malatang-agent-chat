@@ -81,6 +81,8 @@ const environments: IEnvironmentsBridge = {
 	removeDataSource: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:removeDataSource', projectId, dataSourceId),
 	setDataSourceCredential: (projectId: string, dataSourceId: string, secret: IDataSourceSecret) => ipcRenderer.invoke('environments:setDataSourceCredential', projectId, dataSourceId, secret),
 	testDataSource: (projectId: string, payload: IDataSourceTestPayload) => ipcRenderer.invoke('environments:testDataSource', projectId, payload),
+	runQuery: (projectId: string, dataSourceId: string, sql: string, options?: { readonly rowLimit?: number }) => ipcRenderer.invoke('environments:runQuery', projectId, dataSourceId, sql, options),
+	listTables: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:listTables', projectId, dataSourceId),
 };
 
 const git: IGitBridge = {

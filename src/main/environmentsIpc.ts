@@ -5,17 +5,21 @@
 
 import { ipcMain } from 'electron';
 import type {
+	IDataQueryResult,
 	IDataSourceInput,
 	IDataSourceSecret,
 	IDataSourceTestPayload,
 	IDataSourceTestResult,
 	IDataSourceView,
+	IDatabaseSource,
+	IDbTablesResult,
 	IEnvironmentInput,
 	IWorkspaceConfig,
 	IWorkspaceConfigView,
 } from '../sessions/services/environments/common/environments.js';
 import { explainQueryError } from './agent/tools/dataSourceTools.js';
-import { runDbQuery } from './agent/dbQuery.js';
+import { isReadOnlySql, listDbTables, runDbQuery } from './agent/dbQuery.js';
+import { fakeDbRunner } from './agent/fakeDbRunner.js';
 import { deleteCredential, getCredential, hasCredential, setCredential } from './credentialStorage.js';
 import { getProject } from './projectsStorage.js';
 import { createSafeStorageCipher } from './secretCipher.js';
@@ -29,6 +33,10 @@ import { readOrSeedWorkspaceConfig, readWorkspaceConfig, removeDataSource, remov
 export function registerEnvironmentsIpc(dataRoot: string): void {
 	// Secrets at rest are encrypted with the OS keychain (safeStorage) when available.
 	const cipher = createSafeStorageCipher();
+
+	// E2E seam: MELLIVORA_FAKE_DB=1 swaps ONLY the database driver for a
+	// deterministic in-process one — bridge, IPC, gate, and row caps stay real.
+	const queryRunner = process.env['MELLIVORA_FAKE_DB'] === '1' ? fakeDbRunner : runDbQuery;
 
 	// Resolve a project's workspace dir; the config lives under it. A project
 	// with neither is unusable for environments (returns undefined → empty view).
@@ -143,9 +151,72 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 			clearTimeout(timeout);
 		}
 	});
+
+	// A saved database data source + its stored credential, or a renderable
+	// error. The browse panel only ever addresses sources by id — no fuzzy
+	// resolution (that's the agent tools' contract, not the UI's).
+	const resolveDbSource = async (projectId: string, dataSourceId: string): Promise<{ source: IDatabaseSource; secret: IDataSourceSecret | undefined } | string> => {
+		const workspacePath = await resolveWorkspace(projectId);
+		if (!workspacePath) {
+			return '项目没有可用的工作目录。';
+		}
+		const config = await readWorkspaceConfig(workspacePath);
+		const source = config.dataSources.find(candidate => candidate.id === dataSourceId);
+		if (!source) {
+			return '数据源不存在（可能已被删除）。';
+		}
+		if (source.kind !== 'database') {
+			return `“${source.label}” 不是数据库类型的数据源。`;
+		}
+		return { source, secret: await getCredential(dataRoot, dataSourceId, cipher) };
+	};
+
+	// The browse panel's query path: read-only SQL only, row-capped, per-query
+	// connection. Errors return as messages (explainQueryError) — the panel's
+	// status bar renders them; nothing throws across the IPC boundary.
+	ipcMain.handle('environments:runQuery', async (_event, projectId: string, dataSourceId: string, sql: string, options?: { rowLimit?: number }): Promise<IDataQueryResult> => {
+		const started = Date.now();
+		if (typeof sql !== 'string' || !isReadOnlySql(sql)) {
+			return { ok: false, message: '只允许单条只读查询（SELECT / SHOW / EXPLAIN…）。', durationMs: 0 };
+		}
+		const resolved = await resolveDbSource(projectId, dataSourceId);
+		if (typeof resolved === 'string') {
+			return { ok: false, message: resolved, durationMs: 0 };
+		}
+		const rowLimit = Math.max(1, Math.min(options?.rowLimit ?? DEFAULT_BROWSE_ROWS, MAX_BROWSE_ROWS));
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+		try {
+			const result = await queryRunner(resolved.source.coordinates, resolved.secret, sql, { rowLimit, signal: controller.signal });
+			return { ok: true, columns: result.columns, rows: result.rows, truncated: result.truncated, durationMs: Date.now() - started };
+		} catch (error) {
+			return { ok: false, message: explainQueryError(resolved.source, error), durationMs: Date.now() - started };
+		} finally {
+			clearTimeout(timeout);
+		}
+	});
+
+	ipcMain.handle('environments:listTables', async (_event, projectId: string, dataSourceId: string): Promise<IDbTablesResult> => {
+		const resolved = await resolveDbSource(projectId, dataSourceId);
+		if (typeof resolved === 'string') {
+			return { ok: false, message: resolved };
+		}
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+		try {
+			return { ok: true, tables: await listDbTables(resolved.source.coordinates, resolved.secret, { signal: controller.signal, runQuery: queryRunner }) };
+		} catch (error) {
+			return { ok: false, message: explainQueryError(resolved.source, error) };
+		} finally {
+			clearTimeout(timeout);
+		}
+	});
 }
 
 const TEST_TIMEOUT_MS = 12_000;
+const QUERY_TIMEOUT_MS = 20_000;
+const DEFAULT_BROWSE_ROWS = 200;
+const MAX_BROWSE_ROWS = 1000;
 
 /** A secret counts as provided only when some field is non-empty — an untouched form must not clobber the stored credential. */
 function hasSecretContent(secret: IDataSourceSecret): boolean {

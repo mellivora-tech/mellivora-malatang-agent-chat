@@ -1,0 +1,213 @@
+/* Data browser tab (#4 P0): panel layout + Tabulator mapped onto the theme
+   tokens. One mapping serves both themes — every color routes through
+   --vscode-agents-* variables, never a hardcoded hex. */
+
+/* The data tab needs the full pane height (the grid scrolls internally). */
+.auxiliary-content-fill {
+	overflow: hidden;
+	min-height: 0;
+}
+
+.auxiliary-content-fill .auxiliary-view {
+	height: 100%;
+	box-sizing: border-box;
+}
+
+.auxiliary-content-fill .auxiliary-view-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	padding: var(--vscode-agents-space-8);
+}
+
+.data-browser {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-8);
+	height: 100%;
+	min-height: 0;
+	min-width: 0;
+}
+
+.data-browser-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	min-width: 0;
+	flex: 0 0 auto;
+}
+
+.data-browser-select {
+	height: var(--vscode-agents-space-24, 24px);
+	min-width: 0;
+	padding: 0 var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.data-browser-select:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-1);
+}
+
+.data-browser-source {
+	flex: 0 1 auto;
+	max-width: 40%;
+}
+
+.data-browser-table {
+	flex: 1 1 auto;
+}
+
+.data-browser-page-size {
+	flex: 0 0 auto;
+}
+
+.data-browser-spacer {
+	flex: 1 0 var(--vscode-agents-space-4);
+}
+
+.data-browser-button {
+	-webkit-appearance: none;
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--vscode-agents-space-24, 24px);
+	height: var(--vscode-agents-space-24, 24px);
+	flex: 0 0 auto;
+	border: none;
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: transparent;
+	color: var(--vscode-agents-color-text-secondary);
+	cursor: default;
+}
+
+.data-browser-button:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.data-browser-button:disabled {
+	color: var(--vscode-agents-color-text-disabled);
+}
+
+.data-browser-button:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-1);
+}
+
+.data-browser-page {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	white-space: nowrap;
+}
+
+.data-browser-grid {
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+.data-browser-status {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	min-width: 0;
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.data-browser-status-text {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.data-browser-status-sql {
+	flex: 0 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-agents-color-text-muted);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	cursor: pointer;
+}
+
+.data-browser-status-sql:hover {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.data-browser-null {
+	color: var(--vscode-agents-color-text-muted);
+	font-style: italic;
+}
+
+/* ---------- Tabulator → theme tokens ---------- */
+
+.data-browser .tabulator {
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control, 6px);
+	background: transparent;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.data-browser .tabulator .tabulator-header {
+	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 5%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.data-browser .tabulator .tabulator-header .tabulator-col {
+	border-right: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-panel-border) 60%, transparent);
+	background: transparent;
+}
+
+.data-browser .tabulator .tabulator-header .tabulator-col:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
+.data-browser .tabulator .tabulator-tableholder {
+	background: transparent;
+}
+
+.data-browser .tabulator .tabulator-tableholder .tabulator-table {
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.data-browser .tabulator .tabulator-row {
+	background: transparent;
+	min-height: var(--vscode-agents-space-24, 24px);
+}
+
+.data-browser .tabulator .tabulator-row.tabulator-row-even {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 3%, transparent);
+}
+
+.data-browser .tabulator .tabulator-row:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 7%, transparent);
+}
+
+.data-browser .tabulator .tabulator-row .tabulator-cell {
+	border-right: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-panel-border) 45%, transparent);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.data-browser .tabulator .tabulator-placeholder .tabulator-placeholder-contents {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+}
+
+.data-browser .tabulator .tabulator-col-resize-handle:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-focusBorder) 45%, transparent);
+}

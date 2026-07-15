@@ -6,6 +6,8 @@
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { DisposableStore } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
+import { DataBrowserView } from '../../contrib/data/browser/dataBrowserView.js';
+import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import { Part } from '../part.js';
@@ -13,9 +15,10 @@ import { Part } from '../part.js';
 export interface IAuxiliaryBarPartOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
+	readonly environmentsService?: IEnvironmentsService;
 }
 
-type AuxiliaryTabId = 'review' | 'terminal' | 'browser';
+type AuxiliaryTabId = 'review' | 'data' | 'terminal' | 'browser';
 
 const auxiliaryTabs: readonly {
 	readonly id: AuxiliaryTabId;
@@ -29,6 +32,12 @@ const auxiliaryTabs: readonly {
 		label: 'Review',
 		icon: 'codicon-diff',
 		title: 'Review',
+	},
+	{
+		id: 'data',
+		label: '数据',
+		icon: 'codicon-database',
+		title: '数据',
 	},
 	{
 		id: 'terminal',
@@ -150,7 +159,9 @@ export class AuxiliaryBarPart extends Part {
 
 		const activeTab = auxiliaryTabs.find(tab => tab.id === activeTabId)!;
 		const content = document.createElement('div');
-		content.className = 'auxiliary-content';
+		// The data grid manages its own scrolling and needs the full pane height;
+		// the other tabs keep the document-flow + outer-scroll behavior.
+		content.className = activeTab.id === 'data' ? 'auxiliary-content auxiliary-content-fill' : 'auxiliary-content';
 		root.appendChild(content);
 
 		const view = document.createElement('section');
@@ -170,6 +181,14 @@ export class AuxiliaryBarPart extends Part {
 		if (activeTab.id === 'review') {
 			this.viewDisposables.add(
 				new ChangesView(body, {
+					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
+				}),
+			);
+		} else if (activeTab.id === 'data') {
+			this.viewDisposables.add(
+				new DataBrowserView(body, {
+					...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),
 					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
 					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 				}),

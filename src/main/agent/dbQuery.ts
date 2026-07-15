@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IDatabaseCoordinates, IDataSourceSecret } from '../../sessions/services/environments/common/environments.js';
+import type { DbColumnCategory, IDatabaseCoordinates, IDataSourceSecret, IDbColumn, IDbTable } from '../../sessions/services/environments/common/environments.js';
 
 export interface IQueryResult {
-	readonly columns: readonly string[];
+	readonly columns: readonly IDbColumn[];
 	readonly rows: readonly (readonly unknown[])[];
 	readonly truncated: boolean;
 }
@@ -35,6 +35,48 @@ export function isReadOnlySql(sql: string): boolean {
 	return !WRITE_WORDS.test(trimmed);
 }
 
+// Postgres type OIDs → broad category. Anything unlisted renders as text — safe default.
+const PG_NUMBER_OIDS = new Set([20, 21, 23, 26, 700, 701, 1700]);
+const PG_DATE_OIDS = new Set([1082, 1083, 1114, 1184, 1266]);
+const PG_JSON_OIDS = new Set([114, 3802]);
+
+/** Broad category for a Postgres `dataTypeID` (exported for tests). */
+export function pgColumnCategory(dataTypeID: number): DbColumnCategory {
+	if (PG_NUMBER_OIDS.has(dataTypeID)) {
+		return 'number';
+	}
+	if (dataTypeID === 16) {
+		return 'boolean';
+	}
+	if (PG_DATE_OIDS.has(dataTypeID)) {
+		return 'date';
+	}
+	if (PG_JSON_OIDS.has(dataTypeID)) {
+		return 'json';
+	}
+	return 'text';
+}
+
+// mysql2 field type codes (protocol enum) → broad category. BIT and TINY stay
+// number: TINY(1) is often a de-facto boolean but the display length isn't
+// reliably present, and a misrendered number beats a misrendered boolean.
+const MYSQL_NUMBER_TYPES = new Set([0, 1, 2, 3, 4, 5, 8, 9, 13, 16, 246]);
+const MYSQL_DATE_TYPES = new Set([7, 10, 11, 12, 14]);
+
+/** Broad category for a mysql2 field type code (exported for tests). */
+export function mysqlColumnCategory(type: number): DbColumnCategory {
+	if (MYSQL_NUMBER_TYPES.has(type)) {
+		return 'number';
+	}
+	if (MYSQL_DATE_TYPES.has(type)) {
+		return 'date';
+	}
+	if (type === 245) {
+		return 'json';
+	}
+	return 'text';
+}
+
 async function runPostgres(coordinates: IDatabaseCoordinates, secret: IDataSourceSecret | undefined, sql: string, rowLimit: number, signal: AbortSignal): Promise<IQueryResult> {
 	const { Client } = await import('pg');
 	const client = new Client({
@@ -51,7 +93,7 @@ async function runPostgres(coordinates: IDatabaseCoordinates, secret: IDataSourc
 	try {
 		await client.connect();
 		const result = await client.query({ text: sql, rowMode: 'array' });
-		const columns = (result.fields ?? []).map(field => field.name);
+		const columns = (result.fields ?? []).map(field => ({ name: field.name, category: pgColumnCategory(field.dataTypeID) }));
 		const rows = (result.rows as unknown[][]).slice(0, rowLimit);
 		return { columns, rows, truncated: result.rows.length > rowLimit };
 	} finally {
@@ -75,7 +117,7 @@ async function runMysql(coordinates: IDatabaseCoordinates, secret: IDataSourceSe
 	signal.addEventListener('abort', onAbort, { once: true });
 	try {
 		const [rows, fields] = await connection.query(sql);
-		const columns = Array.isArray(fields) ? fields.map(field => field.name) : [];
+		const columns = Array.isArray(fields) ? fields.map(field => ({ name: field.name, category: mysqlColumnCategory(field.type ?? -1) })) : [];
 		const all = Array.isArray(rows) ? (rows as unknown[][]) : [];
 		return { columns, rows: all.slice(0, rowLimit), truncated: all.length > rowLimit };
 	} finally {
@@ -87,3 +129,42 @@ async function runMysql(coordinates: IDatabaseCoordinates, secret: IDataSourceSe
 /** Connect (per query) and run a read-only SQL statement. Callers MUST gate with {@link isReadOnlySql} first. */
 export const runDbQuery: DbQueryRunner = (coordinates, secret, sql, { rowLimit, signal }) =>
 	coordinates.driver === 'postgres' ? runPostgres(coordinates, secret, sql, rowLimit, signal) : runMysql(coordinates, secret, sql, rowLimit, signal);
+
+// Catalog queries are composed HERE (never from user input) — they bypass the
+// isReadOnlySql gate by construction. reltuples/table_rows are planner estimates;
+// negative/absent means the engine hasn't analyzed the table.
+const PG_TABLES_SQL = `
+	SELECT n.nspname, c.relname, CASE WHEN c.reltuples >= 0 THEN c.reltuples::bigint END
+	FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+	WHERE c.relkind IN ('r', 'p', 'v', 'm') AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+	ORDER BY n.nspname, c.relname`;
+const MYSQL_TABLES_SQL = `
+	SELECT table_schema, table_name, table_rows
+	FROM information_schema.tables WHERE table_schema = DATABASE()
+	ORDER BY table_name`;
+
+const TABLE_LIST_LIMIT = 2000;
+
+function asEstimatedRows(value: unknown): number | undefined {
+	const parsed = typeof value === 'string' ? Number(value) : value;
+	return typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** List tables and views of a database data source, with row estimates where the engine knows them. */
+export async function listDbTables(
+	coordinates: IDatabaseCoordinates,
+	secret: IDataSourceSecret | undefined,
+	options: { readonly signal: AbortSignal; readonly runQuery?: DbQueryRunner },
+): Promise<readonly IDbTable[]> {
+	const run = options.runQuery ?? runDbQuery;
+	const sql = coordinates.driver === 'postgres' ? PG_TABLES_SQL : MYSQL_TABLES_SQL;
+	const result = await run(coordinates, secret, sql, { rowLimit: TABLE_LIST_LIMIT, signal: options.signal });
+	return result.rows.map(row => {
+		const estimatedRows = asEstimatedRows(row[2]);
+		return {
+			schema: String(row[0] ?? ''),
+			name: String(row[1] ?? ''),
+			...(estimatedRows !== undefined ? { estimatedRows } : {}),
+		};
+	});
+}

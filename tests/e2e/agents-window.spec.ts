@@ -1984,7 +1984,7 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(toggle).toHaveClass(/active/);
 	await expect(page.locator('.auxiliary-empty-title')).toHaveText('Open tab');
 	await expect(page.locator('.auxiliary-empty-description')).toHaveText('Choose a tab to open in the side pane.');
-	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['Review', 'Terminal', 'Browser']);
+	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
 	await expect(page.locator('.auxiliary-tabs')).toHaveCount(0);
 
 	await page.locator('.auxiliary-empty-card').filter({ hasText: 'Review' }).click();
@@ -2042,7 +2042,7 @@ async function assertSidePaneTab(page: Page, tabId: string, title: string, bodyT
 	await expect(root).not.toHaveClass(/auxiliary-empty/);
 	await expect(page.locator('.auxiliary-empty-content')).toHaveCount(0);
 	await expect(page.locator('.auxiliary-tabs')).toBeVisible();
-	await expect(page.locator('.auxiliary-tab')).toHaveText(['Review', 'Terminal', 'Browser']);
+	await expect(page.locator('.auxiliary-tab')).toHaveText(['Review', '数据', 'Terminal', 'Browser']);
 
 	const activeTab = page.locator(`.auxiliary-tab[data-tab-id="${tabId}"]`);
 	await expect(activeTab).toHaveAttribute('aria-selected', 'true');

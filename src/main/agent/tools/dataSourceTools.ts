@@ -76,7 +76,7 @@ function formatResult(result: IQueryResult): string {
 	if (result.columns.length === 0) {
 		return '(query returned no columns)';
 	}
-	const header = result.columns.join(' | ');
+	const header = result.columns.map(column => column.name).join(' | ');
 	if (result.rows.length === 0) {
 		return `${header}\n(0 rows)`;
 	}

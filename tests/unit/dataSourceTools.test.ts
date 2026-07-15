@@ -43,7 +43,7 @@ test('query_data_source resolves a unique label, runs the query, and formats row
 	let seen: { host: string; sql: string } | undefined;
 	const runQuery: DbQueryRunner = async (coordinates, _secret, sql) => {
 		seen = { host: coordinates.host, sql };
-		return { columns: ['id', 'name'], rows: [[1, 'a'], [2, null]], truncated: false };
+		return { columns: [{ name: 'id', category: 'number' as const }, { name: 'name', category: 'text' as const }], rows: [[1, 'a'], [2, null]], truncated: false };
 	};
 	const tools = createDataSourceTools({ sources: SOURCES, getSecret: async () => ({ username: 'ro' }), runQuery });
 	const result = await run(byName(tools, 'query_data_source'), { source: 'billing', sql: 'SELECT id, name FROM t' });

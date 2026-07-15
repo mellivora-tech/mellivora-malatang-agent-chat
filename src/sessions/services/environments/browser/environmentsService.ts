@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
-import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IDataSourceTestResult, IEnvironmentInput, IEnvironmentsBridge, IWorkspaceConfigView } from '../common/environments.js';
+import type { IDataQueryResult, IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IDataSourceTestResult, IDbTablesResult, IEnvironmentInput, IEnvironmentsBridge, IWorkspaceConfigView } from '../common/environments.js';
 
 export const IEnvironmentsService = createDecorator<IEnvironmentsService>('environmentsService');
 
@@ -24,6 +24,8 @@ export interface IEnvironmentsService {
 	removeDataSource(projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView>;
 	setDataSourceCredential(projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView>;
 	testDataSource(projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult>;
+	runQuery(projectId: string, dataSourceId: string, sql: string, options?: { readonly rowLimit?: number }): Promise<IDataQueryResult>;
+	listTables(projectId: string, dataSourceId: string): Promise<IDbTablesResult>;
 }
 
 const EMPTY_VIEW: IWorkspaceConfigView = { environments: [], dataSources: [] };
@@ -61,5 +63,13 @@ export class EnvironmentsService implements IEnvironmentsService {
 
 	testDataSource(projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult> {
 		return this.bridge?.testDataSource(projectId, payload) ?? Promise.resolve({ ok: false, message: 'Environments bridge unavailable.', durationMs: 0 });
+	}
+
+	runQuery(projectId: string, dataSourceId: string, sql: string, options?: { readonly rowLimit?: number }): Promise<IDataQueryResult> {
+		return this.bridge?.runQuery(projectId, dataSourceId, sql, options) ?? Promise.resolve({ ok: false, message: 'Environments bridge unavailable.', durationMs: 0 });
+	}
+
+	listTables(projectId: string, dataSourceId: string): Promise<IDbTablesResult> {
+		return this.bridge?.listTables(projectId, dataSourceId) ?? Promise.resolve({ ok: false, message: 'Environments bridge unavailable.' });
 	}
 }
