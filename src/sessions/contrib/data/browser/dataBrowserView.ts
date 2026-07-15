@@ -10,7 +10,8 @@ import type { IEnvironmentsService } from '../../../services/environments/browse
 import type { DbColumnCategory, IDatabaseSource, IDbColumn, IDbTable } from '../../../services/environments/common/environments.js';
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
-import { compileBrowseSql, type IBrowseSort } from '../common/browseSql.js';
+import type { ISessionDataBrowse } from '../../../services/sessions/common/session.js';
+import { compileBrowseSql, compileQueryBrowseSql, type IBrowseSort } from '../common/browseSql.js';
 
 export interface IDataBrowserViewOptions {
 	readonly environmentsService?: IEnvironmentsService;
@@ -23,6 +24,9 @@ export interface IDataBrowserViewOptions {
 type BrowsableSource = IDatabaseSource & { readonly hasCredential: boolean };
 
 const PAGE_SIZES = [50, 100, 200, 500];
+
+/** The table dropdown's synthetic value while browsing a hand-off query. */
+const QUERY_OPTION = 'query';
 
 /**
  * Lightweight DataGrip-style table browser (issue #4 P0): pick a database data
@@ -54,6 +58,12 @@ export class DataBrowserView extends Disposable {
 	private hasNext = false;
 	/** Monotonic guard: a response only lands if it's still the newest request. */
 	private requestStamp = 0;
+	/** Query mode (chat → panel hand-off): page/sort wrap THIS statement instead of a table. */
+	private baseQuery: string | undefined;
+	/** The last clicked cell — precise coordinates for the "问 AI" reference. */
+	private lastCell: { column: string; value: unknown; anchor?: { column: string; value: unknown } } | undefined;
+	/** Resolves when the initial source list has loaded (browse requests await it). */
+	private sourcesReady: Promise<void>;
 
 	constructor(container: HTMLElement, private readonly options: IDataBrowserViewOptions = {}) {
 		super();
@@ -120,6 +130,30 @@ export class DataBrowserView extends Disposable {
 			}
 		});
 
+		// Panel → composer: the current view (source, table/query, SQL, selected
+		// cell) lands in the chat input as a structured reference.
+		if (this.options.sessionsPartService) {
+			const ask = document.createElement('button');
+			ask.className = 'data-browser-button data-browser-ask';
+			ask.type = 'button';
+			ask.title = '把当前视图作为引用发给 AI';
+			ask.setAttribute('aria-label', '问 AI');
+			const glyph = document.createElement('span');
+			glyph.className = 'codicon codicon-comment-discussion';
+			glyph.setAttribute('aria-hidden', 'true');
+			ask.appendChild(glyph);
+			const label = document.createElement('span');
+			label.textContent = '问 AI';
+			ask.appendChild(label);
+			ask.addEventListener('click', () => {
+				const reference = this.composeAskReference();
+				if (reference) {
+					this.options.sessionsPartService?.insertIntoComposer(reference);
+				}
+			});
+			toolbar.appendChild(ask);
+		}
+
 		this.gridHost = document.createElement('div');
 		this.gridHost.className = 'data-browser-grid';
 		root.appendChild(this.gridHost);
@@ -148,7 +182,7 @@ export class DataBrowserView extends Disposable {
 				const projectId = activeSession.get()?.projectId;
 				if (projectId !== this.projectId) {
 					this.projectId = projectId;
-					void this.loadSources();
+					this.sourcesReady = this.loadSources();
 				}
 			}));
 			this.projectId = activeSession.get()?.projectId;
@@ -164,7 +198,37 @@ export class DataBrowserView extends Disposable {
 		this.resizeObserver.observe(this.gridHost);
 
 		this.updatePager();
-		void this.loadSources();
+		this.sourcesReady = this.loadSources();
+	}
+
+	/** Chat → panel hand-off: run the agent's query here and keep exploring it. */
+	async applyBrowseRequest(request: ISessionDataBrowse): Promise<void> {
+		await this.sourcesReady;
+		const source = this.resolveSourceRef(request.source);
+		if (!source) {
+			this.baseQuery = undefined;
+			this.setStatus(`找不到数据源 “${request.source}” — 可能已被删除或不属于当前项目。`, '');
+			return;
+		}
+		this.sourceSelect.value = source.id;
+		this.baseQuery = request.sql;
+		this.sort = undefined;
+		this.page = 0;
+		await this.loadTables(source);
+	}
+
+	/** id → label → environment name, first unique match (the agent tools' contract). */
+	private resolveSourceRef(ref: string): BrowsableSource | undefined {
+		const byId = this.sources.find(source => source.id === ref);
+		if (byId) {
+			return byId;
+		}
+		const byLabel = this.sources.filter(source => source.label === ref);
+		if (byLabel.length === 1) {
+			return byLabel[0];
+		}
+		const byEnvironment = this.sources.filter(source => this.environmentNames.get(source.environmentId) === ref);
+		return byEnvironment.length === 1 ? byEnvironment[0] : undefined;
 	}
 
 	override dispose(): void {
@@ -200,8 +264,39 @@ export class DataBrowserView extends Disposable {
 			return;
 		}
 		const scope = this.environmentNames.get(source.environmentId) ?? source.label;
+		if (this.baseQuery !== undefined) {
+			this.options.onContextChange?.(`${scope}·查询`);
+			return;
+		}
 		const table = this.selectedTable;
 		this.options.onContextChange?.(table ? `${scope}·${table.name}` : scope);
+	}
+
+	/** The current view as precise, structured reference text for the composer. */
+	private composeAskReference(): string | undefined {
+		const source = this.selectedSource;
+		if (!source) {
+			return undefined;
+		}
+		const scope = this.environmentNames.get(source.environmentId);
+		const lines = ['引用数据浏览器当前视图：'];
+		lines.push(`- 数据源: ${scope ? `${scope} · ` : ''}${source.label}（${source.coordinates.driver} ${source.coordinates.database}）`);
+		const table = this.selectedTable;
+		if (this.baseQuery !== undefined) {
+			lines.push(`- 查询: ${this.baseQuery}`);
+		} else if (table) {
+			lines.push(`- 表: ${table.schema ? `${table.schema}.` : ''}${table.name}${table.estimatedRows !== undefined ? `（约 ${table.estimatedRows} 行）` : ''}`);
+		}
+		const sql = this.statusSql.textContent;
+		if (sql) {
+			lines.push(`- 当前 SQL: ${sql}`);
+		}
+		lines.push(`- 位置: 第 ${this.page + 1} 页 · 每页 ${this.pageSize} 行`);
+		if (this.lastCell) {
+			const anchor = this.lastCell.anchor ? `（该行 ${this.lastCell.anchor.column}=${formatReferenceValue(this.lastCell.anchor.value)}）` : '';
+			lines.push(`- 选中单元格: ${this.lastCell.column} = ${formatReferenceValue(this.lastCell.value)}${anchor}`);
+		}
+		return `${lines.join('\n')}\n`;
 	}
 
 	private get selectedTable(): IDbTable | undefined {
@@ -235,12 +330,17 @@ export class DataBrowserView extends Disposable {
 		await this.onSourceChanged();
 	}
 
+	/** User picked a source: table mode, from scratch. */
 	private async onSourceChanged(): Promise<void> {
-		const stamp = ++this.requestStamp;
-		const source = this.selectedSource;
-		this.tables = [];
+		this.baseQuery = undefined;
 		this.sort = undefined;
 		this.page = 0;
+		await this.loadTables(this.selectedSource);
+	}
+
+	private async loadTables(source: BrowsableSource | undefined): Promise<void> {
+		const stamp = ++this.requestStamp;
+		this.tables = [];
 		this.resetGrid();
 		this.renderTableOptions();
 		if (!this.projectId || !source || !this.options.environmentsService) {
@@ -252,13 +352,18 @@ export class DataBrowserView extends Disposable {
 			return;
 		}
 		if (!result.ok) {
-			this.setStatus(result.message, '');
-			return;
+			// Query mode still works without a catalog (e.g. permission-limited
+			// information_schema) — only table mode is dead in the water.
+			if (this.baseQuery === undefined) {
+				this.setStatus(result.message, '');
+				return;
+			}
+		} else {
+			this.tables = result.tables;
 		}
-		this.tables = result.tables;
 		this.renderTableOptions();
 		this.reportContext();
-		if (this.tables.length === 0) {
+		if (this.baseQuery === undefined && this.tables.length === 0) {
 			this.setStatus('这个数据源里没有可见的表。', '');
 			return;
 		}
@@ -266,6 +371,16 @@ export class DataBrowserView extends Disposable {
 	}
 
 	private onTableChanged(): void {
+		if (this.tableSelect.value === QUERY_OPTION) {
+			return;
+		}
+		if (this.baseQuery !== undefined) {
+			// Leaving query mode: drop the synthetic option, keep the chosen table.
+			const chosen = this.tableSelect.value;
+			this.baseQuery = undefined;
+			this.renderTableOptions();
+			this.tableSelect.value = chosen;
+		}
 		this.sort = undefined;
 		this.page = 0;
 		void this.runQueryNow();
@@ -275,11 +390,14 @@ export class DataBrowserView extends Disposable {
 		const stamp = ++this.requestStamp;
 		const source = this.selectedSource;
 		const table = this.selectedTable;
-		if (!this.projectId || !source || !table || !this.options.environmentsService) {
+		if (!this.projectId || !source || !this.options.environmentsService || (this.baseQuery === undefined && !table)) {
 			return;
 		}
 		this.reportContext();
-		const sql = compileBrowseSql(source.coordinates.driver, table, { pageSize: this.pageSize, page: this.page, ...(this.sort ? { sort: this.sort } : {}) });
+		const state = { pageSize: this.pageSize, page: this.page, ...(this.sort ? { sort: this.sort } : {}) };
+		const sql = this.baseQuery !== undefined
+			? compileQueryBrowseSql(source.coordinates.driver, this.baseQuery, state)
+			: compileBrowseSql(source.coordinates.driver, table!, state);
 		this.setStatus('查询中…', sql);
 		const result = await this.options.environmentsService.runQuery(this.projectId, source.id, sql, { rowLimit: this.pageSize });
 		if (stamp !== this.requestStamp) {
@@ -294,7 +412,7 @@ export class DataBrowserView extends Disposable {
 		}
 		this.hasNext = result.truncated;
 		this.buildGrid(result.columns, result.rows);
-		const estimate = table.estimatedRows !== undefined ? ` / 约 ${table.estimatedRows} 行` : '';
+		const estimate = this.baseQuery === undefined && table?.estimatedRows !== undefined ? ` / 约 ${table.estimatedRows} 行` : '';
 		this.setStatus(`${result.rows.length} 行${result.truncated ? '+' : ''}${estimate} · ${result.durationMs}ms`, sql);
 		this.updatePager();
 	}
@@ -314,6 +432,13 @@ export class DataBrowserView extends Disposable {
 
 	private renderTableOptions(): void {
 		this.tableSelect.textContent = '';
+		// Query mode gets a synthetic entry; picking a real table leaves it.
+		if (this.baseQuery !== undefined) {
+			const option = document.createElement('option');
+			option.value = QUERY_OPTION;
+			option.textContent = '（查询结果）';
+			this.tableSelect.appendChild(option);
+		}
 		this.tables.forEach((table, index) => {
 			const option = document.createElement('option');
 			option.value = String(index);
@@ -321,7 +446,10 @@ export class DataBrowserView extends Disposable {
 			option.textContent = table.estimatedRows !== undefined ? `${qualified}（约 ${table.estimatedRows} 行）` : qualified;
 			this.tableSelect.appendChild(option);
 		});
-		this.tableSelect.disabled = this.tables.length === 0;
+		this.tableSelect.disabled = this.tables.length === 0 && this.baseQuery === undefined;
+		if (this.baseQuery !== undefined) {
+			this.tableSelect.value = QUERY_OPTION;
+		}
 	}
 
 	private cycleSort(column: string): void {
@@ -339,6 +467,8 @@ export class DataBrowserView extends Disposable {
 	private buildGrid(columns: readonly IDbColumn[], rows: readonly (readonly unknown[])[]): void {
 		this.table?.destroy();
 		this.gridHost.textContent = '';
+		this.lastCell = undefined;
+		const anchorColumn = columns[0];
 		const definitions: ColumnDefinition[] = columns.map((column, index) => ({
 			title: this.columnTitle(column.name),
 			field: `c${index}`,
@@ -346,6 +476,16 @@ export class DataBrowserView extends Disposable {
 			headerClick: () => this.cycleSort(column.name),
 			...(column.category === 'number' ? { hozAlign: 'right' as const } : {}),
 			formatter: (cell: CellComponent) => formatCellValue(cell.getValue(), column.category),
+			// Precise coordinates for "问 AI": the clicked cell, anchored by the
+			// row's first column so the model can find the exact row.
+			cellClick: (_event: UIEvent, cell: CellComponent) => {
+				const data = cell.getRow().getData() as Record<string, unknown>;
+				this.lastCell = {
+					column: column.name,
+					value: cell.getValue(),
+					...(anchorColumn && index !== 0 ? { anchor: { column: anchorColumn.name, value: data['c0'] } } : {}),
+				};
+			},
 		}));
 		const data = rows.map(row => Object.fromEntries(row.map((value, index) => [`c${index}`, value])));
 		this.table = new TabulatorFull(this.gridHost, {
@@ -413,6 +553,15 @@ export function formatCellValue(value: unknown, category: DbColumnCategory): HTM
 	}
 	span.textContent = String(value);
 	return span;
+}
+
+/** Cell value → inline reference text (bounded; NULL/dates/objects readable). */
+function formatReferenceValue(value: unknown): string {
+	if (value === null || value === undefined) {
+		return 'NULL';
+	}
+	const text = value instanceof Date ? formatDate(value) : typeof value === 'object' ? safeJson(value) : String(value);
+	return text.length > 120 ? `${text.slice(0, 120)}…` : text;
 }
 
 function safeJson(value: object): string {

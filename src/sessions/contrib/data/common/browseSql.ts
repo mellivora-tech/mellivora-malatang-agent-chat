@@ -36,7 +36,23 @@ export function compileBrowseSql(driver: DatabaseDriver, table: IDbTable, state:
 	const target = table.schema
 		? `${quoteIdentifier(driver, table.schema)}.${quoteIdentifier(driver, table.name)}`
 		: quoteIdentifier(driver, table.name);
+	return `SELECT * FROM ${target}${compilePageClauses(driver, state)}`;
+}
+
+/**
+ * Page an arbitrary read-only query (the chat → panel hand-off) by wrapping it
+ * as a derived table: sorting and paging apply to the ORIGINAL result set, so
+ * the panel can keep exploring what the agent queried without re-parsing SQL.
+ * The wrapped statement still passes the main-side isReadOnlySql gate iff the
+ * inner one does.
+ */
+export function compileQueryBrowseSql(driver: DatabaseDriver, baseSql: string, state: IBrowseState): string {
+	const inner = baseSql.trim().replace(/;+\s*$/, '');
+	return `SELECT * FROM (${inner}) AS ${quoteIdentifier(driver, '_browse')}${compilePageClauses(driver, state)}`;
+}
+
+function compilePageClauses(driver: DatabaseDriver, state: IBrowseState): string {
 	const orderBy = state.sort ? ` ORDER BY ${quoteIdentifier(driver, state.sort.column)} ${state.sort.direction === 'desc' ? 'DESC' : 'ASC'}` : '';
 	const offset = state.page > 0 ? ` OFFSET ${state.page * state.pageSize}` : '';
-	return `SELECT * FROM ${target}${orderBy} LIMIT ${state.pageSize + 1}${offset}`;
+	return `${orderBy} LIMIT ${state.pageSize + 1}${offset}`;
 }

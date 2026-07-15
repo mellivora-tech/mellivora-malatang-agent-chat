@@ -8,7 +8,7 @@ import { clearNode } from '../../base/browser/dom.js';
 import { sessionsMaxWidthPx } from '../../common/sizes.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
-import type { WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
+import type { ISessionsPartService, WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
@@ -39,6 +39,7 @@ export class SessionsPart extends Part {
 		private readonly projectsService?: IProjectsService,
 		modelsService?: IModelsService,
 		skillsService?: ISkillsService,
+		sessionsPartService?: ISessionsPartService,
 	) {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
@@ -51,7 +52,7 @@ export class SessionsPart extends Part {
 				listSessions: () => listReferencableSessions(this.sessionsService?.getSessions() ?? [], undefined),
 			}),
 		);
-		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService, skillsService));
+		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService, skillsService, sessionsPartService));
 	}
 
 	private getStartSessionOptions(): { workspace: { label: string; description: string }; projectId: string } | undefined {

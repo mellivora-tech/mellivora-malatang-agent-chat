@@ -58,6 +58,8 @@ interface ITabInstance {
 	label: string;
 	readonly container: HTMLElement;
 	readonly disposables: DisposableStore;
+	/** data tabs only: the live view, so browse requests can be forwarded. */
+	dataView?: DataBrowserView;
 }
 
 /**
@@ -89,6 +91,21 @@ export class AuxiliaryBarPart extends Part {
 				tab.disposables.dispose();
 			}
 		}));
+		// Chat → data browser: consume the request, open (or focus) the data tab,
+		// and hand the query to its view.
+		const request = this.options.sessionsPartService?.dataBrowseRequest;
+		if (request) {
+			this._register(request.subscribe(() => {
+				const browse = request.get();
+				if (!browse) {
+					return;
+				}
+				request.set(undefined);
+				this.openTab('data');
+				const tab = this.openTabs.find(candidate => candidate.kind === 'data');
+				void tab?.dataView?.applyBrowseRequest(browse);
+			}));
+		}
 	}
 
 	protected render(container: HTMLElement): void {
@@ -180,14 +197,13 @@ export class AuxiliaryBarPart extends Part {
 				}),
 			);
 		} else if (kind === 'data') {
-			disposables.add(
-				new DataBrowserView(body, {
-					...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),
-					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
-					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
-					onContextChange: label => this.renameTab(instance.id, label),
-				}),
-			);
+			instance.dataView = new DataBrowserView(body, {
+				...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),
+				...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+				...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
+				onContextChange: label => this.renameTab(instance.id, label),
+			});
+			disposables.add(instance.dataView);
 		} else {
 			body.textContent = spec.body ?? '';
 		}

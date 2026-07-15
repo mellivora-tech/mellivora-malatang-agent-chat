@@ -83,6 +83,15 @@
 	outline-offset: var(--vscode-agents-space-1);
 }
 
+/* "问 AI": the only labeled button in the toolbar — icon buttons stay square. */
+.data-browser-ask {
+	width: auto;
+	gap: var(--vscode-agents-space-4);
+	padding: 0 var(--vscode-agents-space-8);
+	font-size: var(--vscode-agents-fontSize-label1);
+	white-space: nowrap;
+}
+
 .data-browser-page {
 	flex: 0 0 auto;
 	color: var(--vscode-agents-color-text-secondary);

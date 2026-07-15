@@ -19,6 +19,7 @@ import type {
 import { buildReviseTurn } from '../../services/sessions/common/planArtifact.js';
 import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
+import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments, type IImageController } from './composerImages.js';
@@ -115,6 +116,7 @@ export class ConversationView extends Disposable {
 		private readonly modelsService?: IModelsService,
 		private readonly projectsService?: IProjectsService,
 		private readonly skillsService?: ISkillsService,
+		private readonly sessionsPartService?: ISessionsPartService,
 	) {
 		super();
 
@@ -315,6 +317,24 @@ export class ConversationView extends Disposable {
 					(this.session?.messages.get() ?? []).filter(message => message.role === 'user').map(message => message.text),
 			}),
 		);
+
+		// Data browser → composer: structured reference text lands in the input
+		// (consume-once; the observable resets so the same text can come again).
+		if (this.sessionsPartService) {
+			const insertRequest = this.sessionsPartService.composerInsertRequest;
+			this._register(insertRequest.subscribe(() => {
+				const text = insertRequest.get();
+				if (text === undefined || text === '') {
+					return;
+				}
+				insertRequest.set(undefined);
+				const current = this.input.value;
+				this.input.value = current === '' ? text : `${current.replace(/\s+$/, '')}\n${text}`;
+				this.input.dispatchEvent(new Event('input', { bubbles: true }));
+				this.input.focus();
+				this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+			}));
+		}
 
 		this._registerEventListeners();
 		this.render();
@@ -1219,6 +1239,23 @@ export class ConversationView extends Disposable {
 				duration.className = 'conversation-work-step-duration';
 				duration.textContent = formatDurationMs(step.durationMs);
 			}
+		}
+
+		// "在数据浏览器打开" — the query jumps to the side pane's data tab where
+		// paging/sorting costs zero tokens.
+		if (step.browse && this.sessionsPartService) {
+			const browse = step.browse;
+			const openButton = append(row, document.createElement('button')) as HTMLButtonElement;
+			openButton.className = 'conversation-work-step-browse';
+			openButton.type = 'button';
+			openButton.title = '在数据浏览器打开这个查询';
+			appendCodicon(openButton, 'codicon-database');
+			append(openButton, document.createElement('span')).textContent = '在数据浏览器打开';
+			openButton.addEventListener('click', event => {
+				// The row itself may be an expand toggle — don't trip it.
+				event.stopPropagation();
+				this.sessionsPartService?.openDataBrowser(browse);
+			});
 		}
 
 		if (step.detail) {

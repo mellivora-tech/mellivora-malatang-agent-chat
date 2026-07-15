@@ -251,3 +251,99 @@ test('side pane sash: drag pins a user width, double-click returns to automatic'
 		await app?.close();
 	}
 });
+
+async function writeSessionWithQueryStep(dataDir: string, projectId: string, sessionId: string): Promise<void> {
+	const dir = join(dataDir, 'projects', projectId, 'sessions');
+	await mkdir(dir, { recursive: true });
+	const createdAt = '2026-01-01T00:00:00.000Z';
+	const lines = [
+		JSON.stringify({ type: 'session', version: 1, sessionId, sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt, interactivity: 'full', projectId }),
+		JSON.stringify({ type: 'message', timestamp: createdAt, id: 'u1', role: 'user', text: '查一下订单' }),
+		JSON.stringify({
+			type: 'message', timestamp: createdAt, id: 'w1', role: 'work', text: '', durationMs: 5000,
+			steps: [{ kind: 'tool', label: 'query_data_source', durationMs: 1200, detail: 'id | name\n1 | a', browse: { source: 'ds-orders', sql: 'SELECT id, name, amount, created_at FROM shop.orders WHERE amount > 0' } }],
+		}),
+		JSON.stringify({ type: 'message', timestamp: createdAt, id: 'a1', role: 'assistant', text: '查到了 120 行。' }),
+		JSON.stringify({ type: 'state', timestamp: createdAt, status: 3, title: '数据浏览' }),
+	];
+	await writeFile(join(dir, `${sessionId}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+}
+
+test('chat → panel: a query step opens in the data browser as a paged derived table', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSessionWithQueryStep(dataDir, 'shop', 'session-query');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await page.locator('.sessions-list-row').first().click();
+		await expect(page.locator('.session-view')).toBeVisible();
+
+		// The settled work block is collapsed — expand it to reach the step.
+		await page.locator('.conversation-work-header').click();
+		const browseButton = page.locator('.conversation-work-step-browse');
+		await expect(browseButton).toContainText('在数据浏览器打开');
+		await browseButton.click();
+
+		// The side pane opens on the data tab in query mode: synthetic table
+		// entry, wrapped SQL, rows from the (fake) database, context tab label.
+		await expect(page.locator('.part.auxiliarybar')).toBeVisible();
+		await expect(page.locator('.auxiliary-view[data-tab-id="data"] .data-browser')).toBeVisible();
+		await expect(page.locator('.data-browser-table')).toHaveValue('query');
+		await expect(page.locator('.data-browser-table option').first()).toHaveText('（查询结果）');
+		await expect(page.locator('.data-browser-status-sql')).toContainText('AS `_browse` LIMIT 101');
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-001');
+		await expect(page.locator('.auxiliary-tab[data-tab-id="data"] .auxiliary-tab-label')).toHaveText('dev·查询');
+
+		// Paging works on the wrapped query too.
+		await page.locator('.data-browser-button[title="下一页"]').click();
+		await expect(page.locator('.data-browser-status-sql')).toContainText('OFFSET 100');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-101');
+
+		// Picking a real table leaves query mode: the synthetic entry disappears.
+		await page.locator('.data-browser-table').selectOption('0');
+		await expect(page.locator('.data-browser-status-sql')).toContainText('SELECT * FROM `shop`.`orders` LIMIT 101');
+		await expect(page.locator('.data-browser-table option').first()).not.toHaveText('（查询结果）');
+	} finally {
+		await app?.close();
+	}
+});
+
+test('panel → chat: 问 AI drops a structured reference into the composer', async () => {
+	let app: ElectronApplication | undefined;
+	try {
+		const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-e2e-'));
+		const workspace = await mkdtemp(join(tmpdir(), 'agent-chat-ws-'));
+		await writeWorkspaceConfig(workspace);
+		await writeProject(dataDir, 'shop', 'Shop', workspace);
+		await writeSession(dataDir, 'shop', 'session-data');
+
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_FAKE_DB: '1' } });
+		const page = await app.firstWindow();
+		await openDataTab(page);
+		const grid = page.locator('.auxiliary-view[data-tab-id="data"] .data-browser-grid');
+		await expect(grid.locator('.tabulator-row').first().locator('.tabulator-cell').nth(1)).toHaveText('item-001');
+
+		// Click a cell (row 2, amount column) then 问 AI: the composer receives
+		// the precise coordinates — source, table, SQL, page, and the cell.
+		await grid.locator('.tabulator-row').nth(1).locator('.tabulator-cell').nth(2).click();
+		await page.locator('.data-browser-ask').click();
+
+		const composer = page.locator('.conversation-input');
+		await expect(composer).toBeFocused();
+		const text = await composer.inputValue();
+		expect(text).toContain('引用数据浏览器当前视图：');
+		expect(text).toContain('- 数据源: dev · orders库（mysql shop）');
+		expect(text).toContain('- 表: shop.orders（约 120 行）');
+		expect(text).toContain('- 当前 SQL: SELECT * FROM `shop`.`orders` LIMIT 101');
+		expect(text).toContain('- 位置: 第 1 页 · 每页 100 行');
+		expect(text).toContain('- 选中单元格: amount = 20（该行 id=2）');
+	} finally {
+		await app?.close();
+	}
+});

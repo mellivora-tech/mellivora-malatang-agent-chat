@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { compileBrowseSql, quoteIdentifier } from '../../src/sessions/contrib/data/common/browseSql.js';
+import { compileBrowseSql, compileQueryBrowseSql, quoteIdentifier } from '../../src/sessions/contrib/data/common/browseSql.js';
 import { isReadOnlySql } from '../../src/main/agent/dbQuery.js';
 
 test('quoteIdentifier escapes per driver', () => {
@@ -42,4 +42,22 @@ test('hostile identifiers never slip past the gate as writes — they are reject
 	// a table simply can't be browsed; nothing mutating ever reaches the driver.
 	const sql = compileBrowseSql('postgres', { schema: 'public', name: 'x"; DROP TABLE users; --' }, { pageSize: 10, page: 0 });
 	assert.equal(isReadOnlySql(sql), false);
+});
+
+test('compileQueryBrowseSql wraps an arbitrary read-only query as a paged derived table', () => {
+	const base = 'SELECT id, name FROM shop.orders WHERE amount > 100;';
+	assert.equal(
+		compileQueryBrowseSql('mysql', base, { pageSize: 100, page: 0 }),
+		'SELECT * FROM (SELECT id, name FROM shop.orders WHERE amount > 100) AS `_browse` LIMIT 101',
+	);
+	assert.equal(
+		compileQueryBrowseSql('postgres', 'SELECT 1 AS n', { pageSize: 50, page: 2, sort: { column: 'n', direction: 'desc' } }),
+		'SELECT * FROM (SELECT 1 AS n) AS "_browse" ORDER BY "n" DESC LIMIT 51 OFFSET 100',
+	);
+});
+
+test('the wrapped query passes the read-only gate iff the inner one does', () => {
+	assert.ok(isReadOnlySql(compileQueryBrowseSql('mysql', 'SELECT * FROM t WHERE x = 1', { pageSize: 10, page: 0 })));
+	// A write smuggled in stays rejected — the wrapper adds no laundering.
+	assert.equal(isReadOnlySql(compileQueryBrowseSql('mysql', 'DELETE FROM t', { pageSize: 10, page: 0 })), false);
 });

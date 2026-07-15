@@ -32,6 +32,13 @@ export interface ISessionChangesSummary {
 	readonly deletions: number;
 }
 
+/** A `query_data_source` call's coordinates, re-runnable in the data browser (chat → panel hand-off). */
+export interface ISessionDataBrowse {
+	/** The source as the model addressed it (id, label, or environment name). */
+	readonly source: string;
+	readonly sql: string;
+}
+
 /** One step inside a work block: a thinking stretch or a tool call. */
 export interface ISessionWorkStep {
 	/** 'narration': pre-tool announce text the model emitted in a WORK turn ("我来梳理一下…") — shown as a step, never as the answer bubble. */
@@ -42,6 +49,8 @@ export interface ISessionWorkStep {
 	readonly detail?: string;
 	/** Still executing — rendered with a spinner instead of a duration chip. Live-view only; never persisted (the step closes before finalize writes). */
 	readonly running?: boolean;
+	/** query_data_source steps only: powers the "在数据浏览器打开" affordance. */
+	readonly browse?: ISessionDataBrowse;
 }
 
 /**

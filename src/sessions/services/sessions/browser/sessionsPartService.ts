@@ -5,7 +5,7 @@
 
 import { observableValue } from '../../../base/common/observable.js';
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
-import type { IActiveSession } from '../common/session.js';
+import type { IActiveSession, ISessionDataBrowse } from '../common/session.js';
 
 export const ISessionsPartService = createDecorator<ISessionsPartService>('sessionsPartService');
 
@@ -17,11 +17,19 @@ export interface ISessionsPartService {
 	readonly auxiliaryBarVisible: ReturnType<typeof observableValue<boolean>>;
 	readonly visibleSessions: ReturnType<typeof observableValue<readonly (IActiveSession | undefined)[]>>;
 	readonly activeSession: ReturnType<typeof observableValue<IActiveSession | undefined>>;
+	/** Chat → data browser: a query to keep exploring; the side pane consumes it (resets to undefined). */
+	readonly dataBrowseRequest: ReturnType<typeof observableValue<ISessionDataBrowse | undefined>>;
+	/** Data browser → composer: reference text to append; the conversation view consumes it. */
+	readonly composerInsertRequest: ReturnType<typeof observableValue<string | undefined>>;
 	showNewSession(): void;
 	showConversation(showAuxiliaryBar?: boolean): void;
 	toggleSidePane(): void;
 	hideSidePane(): void;
 	showSidePane(): void;
+	/** Open the side pane on the data tab and run this query there. */
+	openDataBrowser(request: ISessionDataBrowse): void;
+	/** Append structured reference text to the conversation composer. */
+	insertIntoComposer(text: string): void;
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void;
 }
 
@@ -56,6 +64,18 @@ export class SessionsPartService implements ISessionsPartService {
 
 	showSidePane(): void {
 		this.sidePaneVisible.set(true);
+	}
+
+	readonly dataBrowseRequest = observableValue<ISessionDataBrowse | undefined>(undefined);
+	readonly composerInsertRequest = observableValue<string | undefined>(undefined);
+
+	openDataBrowser(request: ISessionDataBrowse): void {
+		this.showSidePane();
+		this.dataBrowseRequest.set(request);
+	}
+
+	insertIntoComposer(text: string): void {
+		this.composerInsertRequest.set(text);
 	}
 
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void {

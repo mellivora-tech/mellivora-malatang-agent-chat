@@ -17,6 +17,7 @@ import type {
 	ISessionMessage,
 	ISessionPendingApproval,
 	ISessionReconnect,
+	ISessionDataBrowse,
 	ISessionWorkStep,
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
@@ -662,6 +663,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const steps: ISessionWorkStep[] = [];
 		let stepStart = workStart;
 		let openToolLabel: string | undefined;
+		// query_data_source only: the call's coordinates ride the step so the UI
+		// can offer "在数据浏览器打开" (chat → data browser hand-off).
+		let openToolBrowse: ISessionDataBrowse | undefined;
 		// The run's latest propose_plan / write_walkthrough inputs — last call of
 		// each wins; materialized into role:'plan' messages at finalize
 		// (ids/version assigned there, never by the model).
@@ -697,7 +701,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 			// Sub-second thinking stretches without content are noise, not steps.
 			if (kind !== 'thinking' || durationMs >= 1000 || stepDetail !== undefined) {
-				steps.push({ kind, label, durationMs, ...(stepDetail === undefined ? {} : { detail: stepDetail }) });
+				steps.push({ kind, label, durationMs, ...(stepDetail === undefined ? {} : { detail: stepDetail }), ...(kind === 'tool' && openToolBrowse ? { browse: openToolBrowse } : {}) });
+			}
+			if (kind === 'tool') {
+				openToolBrowse = undefined;
 			}
 			stepStart = Date.now();
 		};
@@ -996,6 +1003,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					pendingWalkthroughInput = parsePlanInput(event.input) ?? pendingWalkthroughInput;
 				}
 				openToolLabel = describeWorkTool(event.name, event.input);
+				openToolBrowse = parseBrowsePayload(event.name, event.input);
 				updateWork();
 			} else if (event?.type === 'tool_result') {
 				if (openToolLabel !== undefined) {
@@ -1211,6 +1219,17 @@ const MAX_STEP_DETAIL_CHARS = 2000;
 function truncateStepDetail(content: string, isError: boolean): string {
 	const trimmed = content.length > MAX_STEP_DETAIL_CHARS ? `${content.slice(0, MAX_STEP_DETAIL_CHARS)}\n… (truncated)` : content;
 	return isError ? `[error]\n${trimmed}` : trimmed;
+}
+
+/** query_data_source input → the step's browse payload; undefined for every other tool. */
+function parseBrowsePayload(name: string, input: unknown): ISessionDataBrowse | undefined {
+	if (name !== 'query_data_source' || typeof input !== 'object' || input === null) {
+		return undefined;
+	}
+	const record = input as Record<string, unknown>;
+	return typeof record['source'] === 'string' && typeof record['sql'] === 'string' && record['sql'].trim() !== ''
+		? { source: record['source'], sql: record['sql'] }
+		: undefined;
 }
 
 /** Short human label for a tool step: the tool plus its most telling argument. */
