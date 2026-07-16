@@ -73,7 +73,14 @@ export class Workbench {
 		environmentsService: this.environmentsService,
 		onToggleSidebar: () => this.toggleSidebar(),
 	});
-	private readonly sessionsPart = new SessionsPart(this.sessionsService, this.projectsService, this.modelsService, this.skillsService, this.sessionsPartService);
+	private readonly sessionsPart = new SessionsPart(
+		this.sessionsService,
+		this.projectsService,
+		this.modelsService,
+		this.skillsService,
+		this.sessionsPartService,
+		(globalThis as AgentWindowGlobals).agentWindow?.dataFiles,
+	);
 	private readonly auxiliaryBarPart = new AuxiliaryBarPart({
 		sessionsService: this.sessionsService,
 		sessionsPartService: this.sessionsPartService,

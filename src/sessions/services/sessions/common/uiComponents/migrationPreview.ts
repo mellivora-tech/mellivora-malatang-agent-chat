@@ -220,6 +220,45 @@ export interface IMigrationCellEdit {
 	readonly after: string;
 }
 
+/**
+ * One in-card mapping override, keyed by the mapping's index in props.mappings.
+ * Absent fields = unchanged; `dropped` excludes the field from the migration
+ * (and from the compiled SQL) without forgetting it — restore = delete the edit.
+ */
+export interface IMigrationMappingEdit {
+	readonly index: number;
+	readonly target?: string;
+	readonly transformSql?: string;
+	readonly dropped?: boolean;
+}
+
+/**
+ * The mappings as the user has edited them: overrides applied, dropped fields
+ * excluded. This is the single source both the compiled SQL and the confirm
+ * turn derive from — the model executes exactly what the card showed.
+ */
+export function applyMappingEdits(mappings: readonly IMigrationFieldMapping[], edits: readonly IMigrationMappingEdit[]): IMigrationFieldMapping[] {
+	const byIndex = new Map(edits.map(edit => [edit.index, edit]));
+	const effective: IMigrationFieldMapping[] = [];
+	for (const [index, mapping] of mappings.entries()) {
+		const edit = byIndex.get(index);
+		if (edit?.dropped) {
+			continue;
+		}
+		// An edited transformSql REPLACES the original; clearing it to blank
+		// removes the expression entirely (back to carry-over semantics).
+		const transformSql = edit?.transformSql !== undefined ? (edit.transformSql.trim() !== '' ? edit.transformSql : undefined) : mapping.transformSql;
+		effective.push({
+			source: mapping.source,
+			target: edit?.target !== undefined && edit.target.trim() !== '' ? edit.target : mapping.target,
+			...(mapping.transform !== undefined ? { transform: mapping.transform } : {}),
+			...(transformSql !== undefined ? { transformSql } : {}),
+			...(mapping.note !== undefined ? { note: mapping.note } : {}),
+		});
+	}
+	return effective;
+}
+
 function mappingLine(mapping: IMigrationFieldMapping): string {
 	const transform = mapping.transform !== undefined && mapping.transform.trim() !== '' ? `（transform: ${mapping.transform}）` : '';
 	return `- ${mapping.source} → ${mapping.target}${transform}`;
@@ -229,13 +268,38 @@ function editLine(edit: IMigrationCellEdit): string {
 	return `- 第 ${edit.row + 1} 行 [${edit.column}]: "${edit.before ?? ''}" → "${edit.after}"`;
 }
 
-/** The confirm turn: what the model reads when the user clicks 按此执行. */
-export function buildMigrationConfirmTurn(props: IMigrationPreviewProps, edits: readonly IMigrationCellEdit[]): string {
-	const lines = [`我确认了迁移映射预览（${props.sourceLabel} → ${props.targetLabel}），按以下配置执行：`, '字段映射：', ...props.mappings.map(mappingLine)];
+/**
+ * The confirm turn: what the model reads when the user clicks 按此执行. The
+ * mappings listed are the EFFECTIVE (user-edited) ones; dropped fields are
+ * named so the model knows they were deliberate. When the card compiled the
+ * SQL locally, the exact statement rides the turn and the model is told to
+ * execute it verbatim — regeneration drift is the failure mode this kills.
+ */
+export function buildMigrationConfirmTurn(
+	props: IMigrationPreviewProps,
+	edits: readonly IMigrationCellEdit[],
+	options?: { readonly mappingEdits?: readonly IMigrationMappingEdit[]; readonly compiledSql?: string },
+): string {
+	const mappingEdits = options?.mappingEdits ?? [];
+	const effective = mappingEdits.length > 0 ? applyMappingEdits(props.mappings, mappingEdits) : props.mappings;
+	const dropped = mappingEdits.filter(edit => edit.dropped).map(edit => props.mappings[edit.index]?.source ?? `#${edit.index}`);
+
+	const lines = [
+		`我确认了迁移映射预览（${props.sourceLabel} → ${props.targetLabel}），按以下配置执行${mappingEdits.length > 0 ? '（我在卡片中做过调整，以下为调整后的最终配置）' : ''}：`,
+		'字段映射：',
+		...effective.map(mappingLine),
+	];
+	if (dropped.length > 0) {
+		lines.push(`我丢弃了这些源字段（不迁移）：${dropped.join('、')}`);
+	}
 	if (edits.length > 0) {
 		lines.push(`样例单元格人工修正（共 ${edits.length} 处 — 这些是修正规则的示例，执行时请把对应规则推广到全量数据）：`, ...edits.map(editLine));
 	}
-	lines.push('请先展示将要执行的迁移 SQL，再用 execute_data_source 分批执行——每条写语句都会经过我的审批。');
+	if (options?.compiledSql !== undefined && options.compiledSql.trim() !== '') {
+		lines.push('以下是卡片按上述配置编译出的迁移 SQL——请用 execute_data_source 原样执行这一条语句，不要重新生成：', '```sql', options.compiledSql, '```');
+	} else {
+		lines.push('请先展示将要执行的迁移 SQL，再用 execute_data_source 分批执行——每条写语句都会经过我的审批。');
+	}
 	return lines.join('\n');
 }
 

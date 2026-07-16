@@ -26,6 +26,8 @@ export interface IUiCardContext {
 	readonly sessionId: string | undefined;
 	readonly messageSender: ISessionMessageSender | undefined;
 	readonly onFocusComposer: () => void;
+	/** Save-dialog export for a card-produced text artifact (Tier 1: IPC, no model). Absent when the bridge isn't available. */
+	readonly exportText?: ((defaultName: string, content: string) => Promise<string | undefined>) | undefined;
 }
 
 export interface IUiCardProps<P> {

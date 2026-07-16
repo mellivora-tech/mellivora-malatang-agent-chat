@@ -120,6 +120,13 @@ export const zhCN = {
 	'ui.migration.issues': '{0} 处错误,{1} 处警告',
 	'ui.migration.dirty': '已修正 {0} 个单元格',
 	'ui.migration.settled': '已确认',
+	'ui.migration.mapping.sql': 'SQL 表达式',
+	'ui.migration.mapping.actions': '操作',
+	'ui.migration.drop': '丢弃此字段',
+	'ui.migration.restore': '恢复此字段',
+	'ui.migration.stale': '样例基于原映射,编辑后已过期',
+	'ui.migration.export': '导出 .sql',
+	'ui.migration.exported': '已导出: {0}',
 
 	// --- approval card --------------------------------------------------------------
 	'appr.aria': '需要批准',

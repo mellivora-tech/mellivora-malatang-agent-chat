@@ -9,6 +9,7 @@ import type { IModelsService } from '../../services/models/browser/modelsService
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
+import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { ConversationView, type ISessionMessageSender } from './conversationView.js';
 
@@ -19,7 +20,14 @@ export class SessionView extends Disposable {
 	private readonly conversationView: ConversationView;
 	private session: IActiveSession | undefined;
 
-	constructor(messageSender?: ISessionMessageSender, modelsService?: IModelsService, projectsService?: IProjectsService, skillsService?: ISkillsService, sessionsPartService?: ISessionsPartService) {
+	constructor(
+		messageSender?: ISessionMessageSender,
+		modelsService?: IModelsService,
+		projectsService?: IProjectsService,
+		skillsService?: ISkillsService,
+		sessionsPartService?: ISessionsPartService,
+		dataFiles?: IDataFilesBridge,
+	) {
 		super();
 
 		this.element = document.createElement('div');
@@ -29,7 +37,7 @@ export class SessionView extends Disposable {
 		this.content = append(this.element, document.createElement('div'));
 		this.content.className = 'session-view-content';
 
-		this.conversationView = this._register(new ConversationView(messageSender, modelsService, projectsService, skillsService, sessionsPartService));
+		this.conversationView = this._register(new ConversationView(messageSender, modelsService, projectsService, skillsService, sessionsPartService, dataFiles));
 		this.content.appendChild(this.conversationView.element);
 
 		this.openSession(undefined);

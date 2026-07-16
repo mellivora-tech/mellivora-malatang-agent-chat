@@ -82,15 +82,18 @@ const environments: IEnvironmentsBridge = {
 	removeEnvironment: (projectId: string, environmentId: string) => ipcRenderer.invoke('environments:removeEnvironment', projectId, environmentId),
 	upsertDataSource: (projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret) => ipcRenderer.invoke('environments:upsertDataSource', projectId, input, secret),
 	removeDataSource: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:removeDataSource', projectId, dataSourceId),
-	setDataSourceCredential: (projectId: string, dataSourceId: string, secret: IDataSourceSecret) => ipcRenderer.invoke('environments:setDataSourceCredential', projectId, dataSourceId, secret),
+	setDataSourceCredential: (projectId: string, dataSourceId: string, secret: IDataSourceSecret) =>
+		ipcRenderer.invoke('environments:setDataSourceCredential', projectId, dataSourceId, secret),
 	testDataSource: (projectId: string, payload: IDataSourceTestPayload) => ipcRenderer.invoke('environments:testDataSource', projectId, payload),
-	runQuery: (projectId: string, dataSourceId: string, sql: string, options?: { readonly rowLimit?: number }) => ipcRenderer.invoke('environments:runQuery', projectId, dataSourceId, sql, options),
+	runQuery: (projectId: string, dataSourceId: string, sql: string, options?: { readonly rowLimit?: number }) =>
+		ipcRenderer.invoke('environments:runQuery', projectId, dataSourceId, sql, options),
 	listTables: (projectId: string, dataSourceId: string) => ipcRenderer.invoke('environments:listTables', projectId, dataSourceId),
 };
 
 const dataFiles: IDataFilesBridge = {
 	pick: () => ipcRenderer.invoke('dataFiles:pick'),
 	readTable: (path: string, sheet?: string) => ipcRenderer.invoke('dataFiles:readTable', path, sheet),
+	exportText: (defaultName: string, content: string) => ipcRenderer.invoke('dataFiles:exportText', defaultName, content),
 };
 
 const git: IGitBridge = {
@@ -100,8 +103,15 @@ const git: IGitBridge = {
 };
 
 const agent: IAgentBridge = {
-	run: (sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[], anchor?: ICompactionAnchor) =>
-		ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode, skillIds, anchor }),
+	run: (
+		sessionId: string,
+		messages: readonly IAgentMessage[],
+		modelId?: string,
+		projectId?: string,
+		permissionMode?: PermissionMode,
+		skillIds?: readonly string[],
+		anchor?: ICompactionAnchor,
+	) => ipcRenderer.invoke('agent:run', { sessionId, messages, modelId, projectId, permissionMode, skillIds, anchor }),
 	stop: (sessionId: string) => ipcRenderer.invoke('agent:stop', sessionId),
 	generateTitle: (query: string, modelId?: string) => ipcRenderer.invoke('agent:title', { query, modelId }),
 	onEvent: (listener: (payload: IAgentEventPayload) => void) => {
@@ -114,7 +124,8 @@ const agent: IAgentBridge = {
 		ipcRenderer.on('agent:approval-request', handler);
 		return () => ipcRenderer.removeListener('agent:approval-request', handler);
 	},
-	respondApproval: (requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project') => ipcRenderer.invoke('agent:approval-response', { requestId, approved, always, scope }),
+	respondApproval: (requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project') =>
+		ipcRenderer.invoke('agent:approval-response', { requestId, approved, always, scope }),
 };
 
 contextBridge.exposeInMainWorld('agentWindow', {

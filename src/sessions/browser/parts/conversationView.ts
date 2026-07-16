@@ -21,6 +21,7 @@ import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../.
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
+import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
 import { installSlashCommands, TEMPLATE_COMMANDS, type IComposerCommand } from './composerCommands.js';
 import { installImageAttachments, type IImageController } from './composerImages.js';
 import { installPromptHistory, type IPromptHistoryController } from './composerHistory.js';
@@ -108,6 +109,7 @@ export class ConversationView extends Disposable {
 		private readonly projectsService?: IProjectsService,
 		private readonly skillsService?: ISkillsService,
 		private readonly sessionsPartService?: ISessionsPartService,
+		private readonly dataFiles?: IDataFilesBridge,
 	) {
 		super();
 
@@ -654,6 +656,7 @@ export class ConversationView extends Disposable {
 					sessionId: this.session?.sessionId,
 					messageSender: this.messageSender,
 					onFocusComposer: () => this.input.focus(),
+					exportText: this.dataFiles ? (defaultName, content) => this.dataFiles!.exportText(defaultName, content) : undefined,
 				});
 			default:
 				return createElement(MessageRow, { message, actions: this.buildMessageActions(message), resolveImage: this.buildImageResolver() });

@@ -11,6 +11,7 @@ import type { IProjectsService } from '../../services/projects/browser/projectsS
 import type { ISessionsPartService, WorkbenchMode } from '../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../services/sessions/browser/sessionsService.js';
 import type { ISkillsService } from '../../services/skills/browser/skillsService.js';
+import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
 import type { IActiveSession } from '../../services/sessions/common/session.js';
 import { Part } from '../part.js';
 import { listReferencableSessions } from './conversationView.js';
@@ -40,19 +41,21 @@ export class SessionsPart extends Part {
 		modelsService?: IModelsService,
 		skillsService?: ISkillsService,
 		sessionsPartService?: ISessionsPartService,
+		dataFiles?: IDataFilesBridge,
 	) {
 		super('workbench.parts.sessions', 'sessionspart');
 		this.newSessionView = this._register(
 			new NewSessionView({
 				onStartSession: (query, attachments, images) =>
-					this.sessionsService?.startSession(query, { ...this.getStartSessionOptions(), ...(attachments ? { attachments } : {}), ...(images ? { images } : {}) }) ?? Promise.resolve(),
+					this.sessionsService?.startSession(query, { ...this.getStartSessionOptions(), ...(attachments ? { attachments } : {}), ...(images ? { images } : {}) }) ??
+					Promise.resolve(),
 				...(this.projectsService ? { projectsService: this.projectsService } : {}),
 				...(modelsService ? { modelsService } : {}),
 				...(skillsService ? { skillsService } : {}),
 				listSessions: () => listReferencableSessions(this.sessionsService?.getSessions() ?? [], undefined),
 			}),
 		);
-		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService, skillsService, sessionsPartService));
+		this.sessionView = this._register(new SessionView(this.sessionsService, modelsService, this.projectsService, skillsService, sessionsPartService, dataFiles));
 	}
 
 	private getStartSessionOptions(): { workspace: { label: string; description: string }; projectId: string } | undefined {

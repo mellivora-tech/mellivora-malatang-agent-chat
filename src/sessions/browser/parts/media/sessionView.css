@@ -877,6 +877,79 @@ button.conversation-work-step-row:hover {
 	font-family: inherit;
 }
 
+/* Inline mapping editors: styled as text until focused, so the table reads as
+   a table while every value stays one click from editable. */
+.migration-mapping-input {
+	width: 100%;
+	min-width: 80px;
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid transparent;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.migration-mapping-input:hover:not(:disabled) {
+	border-color: color-mix(in srgb, var(--vscode-agents-color-panel-border) 80%, transparent);
+}
+
+.migration-mapping-input:focus-visible {
+	border-color: var(--vscode-agents-color-focusBorder);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	outline: none;
+}
+
+.migration-mapping-input::placeholder {
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.migration-mapping-dropped td {
+	opacity: 0.45;
+	text-decoration: line-through;
+}
+
+.migration-mapping-drop {
+	display: inline-flex;
+	padding: var(--vscode-agents-space-2);
+	border: none;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-muted);
+	cursor: pointer;
+}
+
+.migration-mapping-drop:hover {
+	color: var(--vscode-agents-color-danger);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 7%, transparent);
+}
+
+.migration-mapping-dropped .migration-mapping-drop:hover {
+	color: var(--vscode-agents-color-success);
+}
+
+.migration-stale {
+	color: var(--vscode-agents-color-warning);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+}
+
+.migration-export {
+	margin-left: auto;
+}
+
+.migration-exported {
+	align-self: center;
+	color: var(--vscode-agents-color-text-muted);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 320px;
+}
+
 .migration-sample-title {
 	display: flex;
 	align-items: center;

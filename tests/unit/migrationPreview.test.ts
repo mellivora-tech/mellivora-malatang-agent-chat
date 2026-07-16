@@ -8,12 +8,14 @@ import test from 'node:test';
 
 import {
 	MIGRATION_CAPS,
+	applyMappingEdits,
 	buildMigrationConfirmTurn,
 	buildMigrationReviseTurn,
 	buildMigrationSql,
 	parseMigrationPreviewProps,
 	quoteIdentifier,
 	type IMigrationCellEdit,
+	type IMigrationMappingEdit,
 	type IMigrationPreviewProps,
 } from '../../src/sessions/services/sessions/common/uiComponents/migrationPreview.js';
 import { isReadOnlySql, isSingleStatement } from '../../src/main/agent/dbQuery.js';
@@ -197,6 +199,57 @@ test('quoteIdentifier escapes embedded quotes so a hostile identifier cannot bre
 	assert.equal(quoteIdentifier('user`s', 'mysql'), '`user``s`');
 	assert.equal(quoteIdentifier('user"s', 'postgres'), '"user""s"');
 	assert.equal(quoteIdentifier('a.b', 'mysql'), '`a`.`b`');
+});
+
+// --- P1b: in-card mapping edits ---
+
+test('applyMappingEdits: overrides replace, blanks fall back, cleared transformSql reverts to carry-over, dropped rows vanish', () => {
+	const base = parseMigrationPreviewProps(COMPILABLE)!.mappings;
+	const edits: IMigrationMappingEdit[] = [
+		{ index: 0, target: 'full_name' },
+		{ index: 1, transformSql: '' },
+		{ index: 2, dropped: true },
+	];
+	const effective = applyMappingEdits(base, edits);
+	assert.equal(effective.length, 2, 'dropped mapping excluded');
+	assert.equal(effective[0]?.target, 'full_name', 'target override applied');
+	assert.equal(effective[0]?.transformSql, 'TRIM(cust_name)', 'untouched expression survives');
+	assert.equal(effective[1]?.transformSql, undefined, 'cleared expression reverts to carry-over');
+	assert.equal(applyMappingEdits(base, []).length, 3, 'no edits = identity');
+});
+
+test('edited mappings compile: the exported SQL reflects renames and drops', () => {
+	const props = parseMigrationPreviewProps(COMPILABLE)!;
+	const effective = applyMappingEdits(props.mappings, [
+		{ index: 0, target: 'full_name' },
+		{ index: 2, dropped: true },
+	]);
+	const sql = buildMigrationSql({ ...props, mappings: effective });
+	assert.ok(sql);
+	assert.match(sql, /`full_name`/, 'renamed column lands in the INSERT list');
+	assert.doesNotMatch(sql, /`status`/, 'dropped field is gone from the statement');
+	assert.equal(isSingleStatement(sql), true);
+});
+
+test('buildMigrationConfirmTurn carries edited mappings, dropped fields, and the exact compiled SQL', () => {
+	const props = parseMigrationPreviewProps(COMPILABLE)!;
+	const mappingEdits: IMigrationMappingEdit[] = [
+		{ index: 0, target: 'full_name' },
+		{ index: 2, dropped: true },
+	];
+	const compiledSql = buildMigrationSql({ ...props, mappings: applyMappingEdits(props.mappings, mappingEdits) })!;
+	const turn = buildMigrationConfirmTurn(props, [], { mappingEdits, compiledSql });
+
+	assert.match(turn, /我在卡片中做过调整/);
+	assert.match(turn, /cust_name → full_name/, 'effective (edited) mapping listed');
+	assert.match(turn, /丢弃了这些源字段（不迁移）：status/);
+	assert.match(turn, /原样执行这一条语句，不要重新生成/);
+	assert.ok(turn.includes(compiledSql), 'the exact compiled statement rides the turn');
+	assert.doesNotMatch(turn, /请先展示将要执行的迁移 SQL/, 'the regenerate instruction is replaced');
+
+	// Without the compile trio the turn keeps the old show-me-the-SQL flow.
+	const reviewOnly = buildMigrationConfirmTurn(parseMigrationPreviewProps(VALID)!, []);
+	assert.match(reviewOnly, /请先展示将要执行的迁移 SQL/);
 });
 
 // --- turn builders ---

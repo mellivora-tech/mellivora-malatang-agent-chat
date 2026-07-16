@@ -36,4 +36,6 @@ export interface IDataFilesBridge {
 	pick(): Promise<IPickedDataFile | undefined>;
 	/** Parse one sheet of a previously PICKED file (main enforces that). */
 	readTable(path: string, sheet?: string): Promise<FileTableResult>;
+	/** Save-dialog + write for a renderer-produced text artifact (e.g. a compiled .sql). Resolves the saved path, or undefined when cancelled. */
+	exportText(defaultName: string, content: string): Promise<string | undefined>;
 }

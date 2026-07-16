@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { dialog, ipcMain } from 'electron';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve, sep } from 'node:path';
 import type { FileTableResult, IPickedDataFile } from '../sessions/services/dataFiles/common/dataFiles.js';
 import { parseCsv, toTable } from './dataFiles.js';
@@ -55,6 +55,33 @@ export function registerDataFilesIpc(dataRoot: string): void {
 		} catch (error) {
 			return { ok: false, message: `读取失败: ${error instanceof Error ? error.message : String(error)}` };
 		}
+	});
+
+	// Save a renderer-produced text artifact (compiled migration .sql etc.) to a
+	// user-chosen location. The destination always comes from the save dialog —
+	// the renderer supplies content and a suggested NAME, never a path.
+	ipcMain.handle('dataFiles:exportText', async (_event, defaultName: string, content: string): Promise<string | undefined> => {
+		if (typeof defaultName !== 'string' || typeof content !== 'string') {
+			return undefined;
+		}
+		// E2E seam: dialogs can't be driven headlessly — the env var IS the destination.
+		const seeded = process.env['MELLIVORA_SAVE_FILE'];
+		if (seeded) {
+			await writeFile(seeded, content, 'utf8');
+			return seeded;
+		}
+		const result = await dialog.showSaveDialog({
+			defaultPath: basename(defaultName),
+			filters: [
+				{ name: 'SQL', extensions: ['sql'] },
+				{ name: '文本', extensions: ['txt'] },
+			],
+		});
+		if (result.canceled || !result.filePath) {
+			return undefined;
+		}
+		await writeFile(result.filePath, content, 'utf8');
+		return result.filePath;
 	});
 }
 
