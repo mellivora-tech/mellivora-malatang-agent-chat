@@ -13,11 +13,10 @@ import type {
 	IPlanComment,
 	ISession,
 	ISessionAttachment,
+	ISessionDataBrowse,
 	ISessionMessage,
 	ISessionPendingApproval,
-	ISessionWorkStep,
 } from '../../services/sessions/common/session.js';
-import { buildReviseTurn } from '../../services/sessions/common/planArtifact.js';
 import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
@@ -27,11 +26,16 @@ import { installImageAttachments, type IImageController } from './composerImages
 import { installPromptHistory, type IPromptHistoryController } from './composerHistory.js';
 import { installFileMentions, installSessionMentions, installSkillMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
-import { renderMarkdown } from './markdownRenderer.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 import { permissionMode } from '../../services/agent/browser/permissionModeService.js';
 import type { PermissionMode } from '../../services/agent/common/agent.js';
 import { toDisposable } from '../../base/common/lifecycle.js';
+import { createElement, type ReactNode } from 'react';
+import type { Root } from 'react-dom/client';
+import { mountOrUpdateReactRow } from './agentUi/bridge/mountReactRow.js';
+import { WorkBlock } from './agentUi/components/WorkBlock.js';
+import { PlanCard } from './agentUi/components/PlanCard.js';
+import { MessageRow } from './agentUi/components/MessageRow.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[]; readonly images?: readonly IPendingImage[] }): Promise<unknown>;
@@ -76,35 +80,20 @@ export class ConversationView extends Disposable {
 	// A follow-up typed while a run is live is held here and sent when it settles,
 	// so a second run never overlaps the first (single slot; a newer one replaces it).
 	private queuedFollowUp: string | undefined;
-	// Work blocks: user toggles override the default (open while live, closed when done).
-	private readonly workExpandOverride = new Map<string, boolean>();
 	/** The approval request whose Allow button already got initial focus (re-render guard). */
 	private focusedApprovalId: string | undefined;
 	/** Approval request ids seen per session — drives the compact-density switch. */
 	private readonly approvalsSeen = new Map<string, Set<string>>();
-	/** Superseded plan cards a click expanded back open (they collapse by default). */
-	private readonly planExpand = new Set<string>();
-	/** Sections with an open comment editor (`messageId:sectionId`) and their unsent drafts. */
-	private readonly planCommentEditor = new Set<string>();
-	private readonly planCommentDraft = new Map<string, string>();
-	/** Comment editor to focus after the next plan-card rebuild (set on open, consumed once). */
-	private planCommentFocus: string | undefined;
-	/** Comments changed — plan cards must resync even though their message objects didn't change. */
-	private planCardsDirty = false;
-	// Individually expanded tool steps ("messageId:index").
-	private readonly stepExpand = new Set<string>();
 	private scrollToBottomOnRender = false;
 	// Fan-out for the session-aware permission picker (the underlying observable
 	// swaps whenever another session becomes active).
 	private readonly permissionListeners = new Set<() => void>();
-	// Live elapsed time is measured from when the block first appeared in this view.
-	private readonly workFirstSeen = new Map<string, number>();
 	private workTicker: ReturnType<typeof setInterval> | undefined;
 	// Rendered rows keyed by message id, so a streaming delta patches only the
 	// row that actually changed instead of tearing down the whole transcript —
 	// rebuilding every row on every token would restart hover-revealed UI (e.g.
 	// the message action bar's fade-in) on unrelated, unchanged messages too.
-	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage }>();
+	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage; reactRoot?: Root }>();
 
 	private readonly mentions: IMentionController;
 	private readonly skillMentions: IMentionController;
@@ -314,8 +303,7 @@ export class ConversationView extends Disposable {
 		this.promptHistory = this._register(
 			installPromptHistory({
 				input: this.input,
-				getHistory: () =>
-					(this.session?.messages.get() ?? []).filter(message => message.role === 'user').map(message => message.text),
+				getHistory: () => (this.session?.messages.get() ?? []).filter(message => message.role === 'user').map(message => message.text),
 			}),
 		);
 
@@ -323,18 +311,20 @@ export class ConversationView extends Disposable {
 		// (consume-once; the observable resets so the same text can come again).
 		if (this.sessionsPartService) {
 			const insertRequest = this.sessionsPartService.composerInsertRequest;
-			this._register(insertRequest.subscribe(() => {
-				const text = insertRequest.get();
-				if (text === undefined || text === '') {
-					return;
-				}
-				insertRequest.set(undefined);
-				const current = this.input.value;
-				this.input.value = current === '' ? text : `${current.replace(/\s+$/, '')}\n${text}`;
-				this.input.dispatchEvent(new Event('input', { bubbles: true }));
-				this.input.focus();
-				this.input.setSelectionRange(this.input.value.length, this.input.value.length);
-			}));
+			this._register(
+				insertRequest.subscribe(() => {
+					const text = insertRequest.get();
+					if (text === undefined || text === '') {
+						return;
+					}
+					insertRequest.set(undefined);
+					const current = this.input.value;
+					this.input.value = current === '' ? text : `${current.replace(/\s+$/, '')}\n${text}`;
+					this.input.dispatchEvent(new Event('input', { bubbles: true }));
+					this.input.focus();
+					this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+				}),
+			);
 		}
 
 		this._registerEventListeners();
@@ -368,12 +358,9 @@ export class ConversationView extends Disposable {
 
 		if (session) {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
-			this.sessionDisposables.add(
-				session.planComments.subscribe(() => {
-					this.planCardsDirty = true;
-					this.render();
-				}),
-			);
+			// planComments has no subscription here — PlanCard (React) subscribes to
+			// it directly via useObservable, so a comment change re-renders just that
+			// card's own root instead of forcing a full transcript reconcile.
 			this.sessionDisposables.add(session.interactivity.subscribe(() => this.render()));
 			this.sessionDisposables.add(
 				session.status.subscribe(() => {
@@ -586,31 +573,29 @@ export class ConversationView extends Disposable {
 			let element: HTMLElement;
 			if (existing) {
 				element = existing.element;
-				if (message.role === 'work') {
-					// A work block's rendering also depends on state outside the
-					// message itself — the expand-override and per-step detail toggles
-					// (both set by clicks, not by a new message object) and the live
-					// ticker — so it always resyncs. Cheap, and work steps have no
-					// hover-fade UI to protect (unlike the message action bar below).
-					this.patchWorkBlock(element, message);
-				} else if (message.role === 'plan') {
-					// Comment changes don't touch the message object — the dirty
-					// flag forces a resync when the planComments observable fired.
-					if (existing.message !== message || this.planCardsDirty) {
-						this.patchPlanCard(element, message);
-					}
-				} else if (existing.message !== message) {
-					this.patchRow(element, message);
+				// A work block's rendering also depends on state outside the message
+				// itself — its own expand/step-detail state and the live ticker — so
+				// it always resyncs; React bails out on an unchanged subtree, so this
+				// is cheap. Everything else is identity-gated: an unchanged message
+				// means unchanged content, because PlanCard subscribes to its own
+				// external store and MessageRow is a pure function of the message prop
+				// (no hand-split "patch only the dynamic bits" needed — React's own
+				// diffing already leaves untouched DOM, like the action bar's
+				// hover-fade, alone).
+				if (message.role === 'work' || existing.message !== message) {
+					existing.reactRoot = mountOrUpdateReactRow(element, existing.reactRoot, this.createRowElement(message));
 				}
 				existing.message = message;
 			} else {
-				element =
-					message.role === 'work'
-						? this.createWorkBlock(message)
-						: message.role === 'plan'
-							? this.createPlanCard(message)
-							: createMessageRow(message, this.buildMessageActions(message), this.buildImageResolver());
-				this.renderedRows.set(message.id, { element, message });
+				// A bare host div — the React component owns everything inside it,
+				// including its own root element and data-message-id; the extra
+				// wrapper is inert for layout (every row type sizes itself via
+				// margin/its own grid, not parent gap/child-selectors) and
+				// transparent to `[data-message-id]` queries (querySelectorAll
+				// reaches through it).
+				element = document.createElement('div');
+				const reactRoot = mountOrUpdateReactRow(element, undefined, this.createRowElement(message));
+				this.renderedRows.set(message.id, { element, message, reactRoot });
 			}
 
 			if (element === cursor) {
@@ -622,55 +607,19 @@ export class ConversationView extends Disposable {
 
 		for (const [id, entry] of this.renderedRows) {
 			if (!seen.has(id)) {
+				entry.reactRoot?.unmount();
 				entry.element.remove();
 				this.renderedRows.delete(id);
 			}
 		}
-		this.planCardsDirty = false;
 	}
 
-	/** Patch an existing user/assistant/tool row's dynamic content in place — never recreate it. Work blocks go through patchWorkBlock instead (see reconcileTranscript). */
-	private patchRow(element: HTMLElement, message: ISessionMessage): void {
-		const textEl = element.querySelector<HTMLElement>('.conversation-message-bubble, .conversation-message-text');
-		if (textEl) {
-			if (message.role === 'assistant') {
-				clearNode(textEl);
-				textEl.appendChild(renderMarkdown(message.text));
-			} else {
-				textEl.textContent = message.text;
-				if (textEl.classList.contains('conversation-message-bubble')) {
-					measureUserBubbleCollapse(textEl);
-				}
-			}
-		}
-
-		let detailEl = element.querySelector<HTMLElement>('.conversation-tool-detail');
-		if (message.detail) {
-			if (!detailEl) {
-				detailEl = document.createElement('div');
-				detailEl.className = 'conversation-tool-detail';
-				element.querySelector('.conversation-message-body')?.appendChild(detailEl);
-			}
-			detailEl.textContent = message.detail;
-		} else {
-			detailEl?.remove();
-		}
-
-		setFeedbackButtonState(element.querySelector('[data-feedback="like"]'), 'like', message.feedback);
-		setFeedbackButtonState(element.querySelector('[data-feedback="dislike"]'), 'dislike', message.feedback);
-	}
-
-	/** Rebuild a work block's step list and refresh its header (title, spinner, expand state). */
-	private patchWorkBlock(block: HTMLElement, message: ISessionMessage): void {
-		this.updateWorkBlockHeader(block, message);
-
-		const stepsList = block.querySelector<HTMLElement>('.conversation-work-steps');
-		if (!stepsList) {
-			return;
-		}
-		clearNode(stepsList);
-		(message.steps ?? []).forEach((step, index) => {
-			stepsList.appendChild(this.createWorkStepRow(`${message.id}:${index}`, step));
+	/** "Worked for 16m 56s ⌄" — one collapsible block per agent run, holding the thinking stretches and tool calls with their durations. React-rendered (see reconcileTranscript); this just builds the element. */
+	private createWorkBlockElement(message: ISessionMessage): ReactNode {
+		const sessionsPartService = this.sessionsPartService;
+		return createElement(WorkBlock, {
+			message,
+			onOpenDataBrowser: sessionsPartService && ((browse: ISessionDataBrowse) => sessionsPartService.openDataBrowser(browse)),
 		});
 	}
 
@@ -679,309 +628,30 @@ export class ConversationView extends Disposable {
 	 * the version in the header. A draft card carries the review actions
 	 * (按此执行 / 让它改); a superseded one collapses to its header. A message
 	 * whose structured payload is missing falls back to its markdown text.
+	 * React-rendered (see reconcileTranscript); this just builds the element.
 	 */
-	private createPlanCard(message: ISessionMessage): HTMLElement {
-		const card = document.createElement('section');
-		card.className = 'conversation-plan';
-		card.dataset.messageId = message.id;
-		this.renderPlanCardContent(card, message);
-		return card;
+	private createPlanCardElement(message: ISessionMessage): ReactNode {
+		return createElement(PlanCard, {
+			message,
+			sessionId: this.session?.sessionId,
+			planComments: this.session?.planComments,
+			messageSender: this.messageSender,
+			onFocusComposer: () => this.input.focus(),
+		});
 	}
 
-	/** Same content builder as createPlanCard — the reconciler patches by rebuilding inside the SAME root element. */
-	private patchPlanCard(card: HTMLElement, message: ISessionMessage): void {
-		clearNode(card);
-		this.renderPlanCardContent(card, message);
-	}
-
-	private renderPlanCardContent(card: HTMLElement, message: ISessionMessage): void {
-		const plan = message.plan;
-		const superseded = plan?.state === 'superseded';
-		const collapsed = superseded && !this.planExpand.has(message.id);
-		card.classList.toggle('superseded', superseded);
-		card.classList.toggle('collapsed', collapsed);
-
-		// A walkthrough is the post-completion twin: book icon, "完成小结" tag,
-		// no version badge, no review actions (it lands settled, never a draft).
-		const isWalkthrough = plan?.kind === 'walkthrough';
-		const header = append(card, document.createElement(superseded ? 'button' : 'div')) as HTMLElement;
-		header.className = 'conversation-plan-header';
-		const icon = append(header, document.createElement('span'));
-		icon.className = `codicon ${isWalkthrough ? 'codicon-book' : 'codicon-checklist'}`;
-		icon.setAttribute('aria-hidden', 'true');
-		const title = append(header, document.createElement('span'));
-		title.className = 'conversation-plan-title';
-		title.textContent = plan ? plan.title : localize('plan.title.fallback');
-		if (plan) {
-			if (isWalkthrough) {
-				const tag = append(header, document.createElement('span'));
-				tag.className = 'conversation-plan-state walkthrough';
-				tag.textContent = localize('plan.tag.walkthrough');
-			} else {
-				const version = append(header, document.createElement('span'));
-				version.className = 'conversation-plan-version';
-				version.textContent = `v${plan.version}`;
-				if (plan.state !== 'draft') {
-					const state = append(header, document.createElement('span'));
-					state.className = `conversation-plan-state ${plan.state}`;
-					state.textContent = plan.state === 'approved' ? localize('plan.state.approved') : localize('plan.state.superseded');
-				}
-			}
-		}
-		if (superseded) {
-			// A retired version folds to its header; the header itself toggles it.
-			const chevron = append(header, document.createElement('span'));
-			chevron.className = `codicon ${collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down'} conversation-plan-chevron`;
-			chevron.setAttribute('aria-hidden', 'true');
-			header.addEventListener('click', () => {
-				if (this.planExpand.has(message.id)) {
-					this.planExpand.delete(message.id);
-				} else {
-					this.planExpand.add(message.id);
-				}
-				this.patchPlanCard(card, message);
-			});
-		}
-		if (collapsed) {
-			return;
-		}
-
-		if (!plan) {
-			// Structured payload missing — the markdown fallback is the content.
-			const body = append(card, document.createElement('div'));
-			body.className = 'conversation-plan-fallback conversation-markdown';
-			body.appendChild(renderMarkdown(message.text));
-			return;
-		}
-
-		const sessionIdForComments = this.session?.sessionId;
-		const allComments = this.session?.planComments.get() ?? [];
-		// Comments are version-scoped via section ids; only a draft accepts new ones.
-		const commentable = plan.state === 'draft' && sessionIdForComments !== undefined && this.messageSender?.setPlanComment !== undefined;
-
-		const sections = append(card, document.createElement('div'));
-		sections.className = 'conversation-plan-sections';
-		for (const section of plan.sections) {
-			const sectionEl = append(sections, document.createElement('div'));
-			sectionEl.className = 'conversation-plan-section';
-			sectionEl.dataset.sectionId = section.id;
-			const sectionComments = allComments.filter(comment => comment.sectionId === section.id);
-			const openCount = sectionComments.filter(comment => !comment.resolved).length;
-			const editorKey = `${message.id}:${section.id}`;
-
-			const kicker = append(sectionEl, document.createElement('div'));
-			kicker.className = 'conversation-plan-kicker';
-			const kickerIcon = append(kicker, document.createElement('span'));
-			kickerIcon.className = `codicon ${PLAN_SECTION_ICONS[section.kind] ?? 'codicon-circle-small'}`;
-			kickerIcon.setAttribute('aria-hidden', 'true');
-			const heading = append(kicker, document.createElement('span'));
-			heading.textContent = section.heading;
-			if (openCount > 0) {
-				const badge = append(kicker, document.createElement('span'));
-				badge.className = 'conversation-plan-comment-badge';
-				badge.textContent = `💬 ${openCount}`;
-			}
-			if (commentable && !this.planCommentEditor.has(editorKey)) {
-				// Hover gutter: opens the inline comment editor for this section.
-				const gutter = append(kicker, document.createElement('button'));
-				gutter.className = 'conversation-plan-gutter codicon codicon-comment-add';
-				gutter.title = localize('plan.comment.gutter');
-				gutter.setAttribute('aria-label', localize('plan.comment.aria', section.heading));
-				gutter.addEventListener('click', () => {
-					this.planCommentEditor.add(editorKey);
-					this.planCommentFocus = editorKey;
-					this.patchPlanCard(card, message);
-				});
-			}
-
-			if (section.body.trim() !== '') {
-				const body = append(sectionEl, document.createElement('div'));
-				body.className = 'conversation-plan-body conversation-markdown';
-				body.appendChild(renderMarkdown(section.body));
-			}
-			if (section.items !== undefined && section.items.length > 0) {
-				const list = append(sectionEl, document.createElement('ul'));
-				list.className = 'conversation-plan-items';
-				for (const item of section.items) {
-					const li = append(list, document.createElement('li'));
-					li.textContent = item;
-				}
-			}
-
-			if (sectionComments.length > 0) {
-				const thread = append(sectionEl, document.createElement('div'));
-				thread.className = 'conversation-plan-thread';
-				for (const comment of sectionComments) {
-					const row = append(thread, document.createElement('div'));
-					row.className = `conversation-plan-comment${comment.resolved ? ' resolved' : ''}`;
-					const body = append(row, document.createElement('span'));
-					body.className = 'conversation-plan-comment-body';
-					body.textContent = comment.body;
-					if (comment.resolved) {
-						const tag = append(row, document.createElement('span'));
-						tag.className = 'conversation-plan-comment-tag';
-						tag.textContent = localize('plan.comment.resolved');
-					} else if (commentable && sessionIdForComments) {
-						const resolve = append(row, document.createElement('button'));
-						resolve.className = 'conversation-plan-comment-resolve';
-						resolve.textContent = localize('plan.comment.resolve');
-						resolve.addEventListener('click', () => {
-							void this.messageSender?.setPlanComment?.(sessionIdForComments, { ...comment, resolved: true });
-						});
-					}
-				}
-			}
-
-			if (commentable && sessionIdForComments && this.planCommentEditor.has(editorKey)) {
-				const editor = append(sectionEl, document.createElement('div'));
-				editor.className = 'conversation-plan-comment-editor';
-				const input = append(editor, document.createElement('textarea'));
-				input.className = 'conversation-plan-comment-input';
-				input.placeholder = localize('plan.comment.placeholder', section.heading);
-				input.rows = 2;
-				input.value = this.planCommentDraft.get(editorKey) ?? '';
-				input.addEventListener('input', () => this.planCommentDraft.set(editorKey, input.value));
-				const buttons = append(editor, document.createElement('div'));
-				buttons.className = 'conversation-plan-comment-buttons';
-				const submit = append(buttons, document.createElement('button'));
-				submit.className = 'conversation-plan-approve';
-				submit.textContent = localize('plan.comment.submit');
-				const cancel = append(buttons, document.createElement('button'));
-				cancel.className = 'conversation-plan-revise';
-				cancel.textContent = localize('sidebar.cancel');
-				submit.addEventListener('click', () => {
-					const body = input.value.trim();
-					if (body === '') {
-						return;
-					}
-					this.planCommentEditor.delete(editorKey);
-					this.planCommentDraft.delete(editorKey);
-					void this.messageSender?.setPlanComment?.(sessionIdForComments, {
-						id: `${section.id}-c${Date.now().toString(36)}`,
-						planId: plan.id,
-						sectionId: section.id,
-						body,
-						resolved: false,
-						createdAt: new Date(),
-					});
-				});
-				cancel.addEventListener('click', () => {
-					this.planCommentEditor.delete(editorKey);
-					this.planCommentDraft.delete(editorKey);
-					this.patchPlanCard(card, message);
-				});
-				if (this.planCommentFocus === editorKey) {
-					this.planCommentFocus = undefined;
-					queueMicrotask(() => {
-						input.focus();
-						input.setSelectionRange(input.value.length, input.value.length);
-					});
-				}
-			}
-		}
-
-		// Review actions live only on a draft — an approved or superseded plan
-		// is settled. Approve flips the SESSION mode (the run reads
-		// session.permissionMode) and sends the proceed turn; revise focuses
-		// the composer so the user says what to change.
-		const sessionId = this.session?.sessionId;
-		if (plan.state === 'draft' && sessionId && this.messageSender) {
-			const sender = this.messageSender;
-			const actions = append(card, document.createElement('div'));
-			actions.className = 'conversation-plan-actions';
-			const approve = append(actions, document.createElement('button'));
-			approve.className = 'conversation-plan-approve';
-			approve.textContent = localize('plan.approve');
-			const revise = append(actions, document.createElement('button'));
-			revise.className = 'conversation-plan-revise';
-			revise.textContent = localize('plan.revise');
-			approve.addEventListener('click', () => {
-				approve.disabled = true;
-				revise.disabled = true;
-				void (async () => {
-					await sender.setPlanState?.(sessionId, message.id, 'approved');
-					await sender.setSessionPermissionMode?.(sessionId, 'auto-edit');
-					await sender.sendMessage(sessionId, localize('plan.approve.message'));
-				})().catch(() => {
-					approve.disabled = false;
-					revise.disabled = false;
-				});
-			});
-			revise.addEventListener('click', () => {
-				// With open comments the revise turn writes itself; the model
-				// re-proposes and the comments auto-resolve (they were delivered).
-				// Without any, the user says what to change in the composer.
-				const comments = this.session?.planComments.get() ?? [];
-				const turn = buildReviseTurn(plan, comments);
-				if (turn === undefined) {
-					this.input.focus();
-					return;
-				}
-				approve.disabled = true;
-				revise.disabled = true;
-				void (async () => {
-					await sender.sendMessage(sessionId, turn);
-					// Only after the turn is on its way — a failed send must not
-					// leave the comments falsely marked as delivered.
-					for (const comment of comments) {
-						if (comment.planId === plan.id && !comment.resolved) {
-							await sender.setPlanComment?.(sessionId, { ...comment, resolved: true });
-						}
-					}
-				})().catch(() => {
-					approve.disabled = false;
-					revise.disabled = false;
-				});
-			});
+	/** Dispatches a message to its React row element by role (see reconcileTranscript). */
+	private createRowElement(message: ISessionMessage): ReactNode {
+		switch (message.role) {
+			case 'work':
+				return this.createWorkBlockElement(message);
+			case 'plan':
+				return this.createPlanCardElement(message);
+			default:
+				return createElement(MessageRow, { message, actions: this.buildMessageActions(message), resolveImage: this.buildImageResolver() });
 		}
 	}
 
-	/** The only place that decides a work block's title text, spinner, and expand state — called on real content changes and on the once-a-second live tick alike. */
-	private updateWorkBlockHeader(block: HTMLElement, message: ISessionMessage): void {
-		const live = message.durationMs === undefined;
-		if (live && !this.workFirstSeen.has(message.id)) {
-			this.workFirstSeen.set(message.id, Date.now());
-		}
-		const expanded = this.workExpandOverride.get(message.id) ?? live;
-
-		block.classList.toggle('live', live);
-
-		const header = block.querySelector<HTMLElement>('.conversation-work-header');
-		const title = block.querySelector<HTMLElement>('.conversation-work-title');
-		if (title) {
-			title.textContent = live
-				? localize('conv.workingFor', formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now())))
-				: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
-		}
-		if (header) {
-			header.setAttribute('aria-expanded', String(expanded));
-			const hasSpinner = header.querySelector('.codicon-loading') !== null;
-			if (live && !hasSpinner) {
-				const spinner = document.createElement('span');
-				spinner.className = 'codicon codicon-loading codicon-modifier-spin';
-				spinner.setAttribute('aria-hidden', 'true');
-				header.insertBefore(spinner, header.firstChild);
-			} else if (!live && hasSpinner) {
-				header.querySelector('.codicon-loading')?.remove();
-			}
-		}
-		const chevron = block.querySelector<HTMLElement>('.conversation-work-header > .codicon-chevron-down, .conversation-work-header > .codicon-chevron-right');
-		if (chevron) {
-			chevron.className = `codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`;
-		}
-		const stepsList = block.querySelector<HTMLElement>('.conversation-work-steps');
-		if (stepsList) {
-			stepsList.hidden = !expanded;
-		}
-	}
-
-	/**
-	 * The rail on the left maps the whole conversation: ONE tick per turn
-	 * (a user message plus everything up to the next one — work, reply).
-	 * Hovering previews the turn (question, answer excerpt, files touched),
-	 * moving the pointer magnifies nearby ticks dock-style, clicking jumps
-	 * to the turn's start.
-	 */
 	private renderTimeline(messages: readonly ISessionMessage[]): void {
 		clearNode(this.timeline);
 		this.closeTimelinePreview();
@@ -1154,136 +824,6 @@ export class ConversationView extends Disposable {
 	private closeTimelinePreview(): void {
 		this.timelinePreview?.remove();
 		this.timelinePreview = undefined;
-	}
-
-	/**
-	 * "Worked for 16m 56s ⌄" — one collapsible block per agent run, holding the
-	 * thinking stretches and tool calls with their durations. Open while the run
-	 * is live (header ticks every second), collapsed once it settles.
-	 */
-	private createWorkBlock(message: ISessionMessage): HTMLElement {
-		const live = message.durationMs === undefined;
-		if (live && !this.workFirstSeen.has(message.id)) {
-			this.workFirstSeen.set(message.id, Date.now());
-		}
-		const expanded = this.workExpandOverride.get(message.id) ?? live;
-
-		const block = document.createElement('section');
-		block.className = 'conversation-work';
-		block.classList.toggle('live', live);
-		block.dataset.messageId = message.id;
-
-		const header = append(block, document.createElement('button')) as HTMLButtonElement;
-		header.className = 'conversation-work-header';
-		header.type = 'button';
-		header.setAttribute('aria-expanded', String(expanded));
-		if (live) {
-			const spinner = append(header, document.createElement('span'));
-			spinner.className = 'codicon codicon-loading codicon-modifier-spin';
-			spinner.setAttribute('aria-hidden', 'true');
-		}
-		const title = append(header, document.createElement('span'));
-		title.className = 'conversation-work-title';
-		title.textContent = live
-			? localize('conv.workingFor', formatDurationMs(Date.now() - (this.workFirstSeen.get(message.id) ?? Date.now())))
-			: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
-		const chevron = append(header, document.createElement('span'));
-		chevron.className = `codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`;
-		chevron.setAttribute('aria-hidden', 'true');
-		// Reads aria-expanded fresh at click time, not the `expanded` captured
-		// above — this header element persists across patches (updateWorkBlockHeader
-		// keeps aria-expanded current), so a stale closure would toggle the wrong way.
-		header.addEventListener('click', () => {
-			const isExpanded = header.getAttribute('aria-expanded') === 'true';
-			this.workExpandOverride.set(message.id, !isExpanded);
-			this.render();
-		});
-
-		const stepsList = append(block, document.createElement('div'));
-		stepsList.className = 'conversation-work-steps';
-		stepsList.hidden = !expanded;
-		(message.steps ?? []).forEach((step, index) => {
-			stepsList.appendChild(this.createWorkStepRow(`${message.id}:${index}`, step));
-		});
-
-		return block;
-	}
-
-	/** "⏱ Thought for a few seconds" / "🔧 read_file src/a.ts · 2s" — tool steps expand to their output. */
-	private createWorkStepRow(key: string, step: ISessionWorkStep): HTMLElement {
-		const wrapper = document.createElement('div');
-		wrapper.className = `conversation-work-step ${step.kind}`;
-
-		const row = append(wrapper, document.createElement(step.detail ? 'button' : 'div')) as HTMLElement;
-		row.className = 'conversation-work-step-row';
-		if (row instanceof HTMLButtonElement) {
-			row.type = 'button';
-		}
-
-		const icon = append(row, document.createElement('span'));
-		icon.className = `codicon ${step.kind === 'thinking' ? 'codicon-history' : step.kind === 'narration' ? 'codicon-comment' : 'codicon-tools'}`;
-		icon.setAttribute('aria-hidden', 'true');
-
-		const label = append(row, document.createElement('span'));
-		label.className = 'conversation-work-step-label';
-		if (step.kind === 'thinking') {
-			label.textContent = localize('conv.thoughtFor', thinkingDurationText(step.durationMs));
-		} else if (step.kind === 'narration') {
-			// The model's own words, verbatim — an announcement, not a timed
-			// activity, so no duration chip.
-			label.textContent = step.label;
-		} else {
-			label.textContent = step.label;
-			if (step.running) {
-				const spinner = append(row, document.createElement('span'));
-				spinner.className = 'codicon codicon-loading codicon-modifier-spin conversation-work-step-duration';
-				spinner.setAttribute('aria-label', localize('conv.running'));
-			} else {
-				const duration = append(row, document.createElement('span'));
-				duration.className = 'conversation-work-step-duration';
-				duration.textContent = formatDurationMs(step.durationMs);
-			}
-		}
-
-		// "在数据浏览器打开" — the query jumps to the side pane's data tab where
-		// paging/sorting costs zero tokens.
-		if (step.browse && this.sessionsPartService) {
-			const browse = step.browse;
-			const openButton = append(row, document.createElement('button')) as HTMLButtonElement;
-			openButton.className = 'conversation-work-step-browse';
-			openButton.type = 'button';
-			openButton.title = localize('appr.openInBrowserTitle');
-			appendCodicon(openButton, 'codicon-database');
-			append(openButton, document.createElement('span')).textContent = localize('appr.openInBrowser');
-			openButton.addEventListener('click', event => {
-				// The row itself may be an expand toggle — don't trip it.
-				event.stopPropagation();
-				this.sessionsPartService?.openDataBrowser(browse);
-			});
-		}
-
-		if (step.detail) {
-			const open = this.stepExpand.has(key);
-			row.setAttribute('aria-expanded', String(open));
-			const chevron = append(row, document.createElement('span'));
-			chevron.className = `codicon ${open ? 'codicon-chevron-down' : 'codicon-chevron-right'} conversation-work-step-chevron`;
-			chevron.setAttribute('aria-hidden', 'true');
-			row.addEventListener('click', () => {
-				if (this.stepExpand.has(key)) {
-					this.stepExpand.delete(key);
-				} else {
-					this.stepExpand.add(key);
-				}
-				this.render();
-			});
-			if (open) {
-				const detail = append(wrapper, document.createElement('pre'));
-				detail.className = 'conversation-work-step-detail';
-				detail.textContent = step.detail;
-			}
-		}
-
-		return wrapper;
 	}
 
 	private updateWorkTicker(hasLiveWork: boolean): void {
@@ -1869,147 +1409,11 @@ function formatTokens(tokens: number): string {
 	return String(tokens);
 }
 
-interface IMessageActions {
+export interface IMessageActions {
 	copy(): void;
 	feedback?(value: 'like' | 'dislike'): void;
 	fork?(): void;
 }
-
-function createMessageRow(message: ISessionMessage, actions?: IMessageActions, resolveImage?: (path: string) => Promise<string | undefined>): HTMLElement {
-	const row = document.createElement('article');
-	row.className = `conversation-message ${message.role}`;
-	row.dataset.role = message.role;
-	row.dataset.messageId = message.id;
-
-	// Assistant messages render as plain text — no avatar, no author label.
-	if (message.role !== 'assistant') {
-		const avatar = append(row, document.createElement('div'));
-		avatar.className = 'conversation-message-avatar';
-		const icon = append(avatar, document.createElement('span'));
-		icon.className = `codicon ${messageIcon(message.role)}`;
-		icon.setAttribute('aria-hidden', 'true');
-	}
-
-	const body = append(row, document.createElement('div'));
-	body.className = 'conversation-message-body';
-
-	if (message.role !== 'assistant') {
-		const label = append(body, document.createElement('div'));
-		label.className = 'conversation-message-label';
-		label.textContent = messageLabel(message.role);
-	}
-
-	if (message.role === 'user') {
-		const bubble = append(body, document.createElement('div'));
-		bubble.className = 'conversation-message-bubble';
-		bubble.textContent = message.text;
-		// An image-only message has no text — don't render an empty bubble.
-		bubble.hidden = message.text.trim() === '';
-		attachUserBubbleCollapse(bubble);
-		if (message.attachments && message.attachments.length > 0) {
-			const chips = append(body, document.createElement('div'));
-			chips.className = 'conversation-message-attachments';
-			for (const attachment of message.attachments) {
-				if (attachment.kind === 'image') {
-					const thumb = append(chips, document.createElement('span'));
-					thumb.className = 'conversation-message-image';
-					const img = append(thumb, document.createElement('img')) as HTMLImageElement;
-					img.alt = 'Attached image';
-					// The bytes live on disk — hydrate the thumbnail when they arrive.
-					void resolveImage?.(attachment.path).then(url => {
-						if (url) {
-							img.src = url;
-						} else {
-							thumb.remove();
-						}
-					});
-					continue;
-				}
-				const chip = append(chips, document.createElement('span'));
-				chip.className = 'conversation-message-attachment';
-				chip.title = attachment.path;
-				const icon = append(chip, document.createElement('span'));
-				icon.className = `codicon ${attachment.kind === 'folder' ? 'codicon-folder' : attachment.kind === 'skill' ? 'codicon-lightbulb' : attachment.kind === 'session' ? 'codicon-comment-discussion' : 'codicon-file'}`;
-				icon.setAttribute('aria-hidden', 'true');
-				const name = append(chip, document.createElement('span'));
-				name.textContent =
-					attachment.kind === 'skill'
-						? `$${attachment.path}`
-						: attachment.kind === 'session'
-							? (attachment.label ?? attachment.path)
-							: attachment.path.split('/').pop()! + (attachment.kind === 'folder' ? '/' : '');
-			}
-		}
-	} else if (message.role === 'assistant') {
-		const text = append(body, document.createElement('div'));
-		text.className = 'conversation-message-text conversation-markdown';
-		text.appendChild(renderMarkdown(message.text));
-	} else {
-		const text = append(body, document.createElement('div'));
-		text.className = 'conversation-message-text';
-		text.textContent = message.text;
-	}
-
-	if (message.detail) {
-		const detail = append(body, document.createElement('div'));
-		detail.className = 'conversation-tool-detail';
-		detail.textContent = message.detail;
-	}
-
-	if (actions) {
-		body.appendChild(createMessageActionBar(message, actions));
-	}
-
-	return row;
-}
-
-/** Binds the click-to-expand toggle once per bubble, then runs the initial measurement. */
-function attachUserBubbleCollapse(bubble: HTMLElement): void {
-	bubble.addEventListener('click', () => {
-		if (bubble.dataset['collapsible'] !== 'true') {
-			return;
-		}
-		// A click that ends a text-drag selection shouldn't also toggle the bubble.
-		if (window.getSelection()?.toString()) {
-			return;
-		}
-		bubble.dataset['collapse'] = bubble.dataset['collapse'] === 'expanded' ? 'collapsed' : 'expanded';
-	});
-	measureUserBubbleCollapse(bubble);
-}
-
-/**
- * Long pastes start clamped to the composer's own input height; short ones
- * render at their natural height with no click affordance at all. Whether a
- * bubble clips only shows up after layout, so this measures on the next
- * frame and only then decides.
- */
-function measureUserBubbleCollapse(bubble: HTMLElement): void {
-	delete bubble.dataset['collapse'];
-	delete bubble.dataset['collapsible'];
-	if (bubble.hidden) {
-		return;
-	}
-	bubble.dataset['collapse'] = 'collapsed';
-	requestAnimationFrame(() => {
-		if (!bubble.isConnected) {
-			return;
-		}
-		if (bubble.scrollHeight > bubble.clientHeight) {
-			bubble.dataset['collapsible'] = 'true';
-		} else {
-			delete bubble.dataset['collapse'];
-		}
-	});
-}
-
-const PLAN_SECTION_ICONS: Readonly<Record<string, string>> = {
-	overview: 'codicon-info',
-	files: 'codicon-files',
-	approach: 'codicon-lightbulb',
-	steps: 'codicon-list-ordered',
-	risks: 'codicon-warning',
-};
 
 /** File names touched by a work block's write/edit tool steps. */
 function extractWorkFiles(work: ISessionMessage | undefined): string[] {
@@ -2026,82 +1430,6 @@ function extractWorkFiles(work: ISessionMessage | undefined): string[] {
 	return files;
 }
 
-/** "Today 14:23" / "Yesterday 09:05" / "Jul 6 18:30" — always 24-hour. */
-function formatMessageTime(date: Date): string {
-	const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-	const now = new Date();
-	const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-	const startOfYesterday = startOfToday - 86_400_000;
-	if (date.getTime() >= startOfToday) {
-		return `Today ${time}`;
-	}
-	if (date.getTime() >= startOfYesterday) {
-		return `Yesterday ${time}`;
-	}
-	return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${time}`;
-}
-
-/** Hover action bar: copy, like/dislike (assistant), fork-from-here. */
-function createMessageActionBar(message: ISessionMessage, actions: IMessageActions): HTMLElement {
-	const bar = document.createElement('div');
-	bar.className = 'conversation-message-actions';
-
-	const addAction = (icon: string, title: string, onClick: () => void, options?: { readonly active?: boolean; readonly feedbackKind?: 'like' | 'dislike' }): void => {
-		const button = append(bar, document.createElement('button')) as HTMLButtonElement;
-		button.className = `conversation-message-action${options?.active ? ' active' : ''}`;
-		button.type = 'button';
-		button.title = title;
-		button.setAttribute('aria-label', title);
-		if (options?.feedbackKind) {
-			// A stable hook so a later patch can toggle the active state in place
-			// without recreating the button (see setFeedbackButtonState).
-			button.dataset.feedback = options.feedbackKind;
-		}
-		const iconEl = append(button, document.createElement('span'));
-		iconEl.className = `codicon ${icon}`;
-		iconEl.setAttribute('aria-hidden', 'true');
-		button.addEventListener('click', onClick);
-	};
-
-	addAction('codicon-copy', 'Copy', () => {
-		actions.copy();
-	});
-	if (actions.feedback) {
-		addAction('codicon-thumbsup', message.feedback === 'like' ? 'Remove like' : 'Like', () => actions.feedback!('like'), {
-			active: message.feedback === 'like',
-			feedbackKind: 'like',
-		});
-		addAction('codicon-thumbsdown', message.feedback === 'dislike' ? 'Remove dislike' : 'Dislike', () => actions.feedback!('dislike'), {
-			active: message.feedback === 'dislike',
-			feedbackKind: 'dislike',
-		});
-	}
-	if (actions.fork) {
-		addAction('codicon-git-branch', localize('conv.forkFromHere'), actions.fork);
-	}
-
-	if (message.timestamp) {
-		const time = append(bar, document.createElement('span'));
-		time.className = 'conversation-message-time';
-		time.textContent = formatMessageTime(message.timestamp);
-		time.title = message.timestamp.toLocaleString();
-	}
-
-	return bar;
-}
-
-/** Toggle a feedback button's active/title state in place — used when patching an existing row. */
-function setFeedbackButtonState(button: Element | null, kind: 'like' | 'dislike', feedback: 'like' | 'dislike' | undefined): void {
-	if (!(button instanceof HTMLButtonElement)) {
-		return;
-	}
-	const active = feedback === kind;
-	button.classList.toggle('active', active);
-	const title = kind === 'like' ? (active ? 'Remove like' : 'Like') : active ? 'Remove dislike' : 'Dislike';
-	button.title = title;
-	button.setAttribute('aria-label', title);
-}
-
 function formatWorkingDuration(startedAt: Date | undefined): string {
 	const elapsedMs = Math.max(0, Date.now() - (startedAt?.getTime() ?? Date.now()));
 	const totalSeconds = Math.floor(elapsedMs / 1000);
@@ -2112,47 +1440,6 @@ function formatWorkingDuration(startedAt: Date | undefined): string {
 	}
 
 	return localize('conv.workingForS', seconds);
-}
-
-function messageIcon(role: ISessionMessage['role']): string {
-	switch (role) {
-		case 'user':
-			return 'codicon-account';
-		case 'assistant':
-			return 'codicon-copilot';
-		case 'tool':
-		case 'work':
-		case 'digest':
-			return 'codicon-tools';
-		case 'plan':
-			return 'codicon-checklist';
-	}
-}
-
-function messageLabel(role: ISessionMessage['role']): string {
-	switch (role) {
-		case 'user':
-			return 'You';
-		case 'assistant':
-			return 'Mellivora';
-		case 'tool':
-		case 'work':
-		case 'digest':
-			return 'Tool';
-		case 'plan':
-			return 'Plan';
-	}
-}
-
-function formatDurationMs(ms: number): string {
-	const totalSeconds = Math.max(1, Math.round(ms / 1000));
-	const minutes = Math.floor(totalSeconds / 60);
-	const seconds = totalSeconds % 60;
-	return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-}
-
-function thinkingDurationText(ms: number): string {
-	return ms < 10_000 ? 'a few seconds' : formatDurationMs(ms);
 }
 
 function conversationStatusId(status: SessionStatus): string {

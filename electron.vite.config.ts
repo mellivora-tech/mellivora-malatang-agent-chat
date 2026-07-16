@@ -5,6 +5,7 @@
 
 import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
+import react from '@vitejs/plugin-react';
 
 const root = resolve(import.meta.dirname);
 
@@ -39,6 +40,7 @@ export default defineConfig({
 		root: resolve(root, 'src/sessions/electron-browser'),
 		base: './',
 		publicDir: resolve(root, 'public'),
+		plugins: [react()],
 		resolve: {
 			extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
 		},

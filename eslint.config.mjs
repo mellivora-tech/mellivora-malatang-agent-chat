@@ -12,7 +12,7 @@ export default tseslint.config(
 	...tseslint.configs.recommended,
 	prettierConfig,
 	{
-		files: ['src/**/*.ts', 'tests/**/*.ts', 'scripts/**/*.mjs', 'electron.vite.config.ts', 'playwright.config.ts'],
+		files: ['src/**/*.ts', 'src/**/*.tsx', 'tests/**/*.ts', 'scripts/**/*.mjs', 'electron.vite.config.ts', 'playwright.config.ts'],
 		languageOptions: {
 			parserOptions: {
 				project: './tsconfig.json',
