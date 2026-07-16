@@ -10,10 +10,13 @@ import {
 	MIGRATION_CAPS,
 	buildMigrationConfirmTurn,
 	buildMigrationReviseTurn,
+	buildMigrationSql,
 	parseMigrationPreviewProps,
+	quoteIdentifier,
 	type IMigrationCellEdit,
 	type IMigrationPreviewProps,
 } from '../../src/sessions/services/sessions/common/uiComponents/migrationPreview.js';
+import { isReadOnlySql, isSingleStatement } from '../../src/main/agent/dbQuery.js';
 
 const VALID = {
 	sourceLabel: 'mysql:legacy_orders',
@@ -127,6 +130,73 @@ test('1-based validation rows (the real-Kimi fingerprint: some row === N, none =
 		[0],
 		'no shift when a 0 exists; the impossible row drops',
 	);
+});
+
+// --- P1a: compile trio + transformSql parse ---
+
+const COMPILABLE = {
+	...VALID,
+	sourceTable: 'test.legacy_orders',
+	targetTable: 'orders_v2',
+	dialect: 'mysql' as const,
+	mappings: [
+		{ source: 'cust_name', target: 'name', transform: 'trim + title-case', transformSql: 'TRIM(cust_name)' },
+		{ source: 'amount_cents', target: 'amount', transform: '分→元', transformSql: 'amount_cents / 100' },
+		{ source: 'status', target: 'status' },
+	],
+	columns: ['name', 'amount', 'status'],
+	sampleRows: [['张三', 12.5, 1]],
+	validations: undefined,
+	filterSql: "status <> ''",
+};
+
+test('the compile trio and transformSql parse, cap, and degrade correctly', () => {
+	const parsed = parseMigrationPreviewProps(COMPILABLE);
+	assert.ok(parsed);
+	assert.equal(parsed.sourceTable, 'test.legacy_orders');
+	assert.equal(parsed.dialect, 'mysql');
+	assert.equal(parsed.mappings[0]?.transformSql, 'TRIM(cust_name)');
+	assert.equal(parsed.mappings[2]?.transformSql, undefined, 'carry-over mapping has no expression');
+	assert.equal(parsed.filterSql, "status <> ''");
+
+	// A bad dialect value degrades to review-only, never a refusal.
+	const badDialect = parseMigrationPreviewProps({ ...COMPILABLE, dialect: 'oracle' });
+	assert.ok(badDialect);
+	assert.equal(badDialect.dialect, undefined);
+
+	const overCap = 'x'.repeat(MIGRATION_CAPS.sqlChars + 1);
+	assert.equal(parseMigrationPreviewProps({ ...COMPILABLE, mappings: [{ source: 's', target: 't', transformSql: overCap }] }), undefined, 'over-cap expression refused');
+	assert.equal(parseMigrationPreviewProps({ ...COMPILABLE, sourceTable: overCap }), undefined, 'over-cap table identifier refused');
+	assert.equal(parseMigrationPreviewProps({ ...COMPILABLE, filterSql: overCap }), undefined, 'over-cap filter refused');
+});
+
+// --- P1a: buildMigrationSql goldens ---
+
+test('buildMigrationSql compiles the mysql golden and satisfies the execute_data_source contract', () => {
+	const props = parseMigrationPreviewProps(COMPILABLE)!;
+	const sql = buildMigrationSql(props);
+	assert.equal(sql, "INSERT INTO `orders_v2` (`name`, `amount`, `status`)\nSELECT TRIM(cust_name), amount_cents / 100, `status`\nFROM `test`.`legacy_orders`\nWHERE status <> '';");
+	// Contract lock: exactly one statement, and NOT a read (execute_data_source
+	// refuses reads and scripts — the export must be feedable as-is).
+	assert.equal(isSingleStatement(sql!), true);
+	assert.equal(isReadOnlySql(sql!), false);
+});
+
+test('buildMigrationSql compiles the postgres golden with double-quoted identifiers', () => {
+	const props = parseMigrationPreviewProps({ ...COMPILABLE, dialect: 'postgres', filterSql: undefined })!;
+	const sql = buildMigrationSql(props);
+	assert.equal(sql, 'INSERT INTO "orders_v2" ("name", "amount", "status")\nSELECT TRIM(cust_name), amount_cents / 100, "status"\nFROM "test"."legacy_orders";');
+});
+
+test('buildMigrationSql returns undefined without the compile trio — the card is review-only', () => {
+	assert.equal(buildMigrationSql(parseMigrationPreviewProps(VALID)!), undefined, 'no tables/dialect → no compile');
+	assert.equal(buildMigrationSql(parseMigrationPreviewProps({ ...COMPILABLE, targetTable: undefined })!), undefined, 'missing one leg → no compile');
+});
+
+test('quoteIdentifier escapes embedded quotes so a hostile identifier cannot break out', () => {
+	assert.equal(quoteIdentifier('user`s', 'mysql'), '`user``s`');
+	assert.equal(quoteIdentifier('user"s', 'postgres'), '"user""s"');
+	assert.equal(quoteIdentifier('a.b', 'mysql'), '`a`.`b`');
 });
 
 // --- turn builders ---

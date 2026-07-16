@@ -22,6 +22,8 @@ export const MIGRATION_CAPS = {
 	sampleRows: 50,
 	validations: 200,
 	cellChars: 500,
+	/** Ceiling for a transformSql expression and for table identifiers. */
+	sqlChars: 500,
 } as const;
 
 export interface IMigrationFieldMapping {
@@ -31,6 +33,13 @@ export interface IMigrationFieldMapping {
 	readonly target: string;
 	/** Human-readable transform, e.g. "trim + title-case". */
 	readonly transform?: string;
+	/**
+	 * Machine-executable SQL expression producing the target value, e.g.
+	 * "TRIM(cust_name)" or "amount_cents / 100". Absent means the source column
+	 * carries over as-is. This is what buildMigrationSql compiles — `transform`
+	 * is only ever prose for the reviewer.
+	 */
+	readonly transformSql?: string;
 	readonly note?: string;
 }
 
@@ -46,10 +55,20 @@ export interface IMigrationValidation {
 export type MigrationCell = string | number | boolean | null;
 
 export interface IMigrationPreviewProps {
-	/** e.g. "mysql:legacy_orders". */
+	/** Display label, e.g. "mysql:legacy_orders" — NOT necessarily a valid table identifier. */
 	readonly sourceLabel: string;
-	/** e.g. "pg:orders_v2". */
+	/** Display label, e.g. "pg:orders_v2". */
 	readonly targetLabel: string;
+	/**
+	 * SQL-quotable source table identifier ("user_bak" or "test.user_bak").
+	 * Together with targetTable + dialect this is what makes the card able to
+	 * COMPILE the migration locally (buildMigrationSql / export) — without
+	 * them the card is review-only.
+	 */
+	readonly sourceTable?: string;
+	readonly targetTable?: string;
+	/** Identifier-quoting dialect for the generated SQL. */
+	readonly dialect?: 'mysql' | 'postgres';
 	readonly mappings: readonly IMigrationFieldMapping[];
 	/** Target-column order for the sample grid. */
 	readonly columns: readonly string[];
@@ -58,6 +77,8 @@ export interface IMigrationPreviewProps {
 	readonly validations?: readonly IMigrationValidation[];
 	/** Full dataset size, display-only ("50 / 12,340 行"). */
 	readonly totalRowCount?: number;
+	/** Optional WHERE-clause body (no "WHERE" keyword) filtering the source rows. */
+	readonly filterSql?: string;
 	/** Markdown rendered under the grid. */
 	readonly note?: string;
 }
@@ -80,7 +101,7 @@ export function parseMigrationPreviewProps(props: unknown): IMigrationPreviewPro
 		return undefined;
 	}
 
-	const { mappings, columns, sampleRows, validations, totalRowCount, note } = record;
+	const { mappings, columns, sampleRows, validations, totalRowCount, note, sourceTable, targetTable, dialect, filterSql } = record;
 	if (!Array.isArray(mappings) || mappings.length === 0 || mappings.length > MIGRATION_CAPS.mappings) {
 		return undefined;
 	}
@@ -96,12 +117,29 @@ export function parseMigrationPreviewProps(props: unknown): IMigrationPreviewPro
 		if ((mapping.transform !== undefined && typeof mapping.transform !== 'string') || (mapping.note !== undefined && typeof mapping.note !== 'string')) {
 			return undefined;
 		}
+		if (mapping.transformSql !== undefined && (typeof mapping.transformSql !== 'string' || mapping.transformSql.length > MIGRATION_CAPS.sqlChars)) {
+			return undefined;
+		}
 		parsedMappings.push({
 			source: mapping.source,
 			target: mapping.target,
 			...(mapping.transform !== undefined ? { transform: mapping.transform } : {}),
+			...(mapping.transformSql !== undefined && mapping.transformSql.trim() !== '' ? { transformSql: mapping.transformSql } : {}),
 			...(mapping.note !== undefined ? { note: mapping.note } : {}),
 		});
+	}
+
+	// The compile-enabling trio: each optional, each capped; a wrong dialect
+	// value degrades to "review-only card", never a refusal.
+	if (sourceTable !== undefined && (!isNonEmptyString(sourceTable) || sourceTable.length > MIGRATION_CAPS.sqlChars)) {
+		return undefined;
+	}
+	if (targetTable !== undefined && (!isNonEmptyString(targetTable) || targetTable.length > MIGRATION_CAPS.sqlChars)) {
+		return undefined;
+	}
+	const parsedDialect = dialect === 'mysql' || dialect === 'postgres' ? dialect : undefined;
+	if (filterSql !== undefined && (typeof filterSql !== 'string' || filterSql.length > MIGRATION_CAPS.sqlChars)) {
+		return undefined;
 	}
 
 	if (!Array.isArray(columns) || columns.length === 0 || columns.length > MIGRATION_CAPS.columns || !columns.every(isNonEmptyString)) {
@@ -161,11 +199,15 @@ export function parseMigrationPreviewProps(props: unknown): IMigrationPreviewPro
 	return {
 		sourceLabel: record.sourceLabel,
 		targetLabel: record.targetLabel,
+		...(sourceTable !== undefined ? { sourceTable: sourceTable as string } : {}),
+		...(targetTable !== undefined ? { targetTable: targetTable as string } : {}),
+		...(parsedDialect !== undefined ? { dialect: parsedDialect } : {}),
 		mappings: parsedMappings,
 		columns: columns as string[],
 		sampleRows: sampleRows as MigrationCell[][],
 		...(parsedValidations !== undefined ? { validations: parsedValidations } : {}),
 		...(totalRowCount !== undefined ? { totalRowCount } : {}),
+		...(filterSql !== undefined && (filterSql as string).trim() !== '' ? { filterSql: filterSql as string } : {}),
 		...(note !== undefined ? { note } : {}),
 	};
 }
@@ -216,4 +258,53 @@ export function buildMigrationReviseTurn(props: IMigrationPreviewProps, edits: r
 	}
 	lines.push('请修订后重新调用 render_ui（component=migration_preview）给出新预览。');
 	return lines.join('\n');
+}
+
+// --- local SQL compilation (the card as a computer, not just a dialog) ------
+
+/**
+ * Quote one identifier segment per dialect; a dotted name ("test.user_bak")
+ * quotes each segment. Embedded quote characters are escaped by doubling —
+ * identifiers are model-authored, and while the generated script is always
+ * user-reviewed (and approval-gated at execution), a broken identifier must
+ * not be able to terminate the quoting context.
+ */
+export function quoteIdentifier(name: string, dialect: 'mysql' | 'postgres'): string {
+	const quote = dialect === 'mysql' ? '`' : '"';
+	return name
+		.split('.')
+		.map(segment => `${quote}${segment.replaceAll(quote, quote + quote)}${quote}`)
+		.join('.');
+}
+
+/**
+ * Compile the mapping into a single set-based migration statement:
+ *
+ *   INSERT INTO target (t1, t2, …)
+ *   SELECT expr1, expr2, … FROM source [WHERE filter];
+ *
+ * Pure and deterministic — the export button and (later) the in-card SQL
+ * preview both call this, so an edited mapping always compiles to the same
+ * script everywhere. Returns undefined when the card lacks the compile trio
+ * (sourceTable/targetTable/dialect): such a card is review-only and callers
+ * disable export. The result is ONE statement by construction, matching
+ * execute_data_source's one-statement-per-approval contract (locked by test
+ * against isSingleStatement).
+ */
+export function buildMigrationSql(props: IMigrationPreviewProps): string | undefined {
+	const { sourceTable, targetTable, dialect } = props;
+	if (sourceTable === undefined || targetTable === undefined || dialect === undefined) {
+		return undefined;
+	}
+	const targetColumns = props.mappings.map(mapping => quoteIdentifier(mapping.target, dialect));
+	const selectExpressions = props.mappings.map(mapping => {
+		const expression = mapping.transformSql?.trim();
+		return expression !== undefined && expression !== '' ? expression : quoteIdentifier(mapping.source, dialect);
+	});
+	const filter = props.filterSql?.trim();
+	return [
+		`INSERT INTO ${quoteIdentifier(targetTable, dialect)} (${targetColumns.join(', ')})`,
+		`SELECT ${selectExpressions.join(', ')}`,
+		`FROM ${quoteIdentifier(sourceTable, dialect)}${filter !== undefined && filter !== '' ? `\nWHERE ${filter}` : ''};`,
+	].join('\n');
 }
