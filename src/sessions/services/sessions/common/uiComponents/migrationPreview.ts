@@ -116,31 +116,39 @@ export function parseMigrationPreviewProps(props: unknown): IMigrationPreviewPro
 		}
 	}
 
+	// Validations are ADVISORY highlights — a malformed entry is dropped, never
+	// allowed to kill the whole card (first real-Kimi smoke test lost both cards
+	// to exactly this: 1-based row numbers). Two-pass: collect the well-shaped
+	// entries, detect the unambiguous 1-based fingerprint (some row === N while
+	// none === 0 — impossible as 0-based), shift if so, then drop any survivor
+	// still out of range.
 	let parsedValidations: IMigrationValidation[] | undefined;
 	if (validations !== undefined) {
 		if (!Array.isArray(validations) || validations.length > MIGRATION_CAPS.validations) {
 			return undefined;
 		}
-		parsedValidations = [];
+		const wellShaped: IMigrationValidation[] = [];
 		for (const raw of validations) {
 			if (typeof raw !== 'object' || raw === null) {
-				return undefined;
+				continue;
 			}
 			const validation = raw as Record<string, unknown>;
 			if (
 				typeof validation.row !== 'number' ||
 				!Number.isInteger(validation.row) ||
-				validation.row < 0 ||
-				validation.row >= sampleRows.length ||
 				!isNonEmptyString(validation.column) ||
 				!columns.includes(validation.column) ||
 				(validation.level !== 'error' && validation.level !== 'warning') ||
 				!isNonEmptyString(validation.message)
 			) {
-				return undefined;
+				continue;
 			}
-			parsedValidations.push({ row: validation.row, column: validation.column, level: validation.level, message: validation.message });
+			wellShaped.push({ row: validation.row, column: validation.column, level: validation.level, message: validation.message });
 		}
+		const oneBased = wellShaped.some(validation => validation.row === sampleRows.length) && !wellShaped.some(validation => validation.row === 0);
+		parsedValidations = wellShaped
+			.map(validation => (oneBased ? { ...validation, row: validation.row - 1 } : validation))
+			.filter(validation => validation.row >= 0 && validation.row < sampleRows.length);
 	}
 
 	if (totalRowCount !== undefined && (typeof totalRowCount !== 'number' || !Number.isInteger(totalRowCount) || totalRowCount < 0)) {

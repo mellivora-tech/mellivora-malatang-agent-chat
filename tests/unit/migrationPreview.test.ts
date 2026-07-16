@@ -69,14 +69,64 @@ test('each cap and cross-check refuses: rows, mappings, columns, validations, ce
 	assert.equal(parseMigrationPreviewProps({ ...VALID, sampleRows: [[longCell, 1]], validations: undefined }), undefined, '501-char cell refused');
 
 	assert.equal(parseMigrationPreviewProps({ ...VALID, sampleRows: [['only-one-cell']], validations: undefined }), undefined, 'ragged row refused');
-	assert.equal(parseMigrationPreviewProps({ ...VALID, validations: [{ row: 9, column: 'name', level: 'error', message: 'x' }] }), undefined, 'validation row out of range refused');
-	assert.equal(
-		parseMigrationPreviewProps({ ...VALID, validations: [{ row: 0, column: 'ghost', level: 'error', message: 'x' }] }),
-		undefined,
-		'validation column not in columns refused',
-	);
 	assert.equal(parseMigrationPreviewProps({ ...VALID, mappings: [] }), undefined, 'empty mappings refused');
 	assert.equal(parseMigrationPreviewProps({ ...VALID, sourceLabel: ' ' }), undefined, 'blank sourceLabel refused');
+});
+
+// --- validations are advisory: malformed entries drop, the card survives ---
+
+test('a malformed validation entry is dropped, never the whole card', () => {
+	const hallucinated = parseMigrationPreviewProps({ ...VALID, validations: [{ row: 9, column: 'name', level: 'error', message: 'x' }] });
+	assert.ok(hallucinated, 'out-of-range row must not kill the card');
+	assert.equal(hallucinated.validations?.length, 0, 'the bad entry itself is dropped');
+
+	const ghostColumn = parseMigrationPreviewProps({ ...VALID, validations: [{ row: 0, column: 'ghost', level: 'error', message: 'x' }] });
+	assert.ok(ghostColumn, 'unknown column must not kill the card');
+	assert.equal(ghostColumn.validations?.length, 0);
+});
+
+test('1-based validation rows (the real-Kimi fingerprint: some row === N, none === 0) are auto-shifted', () => {
+	// Regression for the 2026-07-16 smoke test: 3 sample rows, Kimi sent rows
+	// 1..3 — the whole card was refused. Now the N tell triggers a shift.
+	const threeRows = {
+		...VALID,
+		sampleRows: [
+			['a', 1],
+			['b', 2],
+			['c', 3],
+		],
+	};
+	const shifted = parseMigrationPreviewProps({
+		...threeRows,
+		validations: [
+			{ row: 1, column: 'name', level: 'warning', message: 'w1' },
+			{ row: 3, column: 'name', level: 'warning', message: 'w3' },
+		],
+	});
+	assert.ok(shifted);
+	assert.deepEqual(
+		shifted.validations?.map(validation => validation.row),
+		[0, 2],
+		'all rows shift by -1 when the 1-based tell is present',
+	);
+
+	// No tell (no row === N) → rows are taken as 0-based as documented.
+	const asIs = parseMigrationPreviewProps({ ...threeRows, validations: [{ row: 1, column: 'name', level: 'warning', message: 'w' }] });
+	assert.equal(asIs?.validations?.[0]?.row, 1, 'ambiguous rows stay 0-based');
+
+	// row 0 present alongside row N → contradictory; N is dropped, 0 kept.
+	const mixed = parseMigrationPreviewProps({
+		...threeRows,
+		validations: [
+			{ row: 0, column: 'name', level: 'warning', message: 'w0' },
+			{ row: 3, column: 'name', level: 'warning', message: 'w3' },
+		],
+	});
+	assert.deepEqual(
+		mixed?.validations?.map(validation => validation.row),
+		[0],
+		'no shift when a 0 exists; the impossible row drops',
+	);
 });
 
 // --- turn builders ---

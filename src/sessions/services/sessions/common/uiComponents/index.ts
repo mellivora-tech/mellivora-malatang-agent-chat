@@ -37,6 +37,6 @@ export const UI_COMPONENT_NAMES: readonly string[] = Object.keys(UI_COMPONENT_VA
 export const UI_COMPONENT_GUIDANCE: Readonly<Record<string, string>> = {
 	migration_preview:
 		'migration_preview — use when proposing a data migration / field mapping. First read BOTH schemas (list_data_sources + query_data_source), then present the source→target mappings and a TRANSFORMED sample (max 50 rows, 500 chars/cell — a sample, never the full set) for the user to review and correct. ' +
-		'props: { sourceLabel, targetLabel, mappings: [{ source, target, transform?, note? }], columns: [target column order], sampleRows: [[cells matching columns]], validations?: [{ row, column, level: error|warning, message }], totalRowCount?, note? }. ' +
+		'props: { sourceLabel, targetLabel, mappings: [{ source, target, transform?, note? }], columns: [target column order], sampleRows: [[cells matching columns]], validations?: [{ row (0-BASED index into sampleRows: first row = 0), column, level: error|warning, message }], totalRowCount?, note? }. ' +
 		'Put suspicious conversions in validations. The user can edit sample cells; their confirmation or corrections come back as a message.',
 };
