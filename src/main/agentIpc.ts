@@ -342,9 +342,21 @@ export function registerAgentIpc(dataRoot: string): void {
 		const tools: readonly IAgentTool[] = [...baseTools, ...spawnTools];
 
 		try {
+			// The capability sentences must match the tools actually registered THIS
+			// run — a stale "read-only SELECT" claim made the model refuse writes
+			// even though execute_data_source was in its tool list, and with no
+			// render_ui mention it presented a migration preview as markdown tables
+			// (observed in the 2026-07-16 smoke-test logs).
+			const hasRenderUi = fileTools.some(tool => tool.name === 'render_ui');
 			const dbNote =
 				querySources.length > 0
-					? `\nThis project has ${querySources.length} configured database data source(s). Use list_data_sources to see them and query_data_source (read-only SELECT) to inspect data.`
+					? `\nThis project has ${querySources.length} configured database data source(s). Use list_data_sources to see them and query_data_source (read-only SELECT) to inspect data.` +
+						(executeDataSourceTools.length > 0
+							? ' Writes go through execute_data_source — one statement per call, each individually approved by the user; sources marked READ-ONLY are refused unconditionally.'
+							: '') +
+						(hasRenderUi
+							? ' When the user asks for a data-migration or field-mapping preview, present it with render_ui (component=migration_preview) — NEVER as markdown tables in prose; the card lets the user correct sample cells and confirm.'
+							: '')
 					: '';
 			const sshNote =
 				sshTools.length > 0
