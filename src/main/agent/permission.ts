@@ -83,9 +83,15 @@ export function describeToolCall(toolName: string, input: unknown): string {
 		case 'write_file':
 			return typeof record.path === 'string' ? `write ${record.path}` : 'write a file';
 		case 'upload_to_server':
-			return typeof record.local_path === 'string' && typeof record.remote_path === 'string' ? `上传 ${record.local_path} → ${typeof record.server === 'string' ? `${record.server}:` : ''}${record.remote_path}` : 'upload a file to a server';
+			return typeof record.local_path === 'string' && typeof record.remote_path === 'string'
+				? `上传 ${record.local_path} → ${typeof record.server === 'string' ? `${record.server}:` : ''}${record.remote_path}`
+				: 'upload a file to a server';
 		case 'edit_file':
 			return typeof record.path === 'string' ? `edit ${record.path}` : 'edit a file';
+		case 'execute_data_source':
+			// No prefix: the approval card's own localized title says "执行写库";
+			// this line is the exact statement being approved.
+			return typeof record.source === 'string' && typeof record.sql === 'string' ? `${record.source}: ${record.sql}` : 'execute a database write';
 		default:
 			return toolName;
 	}

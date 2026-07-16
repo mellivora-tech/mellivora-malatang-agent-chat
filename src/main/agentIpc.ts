@@ -16,6 +16,8 @@ import { asPermissionMode, createGateForMode, describeToolCall, type PermissionM
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createDataSourceTools, type IQueryableSource } from './agent/tools/dataSourceTools.js';
+import { createExecuteDataSourceTool } from './agent/tools/executeDataSourceTool.js';
+import { isEffectivelyWritable } from '../sessions/services/environments/common/environments.js';
 import { createRenderDataTool } from './agent/tools/renderDataTool.js';
 import { storeSessionTableCsv } from './sessionsStorage.js';
 import { createSshTools, type ISshServer } from './agent/tools/sshTool.js';
@@ -191,6 +193,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		const workspacePath = project?.workspacePath ?? project?.path;
 		const wsConfig = workspacePath ? await readWorkspaceConfig(workspacePath) : undefined;
 		const envName = new Map((wsConfig?.environments ?? []).map(environment => [environment.id, environment.name]));
+		const envWritable = new Map((wsConfig?.environments ?? []).map(environment => [environment.id, environment.writable]));
 		const querySources: IQueryableSource[] = (wsConfig?.dataSources ?? [])
 			.filter(dataSource => dataSource.kind === 'database')
 			.map(dataSource => ({
@@ -198,8 +201,15 @@ export function registerAgentIpc(dataRoot: string): void {
 				label: dataSource.label,
 				environmentName: envName.get(dataSource.environmentId) ?? '',
 				coordinates: dataSource.coordinates as IQueryableSource['coordinates'],
+				// Effective writability = env writable ∧ account read-write; a
+				// missing environment folds to NOT writable (fail closed).
+				writable: isEffectivelyWritable(envWritable.get(dataSource.environmentId) ?? false, dataSource.access),
 			}));
 		const dataSourceTools = querySources.length > 0 ? createDataSourceTools({ sources: querySources, getSecret: id => getCredential(dataRoot, id, cipher) }) : [];
+		// The write tool is mutation-class: omitted in plan mode (like bash/ssh);
+		// in every other mode the permission gate asks per statement.
+		const executeDataSourceTools =
+			querySources.length > 0 && mode !== 'plan' ? [createExecuteDataSourceTool({ sources: querySources, getSecret: id => getCredential(dataRoot, id, cipher) })] : [];
 
 		// SSH servers → run_on_server (mutation-class: gated, and omitted in plan mode like bash).
 		const sshServers: ISshServer[] = (wsConfig?.dataSources ?? [])
@@ -227,7 +237,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		const renderDataTool = createRenderDataTool({
 			storeCsv: (title, csv) => storeSessionTableCsv(dataRoot, { sessionId: payload.sessionId, ...(payload.projectId ? { projectId: payload.projectId } : {}) }, title, csv),
 		});
-		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...sshTools, renderDataTool];
+		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...executeDataSourceTools, ...sshTools, renderDataTool];
 		// spawn_agent (in-process read-only sub-agent, see spawnAgentTool.ts) is
 		// added below, after the run logger exists to receive its telemetry —
 		// it is read-only, so every permission mode admits it.
@@ -267,7 +277,12 @@ export function registerAgentIpc(dataRoot: string): void {
 				// Only offer the third button for tools that are safe to always-allow
 				// (deriveGrant returns undefined for run_on_server et al.).
 				const grant = deriveGrant(tool.name, input);
-				pendingApprovals.set(context.toolUseId, { sessionId: payload.sessionId, ...(payload.projectId ? { projectId: payload.projectId } : {}), ...(grant ? { grant } : {}), resolve });
+				pendingApprovals.set(context.toolUseId, {
+					sessionId: payload.sessionId,
+					...(payload.projectId ? { projectId: payload.projectId } : {}),
+					...(grant ? { grant } : {}),
+					resolve,
+				});
 				controller.signal.addEventListener(
 					'abort',
 					() => {

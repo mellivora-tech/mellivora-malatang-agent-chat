@@ -11,9 +11,9 @@ import { createDataSourceTools, type IQueryableSource } from '../../src/main/age
 import type { DbQueryRunner } from '../../src/main/agent/dbQuery.js';
 
 const SOURCES: IQueryableSource[] = [
-	{ id: 'ds-1', label: 'orders', environmentName: 'dev', coordinates: { driver: 'mysql', host: 'h1', port: 3306, database: 'orders' } },
-	{ id: 'ds-2', label: 'orders', environmentName: 'prod', coordinates: { driver: 'mysql', host: 'h2', port: 3306, database: 'orders' } },
-	{ id: 'ds-3', label: 'billing', environmentName: 'dev', coordinates: { driver: 'postgres', host: 'h3', port: 5432, database: 'billing' } },
+	{ id: 'ds-1', label: 'orders', environmentName: 'dev', coordinates: { driver: 'mysql', host: 'h1', port: 3306, database: 'orders' }, writable: true },
+	{ id: 'ds-2', label: 'orders', environmentName: 'prod', coordinates: { driver: 'mysql', host: 'h2', port: 3306, database: 'orders' }, writable: false },
+	{ id: 'ds-3', label: 'billing', environmentName: 'dev', coordinates: { driver: 'postgres', host: 'h3', port: 5432, database: 'billing' }, writable: true },
 ];
 
 const context = { toolUseId: 't', signal: new AbortController().signal };
@@ -43,7 +43,17 @@ test('query_data_source resolves a unique label, runs the query, and formats row
 	let seen: { host: string; sql: string } | undefined;
 	const runQuery: DbQueryRunner = async (coordinates, _secret, sql) => {
 		seen = { host: coordinates.host, sql };
-		return { columns: [{ name: 'id', category: 'number' as const }, { name: 'name', category: 'text' as const }], rows: [[1, 'a'], [2, null]], truncated: false };
+		return {
+			columns: [
+				{ name: 'id', category: 'number' as const },
+				{ name: 'name', category: 'text' as const },
+			],
+			rows: [
+				[1, 'a'],
+				[2, null],
+			],
+			truncated: false,
+		};
 	};
 	const tools = createDataSourceTools({ sources: SOURCES, getSecret: async () => ({ username: 'ro' }), runQuery });
 	const result = await run(byName(tools, 'query_data_source'), { source: 'billing', sql: 'SELECT id, name FROM t' });

@@ -11,7 +11,12 @@ export interface IQueryResult {
 	readonly truncated: boolean;
 }
 
-export type DbQueryRunner = (coordinates: IDatabaseCoordinates, secret: IDataSourceSecret | undefined, sql: string, options: { readonly rowLimit: number; readonly signal: AbortSignal }) => Promise<IQueryResult>;
+export type DbQueryRunner = (
+	coordinates: IDatabaseCoordinates,
+	secret: IDataSourceSecret | undefined,
+	sql: string,
+	options: { readonly rowLimit: number; readonly signal: AbortSignal },
+) => Promise<IQueryResult>;
 
 const READONLY_FIRST = new Set(['select', 'with', 'show', 'explain', 'describe', 'desc', 'table', 'values']);
 // Any of these as a whole word makes the statement not-a-pure-read — conservative on purpose.
@@ -33,6 +38,12 @@ export function isReadOnlySql(sql: string): boolean {
 		return false;
 	}
 	return !WRITE_WORDS.test(trimmed);
+}
+
+/** Exactly one statement (a trailing semicolon is fine) — scripts are refused so each approved write is one auditable statement. */
+export function isSingleStatement(sql: string): boolean {
+	const trimmed = sql.trim().replace(/;+\s*$/, '');
+	return trimmed !== '' && !trimmed.includes(';');
 }
 
 // Postgres type OIDs → broad category. Anything unlisted renders as text — safe default.
@@ -129,6 +140,74 @@ async function runMysql(coordinates: IDatabaseCoordinates, secret: IDataSourceSe
 /** Connect (per query) and run a read-only SQL statement. Callers MUST gate with {@link isReadOnlySql} first. */
 export const runDbQuery: DbQueryRunner = (coordinates, secret, sql, { rowLimit, signal }) =>
 	coordinates.driver === 'postgres' ? runPostgres(coordinates, secret, sql, rowLimit, signal) : runMysql(coordinates, secret, sql, rowLimit, signal);
+
+export interface IWriteResult {
+	/** Rows the statement reported as affected (0 for DDL). */
+	readonly affectedRows: number;
+}
+
+export type DbWriteRunner = (
+	coordinates: IDatabaseCoordinates,
+	secret: IDataSourceSecret | undefined,
+	sql: string,
+	options: { readonly signal: AbortSignal },
+) => Promise<IWriteResult>;
+
+async function writePostgres(coordinates: IDatabaseCoordinates, secret: IDataSourceSecret | undefined, sql: string, signal: AbortSignal): Promise<IWriteResult> {
+	const { Client } = await import('pg');
+	const client = new Client({
+		host: coordinates.host,
+		port: coordinates.port,
+		database: coordinates.database,
+		...(secret?.username ? { user: secret.username } : {}),
+		...(secret?.password ? { password: secret.password } : {}),
+		statement_timeout: 60_000,
+		connectionTimeoutMillis: 8_000,
+	});
+	const onAbort = (): void => void client.end().catch(() => {});
+	signal.addEventListener('abort', onAbort, { once: true });
+	try {
+		await client.connect();
+		const result = await client.query(sql);
+		return { affectedRows: result.rowCount ?? 0 };
+	} finally {
+		signal.removeEventListener('abort', onAbort);
+		await client.end().catch(() => {});
+	}
+}
+
+async function writeMysql(coordinates: IDatabaseCoordinates, secret: IDataSourceSecret | undefined, sql: string, signal: AbortSignal): Promise<IWriteResult> {
+	const mysql = await import('mysql2/promise');
+	const connection = await mysql.createConnection({
+		host: coordinates.host,
+		port: coordinates.port,
+		database: coordinates.database,
+		...(secret?.username ? { user: secret.username } : {}),
+		...(secret?.password ? { password: secret.password } : {}),
+		connectTimeout: 8_000,
+	});
+	const onAbort = (): void => connection.destroy();
+	signal.addEventListener('abort', onAbort, { once: true });
+	try {
+		const [result] = await connection.query(sql);
+		const affected = (result as { affectedRows?: number }).affectedRows;
+		return { affectedRows: typeof affected === 'number' ? affected : 0 };
+	} finally {
+		signal.removeEventListener('abort', onAbort);
+		await connection.end().catch(() => {});
+	}
+}
+
+/**
+ * The app's ONLY write path to a database. Sole caller: the
+ * `execute_data_source` tool, which (a) is approval-gated per statement —
+ * deriveGrant has no entry for it, so it can never be "always allowed" — and
+ * (b) refuses sources that are not effectively writable (env writable ∧
+ * account read-write). Everything else in the app stays behind
+ * {@link isReadOnlySql}; do not add callers.
+ */
+export const runDbWrite: DbWriteRunner = (coordinates, secret, sql, { signal }) =>
+	coordinates.driver === 'postgres' ? writePostgres(coordinates, secret, sql, signal) : writeMysql(coordinates, secret, sql, signal);
 
 // Catalog queries are composed HERE (never from user input) — they bypass the
 // isReadOnlySql gate by construction. reltuples/table_rows are planner estimates;

@@ -18,6 +18,12 @@ export interface IQueryableSource {
 	readonly label: string;
 	readonly environmentName: string;
 	readonly coordinates: IDatabaseCoordinates;
+	/**
+	 * Effective writability (env writable ∧ account read-write), computed at
+	 * assembly from the workspace config. Only execute_data_source consults it;
+	 * false means writes are refused unconditionally — approval can't override.
+	 */
+	readonly writable: boolean;
 }
 
 export interface IDataSourceToolDeps {
@@ -29,7 +35,25 @@ export interface IDataSourceToolDeps {
 
 function describe(source: IQueryableSource): string {
 	const c = source.coordinates;
-	return `- ${source.label} (env: ${source.environmentName}, ${c.driver} ${c.host}:${c.port}/${c.database}, id: ${source.id})`;
+	return `- ${source.label} (env: ${source.environmentName}, ${c.driver} ${c.host}:${c.port}/${c.database}, id: ${source.id}, ${source.writable ? 'writable' : 'READ-ONLY'})`;
+}
+
+/**
+ * id → label → environment name, first unique match wins (same contract as the
+ * ssh tools): "dev" hits directly when that environment has one database. An
+ * array return means the name was ambiguous. Shared with execute_data_source.
+ */
+export function resolveDataSource(sources: readonly IQueryableSource[], source: string): IQueryableSource | IQueryableSource[] | undefined {
+	const byId = sources.find(candidate => candidate.id === source);
+	if (byId) {
+		return byId;
+	}
+	const byLabel = sources.filter(candidate => candidate.label === source);
+	if (byLabel.length > 0) {
+		return byLabel.length === 1 ? byLabel[0] : byLabel;
+	}
+	const byEnvironment = sources.filter(candidate => candidate.environmentName === source);
+	return byEnvironment.length === 1 ? byEnvironment[0] : byEnvironment.length > 1 ? byEnvironment : undefined;
 }
 
 /**
@@ -91,21 +115,7 @@ function formatResult(result: IQueryResult): string {
  */
 export function createDataSourceTools(deps: IDataSourceToolDeps): readonly IAgentTool[] {
 	const run = deps.runQuery ?? runDbQuery;
-
-	// id → label → environment name, first unique match wins (same contract as
-	// the ssh tools): "dev" hits directly when that environment has one database.
-	const resolve = (source: string): IQueryableSource | IQueryableSource[] | undefined => {
-		const byId = deps.sources.find(candidate => candidate.id === source);
-		if (byId) {
-			return byId;
-		}
-		const byLabel = deps.sources.filter(candidate => candidate.label === source);
-		if (byLabel.length > 0) {
-			return byLabel.length === 1 ? byLabel[0] : byLabel;
-		}
-		const byEnvironment = deps.sources.filter(candidate => candidate.environmentName === source);
-		return byEnvironment.length === 1 ? byEnvironment[0] : byEnvironment.length > 1 ? byEnvironment : undefined;
-	};
+	const resolve = (source: string): IQueryableSource | IQueryableSource[] | undefined => resolveDataSource(deps.sources, source);
 
 	const listTool = defineTool({
 		name: 'list_data_sources',
