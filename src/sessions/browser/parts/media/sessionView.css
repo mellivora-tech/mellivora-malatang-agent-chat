@@ -368,7 +368,8 @@
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: auto;
-	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-18);
+	padding: var(--vscode-agents-space-20) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2))
+		var(--vscode-agents-space-18);
 	box-sizing: border-box;
 }
 
@@ -801,6 +802,185 @@ button.conversation-work-step-row:hover {
 .conversation-plan-fallback {
 	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
 	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+/* render_ui card shell — same chrome as the plan card; the registered
+   component owns everything below the header. */
+.conversation-ui {
+	display: flex;
+	flex-direction: column;
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-18);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	border-radius: var(--vscode-agents-radius-container);
+	overflow: hidden;
+}
+
+.conversation-ui-header {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	border-bottom: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-ui-header .codicon {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-ui-fallback {
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+/* ---------- migration_preview card ---------- */
+
+.conversation-ui-migration {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+}
+
+.migration-endpoints {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	color: var(--vscode-agents-color-text-secondary);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.migration-mappings {
+	border-collapse: collapse;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.migration-mappings th {
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-10) var(--vscode-agents-space-4) 0;
+	color: var(--vscode-agents-color-text-secondary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	text-align: left;
+}
+
+.migration-mappings td {
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-10) var(--vscode-agents-space-4) 0;
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-panel-border) 60%, transparent);
+	font-family: var(--vscode-agents-font-mono);
+}
+
+.migration-mapping-note {
+	color: var(--vscode-agents-color-text-muted);
+	font-family: inherit;
+}
+
+.migration-sample-title {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-10);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.migration-issues {
+	color: var(--vscode-agents-color-warning);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+}
+
+.migration-dirty {
+	color: var(--vscode-agents-color-accent);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+}
+
+.migration-settled {
+	color: var(--vscode-agents-color-success);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.migration-note {
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+/* Tabulator → theme tokens, re-scoped from the data browser's remap so the
+   in-transcript grid reads as the same product surface. */
+.conversation-ui-migration .tabulator {
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-ui-migration .tabulator .tabulator-header {
+	border-bottom: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 5%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-ui-migration .tabulator .tabulator-header .tabulator-col {
+	border-right: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-panel-border) 60%, transparent);
+	background: transparent;
+}
+
+.conversation-ui-migration .tabulator .tabulator-tableholder {
+	background: transparent;
+}
+
+.conversation-ui-migration .tabulator .tabulator-tableholder .tabulator-table {
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-ui-migration .tabulator .tabulator-row {
+	background: transparent;
+	min-height: var(--vscode-agents-space-24);
+}
+
+.conversation-ui-migration .tabulator .tabulator-row.tabulator-row-even {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 3%, transparent);
+}
+
+.conversation-ui-migration .tabulator .tabulator-row:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 7%, transparent);
+}
+
+.conversation-ui-migration .tabulator .tabulator-row .tabulator-cell {
+	border-right: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-panel-border) 45%, transparent);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+/* The cell being edited gets a token-styled input instead of Tabulator's default. */
+.conversation-ui-migration .tabulator .tabulator-cell.tabulator-editing {
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	padding: 0;
+}
+
+.conversation-ui-migration .tabulator .tabulator-cell.tabulator-editing input {
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-ui-migration .migration-cell-error {
+	box-shadow: inset 0 0 0 var(--vscode-agents-space-1) var(--vscode-agents-color-danger);
+	background: color-mix(in srgb, var(--vscode-agents-color-danger) 12%, transparent);
+}
+
+.conversation-ui-migration .migration-cell-warning {
+	box-shadow: inset 0 0 0 var(--vscode-agents-space-1) var(--vscode-agents-color-warning);
+	background: color-mix(in srgb, var(--vscode-agents-color-warning) 12%, transparent);
+}
+
+.conversation-ui-migration .migration-cell-edited {
+	box-shadow: inset 0 0 0 var(--vscode-agents-space-1) var(--vscode-agents-color-accent);
+	background: color-mix(in srgb, var(--vscode-agents-color-accent) 10%, transparent);
 }
 
 .conversation-plan-comment-badge {
@@ -1358,7 +1538,8 @@ button.conversation-plan-header {
    message column instead of the stage's raw center. */
 .conversation-composer {
 	flex: 0 0 auto;
-	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2)) var(--vscode-agents-space-22)
+	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2))
+		var(--vscode-agents-space-22)
 		calc(var(--vscode-agents-space-44) + max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2)));
 	box-sizing: border-box;
 }

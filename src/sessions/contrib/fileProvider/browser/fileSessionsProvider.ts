@@ -23,6 +23,7 @@ import type {
 } from '../../../services/sessions/common/session.js';
 import { RENDERED_TABLE_MARKER, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
+import { materializeUi, parseUiInput, uiToMarkdown, type IRenderUiInput } from '../../../services/sessions/common/uiArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
 import type { ISessionCompactionAnchorData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
 import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
@@ -438,6 +439,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 					...(message.steps !== undefined ? { steps: message.steps } : {}),
 					...(message.plan !== undefined ? { plan: message.plan } : {}),
+					...(message.ui !== undefined ? { ui: message.ui } : {}),
 				});
 			}
 			await this.bridge.append(ref, {
@@ -508,6 +510,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
 				...(message.plan !== undefined ? { plan: message.plan } : {}),
+				...(message.ui !== undefined ? { ui: message.ui } : {}),
 				...(message.feedback !== undefined ? { feedback: message.feedback } : {}),
 				...(message.timestamp !== undefined ? { timestamp: new Date(message.timestamp) } : {}),
 			})),
@@ -672,6 +675,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// (ids/version assigned there, never by the model).
 		let pendingPlanInput: IProposePlanInput | undefined;
 		let pendingWalkthroughInput: IProposePlanInput | undefined;
+		// render_ui inputs — an ARRAY: multiple cards per run are legal, and only
+		// successful parses are pushed (a failed parse already told the model via
+		// the tool error; pushing nothing avoids double-materializing a retry).
+		const pendingUiInputs: IRenderUiInput[] = [];
 		// The run's work digest (files read/changed), emitted once at run end;
 		// materialized into a hidden role:'digest' message at finalize and carried
 		// on the next run's transcript to pay down the re-exploration tax.
@@ -702,7 +709,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 			// Sub-second thinking stretches without content are noise, not steps.
 			if (kind !== 'thinking' || durationMs >= 1000 || stepDetail !== undefined) {
-				steps.push({ kind, label, durationMs, ...(stepDetail === undefined ? {} : { detail: stepDetail }), ...(kind === 'tool' && openToolBrowse ? { browse: openToolBrowse } : {}) });
+				steps.push({
+					kind,
+					label,
+					durationMs,
+					...(stepDetail === undefined ? {} : { detail: stepDetail }),
+					...(kind === 'tool' && openToolBrowse ? { browse: openToolBrowse } : {}),
+				});
 			}
 			if (kind === 'tool') {
 				openToolBrowse = undefined;
@@ -883,7 +896,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 				const walkthrough = materializePlan(pendingWalkthroughInput, walkthroughId, nextPlanVersion(session.messages.get(), 'walkthrough'), 'walkthrough');
 				walkthroughMessage = { id: walkthroughId, role: 'plan', text: planToMarkdown(walkthrough), plan: walkthrough, timestamp: now };
 			}
-			const artifactMessages = [planMessage, walkthroughMessage].filter((message): message is ISessionMessage => message !== undefined);
+			// render_ui cards: no supersede semantics, one message per captured call.
+			const uiMessages: ISessionMessage[] = pendingUiInputs.map(input => {
+				const uiId = `${sessionId}-ui-${generateId()}`;
+				return { id: uiId, role: 'ui', text: uiToMarkdown(input), ui: materializeUi(input, uiId), timestamp: now };
+			});
+			const artifactMessages = [planMessage, walkthroughMessage, ...uiMessages].filter((message): message is ISessionMessage => message !== undefined);
 			if (artifactMessages.length > 0) {
 				const messages = session.messages
 					.get()
@@ -925,13 +943,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 					await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
 				}
 				for (const artifactMessage of artifactMessages) {
-					if (artifactMessage.plan) {
+					if (artifactMessage.plan || artifactMessage.ui) {
 						await this.bridge.append(ref, {
 							type: 'message',
 							id: artifactMessage.id,
-							role: 'plan',
+							role: artifactMessage.role,
 							text: artifactMessage.text,
-							plan: artifactMessage.plan,
+							...(artifactMessage.plan ? { plan: artifactMessage.plan } : {}),
+							...(artifactMessage.ui ? { ui: artifactMessage.ui } : {}),
 							timestamp: now.toISOString(),
 						});
 					}
@@ -1003,6 +1022,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 					pendingPlanInput = parsePlanInput(event.input) ?? pendingPlanInput;
 				} else if (event.name === 'write_walkthrough') {
 					pendingWalkthroughInput = parsePlanInput(event.input) ?? pendingWalkthroughInput;
+				} else if (event.name === 'render_ui') {
+					const parsedUi = parseUiInput(event.input);
+					if (parsedUi !== undefined) {
+						pendingUiInputs.push(parsedUi);
+					}
 				}
 				openToolLabel = describeWorkTool(event.name, event.input);
 				openToolName = event.name;
@@ -1243,15 +1267,13 @@ function parseBrowsePayload(name: string, input: unknown): ISessionDataBrowse | 
 		return undefined;
 	}
 	const record = input as Record<string, unknown>;
-	return typeof record['source'] === 'string' && typeof record['sql'] === 'string' && record['sql'].trim() !== ''
-		? { source: record['source'], sql: record['sql'] }
-		: undefined;
+	return typeof record['source'] === 'string' && typeof record['sql'] === 'string' && record['sql'].trim() !== '' ? { source: record['source'], sql: record['sql'] } : undefined;
 }
 
 /** Short human label for a tool step: the tool plus its most telling argument. */
 function describeWorkTool(name: string, input: unknown): string {
 	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
-	const arg = [record['command'], record['path'], record['pattern'], record['task']].find(value => typeof value === 'string' && value !== '');
+	const arg = [record['command'], record['path'], record['pattern'], record['task'], record['component']].find(value => typeof value === 'string' && value !== '');
 	return typeof arg === 'string' ? `${name} ${firstLine(arg)}` : name;
 }
 
@@ -1388,8 +1410,9 @@ export function toTranscript(
 		// A plan artifact must reach the model next run — revise ("adjust per my
 		// comments") and approve ("execute the plan") both depend on the model
 		// seeing its own proposal. The markdown fallback crosses as an assistant
-		// turn; dropping it like work/tool would sever the review loop.
-		if (message.role === 'plan') {
+		// turn; dropping it like work/tool would sever the review loop. A ui
+		// card's confirm/revise loop depends on the same thing.
+		if (message.role === 'plan' || message.role === 'ui') {
 			if (message.text.trim() !== '') {
 				transcript.push({ role: 'assistant', content: [{ type: 'text', text: message.text }] });
 			}

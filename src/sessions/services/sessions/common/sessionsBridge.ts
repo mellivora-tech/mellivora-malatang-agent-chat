@@ -80,11 +80,23 @@ export interface IPlanArtifactData {
 	readonly kind?: 'plan' | 'walkthrough';
 }
 
+/**
+ * Wire mirror of IUiArtifact (session.ts). Nested under the message entry's
+ * `ui` key — never a top-level entry field, so the fold's state branch can't
+ * mistake its keys for session state. `props` must be pure JSON (no Dates).
+ */
+export interface IUiArtifactData {
+	readonly id: string;
+	readonly component: string;
+	readonly title: string;
+	readonly props: unknown;
+}
+
 export interface ISessionMessageEntry {
 	readonly type: 'message';
 	readonly id: string;
 	/** 'work' entries summarize one agent run; 'digest' entries are the hidden per-run work summary carried across runs. */
-	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest' | 'ui';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
@@ -93,6 +105,8 @@ export interface ISessionMessageEntry {
 	readonly steps?: readonly ISessionWorkStepData[];
 	/** 'plan' entries carry the structured artifact; `text` is its markdown fallback. */
 	readonly plan?: IPlanArtifactData;
+	/** 'ui' entries carry the structured card envelope; `text` is its markdown fallback. */
+	readonly ui?: IUiArtifactData;
 }
 
 /** User feedback on a single message; the last entry per message wins. */
@@ -187,13 +201,14 @@ export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISession
 
 export interface ISessionSnapshotMessage {
 	readonly id: string;
-	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest' | 'ui';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
 	readonly durationMs?: number;
 	readonly steps?: readonly ISessionWorkStepData[];
 	readonly plan?: IPlanArtifactData;
+	readonly ui?: IUiArtifactData;
 	readonly feedback?: 'like' | 'dislike';
 	readonly timestamp?: string;
 }

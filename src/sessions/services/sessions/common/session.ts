@@ -118,6 +118,22 @@ export interface IPlanArtifact {
 }
 
 /**
+ * A generic interactive card the model rendered via `render_ui`. Rides on a
+ * `role:'ui'` message; the message's `text` holds a markdown fallback so older
+ * builds, unregistered components, and the next run's transcript still see the
+ * content. `props` is the component's own payload — validated per-component
+ * (uiComponents/), opaque to the envelope, and JSON-round-trippable by
+ * construction (storage is bare JSON.stringify).
+ */
+export interface IUiArtifact {
+	readonly id: string;
+	/** Which registered component renders this card (e.g. 'migration_preview'). */
+	readonly component: string;
+	readonly title: string;
+	readonly props: unknown;
+}
+
+/**
  * A user's review comment on one plan section (Google-Docs style margin note).
  * Comments belong to a plan VERSION — section ids are version-scoped, so they
  * never drift when a revision regenerates the sections.
@@ -138,7 +154,7 @@ export interface ISessionMessage {
 	 * 'digest' messages are hidden, deterministic per-run work summaries (files
 	 * read/changed) carried on the next run's transcript — not rendered.
 	 */
-	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest';
+	readonly role: 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest' | 'ui';
 	readonly text: string;
 	readonly attachments?: readonly ISessionAttachment[];
 	readonly detail?: string;
@@ -147,6 +163,8 @@ export interface ISessionMessage {
 	readonly steps?: readonly ISessionWorkStep[];
 	/** 'plan' messages carry the structured artifact; `text` is its markdown fallback. */
 	readonly plan?: IPlanArtifact;
+	/** 'ui' messages carry the structured card envelope; `text` is its markdown fallback. */
+	readonly ui?: IUiArtifact;
 	readonly feedback?: 'like' | 'dislike';
 	/** When the message landed (user: send time; assistant: reply completion). */
 	readonly timestamp?: Date;

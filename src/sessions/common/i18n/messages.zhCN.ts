@@ -109,11 +109,24 @@ export const zhCN = {
 	'plan.revise': '让它改',
 	'plan.approve.message': '按已批准的实现方案执行。',
 
+	// --- render_ui cards -------------------------------------------------------------
+	'ui.title.fallback': '交互卡片',
+	'ui.migration.confirm': '按此执行',
+	'ui.migration.revise': '让它改',
+	'ui.migration.mapping.source': '源字段',
+	'ui.migration.mapping.target': '目标字段',
+	'ui.migration.mapping.transform': '转换',
+	'ui.migration.sampleTitle': '样例预览（{0} / {1} 行）',
+	'ui.migration.issues': '{0} 处错误,{1} 处警告',
+	'ui.migration.dirty': '已修正 {0} 个单元格',
+	'ui.migration.settled': '已确认',
+
 	// --- approval card --------------------------------------------------------------
 	'appr.aria': '需要批准',
 	'appr.runCommand': '运行命令',
 	'appr.writeFile': '写入文件',
 	'appr.editFile': '修改文件',
+	'appr.executeDataSource': '执行写库',
 	'appr.generic': '批准此操作',
 	'appr.allow': '允许',
 	'appr.deny': '拒绝',

@@ -283,6 +283,8 @@ function messageIcon(role: ISessionMessage['role']): string {
 			return 'codicon-tools';
 		case 'plan':
 			return 'codicon-checklist';
+		case 'ui':
+			return 'codicon-layout';
 	}
 }
 
@@ -298,5 +300,7 @@ function messageLabel(role: ISessionMessage['role']): string {
 			return 'Tool';
 		case 'plan':
 			return 'Plan';
+		case 'ui':
+			return 'Mellivora';
 	}
 }

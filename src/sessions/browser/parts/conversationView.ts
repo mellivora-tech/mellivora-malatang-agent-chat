@@ -36,6 +36,7 @@ import { mountOrUpdateReactRow } from './agentUi/bridge/mountReactRow.js';
 import { WorkBlock } from './agentUi/components/WorkBlock.js';
 import { PlanCard } from './agentUi/components/PlanCard.js';
 import { MessageRow } from './agentUi/components/MessageRow.js';
+import { UiCard } from './agentUi/components/UiCard.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[]; readonly images?: readonly IPendingImage[] }): Promise<unknown>;
@@ -647,6 +648,13 @@ export class ConversationView extends Disposable {
 				return this.createWorkBlockElement(message);
 			case 'plan':
 				return this.createPlanCardElement(message);
+			case 'ui':
+				return createElement(UiCard, {
+					message,
+					sessionId: this.session?.sessionId,
+					messageSender: this.messageSender,
+					onFocusComposer: () => this.input.focus(),
+				});
 			default:
 				return createElement(MessageRow, { message, actions: this.buildMessageActions(message), resolveImage: this.buildImageResolver() });
 		}
@@ -1140,6 +1148,10 @@ function describeApproval(toolName: string, detail: string): { icon: string; tit
 			return { icon: 'codicon-new-file', title: localize('appr.writeFile'), chip: 'write_file', path: detail.replace(/^write /, '') };
 		case 'edit_file':
 			return { icon: 'codicon-edit', title: localize('appr.editFile'), chip: 'edit_file', path: detail.replace(/^edit /, '') };
+		case 'execute_data_source':
+			// The SQL renders in the command slot — the user must see the exact
+			// statement they are approving, same treatment as a bash command.
+			return { icon: 'codicon-database', title: localize('appr.executeDataSource'), chip: 'execute_data_source', command: detail };
 		default:
 			return { icon: 'codicon-shield', title: localize('appr.generic'), chip: toolName };
 	}

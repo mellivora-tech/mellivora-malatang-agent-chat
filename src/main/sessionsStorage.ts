@@ -75,7 +75,11 @@ export async function storeSessionMedia(root: string, ref: ISessionRef, base64: 
 export async function storeSessionTableCsv(root: string, ref: ISessionRef, title: string, csv: string): Promise<{ readonly path: string; readonly name: string }> {
 	const dir = sessionMediaDir(root, ref);
 	await mkdir(dir, { recursive: true });
-	const safe = title.replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'table';
+	const safe =
+		title
+			.replace(/[\\/:*?"<>|\s]+/g, '-')
+			.replace(/^-+|-+$/g, '')
+			.slice(0, 40) || 'table';
 	const hash = createHash('sha256').update(csv).digest('hex').slice(0, 8);
 	const name = `${safe}-${hash}.csv`;
 	const file = join(dir, name);
@@ -194,6 +198,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 				...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
 				...(entry.steps !== undefined ? { steps: entry.steps } : {}),
 				...(entry.plan !== undefined ? { plan: entry.plan } : {}),
+				...(entry.ui !== undefined ? { ui: entry.ui } : {}),
 				timestamp: entry.timestamp,
 			});
 			continue;
@@ -351,8 +356,8 @@ function parseEntry(line: string): ISessionEntry | undefined {
 	return undefined;
 }
 
-function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' | 'plan' {
-	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work' || value === 'plan';
+function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'ui' {
+	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work' || value === 'plan' || value === 'ui';
 }
 
 async function listJsonlFiles(dir: string): Promise<readonly string[]> {
