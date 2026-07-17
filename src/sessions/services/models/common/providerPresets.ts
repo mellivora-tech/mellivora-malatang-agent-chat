@@ -34,9 +34,16 @@ export const PROVIDER_PRESETS: readonly IProviderPreset[] = [
 		id: 'kimi-code',
 		name: 'Kimi Code Plan',
 		type: 'anthropic',
-		baseURL: 'https://api.moonshot.cn/anthropic',
+		baseURL: 'https://api.kimi.com/coding',
 		description: 'Coding plan (Anthropic-compatible)',
 		models: [
+			// K3 thinks by default (no effort sent = max); 'none' maps to
+			// thinking disabled server-side. 'low'/'high' are announced but not
+			// open yet — extend when Moonshot enables them.
+			// The window is tier-keyed on the SAME id: Moderato 256K,
+			// Allegretto+ 1M. Seed the conservative size; Allegretto users
+			// raise contextLength to 1048576 in settings.
+			{ model: 'k3', label: 'Kimi K3', contextLength: 262144, efforts: ['none', 'max'] },
 			{ model: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextLength: 256000 },
 			{ model: 'kimi-k2.6', label: 'Kimi K2.6', contextLength: 256000 },
 		],
