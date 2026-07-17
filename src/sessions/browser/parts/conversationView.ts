@@ -55,6 +55,13 @@ export interface ISessionMessageSender {
 	getSessions?(): readonly ISession[];
 }
 
+// A reader within this band above the live end counts as "following the
+// output" — renders keep them pinned; anything further up is a deliberate
+// scroll-back whose position must be preserved.
+const FOLLOW_BAND_PX = 48;
+// settleScrollAtBottom's termination cap: ~1s at 60fps.
+const MAX_SETTLE_FRAMES = 60;
+
 export class ConversationView extends Disposable {
 	readonly element: HTMLElement;
 
@@ -87,6 +94,9 @@ export class ConversationView extends Disposable {
 	/** Approval request ids seen per session — drives the compact-density switch. */
 	private readonly approvalsSeen = new Map<string, Set<string>>();
 	private scrollToBottomOnRender = false;
+	// rAF handle of the settle loop that re-pins a forced scroll-to-bottom
+	// while the transcript is still growing (see settleScrollAtBottom).
+	private scrollSettleFrame: number | undefined;
 	// Fan-out for the session-aware permission picker (the underlying observable
 	// swaps whenever another session becomes active).
 	private readonly permissionListeners = new Set<() => void>();
@@ -484,6 +494,24 @@ export class ConversationView extends Disposable {
 				this.updateTimelineCurrent();
 			});
 		});
+
+		// Attachment thumbnails resolve and decode AFTER their row committed
+		// (resolveMedia is async) — possibly past the settle loop's window. An
+		// <img> growing under a reader pinned at the bottom would push the live
+		// end out of view, so re-pin; `load` doesn't bubble, hence capture.
+		// By `load` the image has ALREADY grown the transcript (reading scroll
+		// geometry forces the post-decode layout), so "was the reader at the
+		// bottom" needs the image's own height added back onto the band —
+		// against the bare band, any image taller than it defeats the re-pin.
+		this.transcript.addEventListener(
+			'load',
+			event => {
+				if (event.target instanceof HTMLImageElement && this.isNearBottom(FOLLOW_BAND_PX + event.target.getBoundingClientRect().height)) {
+					this.transcript.scrollTop = this.transcript.scrollHeight;
+				}
+			},
+			true,
+		);
 	}
 
 	private render(): void {
@@ -495,7 +523,8 @@ export class ConversationView extends Disposable {
 		// A structural change (new/removed row) can move scrollTop; a pure content
 		// patch never does. Follow the output while the reader is at (or near) the
 		// bottom; preserve their position otherwise.
-		const stickToBottom = this.scrollToBottomOnRender || this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < 48;
+		const forcedScrollToBottom = this.scrollToBottomOnRender;
+		const stickToBottom = forcedScrollToBottom || this.isNearBottom(FOLLOW_BAND_PX);
 		const previousScrollTop = this.transcript.scrollTop;
 		this.scrollToBottomOnRender = false;
 
@@ -536,11 +565,49 @@ export class ConversationView extends Disposable {
 		} else {
 			this.transcript.scrollTop = previousScrollTop;
 		}
+		if (forcedScrollToBottom) {
+			this.settleScrollAtBottom();
+		}
 
 		this.updateWorkTicker(hasLiveWork);
 		this.renderTimeline(messages);
 		this.updateComposerState();
 		this.updateContextRing();
+	}
+
+	/**
+	 * Re-pin a forced scroll-to-bottom across the frames in which the transcript
+	 * is still growing. Row content is React-rendered (mountOrUpdateReactRow),
+	 * and createRoot().render() commits ASYNCHRONOUSLY — the synchronous
+	 * `scrollTop = scrollHeight` in render() measures host divs whose content
+	 * hasn't committed yet, so a single shot lands short of the real bottom
+	 * and the freshly opened conversation stays scrolled to the TOP. Keep
+	 * pinning every frame until the scroll height holds steady for two
+	 * consecutive frames (React commits and fast-decoding thumbnails settled),
+	 * capped so the loop always terminates. Late-arriving growth (a slow image
+	 * decode) is covered by the capture-phase `load` listener instead.
+	 */
+	private settleScrollAtBottom(): void {
+		if (this.scrollSettleFrame !== undefined) {
+			cancelAnimationFrame(this.scrollSettleFrame);
+		}
+		let lastHeight = -1;
+		let steadyFrames = 0;
+		let framesLeft = MAX_SETTLE_FRAMES;
+		const step = () => {
+			this.transcript.scrollTop = this.transcript.scrollHeight;
+			const height = this.transcript.scrollHeight;
+			steadyFrames = height === lastHeight ? steadyFrames + 1 : 0;
+			lastHeight = height;
+			framesLeft -= 1;
+			this.scrollSettleFrame = steadyFrames >= 2 || framesLeft <= 0 ? undefined : requestAnimationFrame(step);
+		};
+		this.scrollSettleFrame = requestAnimationFrame(step);
+	}
+
+	/** Whether the reader is within `bandPx` of the live end — the shared "still following" predicate. */
+	private isNearBottom(bandPx: number): boolean {
+		return this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < bandPx;
 	}
 
 	/**
@@ -766,7 +833,9 @@ export class ConversationView extends Disposable {
 	private updateTimelineCurrent(): void {
 		const rows = this.transcript.querySelectorAll<HTMLElement>('[data-message-id]');
 		let currentId: string | undefined;
-		const atBottom = this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < 8;
+		// Tighter band than FOLLOW_BAND_PX: highlighting the last tick is about
+		// being AT the end, not merely following it.
+		const atBottom = this.isNearBottom(8);
 		if (atBottom && rows.length > 0) {
 			// Reading the live end — the last message is current.
 			currentId = rows[rows.length - 1]!.dataset.messageId;
@@ -852,6 +921,10 @@ export class ConversationView extends Disposable {
 		if (this.workTicker !== undefined) {
 			clearInterval(this.workTicker);
 			this.workTicker = undefined;
+		}
+		if (this.scrollSettleFrame !== undefined) {
+			cancelAnimationFrame(this.scrollSettleFrame);
+			this.scrollSettleFrame = undefined;
 		}
 		// Portaled to <body>, outside `this.element` — removing the view's own
 		// root would never take this with it.
