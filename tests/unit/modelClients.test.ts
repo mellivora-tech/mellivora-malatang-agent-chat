@@ -156,6 +156,27 @@ test('Anthropic accumulator streams text and folds input_json_delta into one too
 	assert.equal(usage.outputTokens, 12);
 });
 
+test('Anthropic accumulator lets a usage-bearing message_delta refine message_start (Kimi coding endpoint)', () => {
+	// Observed live 2026-07-17 on api.kimi.com/coding: message_start carries a
+	// PLACEHOLDER (full prompt as input_tokens, cache fields zeroed); the real
+	// uncached-input/cache_read split arrives only on message_delta. Reading
+	// the start alone reported cacheReadTokens=0 while the cache was hitting.
+	const events = runAnthropic([
+		{ type: 'message_start', message: { usage: { input_tokens: 2796, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 } } },
+		{ type: 'content_block_start', index: 0, content_block: { type: 'text' } },
+		{ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'ok' } },
+		{ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 236, cache_read_input_tokens: 2560, cache_creation_input_tokens: 0, output_tokens: 17 } },
+		{ type: 'message_stop' },
+	]);
+
+	const usage = findUsage(events);
+	assert.ok(usage, 'expected a usage event');
+	// The delta's split wins; total prompt = input + cache reads = the start's 2796.
+	assert.equal(usage.inputTokens, 236);
+	assert.equal(usage.cacheReadTokens, 2560);
+	assert.equal(usage.outputTokens, 17);
+});
+
 test('Anthropic accumulator preserves thinking blocks with their signatures', () => {
 	const events = runAnthropic([
 		{ type: 'message_start' },

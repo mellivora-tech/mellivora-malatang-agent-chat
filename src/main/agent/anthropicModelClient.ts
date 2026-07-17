@@ -240,8 +240,24 @@ export class AnthropicStreamAccumulator {
 			if (typeof wire.delta?.stop_reason === 'string') {
 				this.stopReason = wire.delta.stop_reason;
 			}
+			// Take EVERY usage field the delta carries, not just output_tokens.
+			// Kimi's coding endpoint streams a placeholder on message_start (the
+			// full prompt as input_tokens, cache fields zeroed) and the real
+			// split — uncached input + cache_read — only here; reading the start
+			// alone logged cacheReadTokens=0 for two days while the implicit
+			// cache was in fact hitting. The official API's deltas carry only
+			// output_tokens, so its message_start numbers survive untouched.
 			if (typeof wire.usage?.output_tokens === 'number') {
 				this.outputTokens = wire.usage.output_tokens;
+			}
+			if (typeof wire.usage?.input_tokens === 'number') {
+				this.inputTokens = wire.usage.input_tokens;
+			}
+			if (typeof wire.usage?.cache_read_input_tokens === 'number') {
+				this.cacheReadTokens = wire.usage.cache_read_input_tokens;
+			}
+			if (typeof wire.usage?.cache_creation_input_tokens === 'number') {
+				this.cacheWriteTokens = wire.usage.cache_creation_input_tokens;
 			}
 			return [];
 		}
@@ -270,8 +286,9 @@ export class AnthropicStreamAccumulator {
 			}
 		}
 
-		// input_tokens on message_start is the ground truth for this turn's prompt
-		// size — the renderer uses it as the context-window occupancy reading.
+		// The turn's prompt size is inputTokens + cache fields (input_tokens
+		// excludes cache hits — agentLoop sums them). message_start seeds the
+		// numbers; a usage-bearing message_delta refines them (see push).
 		if (this.inputTokens !== undefined) {
 			events.push({
 				type: 'usage',
