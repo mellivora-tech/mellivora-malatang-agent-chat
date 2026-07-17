@@ -87,6 +87,7 @@ export class SessionsList extends Disposable {
 	private modelSettingsView: ModelSettingsView | undefined;
 	private skillSettingsView: SkillSettingsView | undefined;
 	private readonly searchPalette: SearchPalette;
+	private sidebarContentScrollTop = 0;
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -179,6 +180,8 @@ export class SessionsList extends Disposable {
 
 	private render(): void {
 		this.rowSubscriptions.clear();
+		const previousContent = this.container.querySelector<HTMLElement>('.sessions-sidebar-content');
+		this.sidebarContentScrollTop = previousContent?.scrollTop ?? this.sidebarContentScrollTop;
 		this.container.textContent = '';
 
 		const root = document.createElement('div');
@@ -189,6 +192,7 @@ export class SessionsList extends Disposable {
 
 		const content = document.createElement('div');
 		content.className = 'sessions-sidebar-content';
+		content.scrollTop = this.sidebarContentScrollTop;
 		root.appendChild(content);
 
 		const sessions = this.getSessions();
@@ -198,6 +202,7 @@ export class SessionsList extends Disposable {
 		}
 
 		this.renderFooter(root);
+		content.scrollTop = this.sidebarContentScrollTop;
 	}
 
 	private renderHeader(container: HTMLElement): void {
