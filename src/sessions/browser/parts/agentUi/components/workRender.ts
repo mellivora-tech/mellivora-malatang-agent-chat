@@ -133,9 +133,19 @@ export type WorkRenderItem =
 export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRenderItem[] {
 	const items: WorkRenderItem[] = [];
 	let group: { step: ISessionWorkStep; index: number }[] = [];
+	// 2a: thinking never breaks a read run — k3 thinks between every turn and
+	// breaking on it shredded rollups back into an alternating wall. Thinking
+	// rows met inside an open group re-emit right after it closes.
+	let deferredThinking: { step: ISessionWorkStep; index: number }[] = [];
 
 	const flush = (): void => {
 		if (group.length === 0) {
+			if (deferredThinking.length > 0) {
+				for (const entry of deferredThinking) {
+					items.push({ kind: 'step', step: entry.step, index: entry.index });
+				}
+				deferredThinking = [];
+			}
 			return;
 		}
 		if (group.length === 1) {
@@ -172,6 +182,10 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 			items.push({ kind: 'rollup', steps: group, files, dirs, searches, durationMs, running: group[group.length - 1]!.step.running === true });
 		}
 		group = [];
+		for (const entry of deferredThinking) {
+			items.push({ kind: 'step', step: entry.step, index: entry.index });
+		}
+		deferredThinking = [];
 	};
 
 	for (let index = 0; index < steps.length; index++) {
@@ -185,6 +199,8 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 				flush();
 			}
 			group.push({ step, index });
+		} else if (step.kind === 'thinking' && group.length > 0) {
+			deferredThinking.push({ step, index });
 		} else {
 			flush();
 			items.push({ kind: 'step', step, index });

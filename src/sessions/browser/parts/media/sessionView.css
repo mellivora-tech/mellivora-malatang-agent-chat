@@ -793,22 +793,23 @@ button.conversation-work-step-row:hover {
 	font-variant-numeric: tabular-nums;
 }
 
-/* 状态行: slim strip above the composer echoing the live section title. */
-.conversation-work-statusline {
-	display: flex;
-	align-items: center;
-	gap: var(--vscode-agents-space-6);
-	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-16);
-	color: var(--vscode-agents-color-text-secondary);
-	font-size: var(--vscode-agents-fontSize-label1);
-	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
-	min-height: var(--vscode-agents-space-20);
-}
-
-.conversation-work-statusline-title {
+/* 思考直播: the running thinking stretch streams its tail in a clamped, top-faded window. */
+.conversation-work-thinking-stream {
+	margin: var(--vscode-agents-space-2) 0 var(--vscode-agents-space-4) var(--vscode-agents-space-20);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
+	max-height: calc(3 * 1.6em);
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-style: italic;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-word;
+	-webkit-mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);
+	mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);
 }
 
 /* Read-class rollup: "探索了 8 个文件、2 个目录 · 3 次检索" with the folded rows indented beneath. */

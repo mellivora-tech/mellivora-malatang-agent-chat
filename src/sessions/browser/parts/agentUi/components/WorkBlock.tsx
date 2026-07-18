@@ -214,6 +214,20 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 	const [open, setOpen] = useState(() => presentation.error && step.detail !== undefined);
 	const browse = step.browse;
 
+	// 思考直播: the CURRENT thinking stretch streams its tail in a clamped
+	// window; closeStep collapses it into the "思考了 Ns" summary row below.
+	if (step.kind === 'thinking' && step.running === true) {
+		return (
+			<div className="conversation-work-step thinking live">
+				<div className="conversation-work-step-row">
+					<span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />
+					<span className="conversation-work-step-label">{localize('conv.thinking')}</span>
+				</div>
+				{step.detail !== undefined && <div className="conversation-work-thinking-stream">{step.detail}</div>}
+			</div>
+		);
+	}
+
 	const icon =
 		step.kind === 'thinking'
 			? 'codicon-history'

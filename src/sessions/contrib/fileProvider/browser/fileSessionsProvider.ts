@@ -694,8 +694,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// on the next run's transcript to pay down the re-exploration tax.
 		let pendingDigest: string | undefined;
 		// Reasoning text streamed since the last step boundary; becomes the
-		// closing thinking step's expandable detail.
+		// closing thinking step's expandable detail. While streaming it also
+		// feeds the live synthetic thinking step, painted on a trailing throttle.
 		let thinkingBuffer = '';
+		let lastThinkingPaint = 0;
+		let thinkingPaintTimer: number | undefined;
+		const THINKING_PAINT_MS = 150;
 		// Visible text streamed within the CURRENT turn. If the turn goes on to
 		// call tools, this was narration ("我来梳理一下…"), not the answer — it
 		// relocates into the work block so it neither squats in the answer
@@ -773,6 +777,18 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// tool_progress / subagent events refresh each entry's label. Facts
 			// ride along so a running read joins the live rollup, not breaks it.
 			const liveSteps: ISessionWorkStep[] = [...steps];
+			// 思考直播 (#14 P1): the CURRENT thinking stretch rides the live view
+			// as a synthetic running step whose detail is the streaming tail —
+			// closeStep collapses it into the usual "思考了 Ns" summary row.
+			if (thinkingBuffer.trim() !== '') {
+				liveSteps.push({
+					kind: 'thinking',
+					label: 'Thinking',
+					durationMs: Date.now() - stepStart,
+					running: true,
+					detail: thinkingBuffer.length > 600 ? thinkingBuffer.slice(-600) : thinkingBuffer,
+				});
+			}
 			for (const [callId, call] of openCalls) {
 				liveSteps.push({
 					kind: 'tool',
@@ -837,8 +853,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 		};
 
 		// Torn down when the run settles, whatever ends it (done event, error,
-		// window unload) — currently just the quit-flush registration.
+		// window unload).
 		const runCleanups: (() => void)[] = [];
+		runCleanups.push(() => {
+			if (thinkingPaintTimer !== undefined) {
+				clearTimeout(thinkingPaintTimer);
+				thinkingPaintTimer = undefined;
+			}
+		});
 
 		// What a killed run leaves in the transcript: the last thing the model was
 		// thinking/doing, distilled from the work steps. A bare "Stopped." erased
@@ -1049,6 +1071,24 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 			if (event?.type === 'thinking_delta') {
 				thinkingBuffer += event.text;
+				// Deltas arrive at token frequency — paint the live view on a
+				// trailing throttle, never per delta (the 2800-message lesson).
+				const now = Date.now();
+				if (now - lastThinkingPaint >= THINKING_PAINT_MS) {
+					lastThinkingPaint = now;
+					updateWork();
+				} else if (thinkingPaintTimer === undefined) {
+					thinkingPaintTimer = window.setTimeout(
+						() => {
+							thinkingPaintTimer = undefined;
+							lastThinkingPaint = Date.now();
+							if (!finalized) {
+								updateWork();
+							}
+						},
+						THINKING_PAINT_MS - (now - lastThinkingPaint),
+					);
+				}
 				return;
 			}
 			if (session.reconnect.get() !== undefined) {

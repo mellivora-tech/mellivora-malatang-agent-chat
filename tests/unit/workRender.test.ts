@@ -62,20 +62,22 @@ test('a lone read stays a plain step — no single-member rollup', () => {
 	);
 });
 
-test('writes, narration, and thinking all break a read run', () => {
+test('writes and narration break a read run; thinking does NOT (2a) — it re-emits after the fold', () => {
 	const items = buildWorkRenderItems([
 		tool('read_file', 'a'),
 		tool('read_file', 'b'),
-		tool('edit_file', 'a'),
-		tool('read_file', 'c'),
-		narration,
-		tool('read_file', 'd'),
-		tool('read_file', 'e'),
 		thinking,
+		tool('read_file', 'c'),
+		tool('edit_file', 'a'),
+		tool('read_file', 'd'),
+		narration,
+		tool('read_file', 'e'),
 	]);
+	// a+b+c fold as ONE rollup despite the thinking between b and c; the
+	// thinking row lands right after the fold; edit and narration still break.
 	assert.deepEqual(
-		items.map(item => item.kind),
-		['rollup', 'step', 'step', 'step', 'rollup', 'step']
+		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : (item as { step: ISessionWorkStep }).step?.kind ?? item.kind)),
+		['rollup:3', 'thinking', 'tool', 'tool', 'narration', 'tool']
 	);
 });
 
