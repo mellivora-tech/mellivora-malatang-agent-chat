@@ -182,7 +182,14 @@ export type IAgentEvent =
 	| { readonly type: 'thinking_delta'; readonly text: string }
 	| { readonly type: 'assistant_message'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly toolUseId: string; readonly name: string; readonly input: unknown }
-	| { readonly type: 'tool_result'; readonly toolUseId: string; readonly content: string; readonly isError: boolean }
+	| {
+			readonly type: 'tool_result';
+			readonly toolUseId: string;
+			readonly content: string;
+			readonly isError: boolean;
+			/** The call's measured runtime. Ordered emission in a concurrent batch means arrival time ≠ runtime — step accounting must use this. */
+			readonly durationMs?: number;
+	  }
 	/** The model stream failed before producing output; the loop is backing off and will retry. */
 	| { readonly type: 'stream_retry'; readonly attempt: number; readonly maxAttempts: number; readonly delayMs: number }
 	/** Real token counts for the turn just completed. The true prompt size is inputTokens + both cache fields (Anthropic wire semantics: input_tokens excludes cache hits) — the renderer's meter and the compaction trigger must sum them. */

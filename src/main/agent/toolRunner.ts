@@ -66,12 +66,21 @@ export async function* executeToolUses(
 				yield { type: 'loop_guard', toolUseId: use.id, name: use.name, repeatCount: blocked.repeatCount };
 			}
 		}
-		const settled = await mapWithLimit(checked, maxToolConcurrency(), async ({ use, blocked }) =>
-			blocked ? errorResult(use.id, blocked.message) : runSingleToolUse(use, tools, permissionGate, signal),
-		);
-		for (const block of settled) {
+		const running = startWithLimit(checked, maxToolConcurrency(), async ({ use, blocked }) => {
+			const startedAt = Date.now();
+			const block = blocked ? errorResult(use.id, blocked.message) : await runSingleToolUse(use, tools, permissionGate, signal);
+			return { block, durationMs: Date.now() - startedAt };
+		});
+		// Stream results in call order as they settle — the first call's result
+		// goes out the moment it (and nothing else) is done, instead of the whole
+		// batch's results arriving together at the end. Each event carries the
+		// call's OWN measured duration: ordered emission means a fast later call
+		// waits on slower earlier ones, so arrival time is not its runtime (four
+		// parallel spawns all read as the slowest one otherwise — seen live).
+		for (const promise of running) {
+			const { block, durationMs } = await promise;
 			results.push(block);
-			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
+			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError, durationMs };
 		}
 	}
 
@@ -89,18 +98,34 @@ export function maxToolConcurrency(): number {
 	return Number.isInteger(parsed) && parsed >= 1 ? parsed : 4;
 }
 
-/** Promise.all with a slot limit; results keep input order. */
-async function mapWithLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
-	const results = new Array<R>(items.length);
-	let next = 0;
-	const worker = async (): Promise<void> => {
-		while (next < items.length) {
-			const index = next++;
-			results[index] = await run(items[index]!);
-		}
+/** Start every item under a slot limit and return the per-item promises immediately (input order) — callers await them in order to stream ordered results. */
+function startWithLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R>[] {
+	let active = 0;
+	const waiters: (() => void)[] = [];
+	const acquire = (): Promise<void> =>
+		new Promise(resolve => {
+			if (active < limit) {
+				active += 1;
+				resolve();
+			} else {
+				waiters.push(() => {
+					active += 1;
+					resolve();
+				});
+			}
+		});
+	const release = (): void => {
+		active -= 1;
+		waiters.shift()?.();
 	};
-	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-	return results;
+	return items.map(async item => {
+		await acquire();
+		try {
+			return await run(item);
+		} finally {
+			release();
+		}
+	});
 }
 
 /** Split one turn's calls into maximal runs of concurrency-safe tools; unsafe (or unknown) tools become singleton batches. */

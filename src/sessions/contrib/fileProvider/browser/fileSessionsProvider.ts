@@ -722,11 +722,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 			label: string,
 			detail?: string,
 			facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent'; agent?: string },
-			extra?: { startedAt?: number; browse?: ISessionDataBrowse },
+			extra?: { startedAt?: number; durationMs?: number; browse?: ISessionDataBrowse },
 		): void => {
-			// Tool steps carry their own clock (parallel calls overlap); thinking
-			// and narration still measure from the shared step boundary.
-			const durationMs = Date.now() - (extra?.startedAt ?? stepStart);
+			// Tool steps carry their own clock (parallel calls overlap); a batch
+			// result's measured runtime wins outright — ordered emission means
+			// arrival time ≠ runtime. Thinking/narration still measure from the
+			// shared step boundary.
+			const durationMs = extra?.durationMs ?? Date.now() - (extra?.startedAt ?? stepStart);
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
 			if (kind === 'thinking') {
 				thinkingBuffer = '';
@@ -1107,7 +1109,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 						call.label,
 						truncateStepDetail(content, event.isError),
 						{ tool: call.name, ...(call.arg === undefined ? {} : { arg: call.arg }), outcome: event.isError ? 'error' : 'ok' },
-						{ startedAt: call.startedAt, ...(call.browse === undefined ? {} : { browse: call.browse }) },
+						{ startedAt: call.startedAt, ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }), ...(call.browse === undefined ? {} : { browse: call.browse }) },
 					);
 					openCalls.delete(event.toolUseId);
 					updateWork();
@@ -1159,7 +1161,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 					'tool',
 					`子代理结束 · ${event.reason}`,
 					`${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`,
-					{ tool: 'subagent', outcome: 'ok', agent: event.agentId },
+					// arg carries the reason so the structured verb row ("子代理")
+					// keeps the outcome visible — the label is legacy-only now.
+					{ tool: 'subagent', arg: `结束 · ${event.reason}`, outcome: 'ok', agent: event.agentId },
 					{ startedAt: Date.now() },
 				);
 				const endCall = openCalls.get(event.agentId);

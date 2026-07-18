@@ -101,6 +101,30 @@ test('a concurrent batch emits every tool_use up front, then results in call ord
 	assert.deepEqual(flow, ['ut1', 'ut2', 'ut3', 'rt1', 'rt2', 'rt3']);
 });
 
+test('tool_result events carry each call\'s OWN runtime — a fast call behind a slow one is not billed the wait', async () => {
+	const delays: Record<string, number> = { slow: 80, fast: 5 };
+	const safeTool = defineTool({
+		name: 'safe',
+		description: 'safe',
+		inputSchema: { type: 'object' },
+		isReadOnly: () => true,
+		isConcurrencySafe: () => true,
+		validateInput: input => ({ ok: true, value: input }),
+		call: async input => {
+			await new Promise(resolve => setTimeout(resolve, delays[(input as { key: string }).key] ?? 0));
+			return { content: (input as { key: string }).key };
+		},
+	});
+
+	const { events } = await drain([use('t1', 'safe', { key: 'slow' }), use('t2', 'safe', { key: 'fast' })], [safeTool]);
+
+	const durations = new Map(events.filter(event => event.type === 'tool_result').map(event => [event.toolUseId, event.durationMs ?? -1]));
+	// t2 finished in ~5ms but its event is EMITTED after t1's (~80ms) — the
+	// measured runtime must reflect the 5ms, not the ordered-emission wait.
+	assert.ok((durations.get('t1') ?? 0) >= 70, `slow call runtime recorded (${durations.get('t1')}ms)`);
+	assert.ok((durations.get('t2') ?? 99) < 60, `fast call not billed the wait (${durations.get('t2')}ms)`);
+});
+
 test('the batch concurrency cap bounds in-flight calls without changing result order', async () => {
 	process.env['MELLIVORA_TOOL_CONCURRENCY'] = '2';
 	try {
