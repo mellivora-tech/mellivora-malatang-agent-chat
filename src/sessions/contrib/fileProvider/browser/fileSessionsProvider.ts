@@ -437,6 +437,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
 					...(message.detail !== undefined ? { detail: message.detail } : {}),
 					...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+					...(message.outcome !== undefined ? { outcome: message.outcome } : {}),
 					...(message.steps !== undefined ? { steps: message.steps } : {}),
 					...(message.plan !== undefined ? { plan: message.plan } : {}),
 					...(message.ui !== undefined ? { ui: message.ui } : {}),
@@ -508,6 +509,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
 				...(message.detail !== undefined ? { detail: message.detail } : {}),
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+				...(message.outcome !== undefined ? { outcome: message.outcome } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
 				...(message.plan !== undefined ? { plan: message.plan } : {}),
 				...(message.ui !== undefined ? { ui: message.ui } : {}),
@@ -764,14 +766,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 		};
 
-		const updateWork = (durationMs?: number): void => {
+		const updateWork = (durationMs?: number, outcome?: 'ok' | 'error'): void => {
 			// Every RUNNING call rides the live view as a synthetic open step —
 			// steps only holds closed ones, which left long tool calls (a 5-minute
 			// SFTP upload, a parallel sub-agent) invisible until they finished.
 			// tool_progress / subagent events refresh each entry's label. Facts
 			// ride along so a running read joins the live rollup, not breaks it.
 			const liveSteps: ISessionWorkStep[] = [...steps];
-			for (const call of openCalls.values()) {
+			for (const [callId, call] of openCalls) {
 				liveSteps.push({
 					kind: 'tool',
 					label: call.label,
@@ -779,9 +781,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 					running: true,
 					tool: call.name,
 					...(call.arg === undefined ? {} : { arg: call.arg }),
+					// A running spawn's synthetic step routes into its child's group
+					// so the live view shows the current action inside the section.
+					...(call.name === 'spawn_agent' ? { agent: callId } : {}),
 				});
 			}
-			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }) };
+			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }), ...(outcome === undefined ? {} : { outcome }) };
 			const messages = session.messages.get();
 			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
@@ -883,7 +888,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 				closeThinkingOrSkip();
 			}
 			const workDuration = Date.now() - workStart;
-			updateWork(workDuration);
+			// 'completed' is the only clean ending — aborts, limits, refusals and
+			// harness errors (reason undefined) all leave the block un-collapsed
+			// with its evidence in view (#14 Q1: failed runs don't tuck away).
+			const runOutcome: 'ok' | 'error' = reason === 'completed' ? 'ok' : 'error';
+			updateWork(workDuration, runOutcome);
 
 			// A run that ends without any text (e.g. the step limit) must not leave a
 			// blank assistant bubble — say what happened, or persist no reply at all.
@@ -986,7 +995,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
-				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
+				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, outcome: runOutcome, steps, timestamp: now.toISOString() });
 				for (const supersededId of supersededIds) {
 					await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
 				}
@@ -1108,7 +1117,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 						'tool',
 						call.label,
 						truncateStepDetail(content, event.isError),
-						{ tool: call.name, ...(call.arg === undefined ? {} : { arg: call.arg }), outcome: event.isError ? 'error' : 'ok' },
+						{
+							tool: call.name,
+							...(call.arg === undefined ? {} : { arg: call.arg }),
+							outcome: event.isError ? 'error' : 'ok',
+							// The spawn's own result row belongs to its child's group
+							// (agentId == the spawn's toolUseId) — it carries the real
+							// per-child duration the section header displays.
+							...(call.name === 'spawn_agent' ? { agent: event.toolUseId } : {}),
+						},
 						{ startedAt: call.startedAt, ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }), ...(call.browse === undefined ? {} : { browse: call.browse }) },
 					);
 					openCalls.delete(event.toolUseId);

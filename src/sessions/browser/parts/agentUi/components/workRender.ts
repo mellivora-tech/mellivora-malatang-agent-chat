@@ -193,3 +193,143 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 	flush();
 	return items;
 }
+
+/** A child loop's sub-block inside a section: its steps de-interleaved from siblings, so rollups fold whole sweeps again. */
+export interface IWorkAgentGroup {
+	readonly kind: 'agentGroup';
+	readonly agent: string;
+	/** The spawn task (from the spawn marker step's arg); the row header. */
+	readonly label: string;
+	/** Inner render items — the child's own steps, rollups applied. */
+	readonly items: readonly WorkRenderItem[];
+	/** The spawn call's real runtime, once its result closed. */
+	readonly durationMs?: number;
+	readonly running: boolean;
+	readonly error: boolean;
+	/** "12 turns · 47 tool calls · 239k tokens" from the end step. */
+	readonly endDetail?: string;
+	/** Ordering anchor and stable React key: the group's first step index. */
+	readonly firstIndex: number;
+}
+
+export type WorkSectionItem = WorkRenderItem | IWorkAgentGroup;
+
+/** One "说一段 → 做一组" chapter: a narration header and everything until the next one. */
+export interface IWorkSection {
+	/** The narration text (undefined for the untitled preamble before the first narration). */
+	readonly title?: string;
+	/** Full narration when the title was truncated at assembly time. */
+	readonly titleDetail?: string;
+	readonly items: readonly WorkSectionItem[];
+	readonly firstIndex: number;
+}
+
+/**
+ * The #14 P1 render model: narration steps become section headers; within a
+ * section, each child loop's steps collapse into ONE agent group anchored at
+ * the child's first appearance (de-interleaving parallel children); the
+ * remaining main-loop stretches run through the rollup fold. Pure function of
+ * persisted facts — replay renders identically to the live run.
+ */
+export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSection[] {
+	const sections: IWorkSection[] = [];
+	let title: string | undefined;
+	let titleDetail: string | undefined;
+	let sectionFirst = 0;
+	// Per-section accumulation: an ordered token list of main-loop stretches and
+	// agent buckets, buckets keyed by agent and anchored at first appearance.
+	type Token = { kind: 'main'; steps: { step: ISessionWorkStep; index: number }[] } | { kind: 'bucket'; agent: string; firstIndex: number };
+	let tokens: Token[] = [];
+	let buckets = new Map<string, { firstIndex: number; label?: string; durationMs?: number; running: boolean; error: boolean; endDetail?: string; members: ISessionWorkStep[] }>();
+
+	const flushSection = (): void => {
+		if (tokens.length === 0 && title === undefined) {
+			return;
+		}
+		const items: WorkSectionItem[] = [];
+		for (const token of tokens) {
+			if (token.kind === 'main') {
+				items.push(...buildWorkRenderItemsIndexed(token.steps));
+			} else {
+				const bucket = buckets.get(token.agent)!;
+				items.push({
+					kind: 'agentGroup',
+					agent: token.agent,
+					label: bucket.label ?? '子代理',
+					items: buildWorkRenderItems(bucket.members),
+					...(bucket.durationMs === undefined ? {} : { durationMs: bucket.durationMs }),
+					running: bucket.running,
+					error: bucket.error,
+					...(bucket.endDetail === undefined ? {} : { endDetail: bucket.endDetail }),
+					firstIndex: bucket.firstIndex,
+				});
+			}
+		}
+		sections.push({ ...(title === undefined ? {} : { title }), ...(titleDetail === undefined ? {} : { titleDetail }), items, firstIndex: sectionFirst });
+		tokens = [];
+		buckets = new Map();
+	};
+
+	for (let index = 0; index < steps.length; index++) {
+		const step = steps[index]!;
+		if (step.kind === 'narration') {
+			flushSection();
+			title = step.label;
+			titleDetail = step.detail;
+			sectionFirst = index;
+			continue;
+		}
+		const agent = step.kind === 'tool' ? step.agent : undefined;
+		if (agent !== undefined) {
+			let bucket = buckets.get(agent);
+			if (bucket === undefined) {
+				bucket = { firstIndex: index, running: false, error: false, members: [] };
+				buckets.set(agent, bucket);
+				tokens.push({ kind: 'bucket', agent, firstIndex: index });
+			}
+			const tool = stepTool(step);
+			if (tool === 'spawn_agent') {
+				// Marker (closed at subagent_start, no outcome) names the group;
+				// the RESULT (has an outcome + real durationMs) times it; a running
+				// synthetic shows the child's current action as a live row.
+				if (step.running === true) {
+					bucket.running = true;
+					bucket.members.push(step);
+				} else if (step.outcome !== undefined) {
+					bucket.durationMs = step.durationMs;
+					bucket.error = bucket.error || stepError(step);
+				} else if (step.arg !== undefined) {
+					bucket.label = step.arg;
+				}
+			} else if (tool === 'subagent' && step.arg !== undefined && step.arg.startsWith('结束')) {
+				if (step.detail !== undefined) {
+					bucket.endDetail = step.detail;
+				}
+			} else {
+				bucket.error = bucket.error || stepError(step);
+				bucket.running = bucket.running || step.running === true;
+				bucket.members.push(step);
+			}
+		} else {
+			const last = tokens[tokens.length - 1];
+			if (last !== undefined && last.kind === 'main') {
+				last.steps.push({ step, index });
+			} else {
+				tokens.push({ kind: 'main', steps: [{ step, index }] });
+			}
+		}
+	}
+	flushSection();
+	return sections;
+}
+
+/** buildWorkRenderItems over a pre-indexed slice, preserving original indices for stable keys. */
+function buildWorkRenderItemsIndexed(members: readonly { step: ISessionWorkStep; index: number }[]): WorkRenderItem[] {
+	const items = buildWorkRenderItems(members.map(member => member.step));
+	// Remap local indices back to the original step positions.
+	return items.map(item =>
+		item.kind === 'step'
+			? { ...item, index: members[item.index]!.index }
+			: { ...item, steps: item.steps.map(entry => ({ step: entry.step, index: members[entry.index]!.index })) },
+	);
+}

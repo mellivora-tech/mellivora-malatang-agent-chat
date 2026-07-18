@@ -72,6 +72,8 @@ export class ConversationView extends Disposable {
 	private previewTick: HTMLElement | undefined;
 	private readonly tickTurns = new Map<HTMLElement, { user?: ISessionMessage; work?: ISessionMessage; assistant?: ISessionMessage }>();
 	private readonly composer: HTMLFormElement;
+	/** 状态行 (#14 Q1 P1): a slim strip above the composer echoing the live run's current section title — progress stays visible when the block scrolls out of view. */
+	private readonly workStatusLine: HTMLElement;
 	private readonly input: HTMLTextAreaElement;
 	private readonly sendButton: HTMLButtonElement;
 	private readonly stopButton: HTMLButtonElement;
@@ -136,6 +138,11 @@ export class ConversationView extends Disposable {
 
 		this.transcript = append(bodyWrap, document.createElement('div'));
 		this.transcript.className = 'conversation-transcript';
+
+		this.workStatusLine = append(this.element, document.createElement('div'));
+		this.workStatusLine.className = 'conversation-work-statusline';
+		this.workStatusLine.setAttribute('aria-live', 'polite');
+		this.workStatusLine.hidden = true;
 
 		this.composer = append(this.element, document.createElement('form'));
 		this.composer.className = 'conversation-composer';
@@ -569,6 +576,7 @@ export class ConversationView extends Disposable {
 			this.settleScrollAtBottom();
 		}
 
+		this.updateWorkStatusLine(messages, hasLiveWork);
 		this.updateWorkTicker(hasLiveWork);
 		this.renderTimeline(messages);
 		this.updateComposerState();
@@ -904,6 +912,36 @@ export class ConversationView extends Disposable {
 	private closeTimelinePreview(): void {
 		this.timelinePreview?.remove();
 		this.timelinePreview = undefined;
+	}
+
+	/**
+	 * The live run's current chapter, echoed above the composer: the LAST
+	 * narration step is the section now executing ("说一段 → 做一组"). Falls
+	 * back to the generic working label before the first narration lands.
+	 * Content changes only when messages change, so the regular render pass is
+	 * the only updater needed — no timer of its own.
+	 */
+	private updateWorkStatusLine(messages: readonly ISessionMessage[], hasLiveWork: boolean): void {
+		if (!hasLiveWork) {
+			this.workStatusLine.hidden = true;
+			return;
+		}
+		const liveWork = messages.find(message => message.role === 'work' && message.durationMs === undefined);
+		const narration = [...(liveWork?.steps ?? [])].reverse().find(step => step.kind === 'narration');
+		const title = narration?.label ?? localize('conv.workingEllipsis');
+		this.workStatusLine.hidden = false;
+		if (this.workStatusLine.dataset['title'] !== title) {
+			this.workStatusLine.dataset['title'] = title;
+			this.workStatusLine.replaceChildren();
+			const spinner = document.createElement('span');
+			spinner.className = 'codicon codicon-loading codicon-modifier-spin';
+			spinner.setAttribute('aria-hidden', 'true');
+			this.workStatusLine.appendChild(spinner);
+			const text = document.createElement('span');
+			text.className = 'conversation-work-statusline-title';
+			text.textContent = title;
+			this.workStatusLine.appendChild(text);
+		}
 	}
 
 	private updateWorkTicker(hasLiveWork: boolean): void {

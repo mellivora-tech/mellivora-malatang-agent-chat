@@ -175,6 +175,8 @@ export interface ISessionMessage {
 	readonly detail?: string;
 	/** Total run duration; unset while the run is still in progress. */
 	readonly durationMs?: number;
+	/** 'work' messages: how the run ended — 'error' (abort/limit/failure) blocks the auto-collapse so the evidence stays in view (#14 Q1). */
+	readonly outcome?: 'ok' | 'error';
 	readonly steps?: readonly ISessionWorkStep[];
 	/** 'plan' messages carry the structured artifact; `text` is its markdown fallback. */
 	readonly plan?: IPlanArtifact;

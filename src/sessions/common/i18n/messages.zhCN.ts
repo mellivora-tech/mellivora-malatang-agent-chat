@@ -88,6 +88,8 @@ export const zhCN = {
 	'conv.thoughtFor': '思考了 {0}',
 	'conv.thinking': '思考中',
 	'conv.running': '进行中',
+	'conv.workInterrupted': '执行中断',
+	'conv.workSteps': '{0} 个步骤',
 	'conv.rollup.explored': '探索了 {0}',
 	'conv.rollup.files': '{0} 个文件',
 	'conv.rollup.dirs': '{0} 个目录',
