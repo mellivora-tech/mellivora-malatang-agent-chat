@@ -85,11 +85,13 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 		name: 'spawn_agent',
 		description:
 			'Delegate a read-only exploration to a sub-agent with its OWN context and return only its conclusions. ' +
-			'Use it — whatever the task type — when the work means reading MANY files whose contents you will not need afterwards ' +
-			'(audits, find-all-usages, tracing a value across modules): you keep the summary, not the file dumps. ' +
-			'Do NOT use it for anything you can settle in 1-2 reads, and do not re-delegate work a sub-agent already covered. ' +
+			'The ONE criterion is context economy — will you need the files\' contents again after the sweep? If not ' +
+			'(audits, find-all-usages, tracing a value across modules, structure surveys): delegate — you keep the summary, not the file dumps. ' +
+			'When NOT to use it: a known file path → read_file directly; a specific class/function/symbol → grep or glob directly; ' +
+			'anything scoped to 2-3 files → read them yourself; and never re-delegate work a sub-agent already covered. ' +
 			'The sub-agent has a hard budget of ~24 turns — a sweep too big for that (e.g. hundreds of files) MUST be SHARDED: ' +
 			'several spawn_agent calls, each scoped to one module/directory, instead of one call for everything. ' +
+			'Independent sweeps MUST be issued in a SINGLE message with multiple spawn_agent calls — they run concurrently. ' +
 			'Write the task self-contained (the sub-agent sees nothing of this conversation), state the expected output shape ' +
 			'(e.g. "list every X with file:line"), and say how thorough to be.',
 		inputSchema: {
@@ -102,8 +104,10 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 			additionalProperties: false,
 		},
 		isReadOnly: () => true,
-		// Serial in P1; flipping this on is the P2 parallelism seat.
-		isConcurrencySafe: () => false,
+		// The P2 parallelism seat, filled (#15): children are read-only loops on
+		// separate API streams — a 5-probe test saw no throttling at 5 concurrent
+		// k3 requests, and the runner caps each batch (maxToolConcurrency).
+		isConcurrencySafe: () => true,
 		validateInput: input => {
 			const record = asRecord(input);
 			if (!record) {

@@ -52,29 +52,80 @@ export async function* executeToolUses(
 			continue;
 		}
 
-		// Concurrent batch: guard-check up front (synchronous — the repeat counter
-		// must see calls in order), start the survivors together, then emit
-		// ordered use/result pairs.
-		const settled = await Promise.all(
-			batch.map(use => {
-				const blocked = guard?.check(use);
-				if (blocked) {
-					return Promise.resolve({ use, blocked, block: errorResult(use.id, blocked.message) });
-				}
-				return runSingleToolUse(use, tools, permissionGate, signal).then(block => ({ use, blocked: undefined, block }));
-			}),
-		);
-		for (const { use, blocked, block } of settled) {
+		// Concurrent batch: guard-check synchronously in call order (the repeat
+		// counter must see every call), then emit ALL tool_use events up front —
+		// a batch member that runs for minutes (a parallel spawn_agent sweep)
+		// must be visible as an open call from the moment it starts, not after
+		// the whole batch settles. Execution runs under a concurrency cap;
+		// results are emitted in call order regardless of completion order (the
+		// API pairs them by tool_use_id, the transcript stays deterministic).
+		const checked = batch.map(use => ({ use, blocked: guard?.check(use) }));
+		for (const { use, blocked } of checked) {
 			yield { type: 'tool_use', toolUseId: use.id, name: use.name, input: use.input };
 			if (blocked) {
 				yield { type: 'loop_guard', toolUseId: use.id, name: use.name, repeatCount: blocked.repeatCount };
 			}
+		}
+		const running = startWithLimit(checked, maxToolConcurrency(), async ({ use, blocked }) => {
+			const startedAt = Date.now();
+			const block = blocked ? errorResult(use.id, blocked.message) : await runSingleToolUse(use, tools, permissionGate, signal);
+			return { block, durationMs: Date.now() - startedAt };
+		});
+		// Stream results in call order as they settle — the first call's result
+		// goes out the moment it (and nothing else) is done, instead of the whole
+		// batch's results arriving together at the end. Each event carries the
+		// call's OWN measured duration: ordered emission means a fast later call
+		// waits on slower earlier ones, so arrival time is not its runtime (four
+		// parallel spawns all read as the slowest one otherwise — seen live).
+		for (const promise of running) {
+			const { block, durationMs } = await promise;
 			results.push(block);
-			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
+			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError, durationMs };
 		}
 	}
 
 	return results;
+}
+
+/**
+ * Concurrency cap for one batch. 4 by default: a k3 probe (2026-07-18, 5
+ * concurrent minimal requests) saw zero 429s at 5 streams, so 4 leaves
+ * headroom for the main loop's own next request; parallel sub-agents are the
+ * only tools that hold a slot for minutes.
+ */
+export function maxToolConcurrency(): number {
+	const parsed = Number(process.env['MELLIVORA_TOOL_CONCURRENCY']);
+	return Number.isInteger(parsed) && parsed >= 1 ? parsed : 4;
+}
+
+/** Start every item under a slot limit and return the per-item promises immediately (input order) — callers await them in order to stream ordered results. */
+function startWithLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R>[] {
+	let active = 0;
+	const waiters: (() => void)[] = [];
+	const acquire = (): Promise<void> =>
+		new Promise(resolve => {
+			if (active < limit) {
+				active += 1;
+				resolve();
+			} else {
+				waiters.push(() => {
+					active += 1;
+					resolve();
+				});
+			}
+		});
+	const release = (): void => {
+		active -= 1;
+		waiters.shift()?.();
+	};
+	return items.map(async item => {
+		await acquire();
+		try {
+			return await run(item);
+		} finally {
+			release();
+		}
+	});
 }
 
 /** Split one turn's calls into maximal runs of concurrency-safe tools; unsafe (or unknown) tools become singleton batches. */

@@ -665,15 +665,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 		const workStart = Date.now();
 		const steps: ISessionWorkStep[] = [];
 		let stepStart = workStart;
-		let openToolLabel: string | undefined;
-		let openToolName: string | undefined;
-		// The open call's most telling argument — persisted on the closed step as
-		// a structured fact (#14 Q3) so the renderer can derive verb+chip rows and
-		// read-rollups deterministically on replay.
-		let openToolArg: string | undefined;
-		// query_data_source / render_data: coordinates ride the step so the UI
-		// can offer "在数据浏览器打开" (chat → data panel hand-off).
-		let openToolBrowse: ISessionDataBrowse | undefined;
+		// Every in-flight call, keyed by toolUseId — the runner emits a concurrent
+		// batch's tool_use events up front (#15 P1), so several calls are open at
+		// once and each carries its own clock, facts, and browse payload. Closed
+		// steps land in `steps` in COMPLETION order (the chronological truth);
+		// the API-side result ordering is the runner's concern, not ours.
+		interface IOpenCall {
+			label: string;
+			name: string;
+			arg?: string;
+			browse?: ISessionDataBrowse;
+			startedAt: number;
+		}
+		const openCalls = new Map<string, IOpenCall>();
 		// The run's latest propose_plan / write_walkthrough inputs — last call of
 		// each wins; materialized into role:'plan' messages at finalize
 		// (ids/version assigned there, never by the model).
@@ -700,17 +704,31 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// measure) and the newest ok compaction of this run.
 		let sentTranscript: readonly IAgentMessage[] = [];
 		let pendingAnchor: ISessionCompactionAnchorData | undefined;
-		// Sub-agent narration state: the spawn step's own label (restored when the
-		// child ends) and the child's currently-running action. The action's facts
-		// carry the CHILD's real tool name (+ via:'subagent') so a child's read
-		// sweep folds into rollups like the main loop's own — without them a
-		// spawn-heavy run is a 250-row wall of ⑃ steps (seen on real data).
-		let subagentSpawnLabel: string | undefined;
-		let subagentAction: string | undefined;
-		let subagentActionFacts: { tool: string; arg?: string; via: 'subagent' } | undefined;
+		// Per-child narration state, keyed by agentId (== the spawn call's
+		// toolUseId) — parallel children interleave their events, so each keeps
+		// its own pending action, clock, and the spawn label to restore at end.
+		// Action facts carry the CHILD's real tool name (+ via/agent) so a
+		// child's read sweep folds into rollups and never merges across agents.
+		interface ISubagentSlot {
+			spawnLabel: string | undefined;
+			action?: string;
+			facts?: { tool: string; arg?: string; via: 'subagent'; agent: string };
+			actionStart: number;
+		}
+		const subagentSlots = new Map<string, ISubagentSlot>();
 
-		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string, facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent' }): void => {
-			const durationMs = Date.now() - stepStart;
+		const closeStep = (
+			kind: ISessionWorkStep['kind'],
+			label: string,
+			detail?: string,
+			facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent'; agent?: string },
+			extra?: { startedAt?: number; durationMs?: number; browse?: ISessionDataBrowse },
+		): void => {
+			// Tool steps carry their own clock (parallel calls overlap); a batch
+			// result's measured runtime wins outright — ordered emission means
+			// arrival time ≠ runtime. Thinking/narration still measure from the
+			// shared step boundary.
+			const durationMs = extra?.durationMs ?? Date.now() - (extra?.startedAt ?? stepStart);
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
 			if (kind === 'thinking') {
 				thinkingBuffer = '';
@@ -722,15 +740,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 					label,
 					durationMs,
 					...(stepDetail === undefined ? {} : { detail: stepDetail }),
-					...(kind === 'tool' && openToolBrowse ? { browse: openToolBrowse } : {}),
+					...(extra?.browse === undefined ? {} : { browse: extra.browse }),
 					...(facts?.tool === undefined ? {} : { tool: facts.tool }),
 					...(facts?.arg === undefined ? {} : { arg: facts.arg }),
 					...(facts?.outcome === undefined ? {} : { outcome: facts.outcome }),
 					...(facts?.via === undefined ? {} : { via: facts.via }),
+					...(facts?.agent === undefined ? {} : { agent: facts.agent }),
 				});
-			}
-			if (kind === 'tool') {
-				openToolBrowse = undefined;
 			}
 			stepStart = Date.now();
 		};
@@ -749,26 +765,22 @@ export class FileSessionsProvider implements ISessionsProvider {
 		};
 
 		const updateWork = (durationMs?: number): void => {
-			// The RUNNING call rides the live view as a synthetic open step — steps
-			// only holds closed ones, which left long tool calls (a 5-minute SFTP
-			// upload, a sub-agent) invisible until they finished. tool_progress
-			// events refresh openToolLabel, so this row is where progress renders.
-			const liveSteps: ISessionWorkStep[] =
-				openToolLabel !== undefined
-					? [
-							...steps,
-							{
-								kind: 'tool',
-								label: openToolLabel,
-								durationMs: Date.now() - stepStart,
-								running: true,
-								// Structured facts ride the synthetic open step too, so a
-								// running read joins the live rollup instead of breaking it.
-								...(openToolName === undefined ? {} : { tool: openToolName }),
-								...(openToolArg === undefined ? {} : { arg: openToolArg }),
-							},
-						]
-					: [...steps];
+			// Every RUNNING call rides the live view as a synthetic open step —
+			// steps only holds closed ones, which left long tool calls (a 5-minute
+			// SFTP upload, a parallel sub-agent) invisible until they finished.
+			// tool_progress / subagent events refresh each entry's label. Facts
+			// ride along so a running read joins the live rollup, not breaks it.
+			const liveSteps: ISessionWorkStep[] = [...steps];
+			for (const call of openCalls.values()) {
+				liveSteps.push({
+					kind: 'tool',
+					label: call.label,
+					durationMs: Date.now() - call.startedAt,
+					running: true,
+					tool: call.name,
+					...(call.arg === undefined ? {} : { arg: call.arg }),
+				});
+			}
 			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }) };
 			const messages = session.messages.get();
 			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
@@ -853,17 +865,20 @@ export class FileSessionsProvider implements ISessionsProvider {
 			disposeApprovals();
 			session.pendingApproval.set(undefined);
 			session.reconnect.set(undefined);
-			if (openToolLabel !== undefined) {
-				// A run ending with the call still open (abort, error) — the step
-				// closes without a result, so its outcome is honestly an error.
-				closeStep('tool', openToolLabel, undefined, {
-					...(openToolName === undefined ? {} : { tool: openToolName }),
-					...(openToolArg === undefined ? {} : { arg: openToolArg }),
-					outcome: 'error',
-				});
-				openToolLabel = undefined;
-				openToolName = undefined;
-				openToolArg = undefined;
+			if (openCalls.size > 0 || subagentSlots.size > 0) {
+				// A run ending with calls still open (abort, error) — each closes
+				// without a result, so its outcome is honestly an error. Pending
+				// child actions close first (they belong inside their spawn).
+				for (const [agentId, slot] of subagentSlots) {
+					if (slot.action !== undefined) {
+						closeStep('tool', slot.action, undefined, { ...(slot.facts ?? { tool: 'subagent', via: 'subagent', agent: agentId }), outcome: 'error' }, { startedAt: slot.actionStart });
+					}
+				}
+				subagentSlots.clear();
+				for (const call of openCalls.values()) {
+					closeStep('tool', call.label, undefined, { tool: call.name, ...(call.arg === undefined ? {} : { arg: call.arg }), outcome: 'error' }, { startedAt: call.startedAt });
+				}
+				openCalls.clear();
 			} else {
 				closeThinkingOrSkip();
 			}
@@ -1039,7 +1054,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			} else if (event?.type === 'assistant_delta') {
 				// First text after thinking closes the stretch; text after a tool
 				// result belongs to the next thinking stretch, so only close once.
-				if (text === '' && openToolLabel === undefined) {
+				if (text === '' && openCalls.size === 0) {
 					closeStep('thinking', 'Thought');
 					updateWork();
 				}
@@ -1047,7 +1062,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 				text += event.text;
 				updateAssistant();
 			} else if (event?.type === 'tool_use') {
-				closeThinkingOrSkip();
+				// A concurrent batch emits all its tool_use events before any
+				// result — only the FIRST open call closes the thinking stretch.
+				if (openCalls.size === 0) {
+					closeThinkingOrSkip();
+				}
 				relocateTurnNarration();
 				if (event.name === 'propose_plan') {
 					// Malformed input stays on the previous capture — the tool result
@@ -1061,68 +1080,97 @@ export class FileSessionsProvider implements ISessionsProvider {
 						pendingUiInputs.push(parsedUi);
 					}
 				}
-				openToolLabel = describeWorkTool(event.name, event.input);
-				openToolName = event.name;
-				openToolArg = workToolArg(event.input);
-				openToolBrowse = parseBrowsePayload(event.name, event.input);
+				const arg = workToolArg(event.input);
+				const browse = parseBrowsePayload(event.name, event.input);
+				openCalls.set(event.toolUseId, {
+					label: describeWorkTool(event.name, event.input),
+					name: event.name,
+					...(arg === undefined ? {} : { arg }),
+					...(browse === undefined ? {} : { browse }),
+					startedAt: Date.now(),
+				});
 				updateWork();
 			} else if (event?.type === 'tool_result') {
-				if (openToolLabel !== undefined) {
+				const call = openCalls.get(event.toolUseId);
+				if (call !== undefined) {
 					let content = event.content;
 					// render_data: lift the chip payload from the marker tail, and
 					// keep the marker out of the visible step detail.
-					if (openToolName === 'render_data' && !event.isError) {
+					if (call.name === 'render_data' && !event.isError) {
 						const rendered = RENDERED_TABLE_MARKER.exec(content);
 						if (rendered?.[1]) {
 							const path = rendered[1];
-							openToolBrowse = { kind: 'file', path, name: path.split('/').pop() ?? path };
+							call.browse = { kind: 'file', path, name: path.split('/').pop() ?? path };
 							content = content.replace(RENDERED_TABLE_MARKER, '');
 						}
 					}
-					closeStep('tool', openToolLabel, truncateStepDetail(content, event.isError), {
-						...(openToolName === undefined ? {} : { tool: openToolName }),
-						...(openToolArg === undefined ? {} : { arg: openToolArg }),
-						outcome: event.isError ? 'error' : 'ok',
-					});
-					openToolLabel = undefined;
-					openToolName = undefined;
-					openToolArg = undefined;
+					closeStep(
+						'tool',
+						call.label,
+						truncateStepDetail(content, event.isError),
+						{ tool: call.name, ...(call.arg === undefined ? {} : { arg: call.arg }), outcome: event.isError ? 'error' : 'ok' },
+						{ startedAt: call.startedAt, ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }), ...(call.browse === undefined ? {} : { browse: call.browse }) },
+					);
+					openCalls.delete(event.toolUseId);
 					updateWork();
 				}
 			} else if (event?.type === 'tool_progress') {
 				// Live label for the running call (e.g. "上传 … 47% · 4.1 MB/s").
 				// The eventual tool_result closes the step as usual, so the final
 				// label is the last progress line — which reads as the summary.
-				openToolLabel = event.note;
-				updateWork();
+				const progressCall = openCalls.get(event.toolUseId);
+				if (progressCall !== undefined) {
+					progressCall.label = event.note;
+					updateWork();
+				}
 			} else if (event?.type === 'subagent_start') {
-				// A child loop is running inside the open spawn_agent call. Its
-				// narration takes over the open-step slot until subagent_end; the
-				// spawn label is restored then, so the spawn's own tool_result still
-				// closes a matching step.
-				subagentSpawnLabel = openToolLabel;
-				closeStep('tool', `子代理 ⑃ ${firstLine(event.task)}`, undefined, { tool: 'spawn_agent', arg: firstLine(event.task) });
-				openToolLabel = '子代理启动中…';
+				// A child loop is running inside its spawn_agent call (agentId ==
+				// the spawn's toolUseId). The child's narration takes over THAT
+				// call's live label until subagent_end restores it, so the spawn's
+				// own tool_result still closes a matching step. Parallel children
+				// each own a slot — events route by agentId and never cross.
+				const spawnCall = openCalls.get(event.agentId);
+				subagentSlots.set(event.agentId, { spawnLabel: spawnCall?.label, actionStart: Date.now() });
+				closeStep('tool', `子代理 ⑃ ${firstLine(event.task)}`, undefined, { tool: 'spawn_agent', arg: firstLine(event.task), agent: event.agentId }, { startedAt: Date.now() });
+				if (spawnCall !== undefined) {
+					spawnCall.label = '子代理启动中…';
+				}
 				updateWork();
 			} else if (event?.type === 'subagent_tool') {
-				if (subagentAction !== undefined) {
-					closeStep('tool', subagentAction, undefined, subagentActionFacts ?? { tool: 'subagent' });
+				const slot = subagentSlots.get(event.agentId) ?? { spawnLabel: undefined, actionStart: Date.now() };
+				subagentSlots.set(event.agentId, slot);
+				if (slot.action !== undefined) {
+					closeStep('tool', slot.action, undefined, slot.facts ?? { tool: 'subagent', via: 'subagent', agent: event.agentId }, { startedAt: slot.actionStart });
 				}
-				subagentAction = `⑃ ${event.summary}`;
+				slot.action = `⑃ ${event.summary}`;
 				// summary is "name arg" by construction; recover the arg for the chip.
 				const childArg = event.summary.startsWith(`${event.name} `) ? firstLine(event.summary.slice(event.name.length + 1)) : undefined;
-				subagentActionFacts = { tool: event.name, ...(childArg === undefined || childArg === '' ? {} : { arg: childArg }), via: 'subagent' };
-				openToolLabel = subagentAction;
+				slot.facts = { tool: event.name, ...(childArg === undefined || childArg === '' ? {} : { arg: childArg }), via: 'subagent', agent: event.agentId };
+				slot.actionStart = Date.now();
+				const actionCall = openCalls.get(event.agentId);
+				if (actionCall !== undefined) {
+					actionCall.label = slot.action;
+				}
 				updateWork();
 			} else if (event?.type === 'subagent_end') {
-				if (subagentAction !== undefined) {
-					closeStep('tool', subagentAction, undefined, subagentActionFacts ?? { tool: 'subagent' });
-					subagentAction = undefined;
-					subagentActionFacts = undefined;
+				const slot = subagentSlots.get(event.agentId);
+				if (slot?.action !== undefined) {
+					closeStep('tool', slot.action, undefined, slot.facts ?? { tool: 'subagent', via: 'subagent', agent: event.agentId }, { startedAt: slot.actionStart });
 				}
-				closeStep('tool', `子代理结束 · ${event.reason}`, `${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`, { tool: 'subagent', outcome: 'ok' });
-				openToolLabel = subagentSpawnLabel ?? openToolLabel;
-				subagentSpawnLabel = undefined;
+				closeStep(
+					'tool',
+					`子代理结束 · ${event.reason}`,
+					`${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`,
+					// arg carries the reason so the structured verb row ("子代理")
+					// keeps the outcome visible — the label is legacy-only now.
+					{ tool: 'subagent', arg: `结束 · ${event.reason}`, outcome: 'ok', agent: event.agentId },
+					{ startedAt: Date.now() },
+				);
+				const endCall = openCalls.get(event.agentId);
+				if (endCall !== undefined) {
+					endCall.label = slot?.spawnLabel ?? endCall.label;
+				}
+				subagentSlots.delete(event.agentId);
 				updateWork();
 			} else if (event?.type === 'usage') {
 				// The provider's real prompt size for the request just completed —

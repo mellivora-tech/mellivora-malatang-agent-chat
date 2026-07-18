@@ -173,6 +173,24 @@ test('child-loop read sweeps fold into rollups; spawn and end steps break the gr
 	assert.equal(presentation.verbKey, TOOL_VERB_KEYS['read_file']);
 });
 
+test('parallel children never fold into one rollup — groups break on agent change (#15)', () => {
+	const child = (agent: string, arg: string): ISessionWorkStep => ({ kind: 'tool', label: `⑃ read_file ${arg}`, durationMs: 50, tool: 'read_file', arg, via: 'subagent', agent });
+	const items = buildWorkRenderItems([
+		child('a1', 'x.ts'),
+		child('a1', 'y.ts'),
+		child('a2', 'p.ts'),
+		child('a2', 'q.ts'),
+		child('a1', 'z.ts'),
+		{ kind: 'tool', label: 'read_file main.ts', durationMs: 10, tool: 'read_file', arg: 'main.ts' },
+		{ kind: 'tool', label: 'read_file other.ts', durationMs: 10, tool: 'read_file', arg: 'other.ts' },
+	]);
+	// a1 run, a2 run, lone a1 step, then the main loop's own pair — no cross-agent merges.
+	assert.deepEqual(
+		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : 'step')),
+		['rollup:2', 'rollup:2', 'step', 'rollup:2']
+	);
+});
+
 test('presentation derives verb + chip for structured steps and flags errors', () => {
 	const failed = tool('bash', 'pnpm typecheck', { outcome: 'error' });
 	const presentation = presentStep(failed);
