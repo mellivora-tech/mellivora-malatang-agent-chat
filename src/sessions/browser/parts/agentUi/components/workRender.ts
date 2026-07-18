@@ -178,6 +178,12 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 		const step = steps[index]!;
 		const cls = step.kind === 'tool' ? READ_CLASS[stepTool(step) ?? ''] : undefined;
 		if (cls !== undefined && !stepError(step)) {
+			// Parallel children interleave chronologically — a group never spans
+			// agents (or mixes a child with the main loop), so each sweep stays
+			// attributable even when the fold hides the individual rows.
+			if (group.length > 0 && group[group.length - 1]!.step.agent !== step.agent) {
+				flush();
+			}
 			group.push({ step, index });
 		} else {
 			flush();

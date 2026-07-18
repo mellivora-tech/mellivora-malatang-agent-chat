@@ -84,7 +84,7 @@ test('an unsafe tool splits the batch and runs serially between safe runs', asyn
 	assert.ok(unsafeEnd !== -1 && unsafeEnd < lastSafeStart, `serial boundary violated: ${order.join(' → ')}`);
 });
 
-test('a concurrent batch still pairs each tool_use with its tool_result in order', async () => {
+test('a concurrent batch emits every tool_use up front, then results in call order (#15: long members stay visible from start)', async () => {
 	const safeTool = defineTool({
 		name: 'safe',
 		description: 'safe',
@@ -98,5 +98,41 @@ test('a concurrent batch still pairs each tool_use with its tool_result in order
 	const { events } = await drain([use('t1', 'safe', { n: 1 }), use('t2', 'safe', { n: 2 }), use('t3', 'safe', { n: 3 })], [safeTool]);
 
 	const flow = events.map(event => (event.type === 'tool_use' ? `u${event.toolUseId}` : event.type === 'tool_result' ? `r${event.toolUseId}` : event.type));
-	assert.deepEqual(flow, ['ut1', 'rt1', 'ut2', 'rt2', 'ut3', 'rt3']);
+	assert.deepEqual(flow, ['ut1', 'ut2', 'ut3', 'rt1', 'rt2', 'rt3']);
+});
+
+test('the batch concurrency cap bounds in-flight calls without changing result order', async () => {
+	process.env['MELLIVORA_TOOL_CONCURRENCY'] = '2';
+	try {
+		let active = 0;
+		let peakActive = 0;
+		const safeTool = defineTool({
+			name: 'safe',
+			description: 'safe',
+			inputSchema: { type: 'object' },
+			isReadOnly: () => true,
+			isConcurrencySafe: () => true,
+			validateInput: input => ({ ok: true, value: input }),
+			call: async input => {
+				active += 1;
+				peakActive = Math.max(peakActive, active);
+				await new Promise(resolve => setTimeout(resolve, 15));
+				active -= 1;
+				return { content: String((input as { n: number }).n) };
+			},
+		});
+
+		const { results } = await drain(
+			[use('t1', 'safe', { n: 1 }), use('t2', 'safe', { n: 2 }), use('t3', 'safe', { n: 3 }), use('t4', 'safe', { n: 4 })],
+			[safeTool],
+		);
+
+		assert.equal(peakActive, 2, 'no more than the cap in flight');
+		assert.deepEqual(
+			results.map(result => result.content),
+			['1', '2', '3', '4'],
+		);
+	} finally {
+		delete process.env['MELLIVORA_TOOL_CONCURRENCY'];
+	}
 });

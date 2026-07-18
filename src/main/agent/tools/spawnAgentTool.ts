@@ -104,8 +104,10 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 			additionalProperties: false,
 		},
 		isReadOnly: () => true,
-		// Serial in P1; flipping this on is the P2 parallelism seat.
-		isConcurrencySafe: () => false,
+		// The P2 parallelism seat, filled (#15): children are read-only loops on
+		// separate API streams — a 5-probe test saw no throttling at 5 concurrent
+		// k3 requests, and the runner caps each batch (maxToolConcurrency).
+		isConcurrencySafe: () => true,
 		validateInput: input => {
 			const record = asRecord(input);
 			if (!record) {

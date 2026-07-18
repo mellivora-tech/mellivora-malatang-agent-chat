@@ -78,6 +78,8 @@ export interface ISessionWorkStep {
 	readonly outcome?: 'ok' | 'error';
 	/** The step ran inside a spawned child loop — rendered with the ⑃ marker the label carries. */
 	readonly via?: 'subagent';
+	/** Which child loop (the spawn call's toolUseId) — parallel children's steps stay attributable and never fold across agents. */
+	readonly agent?: string;
 }
 
 /**
