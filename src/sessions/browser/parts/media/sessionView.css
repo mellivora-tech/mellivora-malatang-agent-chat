@@ -717,6 +717,101 @@ button.conversation-work-step-row:hover {
 	color: var(--vscode-agents-color-danger);
 }
 
+/* ── #14 P1: sections, agent groups, failure state, status line ── */
+
+/* "▸ 环境齐全，开始搭建项目" — narration promoted to a chapter heading. */
+.conversation-work-section {
+	margin-top: var(--vscode-agents-space-6);
+}
+
+.conversation-work-section-head {
+	display: block;
+	width: 100%;
+	text-align: left;
+	border: none;
+	background: transparent;
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6) var(--vscode-agents-space-2);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: 600;
+	font-size: var(--vscode-agents-fontSize-body2);
+	line-height: 1.5;
+}
+
+.conversation-work-section-head::before {
+	content: '▸ ';
+	color: var(--vscode-agents-color-text-subtle);
+}
+
+.conversation-work-section-head.expandable {
+	cursor: pointer;
+}
+
+.conversation-work-section-head.expandable:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+}
+
+.conversation-work-section-body {
+	margin-left: var(--vscode-agents-space-12);
+}
+
+/* One child loop's sub-block: header row + indented de-interleaved steps. */
+.conversation-work-agent-row .conversation-work-step-label {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-work-agent.error .conversation-work-agent-row .codicon-error {
+	color: var(--vscode-agents-color-danger);
+}
+
+.conversation-work-agent-steps {
+	margin-left: var(--vscode-agents-space-20);
+	border-left: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	padding-left: var(--vscode-agents-space-6);
+}
+
+.conversation-work-agent-stats {
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-6);
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Failed run: the block wears the outcome; it never auto-collapses. */
+.conversation-work.failed {
+	border-color: color-mix(in srgb, var(--vscode-agents-color-danger) 40%, transparent);
+}
+
+.conversation-work.failed .conversation-work-header .codicon-error,
+.conversation-work.failed > .conversation-work-header .conversation-work-title {
+	color: var(--vscode-agents-color-danger);
+}
+
+.conversation-work-meta {
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 思考直播: the running thinking stretch streams its tail in a clamped, top-faded window. */
+.conversation-work-thinking-stream {
+	margin: var(--vscode-agents-space-2) 0 var(--vscode-agents-space-4) var(--vscode-agents-space-20);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
+	max-height: calc(3 * 1.6em);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-style: italic;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-word;
+	-webkit-mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);
+	mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);
+}
+
 /* Read-class rollup: "探索了 8 个文件、2 个目录 · 3 次检索" with the folded rows indented beneath. */
 .conversation-work-rollup-row .conversation-work-step-label {
 	color: var(--vscode-agents-color-text-primary);

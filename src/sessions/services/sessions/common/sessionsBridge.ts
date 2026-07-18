@@ -108,6 +108,8 @@ export interface ISessionMessageEntry {
 	readonly detail?: string;
 	readonly timestamp: string;
 	readonly durationMs?: number;
+	/** 'work' entries: how the run ended; absent on legacy records (renderer treats as ok). */
+	readonly outcome?: 'ok' | 'error';
 	readonly steps?: readonly ISessionWorkStepData[];
 	/** 'plan' entries carry the structured artifact; `text` is its markdown fallback. */
 	readonly plan?: IPlanArtifactData;
@@ -212,6 +214,7 @@ export interface ISessionSnapshotMessage {
 	readonly attachments?: readonly ISessionAttachmentData[];
 	readonly detail?: string;
 	readonly durationMs?: number;
+	readonly outcome?: 'ok' | 'error';
 	readonly steps?: readonly ISessionWorkStepData[];
 	readonly plan?: IPlanArtifactData;
 	readonly ui?: IUiArtifactData;

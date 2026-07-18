@@ -180,6 +180,8 @@ export type IAgentEvent =
 	| { readonly type: 'turn_start'; readonly turn: number }
 	| { readonly type: 'assistant_delta'; readonly text: string }
 	| { readonly type: 'thinking_delta'; readonly text: string }
+	/** A REDACTED thinking block arrived (real reasoning, encrypted, no deltas) — the work panel keeps an honest "思考了 Ns" row for it. Streams' latency gaps carry no such event and no longer masquerade as thought. */
+	| { readonly type: 'thinking_redacted' }
 	| { readonly type: 'assistant_message'; readonly text: string }
 	| { readonly type: 'tool_use'; readonly toolUseId: string; readonly name: string; readonly input: unknown }
 	| {

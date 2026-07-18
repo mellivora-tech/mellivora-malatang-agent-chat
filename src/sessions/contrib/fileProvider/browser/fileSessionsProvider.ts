@@ -437,6 +437,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
 					...(message.detail !== undefined ? { detail: message.detail } : {}),
 					...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+					...(message.outcome !== undefined ? { outcome: message.outcome } : {}),
 					...(message.steps !== undefined ? { steps: message.steps } : {}),
 					...(message.plan !== undefined ? { plan: message.plan } : {}),
 					...(message.ui !== undefined ? { ui: message.ui } : {}),
@@ -508,6 +509,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
 				...(message.detail !== undefined ? { detail: message.detail } : {}),
 				...(message.durationMs !== undefined ? { durationMs: message.durationMs } : {}),
+				...(message.outcome !== undefined ? { outcome: message.outcome } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
 				...(message.plan !== undefined ? { plan: message.plan } : {}),
 				...(message.ui !== undefined ? { ui: message.ui } : {}),
@@ -692,8 +694,17 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// on the next run's transcript to pay down the re-exploration tax.
 		let pendingDigest: string | undefined;
 		// Reasoning text streamed since the last step boundary; becomes the
-		// closing thinking step's expandable detail.
+		// closing thinking step's expandable detail. While streaming it also
+		// feeds the live synthetic thinking step, painted on a trailing throttle.
 		let thinkingBuffer = '';
+		let lastThinkingPaint = 0;
+		let thinkingPaintTimer: number | undefined;
+		const THINKING_PAINT_MS = 150;
+		// A redacted thinking block arrived this stretch — real reasoning with no
+		// visible text. It earns an honest time-only "思考了 Ns" row; a stretch
+		// with NEITHER deltas nor a redacted block is just latency (k3 skips
+		// thinking on quick tool-continuation turns) and gets no row at all.
+		let thinkingRedacted = false;
 		// Visible text streamed within the CURRENT turn. If the turn goes on to
 		// call tools, this was narration ("我来梳理一下…"), not the answer — it
 		// relocates into the work block so it neither squats in the answer
@@ -730,11 +741,16 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// shared step boundary.
 			const durationMs = extra?.durationMs ?? Date.now() - (extra?.startedAt ?? stepStart);
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
+			const redacted = kind === 'thinking' && thinkingRedacted;
 			if (kind === 'thinking') {
 				thinkingBuffer = '';
+				thinkingRedacted = false;
 			}
-			// Sub-second thinking stretches without content are noise, not steps.
-			if (kind !== 'thinking' || durationMs >= 1000 || stepDetail !== undefined) {
+			// A thinking row exists only for REAL reasoning: streamed text, or a
+			// redacted block (encrypted but genuine). Contentless stretches are
+			// request latency — mislabeling TTFT as "思考了 11s" was a lie the
+			// live stream made obvious (2026-07-18 review).
+			if (kind !== 'thinking' || stepDetail !== undefined || redacted) {
 				steps.push({
 					kind,
 					label,
@@ -764,14 +780,26 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 		};
 
-		const updateWork = (durationMs?: number): void => {
+		const updateWork = (durationMs?: number, outcome?: 'ok' | 'error'): void => {
 			// Every RUNNING call rides the live view as a synthetic open step —
 			// steps only holds closed ones, which left long tool calls (a 5-minute
 			// SFTP upload, a parallel sub-agent) invisible until they finished.
 			// tool_progress / subagent events refresh each entry's label. Facts
 			// ride along so a running read joins the live rollup, not breaks it.
 			const liveSteps: ISessionWorkStep[] = [...steps];
-			for (const call of openCalls.values()) {
+			// 思考直播 (#14 P1): the CURRENT thinking stretch rides the live view
+			// as a synthetic running step whose detail is the streaming tail —
+			// closeStep collapses it into the usual "思考了 Ns" summary row.
+			if (thinkingBuffer.trim() !== '') {
+				liveSteps.push({
+					kind: 'thinking',
+					label: 'Thinking',
+					durationMs: Date.now() - stepStart,
+					running: true,
+					detail: thinkingBuffer.length > 600 ? thinkingBuffer.slice(-600) : thinkingBuffer,
+				});
+			}
+			for (const [callId, call] of openCalls) {
 				liveSteps.push({
 					kind: 'tool',
 					label: call.label,
@@ -779,9 +807,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 					running: true,
 					tool: call.name,
 					...(call.arg === undefined ? {} : { arg: call.arg }),
+					// A running spawn's synthetic step routes into its child's group
+					// so the live view shows the current action inside the section.
+					...(call.name === 'spawn_agent' ? { agent: callId } : {}),
 				});
 			}
-			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }) };
+			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }), ...(outcome === undefined ? {} : { outcome }) };
 			const messages = session.messages.get();
 			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
@@ -832,8 +863,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 		};
 
 		// Torn down when the run settles, whatever ends it (done event, error,
-		// window unload) — currently just the quit-flush registration.
+		// window unload).
 		const runCleanups: (() => void)[] = [];
+		runCleanups.push(() => {
+			if (thinkingPaintTimer !== undefined) {
+				clearTimeout(thinkingPaintTimer);
+				thinkingPaintTimer = undefined;
+			}
+		});
 
 		// What a killed run leaves in the transcript: the last thing the model was
 		// thinking/doing, distilled from the work steps. A bare "Stopped." erased
@@ -883,7 +920,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 				closeThinkingOrSkip();
 			}
 			const workDuration = Date.now() - workStart;
-			updateWork(workDuration);
+			// 'completed' is the only clean ending — aborts, limits, refusals and
+			// harness errors (reason undefined) all leave the block un-collapsed
+			// with its evidence in view (#14 Q1: failed runs don't tuck away).
+			const runOutcome: 'ok' | 'error' = reason === 'completed' ? 'ok' : 'error';
+			updateWork(workDuration, runOutcome);
 
 			// A run that ends without any text (e.g. the step limit) must not leave a
 			// blank assistant bubble — say what happened, or persist no reply at all.
@@ -986,7 +1027,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 			this.enqueueWrite(async () => {
 				const ref = this.getRef(sessionId);
-				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, steps, timestamp: now.toISOString() });
+				await this.bridge.append(ref, { type: 'message', id: workId, role: 'work', text: '', durationMs: workDuration, outcome: runOutcome, steps, timestamp: now.toISOString() });
 				for (const supersededId of supersededIds) {
 					await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
 				}
@@ -1035,11 +1076,34 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (event?.type === 'stream_retry') {
 				// The attempt restarts from scratch — drop its partial reasoning.
 				thinkingBuffer = '';
+				thinkingRedacted = false;
 				session.reconnect.set({ attempt: event.attempt, maxAttempts: event.maxAttempts });
 				return;
 			}
 			if (event?.type === 'thinking_delta') {
 				thinkingBuffer += event.text;
+				// Deltas arrive at token frequency — paint the live view on a
+				// trailing throttle, never per delta (the 2800-message lesson).
+				const now = Date.now();
+				if (now - lastThinkingPaint >= THINKING_PAINT_MS) {
+					lastThinkingPaint = now;
+					updateWork();
+				} else if (thinkingPaintTimer === undefined) {
+					thinkingPaintTimer = window.setTimeout(
+						() => {
+							thinkingPaintTimer = undefined;
+							lastThinkingPaint = Date.now();
+							if (!finalized) {
+								updateWork();
+							}
+						},
+						THINKING_PAINT_MS - (now - lastThinkingPaint),
+					);
+				}
+				return;
+			}
+			if (event?.type === 'thinking_redacted') {
+				thinkingRedacted = true;
 				return;
 			}
 			if (session.reconnect.get() !== undefined) {
@@ -1108,7 +1172,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 						'tool',
 						call.label,
 						truncateStepDetail(content, event.isError),
-						{ tool: call.name, ...(call.arg === undefined ? {} : { arg: call.arg }), outcome: event.isError ? 'error' : 'ok' },
+						{
+							tool: call.name,
+							...(call.arg === undefined ? {} : { arg: call.arg }),
+							outcome: event.isError ? 'error' : 'ok',
+							// The spawn's own result row belongs to its child's group
+							// (agentId == the spawn's toolUseId) — it carries the real
+							// per-child duration the section header displays.
+							...(call.name === 'spawn_agent' ? { agent: event.toolUseId } : {}),
+						},
 						{ startedAt: call.startedAt, ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }), ...(call.browse === undefined ? {} : { browse: call.browse }) },
 					);
 					openCalls.delete(event.toolUseId);

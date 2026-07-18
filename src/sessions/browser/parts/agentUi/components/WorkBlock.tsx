@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { localize } from '../../../../common/i18n/i18n.js';
 import type { ISessionDataBrowse, ISessionMessage, ISessionWorkStep } from '../../../../services/sessions/common/session.js';
-import { buildWorkRenderItems, presentStep, type WorkRenderItem } from './workRender.js';
+import { buildWorkSections, presentStep, type IWorkAgentGroup, type WorkRenderItem } from './workRender.js';
 
 export interface IWorkBlockProps {
 	readonly message: ISessionMessage;
@@ -14,21 +14,21 @@ export interface IWorkBlockProps {
 }
 
 /**
- * React port of the old createWorkBlock/patchWorkBlock/updateWorkBlockHeader
- * trio — "Worked for 16m 56s ⌄", one collapsible block per agent run. Expand
- * state and the live-elapsed-time anchor used to live in Maps on
- * ConversationView (workExpandOverride/workFirstSeen), keyed by message id so
- * they'd survive a full DOM rebuild on every patch; here the React root IS
- * the row's lifetime, so they're plain local state/ref instead.
+ * "Worked for 16m 56s ⌄" — one collapsible block per agent run (#14 Q1: 块内
+ * 直播 + 完成收口). Live runs render expanded with sections streaming in;
+ * successful completion auto-collapses to one line; FAILED runs stay open
+ * with their evidence (outcome === 'error' blocks the tuck-away). A manual
+ * expand/collapse always wins over the automatic behavior (expandOverride).
  *
- * Steps render through buildWorkRenderItems (#14 P0): consecutive read-class
- * calls fold into one "探索了 X 个文件…" rollup row, tool rows show intent
- * verbs + argument chips derived from persisted step facts — pure functions
- * of the stored data, so replay renders identically to the live run.
+ * Content renders through buildWorkSections: narration steps become section
+ * headers ("说一段 → 做一组"), parallel children de-interleave into per-agent
+ * sub-blocks, main-loop read sweeps fold into rollups — all pure functions of
+ * persisted step facts, so replay matches the live run.
  */
 export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 	const { message, onOpenDataBrowser } = props;
 	const live = message.durationMs === undefined;
+	const failed = message.outcome === 'error';
 
 	// Anchor for the live "worked for Ns" ticker — set once, the first time this
 	// row is seen live. A ref write during render is intentional here (the
@@ -39,35 +39,117 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 		firstSeenRef.current = Date.now();
 	}
 
-	// undefined = no manual override, follow `live` (open while running, closes
-	// on completion). Once the user clicks, their choice sticks regardless of
-	// live state — same semantics as the old workExpandOverride Map.
+	// undefined = no manual override, follow the automatic rule (open while
+	// running or failed, closed after a clean completion). Once the user
+	// clicks, their choice sticks regardless of state.
 	const [expandOverride, setExpandOverride] = useState<boolean | undefined>(undefined);
-	const expanded = expandOverride ?? live;
+	const expanded = expandOverride ?? (live || failed);
 
-	const title = live
-		? localize('conv.workingFor', formatDurationMs(Date.now() - (firstSeenRef.current ?? Date.now())))
-		: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
+	// 收口滚动锚定: when the auto-collapse fires (live → done, no override, not
+	// failed) and the block's head has scrolled above the viewport, anchor back
+	// to it — the transcript must not yank away from under the reader.
+	const rootRef = useRef<HTMLElement | null>(null);
+	const wasLiveRef = useRef(live);
+	useEffect(() => {
+		if (wasLiveRef.current && !live && !failed && expandOverride === undefined) {
+			const root = rootRef.current;
+			if (root && root.getBoundingClientRect().top < 0) {
+				root.scrollIntoView({ block: 'start' });
+			}
+		}
+		wasLiveRef.current = live;
+	}, [live, failed, expandOverride]);
 
-	const items = buildWorkRenderItems(message.steps ?? []);
+	const title = failed && !live ? localize('conv.workInterrupted') : live ? localize('conv.workingFor', formatDurationMs(Date.now() - (firstSeenRef.current ?? Date.now()))) : localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
+
+	const sections = buildWorkSections(message.steps ?? []);
+	const stepCount = (message.steps ?? []).length;
 
 	return (
-		<section className={`conversation-work${live ? ' live' : ''}`} data-message-id={message.id}>
+		<section ref={rootRef} className={`conversation-work${live ? ' live' : ''}${failed ? ' failed' : ''}`} data-message-id={message.id}>
 			<button type="button" className="conversation-work-header" aria-expanded={expanded} onClick={() => setExpandOverride(!expanded)}>
 				{live && <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />}
+				{failed && !live && <span className="codicon codicon-error" aria-hidden="true" />}
 				<span className="conversation-work-title">{title}</span>
+				{failed && !live && <span className="conversation-work-meta">{formatDurationMs(message.durationMs ?? 0)}</span>}
+				{!live && <span className="conversation-work-meta">{localize('conv.workSteps', String(stepCount))}</span>}
 				<span className={`codicon ${expanded ? 'codicon-chevron-down' : 'codicon-chevron-right'}`} aria-hidden="true" />
 			</button>
 			<div className="conversation-work-steps" hidden={!expanded}>
-				{items.map(item =>
-					item.kind === 'rollup' ? (
-						<RollupRow key={`${message.id}:r${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
-					) : (
-						<WorkStepRow key={`${message.id}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
-					)
-				)}
+				{sections.map(section => (
+					<div key={`${message.id}:s${section.firstIndex}`} className="conversation-work-section">
+						{section.title !== undefined && <SectionHeader title={section.title} detail={section.titleDetail} />}
+						<div className={section.title !== undefined ? 'conversation-work-section-body' : undefined}>
+							{section.items.map(item =>
+								item.kind === 'agentGroup' ? (
+									<AgentGroupRow key={`${message.id}:a${item.firstIndex}`} group={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
+								) : item.kind === 'rollup' ? (
+									<RollupRow key={`${message.id}:r${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
+								) : (
+									<WorkStepRow key={`${message.id}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
+								),
+							)}
+						</div>
+					</div>
+				))}
 			</div>
 		</section>
+	);
+}
+
+/** "▸ 环境齐全，开始搭建项目" — the narration promoted to a chapter heading; truncated narrations expand to the full text. */
+function SectionHeader(props: { readonly title: string; readonly detail?: string | undefined }): JSX.Element {
+	const [open, setOpen] = useState(false);
+	if (props.detail === undefined) {
+		return <div className="conversation-work-section-head">{props.title}</div>;
+	}
+	return (
+		<>
+			<button type="button" className="conversation-work-section-head expandable" aria-expanded={open} onClick={() => setOpen(!open)}>
+				{props.title}
+			</button>
+			{open && <pre className="conversation-work-step-detail">{props.detail}</pre>}
+		</>
+	);
+}
+
+interface IAgentGroupRowProps {
+	readonly group: IWorkAgentGroup;
+	readonly messageId: string;
+	readonly onOpenDataBrowser?: ((browse: ISessionDataBrowse) => void) | undefined;
+}
+
+/** "⑃ Explore the renderer workbench… · 4m 43s ⌄" — one child loop, de-interleaved; open while running, tucked when done. */
+function AgentGroupRow(props: IAgentGroupRowProps): JSX.Element {
+	const { group, messageId, onOpenDataBrowser } = props;
+	const [openOverride, setOpenOverride] = useState<boolean | undefined>(undefined);
+	const open = openOverride ?? (group.running || group.error);
+
+	return (
+		<div className={`conversation-work-agent${group.error ? ' error' : ''}`}>
+			<button type="button" className="conversation-work-step-row conversation-work-agent-row" aria-expanded={open} onClick={() => setOpenOverride(!open)}>
+				<span className={`codicon ${group.error ? 'codicon-error' : 'codicon-type-hierarchy-sub'}`} aria-hidden="true" />
+				<span className="conversation-work-step-label">{group.label}</span>
+				{group.running ? (
+					<span className="codicon codicon-loading codicon-modifier-spin conversation-work-step-duration" aria-label={localize('conv.running')} />
+				) : (
+					group.durationMs !== undefined && <span className="conversation-work-step-duration">{formatDurationMs(group.durationMs)}</span>
+				)}
+				<span className={`codicon ${open ? 'codicon-chevron-down' : 'codicon-chevron-right'} conversation-work-step-chevron`} aria-hidden="true" />
+			</button>
+			{open && (
+				<div className="conversation-work-agent-steps">
+					{group.items.map(item =>
+						item.kind === 'rollup' ? (
+							<RollupRow key={`${messageId}:${group.agent}:r${item.steps[0]!.index}`} item={item} messageId={`${messageId}:${group.agent}`} onOpenDataBrowser={onOpenDataBrowser} />
+						) : (
+							<WorkStepRow key={`${messageId}:${group.agent}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
+						),
+					)}
+					{group.endDetail !== undefined && <div className="conversation-work-agent-stats">{group.endDetail}</div>}
+				</div>
+			)}
+		</div>
 	);
 }
 
@@ -126,13 +208,25 @@ interface IWorkStepRowProps {
 /** "读取 ▸src/a.ts · 2s" (structured facts) / "🔧 read_file src/a.ts · 2s" (legacy label) — tool steps expand to their output. */
 function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 	const { step, onOpenDataBrowser } = props;
-	// Keyed by the parent's `key`, not a messageId:index Set entry (the old
-	// stepExpand Set existed only because the DOM version rebuilt every step
-	// row from scratch on every patch) — React's keyed reconciliation already
-	// keeps this instance, and its state, alive across re-renders.
-	const [open, setOpen] = useState(false);
-	const browse = step.browse;
 	const presentation = presentStep(step);
+	// Failed steps open by default — a failed run's evidence must be in view
+	// without a hunt (#14 Q1); everything else starts collapsed.
+	const [open, setOpen] = useState(() => presentation.error && step.detail !== undefined);
+	const browse = step.browse;
+
+	// 思考直播: the CURRENT thinking stretch streams its tail in a clamped
+	// window; closeStep collapses it into the "思考了 Ns" summary row below.
+	if (step.kind === 'thinking' && step.running === true) {
+		return (
+			<div className="conversation-work-step thinking live">
+				<div className="conversation-work-step-row">
+					<span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />
+					<span className="conversation-work-step-label">{localize('conv.thinking')}</span>
+				</div>
+				{step.detail !== undefined && <div className="conversation-work-thinking-stream">{step.detail}</div>}
+			</div>
+		);
+	}
 
 	const icon =
 		step.kind === 'thinking'

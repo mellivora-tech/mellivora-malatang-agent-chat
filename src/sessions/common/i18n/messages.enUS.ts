@@ -77,6 +77,8 @@ export const enUS: Record<MessageKey, string> = {
 	'conv.workingForMS': 'Working for {0}m {1}s',
 	'conv.workingForS': 'Working for {0}s',
 	'conv.thoughtFor': 'Thought for {0}',
+	'conv.workInterrupted': 'Run interrupted',
+	'conv.workSteps': '{0} steps',
 	'conv.rollup.explored': 'Explored {0}',
 	'conv.rollup.files': '{0} files',
 	'conv.rollup.dirs': '{0} folders',

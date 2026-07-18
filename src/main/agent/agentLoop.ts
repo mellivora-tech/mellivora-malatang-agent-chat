@@ -353,6 +353,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 							break;
 						case 'thinking_block':
 							thinkingBlocks.push(event.block);
+							if (event.block.type === 'redacted_thinking') {
+								yield { type: 'thinking_redacted' };
+							}
 							break;
 						case 'tool_use':
 							toolUses.push(event.block);
