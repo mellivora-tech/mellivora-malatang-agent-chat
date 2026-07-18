@@ -700,6 +700,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 		let lastThinkingPaint = 0;
 		let thinkingPaintTimer: number | undefined;
 		const THINKING_PAINT_MS = 150;
+		// A redacted thinking block arrived this stretch — real reasoning with no
+		// visible text. It earns an honest time-only "思考了 Ns" row; a stretch
+		// with NEITHER deltas nor a redacted block is just latency (k3 skips
+		// thinking on quick tool-continuation turns) and gets no row at all.
+		let thinkingRedacted = false;
 		// Visible text streamed within the CURRENT turn. If the turn goes on to
 		// call tools, this was narration ("我来梳理一下…"), not the answer — it
 		// relocates into the work block so it neither squats in the answer
@@ -736,11 +741,16 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// shared step boundary.
 			const durationMs = extra?.durationMs ?? Date.now() - (extra?.startedAt ?? stepStart);
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
+			const redacted = kind === 'thinking' && thinkingRedacted;
 			if (kind === 'thinking') {
 				thinkingBuffer = '';
+				thinkingRedacted = false;
 			}
-			// Sub-second thinking stretches without content are noise, not steps.
-			if (kind !== 'thinking' || durationMs >= 1000 || stepDetail !== undefined) {
+			// A thinking row exists only for REAL reasoning: streamed text, or a
+			// redacted block (encrypted but genuine). Contentless stretches are
+			// request latency — mislabeling TTFT as "思考了 11s" was a lie the
+			// live stream made obvious (2026-07-18 review).
+			if (kind !== 'thinking' || stepDetail !== undefined || redacted) {
 				steps.push({
 					kind,
 					label,
@@ -1066,6 +1076,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (event?.type === 'stream_retry') {
 				// The attempt restarts from scratch — drop its partial reasoning.
 				thinkingBuffer = '';
+				thinkingRedacted = false;
 				session.reconnect.set({ attempt: event.attempt, maxAttempts: event.maxAttempts });
 				return;
 			}
@@ -1089,6 +1100,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 						THINKING_PAINT_MS - (now - lastThinkingPaint),
 					);
 				}
+				return;
+			}
+			if (event?.type === 'thinking_redacted') {
+				thinkingRedacted = true;
 				return;
 			}
 			if (session.reconnect.get() !== undefined) {
