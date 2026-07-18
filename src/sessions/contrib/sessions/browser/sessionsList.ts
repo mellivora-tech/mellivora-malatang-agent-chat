@@ -80,6 +80,11 @@ const SETTINGS_PLACEHOLDERS: Readonly<Record<string, { readonly icon: string; re
 export class SessionsList extends Disposable {
 	private readonly rowSubscriptions = this._register(new DisposableStore());
 	private readonly collapsedSidebarSections = new Set<SidebarTreeSectionId>();
+	/** Project groups the user collapsed, by projectId — the render is a full
+	 *  DOM rebuild (any session's status/isRead/changesSummary change triggers
+	 *  it), so collapse state must live OUTSIDE the DOM or every rebuild pops
+	 *  collapsed groups back open (same family as the 5ed5bff scroll fix). */
+	private readonly collapsedProjectGroups = new Set<string>();
 	private settingsSection = 'general';
 	private closeSettings: (() => void) | undefined;
 	private settingsNavElement: HTMLElement | undefined;
@@ -302,7 +307,7 @@ export class SessionsList extends Disposable {
 		for (const project of this.options.projectsService?.projects.get() ?? []) {
 			knownProjectIds.add(project.id);
 			const rows = unpinned.filter(session => session.projectId === project.id).map(toRow);
-			projects.push({ id: project.id, name: project.name, count: rows.length, expanded: true, rows });
+			projects.push({ id: project.id, name: project.name, count: rows.length, expanded: !this.collapsedProjectGroups.has(project.id), rows });
 		}
 
 		// Sessions without a project (or whose project vanished) collect into
@@ -433,6 +438,14 @@ export class SessionsList extends Disposable {
 
 		toggle.addEventListener('click', () => {
 			const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+			// Record the choice BEFORE touching the DOM — the widget-level Set is
+			// what survives the next full rebuild; the attribute flip is just the
+			// immediate visual response.
+			if (expanded) {
+				this.collapsedProjectGroups.delete(project.id);
+			} else {
+				this.collapsedProjectGroups.add(project.id);
+			}
 			toggle.setAttribute('aria-expanded', String(expanded));
 			rows.hidden = !expanded;
 		});
