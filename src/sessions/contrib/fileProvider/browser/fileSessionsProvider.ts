@@ -667,6 +667,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		let stepStart = workStart;
 		let openToolLabel: string | undefined;
 		let openToolName: string | undefined;
+		// The open call's most telling argument — persisted on the closed step as
+		// a structured fact (#14 Q3) so the renderer can derive verb+chip rows and
+		// read-rollups deterministically on replay.
+		let openToolArg: string | undefined;
 		// query_data_source / render_data: coordinates ride the step so the UI
 		// can offer "在数据浏览器打开" (chat → data panel hand-off).
 		let openToolBrowse: ISessionDataBrowse | undefined;
@@ -697,11 +701,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 		let sentTranscript: readonly IAgentMessage[] = [];
 		let pendingAnchor: ISessionCompactionAnchorData | undefined;
 		// Sub-agent narration state: the spawn step's own label (restored when the
-		// child ends) and the child's currently-running action.
+		// child ends) and the child's currently-running action. The action's facts
+		// carry the CHILD's real tool name (+ via:'subagent') so a child's read
+		// sweep folds into rollups like the main loop's own — without them a
+		// spawn-heavy run is a 250-row wall of ⑃ steps (seen on real data).
 		let subagentSpawnLabel: string | undefined;
 		let subagentAction: string | undefined;
+		let subagentActionFacts: { tool: string; arg?: string; via: 'subagent' } | undefined;
 
-		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string): void => {
+		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string, facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent' }): void => {
 			const durationMs = Date.now() - stepStart;
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
 			if (kind === 'thinking') {
@@ -715,6 +723,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 					durationMs,
 					...(stepDetail === undefined ? {} : { detail: stepDetail }),
 					...(kind === 'tool' && openToolBrowse ? { browse: openToolBrowse } : {}),
+					...(facts?.tool === undefined ? {} : { tool: facts.tool }),
+					...(facts?.arg === undefined ? {} : { arg: facts.arg }),
+					...(facts?.outcome === undefined ? {} : { outcome: facts.outcome }),
+					...(facts?.via === undefined ? {} : { via: facts.via }),
 				});
 			}
 			if (kind === 'tool') {
@@ -742,7 +754,21 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// upload, a sub-agent) invisible until they finished. tool_progress
 			// events refresh openToolLabel, so this row is where progress renders.
 			const liveSteps: ISessionWorkStep[] =
-				openToolLabel !== undefined ? [...steps, { kind: 'tool', label: openToolLabel, durationMs: Date.now() - stepStart, running: true }] : [...steps];
+				openToolLabel !== undefined
+					? [
+							...steps,
+							{
+								kind: 'tool',
+								label: openToolLabel,
+								durationMs: Date.now() - stepStart,
+								running: true,
+								// Structured facts ride the synthetic open step too, so a
+								// running read joins the live rollup instead of breaking it.
+								...(openToolName === undefined ? {} : { tool: openToolName }),
+								...(openToolArg === undefined ? {} : { arg: openToolArg }),
+							},
+						]
+					: [...steps];
 			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }) };
 			const messages = session.messages.get();
 			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
@@ -828,9 +854,16 @@ export class FileSessionsProvider implements ISessionsProvider {
 			session.pendingApproval.set(undefined);
 			session.reconnect.set(undefined);
 			if (openToolLabel !== undefined) {
-				closeStep('tool', openToolLabel);
+				// A run ending with the call still open (abort, error) — the step
+				// closes without a result, so its outcome is honestly an error.
+				closeStep('tool', openToolLabel, undefined, {
+					...(openToolName === undefined ? {} : { tool: openToolName }),
+					...(openToolArg === undefined ? {} : { arg: openToolArg }),
+					outcome: 'error',
+				});
 				openToolLabel = undefined;
 				openToolName = undefined;
+				openToolArg = undefined;
 			} else {
 				closeThinkingOrSkip();
 			}
@@ -1030,6 +1063,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				}
 				openToolLabel = describeWorkTool(event.name, event.input);
 				openToolName = event.name;
+				openToolArg = workToolArg(event.input);
 				openToolBrowse = parseBrowsePayload(event.name, event.input);
 				updateWork();
 			} else if (event?.type === 'tool_result') {
@@ -1045,9 +1079,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 							content = content.replace(RENDERED_TABLE_MARKER, '');
 						}
 					}
-					closeStep('tool', openToolLabel, truncateStepDetail(content, event.isError));
+					closeStep('tool', openToolLabel, truncateStepDetail(content, event.isError), {
+						...(openToolName === undefined ? {} : { tool: openToolName }),
+						...(openToolArg === undefined ? {} : { arg: openToolArg }),
+						outcome: event.isError ? 'error' : 'ok',
+					});
 					openToolLabel = undefined;
 					openToolName = undefined;
+					openToolArg = undefined;
 					updateWork();
 				}
 			} else if (event?.type === 'tool_progress') {
@@ -1062,22 +1101,26 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// spawn label is restored then, so the spawn's own tool_result still
 				// closes a matching step.
 				subagentSpawnLabel = openToolLabel;
-				closeStep('tool', `子代理 ⑃ ${firstLine(event.task)}`);
+				closeStep('tool', `子代理 ⑃ ${firstLine(event.task)}`, undefined, { tool: 'spawn_agent', arg: firstLine(event.task) });
 				openToolLabel = '子代理启动中…';
 				updateWork();
 			} else if (event?.type === 'subagent_tool') {
 				if (subagentAction !== undefined) {
-					closeStep('tool', subagentAction);
+					closeStep('tool', subagentAction, undefined, subagentActionFacts ?? { tool: 'subagent' });
 				}
 				subagentAction = `⑃ ${event.summary}`;
+				// summary is "name arg" by construction; recover the arg for the chip.
+				const childArg = event.summary.startsWith(`${event.name} `) ? firstLine(event.summary.slice(event.name.length + 1)) : undefined;
+				subagentActionFacts = { tool: event.name, ...(childArg === undefined || childArg === '' ? {} : { arg: childArg }), via: 'subagent' };
 				openToolLabel = subagentAction;
 				updateWork();
 			} else if (event?.type === 'subagent_end') {
 				if (subagentAction !== undefined) {
-					closeStep('tool', subagentAction);
+					closeStep('tool', subagentAction, undefined, subagentActionFacts ?? { tool: 'subagent' });
 					subagentAction = undefined;
+					subagentActionFacts = undefined;
 				}
-				closeStep('tool', `子代理结束 · ${event.reason}`, `${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`);
+				closeStep('tool', `子代理结束 · ${event.reason}`, `${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`, { tool: 'subagent', outcome: 'ok' });
 				openToolLabel = subagentSpawnLabel ?? openToolLabel;
 				subagentSpawnLabel = undefined;
 				updateWork();
@@ -1270,11 +1313,19 @@ function parseBrowsePayload(name: string, input: unknown): ISessionDataBrowse | 
 	return typeof record['source'] === 'string' && typeof record['sql'] === 'string' && record['sql'].trim() !== '' ? { source: record['source'], sql: record['sql'] } : undefined;
 }
 
-/** Short human label for a tool step: the tool plus its most telling argument. */
-function describeWorkTool(name: string, input: unknown): string {
+/** The most telling argument of a tool call, first-line bounded — the structured `arg` fact on work steps (#14 Q3). */
+export function workToolArg(input: unknown): string | undefined {
 	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
-	const arg = [record['command'], record['path'], record['pattern'], record['task'], record['component']].find(value => typeof value === 'string' && value !== '');
-	return typeof arg === 'string' ? `${name} ${firstLine(arg)}` : name;
+	const arg = [record['command'], record['path'], record['pattern'], record['task'], record['component'], record['sql'], record['source']].find(
+		value => typeof value === 'string' && value !== ''
+	);
+	return typeof arg === 'string' ? firstLine(arg) : undefined;
+}
+
+/** Short human label for a tool step: the tool plus its most telling argument. Kept as the legacy-render fallback. */
+function describeWorkTool(name: string, input: unknown): string {
+	const arg = workToolArg(input);
+	return arg !== undefined ? `${name} ${arg}` : name;
 }
 
 /** First line only, bounded — multi-line tasks/commands must not blow up a one-line step label. */

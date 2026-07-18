@@ -684,6 +684,50 @@ button.conversation-work-step-row:hover {
 	font-variant-numeric: tabular-nums;
 }
 
+/* Intent verb + argument chip (#14 P0) — the verb reads as prose, the argument as code. */
+.conversation-work-step-verb {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-work-step-chip {
+	margin-left: var(--vscode-agents-space-6);
+	padding: 0 var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-radius-control);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Structured rows carry the verb in normal prose — undo the legacy all-mono tool row. */
+.conversation-work-step.tool .conversation-work-step-label:has(.conversation-work-step-verb) {
+	font-family: var(--vscode-agents-font-ui);
+	font-size: inherit;
+	display: inline-flex;
+	align-items: baseline;
+	min-width: 0;
+}
+
+/* Failed tool call — the row's icon and verb speak danger, the detail already carries [error]. */
+.conversation-work-step.error .codicon-error,
+.conversation-work-step.error .conversation-work-step-verb {
+	color: var(--vscode-agents-color-danger);
+}
+
+/* Read-class rollup: "探索了 8 个文件、2 个目录 · 3 次检索" with the folded rows indented beneath. */
+.conversation-work-rollup-row .conversation-work-step-label {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-work-rollup-steps {
+	margin-left: var(--vscode-agents-space-20);
+	border-left: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	padding-left: var(--vscode-agents-space-6);
+}
+
 /* "在数据浏览器打开" on query_data_source steps — a quiet chip beside the label. */
 .conversation-work-step-browse {
 	-webkit-appearance: none;

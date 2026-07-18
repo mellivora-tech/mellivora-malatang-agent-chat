@@ -45,6 +45,11 @@ export interface ISessionWorkStepData {
 	readonly label: string;
 	readonly durationMs: number;
 	readonly detail?: string;
+	/** Structured facts for replayable rendering (#14 Q3); absent on legacy records. */
+	readonly tool?: string;
+	readonly arg?: string;
+	readonly outcome?: 'ok' | 'error';
+	readonly via?: 'subagent';
 }
 
 /** A structured reference attached to a user message (@-mentioned file/folder, a stored image, or a $-mentioned skill). */
