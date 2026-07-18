@@ -65,6 +65,17 @@ export interface ISessionWorkStep {
 	readonly running?: boolean;
 	/** query_data_source steps only: powers the "在数据浏览器打开" affordance. */
 	readonly browse?: ISessionDataBrowse;
+	/**
+	 * Structured facts for replayable rendering (#14 Q3) — the renderer derives
+	 * verbs/chips/rollups/status from these, never persists derived output.
+	 * Absent on legacy records, which fall back to the pre-rendered `label`.
+	 */
+	/** Raw tool name as the agent invoked it (e.g. 'read_file'); 'subagent' for child-loop synthetic steps. */
+	readonly tool?: string;
+	/** The most telling argument (path / command / pattern…), first-line bounded. */
+	readonly arg?: string;
+	/** Result state of a closed tool step. */
+	readonly outcome?: 'ok' | 'error';
 }
 
 /**
