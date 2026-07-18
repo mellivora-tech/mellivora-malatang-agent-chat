@@ -152,6 +152,27 @@ test('replayability: rendering is a pure function of persisted facts — same in
 	assert.ok(steps.every(step => step.running === undefined));
 });
 
+test('child-loop read sweeps fold into rollups; spawn and end steps break the group', () => {
+	const child = (name: string, arg: string): ISessionWorkStep => ({ kind: 'tool', label: `⑃ ${name} ${arg}`, durationMs: 50, tool: name, arg, via: 'subagent' });
+	const items = buildWorkRenderItems([
+		{ kind: 'tool', label: '子代理 ⑃ 梳理 src', durationMs: 10, tool: 'spawn_agent', arg: '梳理 src' },
+		child('read_file', 'a.ts'),
+		child('read_file', 'b.ts'),
+		child('list_dir', 'src/'),
+		{ kind: 'tool', label: '⑃ bash pnpm test', durationMs: 900, tool: 'bash', arg: 'pnpm test', via: 'subagent' },
+		child('read_file', 'c.ts'),
+		child('grep', 'foo'),
+		{ kind: 'tool', label: '子代理结束 · done', durationMs: 5, tool: 'subagent', outcome: 'ok' },
+	]);
+	assert.deepEqual(
+		items.map(item => item.kind),
+		['step', 'rollup', 'step', 'rollup', 'step']
+	);
+	const presentation = presentStep(child('read_file', 'a.ts'));
+	assert.equal(presentation.sub, true);
+	assert.equal(presentation.verbKey, TOOL_VERB_KEYS['read_file']);
+});
+
 test('presentation derives verb + chip for structured steps and flags errors', () => {
 	const failed = tool('bash', 'pnpm typecheck', { outcome: 'error' });
 	const presentation = presentStep(failed);

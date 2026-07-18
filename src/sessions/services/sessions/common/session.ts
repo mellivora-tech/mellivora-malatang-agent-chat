@@ -70,12 +70,14 @@ export interface ISessionWorkStep {
 	 * verbs/chips/rollups/status from these, never persists derived output.
 	 * Absent on legacy records, which fall back to the pre-rendered `label`.
 	 */
-	/** Raw tool name as the agent invoked it (e.g. 'read_file'); 'subagent' for child-loop synthetic steps. */
+	/** Raw tool name as the agent invoked it (e.g. 'read_file'); child-loop actions carry the CHILD's real tool so read sweeps fold into rollups. */
 	readonly tool?: string;
 	/** The most telling argument (path / command / pattern…), first-line bounded. */
 	readonly arg?: string;
 	/** Result state of a closed tool step. */
 	readonly outcome?: 'ok' | 'error';
+	/** The step ran inside a spawned child loop — rendered with the ⑃ marker the label carries. */
+	readonly via?: 'subagent';
 }
 
 /**

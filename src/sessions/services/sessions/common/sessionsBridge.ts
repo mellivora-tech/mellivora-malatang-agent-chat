@@ -49,6 +49,7 @@ export interface ISessionWorkStepData {
 	readonly tool?: string;
 	readonly arg?: string;
 	readonly outcome?: 'ok' | 'error';
+	readonly via?: 'subagent';
 }
 
 /** A structured reference attached to a user message (@-mentioned file/folder, a stored image, or a $-mentioned skill). */

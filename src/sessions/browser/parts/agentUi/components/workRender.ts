@@ -53,6 +53,8 @@ export interface IWorkStepPresentation {
 	readonly chip?: string;
 	/** Failed tool call — legacy records are recognized by their '[error]' detail marker. */
 	readonly error: boolean;
+	/** Ran inside a spawned child loop — the row keeps the ⑃ marker. */
+	readonly sub?: boolean;
 }
 
 /**
@@ -99,7 +101,7 @@ export function presentStep(step: ISessionWorkStep): IWorkStepPresentation {
 		return { error };
 	}
 	const chip = stepArg(step);
-	return { verbKey, ...(chip === undefined ? {} : { chip }), error };
+	return { verbKey, ...(chip === undefined ? {} : { chip }), error, ...(step.via === 'subagent' ? { sub: true } : {}) };
 }
 
 /** One rendered row: a plain step, or a rollup of consecutive read-class steps. */

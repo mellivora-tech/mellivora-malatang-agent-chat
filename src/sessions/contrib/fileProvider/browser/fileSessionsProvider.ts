@@ -701,11 +701,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 		let sentTranscript: readonly IAgentMessage[] = [];
 		let pendingAnchor: ISessionCompactionAnchorData | undefined;
 		// Sub-agent narration state: the spawn step's own label (restored when the
-		// child ends) and the child's currently-running action.
+		// child ends) and the child's currently-running action. The action's facts
+		// carry the CHILD's real tool name (+ via:'subagent') so a child's read
+		// sweep folds into rollups like the main loop's own — without them a
+		// spawn-heavy run is a 250-row wall of ⑃ steps (seen on real data).
 		let subagentSpawnLabel: string | undefined;
 		let subagentAction: string | undefined;
+		let subagentActionFacts: { tool: string; arg?: string; via: 'subagent' } | undefined;
 
-		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string, facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error' }): void => {
+		const closeStep = (kind: ISessionWorkStep['kind'], label: string, detail?: string, facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent' }): void => {
 			const durationMs = Date.now() - stepStart;
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
 			if (kind === 'thinking') {
@@ -722,6 +726,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(facts?.tool === undefined ? {} : { tool: facts.tool }),
 					...(facts?.arg === undefined ? {} : { arg: facts.arg }),
 					...(facts?.outcome === undefined ? {} : { outcome: facts.outcome }),
+					...(facts?.via === undefined ? {} : { via: facts.via }),
 				});
 			}
 			if (kind === 'tool') {
@@ -1101,15 +1106,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 				updateWork();
 			} else if (event?.type === 'subagent_tool') {
 				if (subagentAction !== undefined) {
-					closeStep('tool', subagentAction, undefined, { tool: 'subagent' });
+					closeStep('tool', subagentAction, undefined, subagentActionFacts ?? { tool: 'subagent' });
 				}
 				subagentAction = `⑃ ${event.summary}`;
+				// summary is "name arg" by construction; recover the arg for the chip.
+				const childArg = event.summary.startsWith(`${event.name} `) ? firstLine(event.summary.slice(event.name.length + 1)) : undefined;
+				subagentActionFacts = { tool: event.name, ...(childArg === undefined || childArg === '' ? {} : { arg: childArg }), via: 'subagent' };
 				openToolLabel = subagentAction;
 				updateWork();
 			} else if (event?.type === 'subagent_end') {
 				if (subagentAction !== undefined) {
-					closeStep('tool', subagentAction, undefined, { tool: 'subagent' });
+					closeStep('tool', subagentAction, undefined, subagentActionFacts ?? { tool: 'subagent' });
 					subagentAction = undefined;
+					subagentActionFacts = undefined;
 				}
 				closeStep('tool', `子代理结束 · ${event.reason}`, `${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`, { tool: 'subagent', outcome: 'ok' });
 				openToolLabel = subagentSpawnLabel ?? openToolLabel;

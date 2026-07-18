@@ -148,7 +148,7 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 			<span className={`codicon ${icon}`} aria-hidden="true" />
 			{step.kind === 'tool' && presentation.verbKey !== undefined ? (
 				<span className="conversation-work-step-label">
-					<span className="conversation-work-step-verb">{localize(presentation.verbKey)}</span>
+					<span className="conversation-work-step-verb">{`${presentation.sub ? '⑃ ' : ''}${localize(presentation.verbKey)}`}</span>
 					{presentation.chip !== undefined && <span className="conversation-work-step-chip">{presentation.chip}</span>}
 				</span>
 			) : (
