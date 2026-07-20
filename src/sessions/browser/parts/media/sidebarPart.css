@@ -1503,29 +1503,6 @@
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-.sessions-models-select {
-	position: relative;
-	display: flex;
-}
-
-.sessions-models-select select {
-	flex: 1;
-	appearance: none;
-	-webkit-appearance: none;
-	padding-right: var(--vscode-agents-space-32);
-	cursor: default;
-}
-
-.sessions-models-select-chevron {
-	position: absolute;
-	top: 50%;
-	right: var(--vscode-agents-space-10);
-	transform: translateY(-50%);
-	pointer-events: none;
-	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-fontSize-label2);
-}
-
 .sessions-models-error {
 	color: var(--vscode-agents-color-danger);
 	font-size: var(--vscode-agents-fontSize-label1);
@@ -1692,21 +1669,6 @@
 
 .sessions-settings-toggle.on .sessions-settings-toggle-knob {
 	transform: translateX(16px);
-}
-
-/* Dropdown + button controls reuse the model select / action button styling */
-.sessions-settings-dropdown {
-	height: var(--vscode-agents-size-control);
-	padding: 0 var(--vscode-agents-space-32) 0 var(--vscode-agents-space-10);
-	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
-	border-radius: var(--vscode-agents-radius-control);
-	background: var(--vscode-agents-color-input-background);
-	color: var(--vscode-agents-color-text-primary);
-	font: inherit;
-	appearance: none;
-	-webkit-appearance: none;
-	cursor: default;
-	box-sizing: border-box;
 }
 
 .sessions-settings-btn {

@@ -1601,24 +1601,29 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await expect(dialog.locator('.sessions-settings-main')).toHaveCSS('overflow-y', 'auto');
 
 	// Appearance offers a real theme control that re-themes the app live.
-	// Two dropdowns live here now (theme + language, #9 P2) — target the
-	// theme one by position; the language row is asserted separately.
+	// Dropdowns are the self-drawn Dropdown component (no native <select> —
+	// the OS popup cannot be themed): open the menu, click the option.
 	await dialog.locator('[data-settings-nav-id="appearance"]').click();
 	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('外观');
-	const themeDropdown = dialog.locator('.sessions-settings-dropdown').first();
-	await expect(themeDropdown).toBeVisible();
-	await themeDropdown.selectOption('light');
+	const modeDropdown = dialog.locator('.sessions-dropdown').first();
+	await expect(modeDropdown).toBeVisible();
+	await modeDropdown.click();
+	await page.locator('.sessions-dropdown-menu .sessions-dropdown-item', { hasText: '浅色' }).click();
 	await expect(page.locator('.agent-sessions-workbench')).toHaveAttribute('data-agents-theme', 'light');
-	await themeDropdown.selectOption('dark');
+	await modeDropdown.click();
+	await page.locator('.sessions-dropdown-menu .sessions-dropdown-item', { hasText: '深色' }).click();
+	await expect(page.locator('.agent-sessions-workbench')).toHaveAttribute('data-agents-theme', 'dark');
 
 	// Preset slots (#8 P3): one dropdown per polarity beside the mode picker.
-	await expect(dialog.locator('.sessions-settings-dropdown')).toHaveCount(4);
+	await expect(dialog.locator('.sessions-dropdown')).toHaveCount(4);
 	await expect(dialog.locator('.sessions-appearance-swatch').first()).toBeVisible();
 
-	// Language picker (#9 P2) lives in its own section: three choices.
-	const languageDropdown = dialog.locator('.sessions-settings-section').nth(1).locator('.sessions-settings-dropdown');
+	// Language picker (#9 P2) lives in its own section: three self-drawn choices.
+	const languageDropdown = dialog.locator('.sessions-settings-section').nth(1).locator('.sessions-dropdown');
 	await expect(languageDropdown).toBeVisible();
-	await expect(languageDropdown.locator('option')).toHaveCount(3);
+	await languageDropdown.click();
+	await expect(page.locator('.sessions-dropdown-menu .sessions-dropdown-item')).toHaveCount(3);
+	await page.keyboard.press('Escape');
 
 	// Models is a real section too.
 	await dialog.locator('[data-settings-nav-id="models"]').click();

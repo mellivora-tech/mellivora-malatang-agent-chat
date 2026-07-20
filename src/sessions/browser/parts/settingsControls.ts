@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { append } from '../../base/browser/dom.js';
+import { Dropdown } from './dropdown.js';
 
 /**
  * The reusable Cursor-style settings language: a section (muted label + card)
@@ -78,23 +79,13 @@ export interface ISettingsOption {
 	readonly label: string;
 }
 
-export function settingsDropdown(parent: HTMLElement, options: readonly ISettingsOption[], value: string, onChange: (value: string) => void): HTMLSelectElement {
-	const wrap = append(parent, document.createElement('div'));
-	wrap.className = 'sessions-models-select';
-	const select = append(wrap, document.createElement('select')) as HTMLSelectElement;
-	select.className = 'sessions-settings-dropdown';
-	for (const option of options) {
-		const element = append(select, document.createElement('option')) as HTMLOptionElement;
-		element.value = option.value;
-		element.textContent = option.label;
-	}
-	select.value = value;
-	select.addEventListener('change', () => onChange(select.value));
-
-	const chevron = append(wrap, document.createElement('span'));
-	chevron.className = 'codicon codicon-chevron-down sessions-models-select-chevron';
-	chevron.setAttribute('aria-hidden', 'true');
-	return select;
+export function settingsDropdown(parent: HTMLElement, options: readonly ISettingsOption[], value: string, onChange: (value: string) => void): Dropdown {
+	// The self-drawn Dropdown, not a native <select>: the OS renders a native
+	// select's popup and no theme token reaches it — same reasoning as the
+	// project-config form fields, now unified (2026-07-20).
+	const dropdown = new Dropdown({ items: options, value, onChange });
+	parent.appendChild(dropdown.element);
+	return dropdown;
 }
 
 export function settingsButton(parent: HTMLElement, label: string, onClick: () => void): HTMLButtonElement {
