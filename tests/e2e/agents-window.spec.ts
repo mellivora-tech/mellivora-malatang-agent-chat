@@ -2032,8 +2032,9 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	const changesView = page.locator('.auxiliary-view[data-tab-id="review"] .changes-view');
 	await expect(changesView).toBeVisible();
 	await expect(changesView.locator('.changes-view-subtitle')).toHaveText('hello');
-	// A fresh mock conversation has no changes summary — the empty state shows.
-	await expect(changesView.locator('.changes-empty')).toContainText('No changed files for this session');
+	// A fresh mock conversation has no changes summary — the empty state shows
+	// (localized since #13 P2 swept the Review tab's hardcoded strings).
+	await expect(changesView.locator('.changes-empty')).toContainText('该会话没有文件改动');
 
 	await expect(page.locator('.monaco-workbench.agent-sessions-workbench')).toHaveClass(/side-pane-open/);
 	await assertSidePaneDockedToStage(page);

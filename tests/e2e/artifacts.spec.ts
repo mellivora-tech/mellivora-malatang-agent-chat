@@ -21,6 +21,13 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
 const DOCUMENT_FILE = '部署梳理-deadbeef.md';
 const DOCUMENT_FULL_TEXT = '# 部署梳理\n\n完整的梳理内容正文，比摘要长得多。';
 
+// The run-end diff snapshot (#13 P2): persisted per-file detail on the state
+// entry (the Review tab's data) plus a change-set index line (the panel row).
+const CHANGED_FILES = [
+	{ path: 'src/app/main.ts', added: 10, removed: 3 },
+	{ path: 'docs/notes.md', added: 2, removed: 0, status: 'untracked' },
+];
+
 async function seedSession(dataDir: string): Promise<void> {
 	const now = new Date().toISOString();
 	await mkdir(join(dataDir, 'sessions'), { recursive: true });
@@ -55,12 +62,33 @@ async function seedSession(dataDir: string): Promise<void> {
 			text: '摘要：部署链路问题在网关配置。\n\n（全文见下方产物卡）\n[完整梳理文档: 部署梳理]',
 			attachments: [{ kind: 'document', path: `media/artifacts-sess/${DOCUMENT_FILE}`, label: '部署梳理' }],
 		}),
-		JSON.stringify({ type: 'state', timestamp: now, status: 2, title: 'artifacts session' }),
+		JSON.stringify({
+			type: 'state',
+			timestamp: now,
+			status: 2,
+			title: 'artifacts session',
+			changesSummary: { files: 2, additions: 12, deletions: 3, changedFiles: CHANGED_FILES },
+		}),
 	];
 	await writeFile(join(dataDir, 'sessions', 'artifacts-sess.jsonl'), `${lines.join('\n')}\n`, 'utf8');
 	// The split answer's full text, exactly where storeSessionDocument puts it.
 	await mkdir(join(dataDir, 'sessions', 'media', 'artifacts-sess'), { recursive: true });
 	await writeFile(join(dataDir, 'sessions', 'media', 'artifacts-sess', DOCUMENT_FILE), DOCUMENT_FULL_TEXT, 'utf8');
+	// A change-set row as the run-end capture appends it (#13 P2). The mount-time
+	// rebuild wipes and rescans this index — the row can only survive via the
+	// preserved-kinds carry-over, so its presence below proves that logic.
+	await writeFile(
+		join(dataDir, 'artifacts.jsonl'),
+		`${JSON.stringify({
+			id: 'artifacts-sess:changeset:deadbeef',
+			kind: 'change-set',
+			sessionId: 'artifacts-sess',
+			title: '2 个文件改动',
+			createdAt: now,
+			payload: { type: 'change-set', files: CHANGED_FILES.map(({ path, added, removed }) => ({ path, added, removed })) },
+		})}\n`,
+		'utf8',
+	);
 }
 
 test('artifacts tab backfills existing sessions, groups rows by session, and a ui-card row jumps to the highlighted message', async () => {
@@ -98,11 +126,12 @@ test('artifacts tab backfills existing sessions, groups rows by session, and a u
 		await page.locator('.auxiliary-empty-card').filter({ hasText: '产出物' }).click();
 		await expect(page.locator('.auxiliary-view[data-tab-id="artifacts"]')).toBeVisible();
 
-		// No artifacts.jsonl was seeded — rows can only come from the mount-time
-		// rebuild scanning the session transcript (the backfill acceptance).
+		// Message/media rows come from the mount-time rebuild scanning the session
+		// transcript (the backfill acceptance); the change-set row rides through
+		// the same rebuild only via preservation.
 		const group = page.locator('.artifacts-group[data-session-id="artifacts-sess"]');
 		await expect(group.locator('.artifacts-group-header')).toHaveText('artifacts session');
-		await expect(group.locator('.artifact-row')).toHaveCount(3);
+		await expect(group.locator('.artifact-row')).toHaveCount(4);
 
 		// The rebuild's media scan regenerates the document row from its .md file.
 		const docRow = group.locator('.artifact-row[data-artifact-kind="document"]');
@@ -126,6 +155,25 @@ test('artifacts tab backfills existing sessions, groups rows by session, and a u
 		await expect(target).toBeInViewport();
 		// The flash is temporary — the transcript returns to its normal styling.
 		await expect(target).not.toHaveClass(/artifact-reveal-highlight/, { timeout: 5000 });
+
+		// change-set (#13 P2): the row survived the rebuild (preserved kind),
+		// wears the diff codicon, and opens the Review tab with the REAL file
+		// list — paths and per-file +/− from the persisted summary, no
+		// placeholder names.
+		const changeSetRow = group.locator('.artifact-row[data-artifact-kind="change-set"]');
+		await expect(changeSetRow.locator('.codicon-diff')).toBeVisible();
+		await expect(changeSetRow.locator('.artifact-row-title')).toHaveText('2 个文件改动');
+		await changeSetRow.click();
+		const reviewView = page.locator('.auxiliary-view[data-tab-id="review"]');
+		await expect(reviewView).toBeVisible();
+		const fileRows = reviewView.locator('.changes-file-row');
+		await expect(fileRows).toHaveCount(2);
+		await expect(fileRows.nth(0).locator('.changes-file-name')).toHaveText('src/app/main.ts');
+		await expect(fileRows.nth(0).locator('.changes-file-added')).toHaveText('+10');
+		await expect(fileRows.nth(0).locator('.changes-file-removed')).toHaveText('-3');
+		await expect(fileRows.nth(1).locator('.changes-file-name')).toHaveText('docs/notes.md');
+		await expect(fileRows.nth(1).locator('.changes-file-added')).toHaveText('+2');
+		await expect(reviewView.locator('.changes-summary-stat.additions .changes-summary-value')).toHaveText('+12');
 
 		expect(errors, errors.join('\n')).toEqual([]);
 	} finally {

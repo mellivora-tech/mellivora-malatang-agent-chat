@@ -513,6 +513,16 @@ export const zhCN = {
 	'conv.docCollapse': '收起全文',
 	'conv.docLoading': '加载中…',
 	'conv.docMissing': '文档文件已不存在',
+
+	// --- 评审页签真实文件列表（#13 P2）---
+	'changes.title': '代码改动',
+	'changes.noSession': '暂无活动会话',
+	'changes.stat.files': '文件',
+	'changes.stat.additions': '新增',
+	'changes.stat.deletions': '删除',
+	'changes.empty.noChanges': '该会话没有文件改动',
+	'changes.empty.openSession': '打开会话以查看改动',
+	'changes.list.stale': '文件明细暂缺——下次运行结束后会补上',
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

@@ -240,7 +240,7 @@ test('rebuildArtifacts regenerates the same index the live hooks produced (expor
 	}
 });
 
-test('rebuildArtifacts preserves export entries — the index is their only record (P1 panel rebuilds on every mount)', async () => {
+test('rebuildArtifacts preserves export AND change-set entries — the index is their only record (P1 panel rebuilds on every mount)', async () => {
 	const root = await createTempRoot();
 	try {
 		await mkdir(join(root, 'sessions'), { recursive: true });
@@ -250,12 +250,53 @@ test('rebuildArtifacts preserves export entries — the index is their only reco
 			'utf8',
 		);
 		await appendArtifact(root, entry({ id: 's1:export:abc', kind: 'export', title: 'migration.sql', payload: { type: 'export', path: '/somewhere/migration.sql' } }));
-		assert.equal((await listArtifacts(root)).length, 1);
+		// change-set snapshots transient working-tree state — no transcript line
+		// can regenerate it, so it rides the same preservation (#13 P2).
+		await appendArtifact(
+			root,
+			entry({
+				id: 's1:changeset:deadbeef',
+				kind: 'change-set',
+				title: '1 个文件改动',
+				payload: { type: 'change-set', files: [{ path: 'src/a.ts', added: 3, removed: 1 }] },
+			}),
+		);
+		assert.equal((await listArtifacts(root)).length, 2);
 
 		await rebuildArtifacts(root);
 		const after = await listArtifacts(root);
-		assert.equal(after.length, 1, 'the export row survived the rebuild');
-		assert.equal(after[0]!.kind, 'export');
+		assert.equal(after.length, 2, 'export and change-set rows survived the rebuild');
+		assert.deepEqual(after.map(artifact => artifact.kind).sort(), ['change-set', 'export']);
+		const changeSet = after.find(artifact => artifact.kind === 'change-set');
+		assert.deepEqual(changeSet?.payload, { type: 'change-set', files: [{ path: 'src/a.ts', added: 3, removed: 1 }] });
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('change-set snapshots with identical content fold to one row; changed content is a new row', async () => {
+	const root = await createTempRoot();
+	try {
+		const payload = { type: 'change-set' as const, files: [{ path: 'src/a.ts', added: 3, removed: 1 }] };
+		await appendArtifact(root, entry({ id: 's1:changeset:aaaa0001', kind: 'change-set', title: '1 个文件改动', payload }));
+		// A restart loses the renderer-side gate — the same content appended
+		// again must still collapse (same content hash → same id → fold).
+		await appendArtifact(root, entry({ id: 's1:changeset:aaaa0001', kind: 'change-set', title: '1 个文件改动', createdAt: '2026-07-20T12:00:00.000Z', payload }));
+		const deduped = await listArtifacts(root);
+		assert.equal(deduped.length, 1);
+		assert.equal(deduped[0]!.createdAt, '2026-07-20T12:00:00.000Z', 'the later snapshot wins the fold');
+
+		await appendArtifact(
+			root,
+			entry({
+				id: 's1:changeset:bbbb0002',
+				kind: 'change-set',
+				title: '2 个文件改动',
+				createdAt: '2026-07-20T13:00:00.000Z',
+				payload: { type: 'change-set', files: [...payload.files, { path: 'src/b.ts', added: 1, removed: 0 }] },
+			}),
+		);
+		assert.equal((await listArtifacts(root)).length, 2, 'a different diff is its own artifact');
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

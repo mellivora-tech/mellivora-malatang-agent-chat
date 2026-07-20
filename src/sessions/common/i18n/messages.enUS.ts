@@ -474,4 +474,12 @@ export const enUS: Record<MessageKey, string> = {
 	'conv.docCollapse': 'Collapse',
 	'conv.docLoading': 'Loading…',
 	'conv.docMissing': 'The document file no longer exists',
+	'changes.title': 'Changes',
+	'changes.noSession': 'No active session',
+	'changes.stat.files': 'Files',
+	'changes.stat.additions': 'Additions',
+	'changes.stat.deletions': 'Deletions',
+	'changes.empty.noChanges': 'No changed files for this session',
+	'changes.empty.openSession': 'Open a session to inspect changes',
+	'changes.list.stale': 'File details pending — they arrive when the next run ends',
 };

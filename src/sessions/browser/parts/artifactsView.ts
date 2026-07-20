@@ -167,6 +167,11 @@ export class ArtifactsView extends Disposable {
 			} else {
 				this.options.sessionsPartService?.openDataBrowser({ kind: 'file', path: payload.path, name: entry.title });
 			}
+		} else if (payload.type === 'change-set') {
+			// The Review tab renders the ACTIVE session's summary — activate the
+			// producing session first so the tab shows the matching diff (#13 P2).
+			this.options.sessionsService?.openSession(entry.sessionId);
+			this.options.sessionsPartService?.openReviewPanel();
 		} else {
 			void this.options.artifacts?.reveal(payload.path).then(found => {
 				// Export paths live outside the data root; a vanished file is marked
