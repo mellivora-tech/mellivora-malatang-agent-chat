@@ -116,6 +116,8 @@ export const enUS: Record<MessageKey, string> = {
 	'quota.resetLabel': 'Weekly reset',
 	'quota.windowHours': '{0}h window',
 	'quota.windowShort': 'Rolling window',
+	'quota.lineHours': '{0}h',
+	'quota.lineWeek': '7d',
 	'quota.windowLeft': '{0}% left',
 	'quota.windowReset': '{0}% left (resets {1})',
 	'quota.footnote': 'Pill shows the weekly quota · auto-refreshes every 5 minutes',
