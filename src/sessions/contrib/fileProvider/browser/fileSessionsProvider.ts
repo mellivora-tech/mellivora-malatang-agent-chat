@@ -23,7 +23,7 @@ import type {
 	ISessionWorkStep,
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
-import { RENDERED_TABLE_MARKER, SUBAGENT_END_ARG_PREFIX, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
+import { DOCUMENT_SPLIT_MARKER_PREFIX, RENDERED_TABLE_MARKER, SUBAGENT_END_ARG_PREFIX, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { materializeUi, parseUiInput, uiToMarkdown, type IRenderUiInput } from '../../../services/sessions/common/uiArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
@@ -715,6 +715,15 @@ export class FileSessionsProvider implements ISessionsProvider {
 		return data ? `data:${mediaTypeFromPath(path)};base64,${data}` : undefined;
 	}
 
+	/** Markdown of a split answer's document attachment — the reference card's expand (#13 长答案分流). Undefined when the file is gone or the bridge is old. */
+	async resolveDocumentText(sessionId: string, path: string): Promise<string | undefined> {
+		try {
+			return await this.bridge.readMediaText?.(this.getRef(sessionId), path);
+		} catch {
+			return undefined;
+		}
+	}
+
 	/**
 	 * The model request needs image bytes, which live on disk — resolve every
 	 * image attachment in the history (cache-first) before building the
@@ -1067,6 +1076,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (hasReply) {
 				updateAssistant();
 			}
+			// 长答案分流 (#13, 原 #14 P2 / Q4 决议): a CLEAN completion's long answer
+			// keeps only whole-paragraph summary in the bubble — the full text lands
+			// as a document artifact beside the transcript, referenced by a generic
+			// attachment card (no new role, no dedicated card). Abort / pause /
+			// error runs never split: their partial text IS the evidence.
+			let documentSplit: { readonly summary: string; readonly full: string; readonly title: string } | undefined;
+			if (reason === 'completed' && hasReply && this.bridge.storeDocument !== undefined) {
+				const split = splitLongAnswer(text);
+				if (split !== undefined) {
+					const sessionTitle = session.title.get().trim();
+					documentSplit = { ...split, title: sessionTitle !== '' ? sessionTitle : firstLine(split.full) };
+				}
+			}
 
 			if (pendingAnchor) {
 				session.compactionAnchor = pendingAnchor;
@@ -1187,7 +1209,38 @@ export class FileSessionsProvider implements ISessionsProvider {
 					}
 				}
 				if (hasReply) {
-					await this.bridge.append(ref, { type: 'message', id: assistantId, role: 'assistant', text, timestamp: now.toISOString() });
+					let assistantText = text;
+					let assistantAttachments: readonly ISessionAttachment[] | undefined;
+					if (documentSplit !== undefined) {
+						// The swap happens only AFTER the store succeeded — a failed
+						// store keeps the full text in the bubble instead of losing it.
+						// The persisted tail carries the human note (localized once, at
+						// write time) plus the machine marker the next run's transcript
+						// needs (message.text IS what toTranscript sends).
+						try {
+							const stored = await this.bridge.storeDocument!(ref, documentSplit.title, documentSplit.full);
+							assistantText = `${documentSplit.summary}\n\n${localize('conv.docSplitNote')}\n[${DOCUMENT_SPLIT_MARKER_PREFIX}: ${documentSplit.title}]`;
+							assistantAttachments = [{ kind: 'document', path: stored.path, label: documentSplit.title }];
+						} catch (splitError) {
+							console.error(`Storing the split document failed for ${sessionId}:`, splitError);
+						}
+					}
+					await this.bridge.append(ref, {
+						type: 'message',
+						id: assistantId,
+						role: 'assistant',
+						text: assistantText,
+						...(assistantAttachments !== undefined ? { attachments: assistantAttachments } : {}),
+						timestamp: now.toISOString(),
+					});
+					if (assistantAttachments !== undefined) {
+						// Fold the live bubble to what was persisted (streaming showed
+						// the full text until here — same live-then-fold discipline as
+						// the work block's collapse).
+						const attachments = assistantAttachments;
+						session.messages.set(session.messages.get().map(message => (message.id === assistantId ? { ...message, text: assistantText, attachments } : message)));
+						this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+					}
 				}
 				if (digestMessage) {
 					await this.bridge.append(ref, { type: 'message', id: digestMessage.id, role: 'digest', text: digestMessage.text, timestamp: now.toISOString() });
@@ -1679,6 +1732,42 @@ function describeWorkTool(name: string, input: unknown): string {
 function firstLine(value: string): string {
 	const line = value.split('\n', 1)[0] ?? '';
 	return line.length > 72 ? `${line.slice(0, 72)}…` : line;
+}
+
+// --- 长答案分流 (#13, 原 #14 P2) ---------------------------------------------
+
+/** Answers longer than this (chars) split on a clean completion: summary in the bubble, full text as a document artifact. */
+export const DOCUMENT_SPLIT_THRESHOLD = 2000;
+// The bubble keeps whole paragraphs from the top within this budget — a
+// mid-sentence cut reads broken in a chat stream.
+const DOCUMENT_SUMMARY_MAX_CHARS = 600;
+
+/**
+ * The split decision as a pure function: undefined below the threshold
+ * (nothing to split); otherwise the summary is consecutive WHOLE paragraphs
+ * from the first one, total ≤ {@link DOCUMENT_SUMMARY_MAX_CHARS}. A first
+ * paragraph that alone blows the budget (one giant unbroken block) is
+ * hard-cut with an ellipsis — an empty summary would be worse.
+ */
+export function splitLongAnswer(text: string): { readonly summary: string; readonly full: string } | undefined {
+	if (text.length <= DOCUMENT_SPLIT_THRESHOLD) {
+		return undefined;
+	}
+	let summary = '';
+	for (const paragraph of text.split(/\n{2,}/)) {
+		if (paragraph.trim() === '') {
+			continue;
+		}
+		const candidate = summary === '' ? paragraph : `${summary}\n\n${paragraph}`;
+		if (candidate.length > DOCUMENT_SUMMARY_MAX_CHARS) {
+			break;
+		}
+		summary = candidate;
+	}
+	if (summary === '') {
+		summary = `${text.slice(0, DOCUMENT_SUMMARY_MAX_CHARS - 1).trimEnd()}…`;
+	}
+	return { summary, full: text };
 }
 
 /** Drop malformed entries and duplicates; undefined when nothing survives, so callers can omit the field entirely. */

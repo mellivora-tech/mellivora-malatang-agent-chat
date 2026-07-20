@@ -29,4 +29,6 @@ export interface ISessionsManagementService {
 	renameSession(sessionId: string, title: string): Promise<ISession>;
 	/** Data URL for a stored image attachment, for thumbnails. */
 	resolveMedia(sessionId: string, path: string): Promise<string | undefined>;
+	/** Markdown of a split answer's document attachment (#13 长答案分流). */
+	resolveDocumentText(sessionId: string, path: string): Promise<string | undefined>;
 }

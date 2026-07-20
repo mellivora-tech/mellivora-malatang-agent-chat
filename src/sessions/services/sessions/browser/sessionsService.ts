@@ -39,6 +39,8 @@ export interface ISessionsService {
 	deleteSession(sessionId: string): Promise<void>;
 	/** Data URL for a stored image attachment, for thumbnails. */
 	resolveMedia(sessionId: string, path: string): Promise<string | undefined>;
+	/** Markdown of a split answer's document attachment (#13 长答案分流). */
+	resolveDocumentText(sessionId: string, path: string): Promise<string | undefined>;
 }
 
 export class SessionsService extends Disposable implements ISessionsService {
@@ -114,6 +116,10 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async resolveMedia(sessionId: string, path: string): Promise<string | undefined> {
 		return this.managementService.resolveMedia(sessionId, path);
+	}
+
+	async resolveDocumentText(sessionId: string, path: string): Promise<string | undefined> {
+		return this.managementService.resolveDocumentText(sessionId, path);
 	}
 
 	async setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession> {

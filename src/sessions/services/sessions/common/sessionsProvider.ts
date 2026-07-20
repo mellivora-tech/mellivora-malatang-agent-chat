@@ -58,4 +58,6 @@ export interface ISessionsProvider {
 	renameSession(sessionId: string, title: string): Promise<ISession>;
 	/** Data URL for a stored image attachment, for thumbnails. Optional; undefined when unavailable. */
 	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
+	/** Markdown of a split answer's document attachment (#13 长答案分流). Optional; undefined when unavailable. */
+	resolveDocumentText?(sessionId: string, path: string): Promise<string | undefined>;
 }

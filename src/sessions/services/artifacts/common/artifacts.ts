@@ -13,7 +13,7 @@
  * session files, so it carries no consistency responsibility of its own.
  */
 
-/** 'change-set' and 'document' are reserved for later phases (#13 P2 / 长答案分流) — no producer writes them yet. */
+/** 'document' is the split long answer's full text (#13 长答案分流, storeSessionDocument); 'change-set' is reserved for #13 P2 — no producer writes it yet. */
 export type ArtifactKind = 'plan' | 'walkthrough' | 'ui-card' | 'table' | 'export' | 'change-set' | 'document';
 
 /**

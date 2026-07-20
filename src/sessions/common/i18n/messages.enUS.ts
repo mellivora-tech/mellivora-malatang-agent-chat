@@ -469,4 +469,9 @@ export const enUS: Record<MessageKey, string> = {
 	'artifacts.empty': 'No artifacts yet — plans, walkthroughs, cards, tables and exports gather here.',
 	'artifacts.missing': 'File no longer exists',
 	'artifacts.superseded': 'Superseded by a newer version',
+	'conv.docSplitNote': '(Full text in the document card below)',
+	'conv.docExpand': 'Show full text',
+	'conv.docCollapse': 'Collapse',
+	'conv.docLoading': 'Loading…',
+	'conv.docMissing': 'The document file no longer exists',
 };

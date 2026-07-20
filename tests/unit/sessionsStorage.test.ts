@@ -9,7 +9,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, loadSession, readSessionMedia, storeSessionMedia } from '../../src/main/sessionsStorage.js';
+import {
+	appendSessionEntry,
+	createSessionFile,
+	deleteSessionFile,
+	loadAllSessions,
+	loadSession,
+	readSessionMedia,
+	readSessionMediaText,
+	storeSessionDocument,
+	storeSessionMedia,
+} from '../../src/main/sessionsStorage.js';
 import type { ISessionHeader } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
 
 async function createTempRoot(): Promise<string> {
@@ -301,6 +311,24 @@ test('storeSessionMedia rejects unknown media types; readSessionMedia refuses pa
 		await storeSessionMedia(root, ref, PNG_BASE64, 'image/png');
 		assert.equal(await readSessionMedia(root, ref, '../med-2.jsonl'), undefined, 'a traversal outside the media dir reads nothing');
 		assert.equal(await readSessionMedia(root, ref, 'media/med-2/missing.png'), undefined, 'a missing file reads nothing');
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('storeSessionDocument writes the split answer beside the transcript; readSessionMediaText round-trips and refuses escapes', async () => {
+	const root = await createTempRoot();
+	try {
+		await createSessionFile(root, createHeader('doc-1'));
+		const ref = { sessionId: 'doc-1' };
+
+		const stored = await storeSessionDocument(root, ref, '部署 / 梳理*', '# 全文\n\n正文内容。');
+		assert.match(stored.name, /^部署-梳理-[0-9a-f]{8}\.md$/);
+		assert.equal(stored.path, `media/doc-1/${stored.name}`);
+
+		assert.equal(await readSessionMediaText(root, ref, stored.path), '# 全文\n\n正文内容。');
+		assert.equal(await readSessionMediaText(root, ref, '../doc-1.jsonl'), undefined, 'a traversal outside the media dir reads nothing');
+		assert.equal(await readSessionMediaText(root, ref, 'media/doc-1/missing.md'), undefined, 'a missing file reads nothing');
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

@@ -959,6 +959,67 @@ button.conversation-work-step-row:hover {
 	font-size: var(--vscode-agents-fontSize-body2);
 }
 
+/* The split long answer's document reference card (#13): title + in-place
+   full-text toggle under the summarized assistant bubble. */
+.conversation-document-card {
+	margin-top: var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	border-radius: var(--vscode-agents-radius-container);
+	overflow: hidden;
+}
+
+.conversation-document-header {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-12);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-document-header .codicon {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-document-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-document-toggle {
+	border: none;
+	background: none;
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label2);
+	cursor: pointer;
+}
+
+.conversation-document-toggle:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-document-body {
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-document-loading,
+.conversation-document-missing {
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-14);
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
 /* render_ui card shell — same chrome as the plan card; the registered
    component owns everything below the header. */
 .conversation-ui {

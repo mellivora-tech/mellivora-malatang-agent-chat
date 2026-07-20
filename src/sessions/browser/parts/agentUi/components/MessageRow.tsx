@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { localize } from '../../../../common/i18n/i18n.js';
+import { DOCUMENT_SPLIT_MARKER } from '../../../../services/sessions/common/session.js';
 import type { ISessionAttachment, ISessionMessage } from '../../../../services/sessions/common/session.js';
 import type { IMessageActions } from '../../conversationView.js';
 import { Markdown } from './Markdown.js';
@@ -13,6 +14,7 @@ export interface IMessageRowProps {
 	readonly message: ISessionMessage;
 	readonly actions?: IMessageActions | undefined;
 	readonly resolveImage?: ((path: string) => Promise<string | undefined>) | undefined;
+	readonly resolveDocument?: ((path: string) => Promise<string | undefined>) | undefined;
 }
 
 /**
@@ -27,7 +29,8 @@ export interface IMessageRowProps {
  * streamed token exactly as before.
  */
 export function MessageRow(props: IMessageRowProps): JSX.Element {
-	const { message, actions, resolveImage } = props;
+	const { message, actions, resolveImage, resolveDocument } = props;
+	const documentAttachments = message.role === 'assistant' ? (message.attachments ?? []).filter(attachment => attachment.kind === 'document') : [];
 
 	return (
 		<article className={`conversation-message ${message.role}`} data-role={message.role} data-message-id={message.id}>
@@ -42,16 +45,77 @@ export function MessageRow(props: IMessageRowProps): JSX.Element {
 				{message.role === 'user' ? (
 					<UserContent message={message} resolveImage={resolveImage} />
 				) : message.role === 'assistant' ? (
-					<Markdown className="conversation-message-text" text={message.text} />
+					// The split marker tail is transcript wire format (the next run's
+					// model reads it) — the human gets the document card instead.
+					<Markdown className="conversation-message-text" text={message.text.replace(DOCUMENT_SPLIT_MARKER, '')} />
 				) : (
 					<div className="conversation-message-text">{message.text}</div>
 				)}
+
+				{documentAttachments.map((attachment, index) => (
+					<DocumentCard key={`${attachment.path}-${index}`} attachment={attachment} resolveDocument={resolveDocument} />
+				))}
 
 				{message.detail && <div className="conversation-tool-detail">{message.detail}</div>}
 
 				{actions && <MessageActionBar message={message} actions={actions} />}
 			</div>
 		</article>
+	);
+}
+
+interface IDocumentCardProps {
+	readonly attachment: ISessionAttachment;
+	readonly resolveDocument?: ((path: string) => Promise<string | undefined>) | undefined;
+}
+
+/**
+ * The generic artifact reference card for a split long answer (#13, Q4): the
+ * document's title plus an in-place full-text toggle. Deliberately NOT a
+ * PlanCard-style dedicated card — one light, kind-agnostic projection. The
+ * markdown loads lazily on first expand and is cached for the row's lifetime;
+ * a missing file (deleted media) degrades to a stale note, never an error.
+ */
+function DocumentCard(props: IDocumentCardProps): JSX.Element {
+	const { attachment, resolveDocument } = props;
+	const [expanded, setExpanded] = useState(false);
+	const [content, setContent] = useState<string | undefined>(undefined);
+	const [missing, setMissing] = useState(false);
+
+	useEffect(() => {
+		if (!expanded || content !== undefined || missing) {
+			return;
+		}
+		let cancelled = false;
+		void (resolveDocument ? resolveDocument(attachment.path) : Promise.resolve(undefined)).then(text => {
+			if (cancelled) {
+				return;
+			}
+			if (text !== undefined) {
+				setContent(text);
+			} else {
+				setMissing(true);
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [expanded, content, missing, attachment.path, resolveDocument]);
+
+	const title = attachment.label ?? attachment.path.split('/').pop() ?? attachment.path;
+	return (
+		<div className="conversation-document-card" data-document-path={attachment.path}>
+			<div className="conversation-document-header">
+				<span className="codicon codicon-file-text" aria-hidden="true" />
+				<span className="conversation-document-title" title={title}>
+					{title}
+				</span>
+				<button type="button" className="conversation-document-toggle" onClick={() => setExpanded(previous => !previous)}>
+					{expanded ? localize('conv.docCollapse') : localize('conv.docExpand')}
+				</button>
+			</div>
+			{expanded && (missing ? <div className="conversation-document-missing">{localize('conv.docMissing')}</div> : content !== undefined ? <Markdown className="conversation-document-body" text={content} /> : <div className="conversation-document-loading">{localize('conv.docLoading')}</div>)}
+		</div>
 	);
 }
 

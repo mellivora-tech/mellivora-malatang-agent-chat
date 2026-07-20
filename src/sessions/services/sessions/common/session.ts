@@ -90,21 +90,31 @@ export interface ISessionWorkStep {
 }
 
 /**
- * A structured reference the user attached to a message (@-mentions and pasted
- * images today; sessions and skills are future kinds). File/folder paths are
- * workspace-relative — the agent reads them through its tools. Image paths are
- * session-media-relative (`media/<sessionId>/<hash>.png`); the bytes live on
- * disk beside the transcript, never inlined here.
+ * A structured reference riding a message: @-mentions, pasted images and
+ * skills on user messages; 'document' on assistant messages (the long-answer
+ * split's full-text artifact, #13). File/folder paths are workspace-relative —
+ * the agent reads them through its tools. Image and document paths are
+ * session-media-relative (`media/<sessionId>/<name>`); the bytes live on disk
+ * beside the transcript, never inlined here.
  */
 export interface ISessionAttachment {
-	readonly kind: 'file' | 'folder' | 'image' | 'skill' | 'session';
-	/** file/folder: workspace-relative path; image: session-media path; skill: the skill id; session: the referenced sessionId. */
+	readonly kind: 'file' | 'folder' | 'image' | 'skill' | 'session' | 'document';
+	/** file/folder: workspace-relative path; image/document: session-media path; skill: the skill id; session: the referenced sessionId. */
 	readonly path: string;
 	/** Images only: e.g. 'image/png'. */
 	readonly mediaType?: string;
-	/** Human-readable name for chips (session title at attach time). */
+	/** Human-readable name for chips (session title at attach time; document title for split answers). */
 	readonly label?: string;
 }
+
+/** A split assistant reply's tail marker (`[完整梳理文档: <标题>]`) — how the
+ *  NEXT run's model learns the full text exists (the transcript carries the
+ *  summary only). A PERSISTED fact shared by writer (fileSessionsProvider)
+ *  and reader (MessageRow, which hides the line from the bubble) —
+ *  deliberately locale-independent like {@link SUBAGENT_END_ARG_PREFIX}, so
+ *  it never routes through localize(). */
+export const DOCUMENT_SPLIT_MARKER_PREFIX = '完整梳理文档';
+export const DOCUMENT_SPLIT_MARKER = /\n\[完整梳理文档: [^\]\n]*\]\s*$/;
 
 /** One section of a plan artifact — the stable anchor unit for review comments. */
 export interface IPlanSection {
