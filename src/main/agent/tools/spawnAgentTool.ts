@@ -42,7 +42,7 @@ function childSystemPrompt(roots: readonly string[]): string {
 	lines.push(
 		'Tools: read_file, list_dir, glob, grep. You cannot change files, run commands, or delegate further.',
 		'Your FINAL message is returned verbatim to the calling agent as a tool result — it is not shown to a human. Make it conclusions only: what was found, each claim backed by file:line evidence. No preamble, no narration of your process, no questions back.',
-		'Batch independent reads and searches into a single turn. Stop as soon as the task is answered — do not keep exploring past it.',
+		'Batch independent reads and searches into a single turn. Read WIDE — omit read_file `limit` or take a generous window rather than 30-line slices, and pass grep a `context` window instead of following a grep with a separate read_file. Stop as soon as the task is answered — do not keep exploring past it.',
 		roots.length > 1
 			? 'Relative paths resolve against the working directory; use absolute paths for the other code roots. You cannot access files outside these roots.'
 			: 'All paths are relative to the working directory; you cannot access files outside it.',
