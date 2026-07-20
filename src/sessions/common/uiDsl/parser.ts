@@ -544,6 +544,24 @@ export function parseProgram(source: string, catalog: readonly IComponentSpec[])
 	return { statements, errors, attempts: raw.length };
 }
 
+/**
+ * Batch-scope lint (#12 M4): syntax + catalog violations ONLY. Resolution
+ * (missing refs, root) is deliberately excluded — a later batch may reference
+ * an earlier batch's skeleton or leave root untouched; those judgments belong
+ * to the fold, not the single batch the tool call carries.
+ */
+export function lintBatch(source: string, catalog: readonly IComponentSpec[]): IDslError[] {
+	const byName = new Map(catalog.map(component => [component.name, component]));
+	const errors: IDslError[] = [];
+	for (const { text, line } of splitStatements(source)) {
+		const parsed = parseRawStatement(text, line, byName);
+		if (parsed.error) {
+			errors.push(parsed.error);
+		}
+	}
+	return errors;
+}
+
 /** The smoke metric: statements that survived into the merged program / attempts. */
 export function statementYield(program: IDslProgram): { valid: number; attempts: number } {
 	// A statement that parsed but carries a resolution error still counts

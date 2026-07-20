@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { UI_PROPS_CHAR_CAP, parseUiInput } from '../../../sessions/services/sessions/common/uiArtifact.js';
-import { UI_COMPONENT_GUIDANCE, UI_COMPONENT_NAMES } from '../../../sessions/services/sessions/common/uiComponents/index.js';
+import { UI_COMPONENT_ERROR_EXPLAINERS, UI_COMPONENT_GUIDANCE, UI_COMPONENT_NAMES } from '../../../sessions/services/sessions/common/uiComponents/index.js';
 import { defineTool } from '../agentTools.js';
 import type { IAgentTool } from '../agentTypes.js';
 import { invalid, valid } from './workspace.js';
@@ -44,11 +44,17 @@ export function createRenderUiTool(): IAgentTool {
 		isConcurrencySafe: () => true,
 		validateInput: input => {
 			const parsed = parseUiInput(input);
-			return parsed
-				? valid(parsed)
-				: invalid(
-						`input needs a registered "component" (${UI_COMPONENT_NAMES.join('/') || 'none available'}), a non-empty "title" and "markdown", and a "props" object matching that component's schema, at most ${UI_PROPS_CHAR_CAP} chars serialized — shrink the sample and shorten cell values if over`,
-					);
+			if (parsed) {
+				return valid(parsed);
+			}
+			// Structured per-component detail when available (#12 M4): the DSL's
+			// parser hints feed the model's self-correction directly.
+			const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+			const explain = typeof record.component === 'string' ? UI_COMPONENT_ERROR_EXPLAINERS[record.component]?.(record.props) : undefined;
+			return invalid(
+				`input needs a registered "component" (${UI_COMPONENT_NAMES.join('/') || 'none available'}), a non-empty "title" and "markdown", and a "props" object matching that component's schema, at most ${UI_PROPS_CHAR_CAP} chars serialized — shrink the sample and shorten cell values if over` +
+					(explain ? `\n${explain}` : ''),
+			);
 		},
 		call: async input => {
 			const card = input as { readonly component: string; readonly title: string };

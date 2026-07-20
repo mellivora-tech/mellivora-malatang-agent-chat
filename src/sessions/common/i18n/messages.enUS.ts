@@ -458,4 +458,10 @@ export const enUS: Record<MessageKey, string> = {
 	'appearance.importSeed': 'Import',
 	'appearance.importPlaceholder': 'Paste seed JSON…',
 	'appearance.importInvalid': 'Invalid seed JSON',
+	'aux.tab.surface': 'Workbench',
+	'surface.empty': 'Nothing on the workbench yet — it fills in when the agent calls surface_patch.',
+	'surface.open': 'Open workbench',
+	'surface.patchSummary': 'Workbench updated · {0} statement(s)',
+	'surface.hole': 'Undefined: {0}',
+	'surface.errorNote': '{0} statement(s) failed to render (see run log)',
 };

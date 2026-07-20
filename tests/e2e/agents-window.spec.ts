@@ -2023,7 +2023,7 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(toggle).toHaveClass(/active/);
 	await expect(page.locator('.auxiliary-empty-title')).toHaveText('打开标签页');
 	await expect(page.locator('.auxiliary-empty-description')).toHaveText('选择要在侧栏打开的标签页。');
-	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['评审', '数据', '终端', '浏览器']);
+	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['评审', '数据', '工作台', '终端', '浏览器']);
 	await expect(page.locator('.auxiliary-tabs')).toBeHidden();
 
 	// Opening from the picker creates ONE tab — instances, not fixed destinations.
@@ -2041,7 +2041,7 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 
 	// "+" menu opens further tabs; a review tab stays open (and alive) behind it.
 	await page.locator('.auxiliary-tab-add').click();
-	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '终端', '浏览器']);
+	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '工作台', '终端', '浏览器']);
 	await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
 	await assertSidePaneTab(page, 'terminal', ['评审', '终端'], '终端会话尚未启动');
 

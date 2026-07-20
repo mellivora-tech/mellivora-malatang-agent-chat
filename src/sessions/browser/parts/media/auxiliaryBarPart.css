@@ -424,3 +424,104 @@
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
 	outline-offset: var(--vscode-agents-space-2);
 }
+
+/* Workbench surface (#12 M4): the folded DSL tree. Plain token-styled
+   primitives — the vocabulary is deliberately unstylable (variant enums only). */
+.surface-view {
+	height: 100%;
+	overflow: auto;
+	padding: var(--vscode-agents-space-12);
+	box-sizing: border-box;
+}
+
+.surface-empty {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	padding: var(--vscode-agents-space-16);
+	text-align: center;
+}
+
+.surface-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-10);
+	align-items: flex-start;
+}
+
+.surface-text-title {
+	font-size: var(--vscode-agents-fontSize-heading2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.surface-text-body {
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.surface-text-caption {
+	font-size: var(--vscode-agents-fontSize-label2);
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.surface-table {
+	border-collapse: collapse;
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.surface-table th,
+.surface-table td {
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
+	text-align: left;
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.surface-table th {
+	background: var(--vscode-agents-color-control-background);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.surface-field {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	font-size: var(--vscode-agents-fontSize-label1);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.surface-field input,
+.surface-field select {
+	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-6);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	font: inherit;
+}
+
+.surface-button {
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	cursor: default;
+}
+
+.surface-button:hover {
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+.surface-hole {
+	color: var(--vscode-agents-color-warning);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.surface-panel-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-10);
+	align-items: flex-start;
+}
