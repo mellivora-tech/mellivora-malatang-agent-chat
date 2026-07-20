@@ -236,7 +236,9 @@ test('agent groups de-interleave parallel children: one group per agent, anchore
 	const groups = sections[0]!.items.filter(item => item.kind === 'agentGroup');
 	assert.equal(groups.length, 2);
 	const [g1, g2] = groups as [Extract<(typeof groups)[0], { kind: 'agentGroup' }>, Extract<(typeof groups)[0], { kind: 'agentGroup' }>];
-	assert.equal(g1.label, '探索主进程');
+	// Two siblings → ordinal labels; the 2-char shared prefix ('探索') is semantic and stays.
+	assert.equal(g1.label, '子代理 1 · 探索主进程');
+	assert.equal(g1.fullLabel, '探索主进程');
 	assert.equal(g1.durationMs, 208_000);
 	assert.equal(g1.endDetail, '12 turns · 47 tool calls');
 	// De-interleaved: a1's three reads fold into ONE rollup despite a2 interleaving.
@@ -274,4 +276,42 @@ test('presentation derives verb + chip for structured steps and flags errors', (
 	assert.equal(presentation.verbKey, TOOL_VERB_KEYS['bash']);
 	assert.equal(presentation.chip, 'pnpm typecheck');
 	assert.equal(presentation.error, true);
+});
+
+test('sibling agent groups with a shared task prefix get ordinal short labels; the full task moves to fullLabel (#12 polish)', async () => {
+	const { buildWorkSections } = await import('../../src/sessions/browser/parts/agentUi/components/workRender.js');
+	const task = (suffix: string): string => `你在梳理一个 Java 17 / Spring Boot 3 多模块 Maven 后端项目,负责${suffix}`;
+	const steps = [
+		{ kind: 'tool', label: 'x', durationMs: 1, tool: 'spawn_agent', arg: task('system 模块'), agent: 'a1' },
+		{ kind: 'tool', label: 'x', durationMs: 1, tool: 'spawn_agent', arg: task('monitor 模块'), agent: 'a2' },
+		{ kind: 'tool', label: 'read_file pom.xml', durationMs: 1, tool: 'read_file', arg: 'pom.xml', via: 'subagent', agent: 'a1' },
+	] as never[];
+	const sections = buildWorkSections(steps);
+	const groups = sections[0]!.items.filter(item => item.kind === 'agentGroup') as { label: string; fullLabel?: string }[];
+	assert.equal(groups.length, 2);
+	assert.match(groups[0]!.label, /子代理 1 · system 模块/);
+	assert.match(groups[1]!.label, /子代理 2 · monitor 模块/);
+	assert.equal(groups[0]!.fullLabel, task('system 模块'));
+});
+
+test('a single agent group keeps its task label; a running spawn synthetic echoing the raw task is dropped, a live-activity one stays (#12 polish)', async () => {
+	const { buildWorkSections } = await import('../../src/sessions/browser/parts/agentUi/components/workRender.js');
+	const task = '梳理 services 层';
+	const base = { kind: 'tool', durationMs: 1, tool: 'spawn_agent', arg: task, agent: 'a1' };
+	// Echo phase: synthetic label is still the raw tool label — must not render.
+	const echo = buildWorkSections([
+		{ ...base, label: `子代理 ⑃ ${task}` },
+		{ ...base, label: `spawn_agent ${task}`, running: true },
+	] as never[]);
+	const echoGroup = echo[0]!.items.find(item => item.kind === 'agentGroup') as { label: string; items: readonly unknown[]; running: boolean };
+	assert.equal(echoGroup.items.length, 0, 'the raw-task echo row is noise under the header');
+	assert.equal(echoGroup.running, true, 'the group still spins');
+	assert.match(echoGroup.label, /梳理 services 层/, 'a lone group keeps the task text');
+	// Live phase: the label moved on to real child activity — that row renders.
+	const live = buildWorkSections([
+		{ ...base, label: `子代理 ⑃ ${task}` },
+		{ ...base, label: '⑃ 撰写结论中 · 3.4k 字', running: true },
+	] as never[]);
+	const liveGroup = live[0]!.items.find(item => item.kind === 'agentGroup') as { items: readonly { kind: string }[] };
+	assert.equal(liveGroup.items.length, 1, 'live activity rows stay');
 });

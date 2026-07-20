@@ -499,6 +499,7 @@ export const zhCN = {
 	'surface.patchSummary': '工作台已更新 · {0} 条语句',
 	'surface.hole': '未定义: {0}',
 	'surface.errorNote': '{0} 处语句未能渲染（详见运行日志）',
+	'work.agentOrdinal': '子代理 {0} · {1}',
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

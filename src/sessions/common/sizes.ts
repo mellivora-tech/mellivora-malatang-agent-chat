@@ -115,6 +115,8 @@ export const agentsSizeButton = registerSize('agents.size.button', '32px');
 export const agentsSizeControl = registerSize('agents.size.control', '34px');
 /** Fixed width for settings-page inline inputs (seed import, font stacks, contrast slider) — dropdowns stay auto-width. */
 export const agentsSizeSettingsControl = registerSize('agents.size.settingsControl', '220px');
+/** Ceiling for a work-step argument chip — long spawn task briefs truncate to one line instead of wrapping into gray walls. */
+export const agentsSizeWorkChipMax = registerSize('agents.size.workChipMax', '360px');
 // Layout dimensions shared by the CSS tokens below and the workbench grid
 // math (workbench.ts / grid.ts). Defined once as numbers here so the pixel
 // tokens and the JS layout can never drift apart.
