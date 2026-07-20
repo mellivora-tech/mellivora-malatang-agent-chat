@@ -506,6 +506,13 @@ export const zhCN = {
 	'artifacts.empty': '还没有产出物——计划、讲解、卡片、表格和导出会汇总在这里。',
 	'artifacts.missing': '文件已不存在',
 	'artifacts.superseded': '已被新版本取代',
+
+	// --- 长答案分流（#13，原 #14 P2）---
+	'conv.docSplitNote': '（全文见下方产物卡）',
+	'conv.docExpand': '展开全文',
+	'conv.docCollapse': '收起全文',
+	'conv.docLoading': '加载中…',
+	'conv.docMissing': '文档文件已不存在',
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

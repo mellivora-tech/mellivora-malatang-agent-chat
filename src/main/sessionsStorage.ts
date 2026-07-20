@@ -103,15 +103,72 @@ export async function storeSessionTableCsv(root: string, ref: ISessionRef, title
 	return { path: file, name };
 }
 
-/** Read a stored image back as raw base64; undefined when missing or the path escapes the media dir. */
-export async function readSessionMedia(root: string, ref: ISessionRef, entryPath: string): Promise<string | undefined> {
+/**
+ * Write a split long answer's full markdown beside the transcript (#13
+ * 长答案分流) — the table-csv pattern verbatim: content-hashed name, live
+ * artifact capture, transcript never inflates. Returns the ENTRY path
+ * (`media/<sessionId>/<name>.md`, what the assistant attachment persists and
+ * readSessionMediaText resolves) plus the bare file name.
+ */
+export async function storeSessionDocument(root: string, ref: ISessionRef, title: string, markdown: string): Promise<{ readonly path: string; readonly name: string }> {
+	const dir = sessionMediaDir(root, ref);
+	await mkdir(dir, { recursive: true });
+	const safe =
+		title
+			.replace(/[\\/:*?"<>|\s]+/g, '-')
+			.replace(/^-+|-+$/g, '')
+			.slice(0, 40) || 'document';
+	const hash = createHash('sha256').update(markdown).digest('hex').slice(0, 8);
+	const name = `${safe}-${hash}.md`;
+	const file = join(dir, name);
+	await writeFile(file, markdown, 'utf8');
+	// Artifact capture (#13), best-effort: a broken index never fails the
+	// document write. The id derives from the file name so rebuild regenerates
+	// it stably.
+	try {
+		await appendArtifact(root, {
+			id: `${ref.sessionId}:${name}`,
+			kind: 'document',
+			sessionId: ref.sessionId,
+			...(ref.projectId !== undefined ? { projectId: ref.projectId } : {}),
+			title,
+			createdAt: new Date().toISOString(),
+			payload: { type: 'media', path: file },
+		});
+	} catch (error) {
+		console.error('[artifacts] capture on document store failed', error);
+	}
+	return { path: `media/${ref.sessionId}/${name}`, name };
+}
+
+/** Resolve an entry path against the session's transcript dir; undefined when it escapes the session's media dir — the renderer can never point main at arbitrary files. */
+function gatedMediaPath(root: string, ref: ISessionRef, entryPath: string): string | undefined {
 	const mediaRoot = resolve(sessionMediaDir(root, ref));
 	const target = resolve(dirname(sessionFilePath(root, ref)), entryPath);
-	if (target !== mediaRoot && !target.startsWith(mediaRoot + sep)) {
+	return target !== mediaRoot && !target.startsWith(mediaRoot + sep) ? undefined : target;
+}
+
+/** Read a stored image back as raw base64; undefined when missing or the path escapes the media dir. */
+export async function readSessionMedia(root: string, ref: ISessionRef, entryPath: string): Promise<string | undefined> {
+	const target = gatedMediaPath(root, ref, entryPath);
+	if (target === undefined) {
 		return undefined;
 	}
 	try {
 		return (await readFile(target)).toString('base64');
+	} catch {
+		return undefined;
+	}
+}
+
+/** Read a stored media text file (the document card's expand); undefined when missing or the path escapes the media dir — same gate as readSessionMedia. */
+export async function readSessionMediaText(root: string, ref: ISessionRef, entryPath: string): Promise<string | undefined> {
+	const target = gatedMediaPath(root, ref, entryPath);
+	if (target === undefined) {
+		return undefined;
+	}
+	try {
+		return await readFile(target, 'utf8');
 	} catch {
 		return undefined;
 	}

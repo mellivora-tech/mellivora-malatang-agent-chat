@@ -6,7 +6,7 @@
 import { ipcMain } from 'electron';
 import type { ISessionEntry, ISessionHeader, ISessionRef } from '../sessions/services/sessions/common/sessionsBridge.js';
 import { appendArtifact, extractArtifactsFromEntries, removeSessionArtifacts } from './artifactsStorage.js';
-import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, readSessionMedia, storeSessionMedia } from './sessionsStorage.js';
+import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, readSessionMedia, readSessionMediaText, storeSessionDocument, storeSessionMedia } from './sessionsStorage.js';
 
 export function registerSessionsIpc(dataRoot: string): void {
 	ipcMain.handle('sessions:list', () => loadAllSessions(dataRoot));
@@ -33,4 +33,6 @@ export function registerSessionsIpc(dataRoot: string): void {
 	});
 	ipcMain.handle('sessions:storeMedia', (_event, ref: ISessionRef, base64: string, mediaType: string) => storeSessionMedia(dataRoot, ref, base64, mediaType));
 	ipcMain.handle('sessions:readMedia', (_event, ref: ISessionRef, entryPath: string) => readSessionMedia(dataRoot, ref, entryPath));
+	ipcMain.handle('sessions:storeDocument', (_event, ref: ISessionRef, title: string, markdown: string) => storeSessionDocument(dataRoot, ref, title, markdown));
+	ipcMain.handle('sessions:readMediaText', (_event, ref: ISessionRef, entryPath: string) => readSessionMediaText(dataRoot, ref, entryPath));
 }

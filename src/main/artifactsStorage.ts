@@ -202,26 +202,33 @@ export async function rebuildArtifacts(root: string, projectId?: string): Promis
 		}
 		lines.push(...extractArtifactsFromEntries(sessionId, projectId, entries));
 
-		// Table artifacts live as csv files beside the transcript, not in it.
+		// Table (csv) and document (md) artifacts live as files beside the
+		// transcript, not in it — both store hooks name `<sanitized-title>-<hash8>.<ext>`.
 		const mediaDir = join(sessionsDir, 'media', sessionId);
-		for (const csvFile of [...(await listFiles(mediaDir, '.csv'))].sort()) {
-			const name = basename(csvFile);
-			let createdAt: string;
-			try {
-				createdAt = (await stat(csvFile)).mtime.toISOString();
-			} catch {
-				continue;
+		for (const media of [
+			{ extension: '.csv', kind: 'table' as const },
+			{ extension: '.md', kind: 'document' as const },
+		]) {
+			for (const mediaFile of [...(await listFiles(mediaDir, media.extension))].sort()) {
+				const name = basename(mediaFile);
+				let createdAt: string;
+				try {
+					createdAt = (await stat(mediaFile)).mtime.toISOString();
+				} catch {
+					continue;
+				}
+				lines.push({
+					id: `${sessionId}:${name}`,
+					kind: media.kind,
+					sessionId,
+					...(projectId !== undefined ? { projectId } : {}),
+					// The sanitized form of the original title — the exact title only
+					// the live capture knows (documented rebuild drift, like mtime).
+					title: name.replace(new RegExp(`-[0-9a-f]{8}\\${media.extension}$`), '') || name,
+					createdAt,
+					payload: { type: 'media', path: mediaFile },
+				});
 			}
-			lines.push({
-				id: `${sessionId}:${name}`,
-				kind: 'table',
-				sessionId,
-				...(projectId !== undefined ? { projectId } : {}),
-				// storeSessionTableCsv names files `<sanitized-title>-<hash8>.csv`.
-				title: name.replace(/-[0-9a-f]{8}\.csv$/, '') || name,
-				createdAt,
-				payload: { type: 'media', path: csvFile },
-			});
 		}
 	}
 

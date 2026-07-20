@@ -63,7 +63,9 @@ const SWEPT_FILES: readonly string[] = [
 // shared by writer and reader — locale-independent by necessity, never
 // localized. '中文（简体）' is a language endonym: language names are shown in
 // their own language by convention, not translated.
-const ALLOWED_BARE_STRINGS = new Set(["'NULL'", "'Esc'", "'C'", "'Chao Wang'", "'结束'", "'中文（简体）'"]);
+// '完整梳理文档' is DOCUMENT_SPLIT_MARKER_PREFIX (session.ts): the split
+// answer's persisted transcript marker — locale-independent like '结束'.
+const ALLOWED_BARE_STRINGS = new Set(["'NULL'", "'Esc'", "'C'", "'Chao Wang'", "'结束'", "'中文（简体）'", "'完整梳理文档'"]);
 
 test('audit corpus resolves (the swept file list still exists)', () => {
 	for (const relative of SWEPT_FILES) {

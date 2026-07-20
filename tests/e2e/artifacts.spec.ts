@@ -13,8 +13,13 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
  * The artifacts panel (#13 P1): opening the tab backfills the index from
  * pre-existing session transcripts (no artifacts.jsonl is seeded), groups the
  * rows by session, and a message-payload row jumps to — and flashes — the
- * producing message in the conversation.
+ * producing message in the conversation. The seed also carries a split long
+ * answer (#13 长答案分流): a summarized assistant message with a document
+ * attachment whose full markdown lives beside the transcript.
  */
+
+const DOCUMENT_FILE = '部署梳理-deadbeef.md';
+const DOCUMENT_FULL_TEXT = '# 部署梳理\n\n完整的梳理内容正文，比摘要长得多。';
 
 async function seedSession(dataDir: string): Promise<void> {
 	const now = new Date().toISOString();
@@ -40,9 +45,22 @@ async function seedSession(dataDir: string): Promise<void> {
 			// only needs the envelope's title, so the jump target stays stable.
 			ui: { id: 'ui-1', component: 'future_widget', title: '订单表迁移映射', props: { x: 1 } },
 		}),
+		JSON.stringify({
+			type: 'message',
+			timestamp: now,
+			id: 'm-doc',
+			role: 'assistant',
+			// A split reply as fileSessionsProvider persists it: summary + note +
+			// the transcript marker (the card hides the marker line from humans).
+			text: '摘要：部署链路问题在网关配置。\n\n（全文见下方产物卡）\n[完整梳理文档: 部署梳理]',
+			attachments: [{ kind: 'document', path: `media/artifacts-sess/${DOCUMENT_FILE}`, label: '部署梳理' }],
+		}),
 		JSON.stringify({ type: 'state', timestamp: now, status: 2, title: 'artifacts session' }),
 	];
 	await writeFile(join(dataDir, 'sessions', 'artifacts-sess.jsonl'), `${lines.join('\n')}\n`, 'utf8');
+	// The split answer's full text, exactly where storeSessionDocument puts it.
+	await mkdir(join(dataDir, 'sessions', 'media', 'artifacts-sess'), { recursive: true });
+	await writeFile(join(dataDir, 'sessions', 'media', 'artifacts-sess', DOCUMENT_FILE), DOCUMENT_FULL_TEXT, 'utf8');
 }
 
 test('artifacts tab backfills existing sessions, groups rows by session, and a ui-card row jumps to the highlighted message', async () => {
@@ -60,6 +78,21 @@ test('artifacts tab backfills existing sessions, groups rows by session, and a u
 		await page.locator('.sessions-project-task-row').filter({ hasText: 'artifacts session' }).click();
 		await page.waitForSelector('.conversation-transcript');
 
+		// The split answer (#13 长答案分流): the bubble shows the summary but hides
+		// the transcript marker line; the document card carries the title and
+		// expands to the full markdown loaded from session media.
+		const docMessage = page.locator('.conversation-transcript [data-message-id="m-doc"]');
+		await expect(docMessage.locator('.conversation-message-text')).toContainText('摘要：部署链路问题在网关配置。');
+		await expect(docMessage.locator('.conversation-message-text')).not.toContainText('完整梳理文档');
+		const docCard = docMessage.locator('.conversation-document-card');
+		await expect(docCard.locator('.codicon-file-text')).toBeVisible();
+		await expect(docCard.locator('.conversation-document-title')).toHaveText('部署梳理');
+		await expect(docCard.locator('.conversation-document-body')).toBeHidden();
+		await docCard.locator('.conversation-document-toggle').click();
+		await expect(docCard.locator('.conversation-document-body')).toContainText('完整的梳理内容正文，比摘要长得多。');
+		await docCard.locator('.conversation-document-toggle').click();
+		await expect(docCard.locator('.conversation-document-body')).toBeHidden();
+
 		// Open the side pane and pick the artifacts tab from the empty-state picker.
 		await page.locator('.sessions-titlebar-side-pane-toggle').click();
 		await page.locator('.auxiliary-empty-card').filter({ hasText: '产出物' }).click();
@@ -69,7 +102,12 @@ test('artifacts tab backfills existing sessions, groups rows by session, and a u
 		// rebuild scanning the session transcript (the backfill acceptance).
 		const group = page.locator('.artifacts-group[data-session-id="artifacts-sess"]');
 		await expect(group.locator('.artifacts-group-header')).toHaveText('artifacts session');
-		await expect(group.locator('.artifact-row')).toHaveCount(2);
+		await expect(group.locator('.artifact-row')).toHaveCount(3);
+
+		// The rebuild's media scan regenerates the document row from its .md file.
+		const docRow = group.locator('.artifact-row[data-artifact-kind="document"]');
+		await expect(docRow.locator('.codicon-file-text')).toBeVisible();
+		await expect(docRow.locator('.artifact-row-title')).toHaveText('部署梳理');
 
 		// Newest-first inside the group would be ambiguous here (same timestamp)
 		// — assert by kind instead: each row wears its own codicon and a time label.

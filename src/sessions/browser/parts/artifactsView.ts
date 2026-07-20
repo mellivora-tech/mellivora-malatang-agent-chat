@@ -160,7 +160,13 @@ export class ArtifactsView extends Disposable {
 			this.options.sessionsService?.openSession(entry.sessionId);
 			this.options.sessionsPartService?.revealArtifactMessage(entry.sessionId, payload.messageId);
 		} else if (payload.type === 'media') {
-			this.options.sessionsPartService?.openDataBrowser({ kind: 'file', path: payload.path, name: entry.title });
+			if (entry.kind === 'document') {
+				// A document's home is its conversation (the reference card holds the
+				// expand) — the data browser can only parse tabular files.
+				this.options.sessionsService?.openSession(entry.sessionId);
+			} else {
+				this.options.sessionsPartService?.openDataBrowser({ kind: 'file', path: payload.path, name: entry.title });
+			}
 		} else {
 			void this.options.artifacts?.reveal(payload.path).then(found => {
 				// Export paths live outside the data root; a vanished file is marked

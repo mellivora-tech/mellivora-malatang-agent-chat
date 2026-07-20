@@ -6,9 +6,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { FileSessionsProvider, formatSessionContext, humanizeAgentRunError, toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
+import {
+	DOCUMENT_SPLIT_THRESHOLD,
+	FileSessionsProvider,
+	formatSessionContext,
+	humanizeAgentRunError,
+	splitLongAnswer,
+	toTranscript,
+} from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
 import type { ISessionMessage } from '../../src/sessions/services/sessions/common/session.js';
-import { SessionInteractivity, SessionStatus } from '../../src/sessions/services/sessions/common/session.js';
+import { DOCUMENT_SPLIT_MARKER, SessionInteractivity, SessionStatus } from '../../src/sessions/services/sessions/common/session.js';
 import type { IAgentBridge, IAgentEventPayload } from '../../src/sessions/services/agent/common/agent.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionSnapshot, ISessionsBridge } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
 
@@ -17,18 +24,29 @@ interface IAppendCall {
 	readonly entry: ISessionEntry;
 }
 
+interface IStoredDocumentCall {
+	readonly ref: ISessionRef;
+	readonly title: string;
+	readonly markdown: string;
+}
+
 interface IFakeBridge extends ISessionsBridge {
 	readonly creates: ISessionHeader[];
 	readonly appends: IAppendCall[];
 	readonly deletes: ISessionRef[];
+	readonly documents: IStoredDocumentCall[];
 	failAppends: boolean;
 	failCreates: boolean;
+	failStoreDocument: boolean;
 }
 
 function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBridge {
 	const creates: ISessionHeader[] = [];
 	const appends: IAppendCall[] = [];
 	const deletes: ISessionRef[] = [];
+	const documents: IStoredDocumentCall[] = [];
+	// Stored document markdown keyed by entry path, so readMediaText round-trips.
+	const documentTexts = new Map<string, string>();
 	// A tiny store folding state entries so tests can rehydrate a second
 	// provider over the same bridge and observe persisted lifecycle state.
 	const store = new Map<string, ISessionSnapshot>(snapshots.map(snapshot => [snapshot.sessionId, snapshot]));
@@ -36,8 +54,21 @@ function createFakeBridge(snapshots: readonly ISessionSnapshot[] = []): IFakeBri
 		creates,
 		appends,
 		deletes,
+		documents,
 		failAppends: false,
 		failCreates: false,
+		failStoreDocument: false,
+		storeDocument: async (ref, title, markdown) => {
+			if (bridge.failStoreDocument) {
+				throw new Error('storeDocument failed');
+			}
+			documents.push({ ref, title, markdown });
+			const name = `doc-${documents.length}.md`;
+			const path = `media/${ref.sessionId}/${name}`;
+			documentTexts.set(path, markdown);
+			return { path, name };
+		},
+		readMediaText: async (_ref, entryPath) => documentTexts.get(entryPath),
 		delete: async ref => {
 			deletes.push(ref);
 			store.delete(ref.sessionId);
@@ -470,6 +501,158 @@ test('agent runs assemble a work block with tool steps and persist it', async ()
 	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
 	assert.ok(persistedWork, 'work entry persisted');
 	assert.ok(((persistedWork.entry as { steps?: readonly unknown[] }).steps?.length ?? 0) >= 2, 'persisted steps include thinking and tool');
+});
+
+// --- 长答案分流 (#13, 原 #14 P2) ---------------------------------------------
+
+test('splitLongAnswer: at or below the threshold there is nothing to split', () => {
+	assert.equal(splitLongAnswer('short answer'), undefined);
+	assert.equal(splitLongAnswer('a'.repeat(DOCUMENT_SPLIT_THRESHOLD)), undefined);
+	assert.ok(splitLongAnswer('a\n\n' + 'b'.repeat(DOCUMENT_SPLIT_THRESHOLD)) !== undefined);
+});
+
+test('splitLongAnswer keeps consecutive whole paragraphs within the 600-char budget', () => {
+	const first = '结论：迁移可以分两步走。';
+	const second = 'B'.repeat(300);
+	const third = 'C'.repeat(400);
+	const full = [first, second, third, 'D'.repeat(1500)].join('\n\n');
+	const split = splitLongAnswer(full);
+	assert.ok(split);
+	// first+second fits (≤600); adding third would blow the budget mid-way.
+	assert.equal(split.summary, `${first}\n\n${second}`);
+	assert.equal(split.full, full);
+});
+
+test('splitLongAnswer hard-cuts a single over-budget paragraph with an ellipsis', () => {
+	const split = splitLongAnswer('E'.repeat(DOCUMENT_SPLIT_THRESHOLD + 500));
+	assert.ok(split);
+	assert.equal(split.summary.length, 600);
+	assert.ok(split.summary.endsWith('…'));
+});
+
+/** Scripted agent bridge for the split tests: capture the listener, replay the script on run. */
+function createScriptedAgent(script: (emit: (payload: object) => void) => void): IAgentBridge {
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	return {
+		run: async sessionId => {
+			script(payload => listener?.({ sessionId, ...payload } as never));
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+}
+
+const ENABLED_MODELS_SERVICE = {
+	registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+	selectedModel: { get: () => ({ id: 'model-1' }) },
+} as never;
+
+const LONG_ANSWER = ['结论：部署链路已经梳理完毕，问题出在网关配置。', 'X'.repeat(700), 'Y'.repeat(700), 'Z'.repeat(700)].join('\n\n');
+
+test('a long completed answer splits: summary+marker bubble, document attachment, full text stored', async () => {
+	const bridge = createFakeBridge();
+	const agent = createScriptedAgent(emit => {
+		emit({ event: { type: 'assistant_delta', text: LONG_ANSWER } });
+		emit({ done: { reason: 'completed', turns: 1 } });
+	});
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, ENABLED_MODELS_SERVICE);
+	await provider.initialize();
+
+	const session = await provider.startSession('梳理部署链路');
+	await new Promise(resolve => setTimeout(resolve, 20));
+	await provider.whenIdle();
+
+	// The full text landed on the bridge exactly once, titled by the session.
+	assert.equal(bridge.documents.length, 1);
+	assert.equal(bridge.documents[0]!.title, '梳理部署链路');
+	assert.equal(bridge.documents[0]!.markdown, LONG_ANSWER);
+
+	// The bubble folded to summary + note + marker, with the document attachment.
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.ok(assistant);
+	assert.ok(assistant.text.startsWith('结论：部署链路已经梳理完毕'), 'summary keeps the first paragraph');
+	assert.ok(assistant.text.length < LONG_ANSWER.length, 'the bubble no longer holds the full text');
+	assert.match(assistant.text, DOCUMENT_SPLIT_MARKER);
+	assert.ok(assistant.text.includes('梳理部署链路'), 'the marker names the document title');
+	assert.deepEqual(assistant.attachments, [{ kind: 'document', path: `media/${session.sessionId}/doc-1.md`, label: '梳理部署链路' }]);
+
+	// Persisted identically: summary text + attachments on the assistant entry.
+	const persisted = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
+	assert.ok(persisted);
+	assert.equal((persisted.entry as { text: string }).text, assistant.text);
+	assert.deepEqual((persisted.entry as { attachments?: readonly unknown[] }).attachments, assistant.attachments);
+
+	// The next run's transcript sees the summary + marker (message.text verbatim).
+	const transcript = toTranscript(session.messages.get());
+	const lastAssistantTurn = [...transcript].reverse().find(turn => turn.role === 'assistant');
+	assert.ok(lastAssistantTurn);
+	assert.match((lastAssistantTurn.content[0] as { text: string }).text, DOCUMENT_SPLIT_MARKER);
+
+	// The reference card's expand round-trips through the bridge.
+	assert.equal(await provider.resolveDocumentText(session.sessionId, assistant.attachments![0]!.path), LONG_ANSWER);
+});
+
+test('short completed answers and non-completed long answers never split', async () => {
+	// Short + completed: below the threshold, nothing to store.
+	const shortBridge = createFakeBridge();
+	const shortAgent = createScriptedAgent(emit => {
+		emit({ event: { type: 'assistant_delta', text: '短回答。' } });
+		emit({ done: { reason: 'completed', turns: 1 } });
+	});
+	const shortProvider = new FileSessionsProvider(shortBridge, { responseDelayMs: 1 }, shortAgent, ENABLED_MODELS_SERVICE);
+	await shortProvider.initialize();
+	const shortSession = await shortProvider.startSession('问个小问题');
+	await new Promise(resolve => setTimeout(resolve, 20));
+	await shortProvider.whenIdle();
+	assert.equal(shortBridge.documents.length, 0);
+	assert.equal(shortSession.messages.get().find(message => message.role === 'assistant')?.attachments, undefined);
+
+	// Long but aborted: the partial text IS the evidence — keep it whole.
+	const abortBridge = createFakeBridge();
+	const abortAgent = createScriptedAgent(emit => {
+		emit({ event: { type: 'assistant_delta', text: LONG_ANSWER } });
+		emit({ done: { reason: 'aborted', turns: 1 } });
+	});
+	const abortProvider = new FileSessionsProvider(abortBridge, { responseDelayMs: 1 }, abortAgent, ENABLED_MODELS_SERVICE);
+	await abortProvider.initialize();
+	const abortSession = await abortProvider.startSession('梳理部署链路');
+	await new Promise(resolve => setTimeout(resolve, 20));
+	await abortProvider.whenIdle();
+	assert.equal(abortBridge.documents.length, 0);
+	const abortedAssistant = abortSession.messages.get().find(message => message.role === 'assistant');
+	assert.equal(abortedAssistant?.text, LONG_ANSWER);
+	assert.equal(abortedAssistant?.attachments, undefined);
+});
+
+test('a failed document store keeps the full text in the bubble instead of losing it', async t => {
+	const bridge = createFakeBridge();
+	bridge.failStoreDocument = true;
+	const agent = createScriptedAgent(emit => {
+		emit({ event: { type: 'assistant_delta', text: LONG_ANSWER } });
+		emit({ done: { reason: 'completed', turns: 1 } });
+	});
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, ENABLED_MODELS_SERVICE);
+	await provider.initialize();
+	const errorSpy = t.mock.method(console, 'error', () => undefined);
+
+	const session = await provider.startSession('梳理部署链路');
+	await new Promise(resolve => setTimeout(resolve, 20));
+	await provider.whenIdle();
+
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.equal(assistant?.text, LONG_ANSWER);
+	assert.equal(assistant?.attachments, undefined);
+	const persisted = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
+	assert.equal((persisted!.entry as { text: string }).text, LONG_ANSWER);
+	assert.ok(errorSpy.mock.callCount() >= 1);
 });
 
 test('a work_digest event materializes a hidden digest message, persisted after the reply', async () => {

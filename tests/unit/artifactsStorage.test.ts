@@ -11,7 +11,7 @@ import test from 'node:test';
 
 import type { IArtifactEntryData } from '../../src/sessions/services/artifacts/common/artifacts.js';
 import { appendArtifact, artifactsFilePath, extractArtifactsFromEntries, listArtifacts, rebuildArtifacts, removeSessionArtifacts } from '../../src/main/artifactsStorage.js';
-import { storeSessionTableCsv } from '../../src/main/sessionsStorage.js';
+import { storeSessionDocument, storeSessionTableCsv } from '../../src/main/sessionsStorage.js';
 import type { ISessionEntry } from '../../src/sessions/services/sessions/common/sessionsBridge.js';
 
 async function createTempRoot(): Promise<string> {
@@ -213,11 +213,12 @@ test('rebuildArtifacts regenerates the same index the live hooks produced (expor
 		for (const line of extractArtifactsFromEntries('sess-b', projectId, [uiMessage] as unknown as ISessionEntry[])) {
 			await appendArtifact(root, line);
 		}
-		// storeSessionTableCsv writes the csv AND its live index entry.
+		// storeSessionTableCsv / storeSessionDocument write the media file AND its live index entry.
 		await storeSessionTableCsv(root, { sessionId: 'sess-b', projectId }, 'orders', 'a,b\n1,2');
+		await storeSessionDocument(root, { sessionId: 'sess-b', projectId }, '梳理报告', '# 全文\n\n正文内容。');
 
 		const live = await listArtifacts(root, { projectId });
-		assert.equal(live.length, 3);
+		assert.equal(live.length, 4);
 
 		await rebuildArtifacts(root, projectId);
 		const rebuilt = await listArtifacts(root, { projectId });
@@ -225,6 +226,10 @@ test('rebuildArtifacts regenerates the same index the live hooks produced (expor
 		assert.deepEqual(rebuilt.map(stableFields), live.map(stableFields));
 		assert.equal(rebuilt.find(artifact => artifact.id === 'sess-a:p1')?.superseded, true);
 		assert.equal(rebuilt.find(artifact => artifact.kind === 'table')?.title, 'orders');
+		// The media scan regenerates document rows from their .md files too (#13 长答案分流).
+		const rebuiltDocument = rebuilt.find(artifact => artifact.kind === 'document');
+		assert.equal(rebuiltDocument?.title, '梳理报告');
+		assert.equal(rebuiltDocument?.payload.type, 'media');
 		// Message-payload artifacts keep their transcript timestamps exactly.
 		assert.deepEqual(
 			rebuilt.filter(artifact => artifact.payload.type === 'message').map(artifact => artifact.createdAt),

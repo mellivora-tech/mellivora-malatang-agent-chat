@@ -55,6 +55,8 @@ export interface ISessionMessageSender {
 	forkSession?(sessionId: string, messageId: string): Promise<unknown>;
 	/** Data URL for a stored image attachment, for thumbnails in the transcript. */
 	resolveMedia?(sessionId: string, path: string): Promise<string | undefined>;
+	/** Markdown of a split answer's document attachment — the reference card's expand (#13 长答案分流). */
+	resolveDocumentText?(sessionId: string, path: string): Promise<string | undefined>;
 	/** All sessions, for the #-mention picker (sessionsService satisfies this structurally). */
 	getSessions?(): readonly ISession[];
 }
@@ -520,6 +522,13 @@ export class ConversationView extends Disposable {
 		return sessionId && resolve ? path => resolve(sessionId, path) : undefined;
 	}
 
+	/** Path → markdown for document attachments (the split answer's full text); undefined when the sender can't resolve it. */
+	private buildDocumentResolver(): ((path: string) => Promise<string | undefined>) | undefined {
+		const sessionId = this.session?.sessionId;
+		const resolve = this.messageSender?.resolveDocumentText?.bind(this.messageSender);
+		return sessionId && resolve ? path => resolve(sessionId, path) : undefined;
+	}
+
 	private notifyPermissionListeners(): void {
 		for (const listener of this.permissionListeners) {
 			listener();
@@ -824,7 +833,12 @@ export class ConversationView extends Disposable {
 						: undefined,
 				});
 			default:
-				return createElement(MessageRow, { message, actions: this.buildMessageActions(message), resolveImage: this.buildImageResolver() });
+				return createElement(MessageRow, {
+					message,
+					actions: this.buildMessageActions(message),
+					resolveImage: this.buildImageResolver(),
+					resolveDocument: this.buildDocumentResolver(),
+				});
 		}
 	}
 

@@ -53,9 +53,9 @@ export interface ISessionWorkStepData {
 	readonly agent?: string;
 }
 
-/** A structured reference attached to a user message (@-mentioned file/folder, a stored image, or a $-mentioned skill). */
+/** A structured reference riding a message: user-attached file/folder/image/skill/session, or an assistant reply's split-off 'document' (#13). */
 export interface ISessionAttachmentData {
-	readonly kind: 'file' | 'folder' | 'image' | 'skill' | 'session';
+	readonly kind: 'file' | 'folder' | 'image' | 'skill' | 'session' | 'document';
 	readonly path: string;
 	/** Images only: e.g. 'image/png'. */
 	readonly mediaType?: string;
@@ -272,4 +272,8 @@ export interface ISessionsBridge {
 	storeMedia?(ref: ISessionRef, base64: string, mediaType: string): Promise<string>;
 	/** Read a stored image back as raw base64; undefined when missing. */
 	readMedia?(ref: ISessionRef, entryPath: string): Promise<string | undefined>;
+	/** Write a split long answer's full markdown beside the transcript (#13 长答案分流); returns the entry path (`media/<sessionId>/<name>.md`) and file name. */
+	storeDocument?(ref: ISessionRef, title: string, markdown: string): Promise<{ readonly path: string; readonly name: string }>;
+	/** Read a stored media text file (the document card's expand); undefined when missing or the path escapes the session's media dir. */
+	readMediaText?(ref: ISessionRef, entryPath: string): Promise<string | undefined>;
 }
