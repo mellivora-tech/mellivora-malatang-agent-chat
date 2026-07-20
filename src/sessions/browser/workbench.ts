@@ -47,7 +47,7 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly skills?: ISkillsBridge;
 		readonly environments?: IEnvironmentsBridge;
 		readonly dataFiles?: IDataFilesBridge;
-		/** #13 P0: exposed for the P1 artifacts panel; unused by the renderer this phase. */
+		/** #13: the artifacts index — the auxiliary bar's 产出物 tab lists/rebuilds/reveals through it. */
 		readonly artifacts?: IArtifactsBridge;
 	};
 };
@@ -90,6 +90,7 @@ export class Workbench {
 		sessionsPartService: this.sessionsPartService,
 		environmentsService: this.environmentsService,
 		...((globalThis as AgentWindowGlobals).agentWindow?.dataFiles ? { dataFiles: (globalThis as AgentWindowGlobals).agentWindow!.dataFiles! } : {}),
+		...((globalThis as AgentWindowGlobals).agentWindow?.artifacts ? { artifacts: (globalThis as AgentWindowGlobals).agentWindow!.artifacts! } : {}),
 	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();

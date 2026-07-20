@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { getActiveLocale, localize, resolveLocale, type LocalePreference } from '../../../common/i18n/i18n.js';
+import { formatTimestamp } from '../../../common/relativeTime.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { append, clearNode } from '../../../base/browser/dom.js';
 import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChanges, type ISearchPaletteTask } from '../../search/browser/searchPalette.js';
@@ -1346,30 +1347,6 @@ function getStatusLabel(status: SessionStatus): string {
 }
 
 /** Compact relative time for list rows: "now", "27m", "1h", "4d"; dates past a week. */
-function formatTimestamp(date: Date): string {
-	const diff = Date.now() - date.getTime();
-	const minutes = Math.max(0, Math.floor(diff / 60000));
-	if (minutes < 1) {
-		return localize('time.now');
-	}
-	if (minutes < 60) {
-		return localize('time.minutes', minutes);
-	}
-
-	const hours = Math.floor(minutes / 60);
-	if (hours < 24) {
-		return localize('time.hours', hours);
-	}
-
-	const days = Math.floor(hours / 24);
-	if (days < 7) {
-		return localize('time.days', days);
-	}
-
-	// The APP locale, not the OS locale — a pinned en-US must not show 中文 dates (#9 P1).
-	return date.toLocaleDateString(getActiveLocale(), { month: 'short', day: 'numeric' });
-}
-
 /** Aa card + accent/status dots straight from a seed — the preview costs nothing because a preset IS its colors (#8 P3). */
 function renderSeedSwatch(seed: IThemeSeed): HTMLElement {
 	const strip = document.createElement('div');

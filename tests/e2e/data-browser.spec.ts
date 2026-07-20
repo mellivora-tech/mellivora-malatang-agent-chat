@@ -185,7 +185,7 @@ test('side pane tabs are instances: + menu, close, and view keep-alive', async (
 
 		// Open a second tab through the "+" menu.
 		await page.locator('.auxiliary-tab-add').click();
-		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '工作台', '终端', '浏览器']);
+		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '工作台', '产出物', '终端', '浏览器']);
 		await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
 		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['dev·orders', '终端']);
 		await expect(page.locator('.auxiliary-view[data-tab-id="data"]')).toBeHidden();

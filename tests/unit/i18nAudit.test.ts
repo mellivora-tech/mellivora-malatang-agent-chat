@@ -50,6 +50,8 @@ const SWEPT_FILES: readonly string[] = [
 	'src/sessions/browser/parts/agentUi/components/workRender.ts',
 	'src/sessions/services/sessions/common/session.ts',
 	'src/sessions/browser/parts/quotaIndicator.ts',
+	// --- #13 P1 ---
+	'src/sessions/browser/parts/artifactsView.ts',
 	'src/sessions/services/environments/common/environments.ts',
 	'src/sessions/contrib/data/common/dataProvider.ts',
 	'src/sessions/browser/workbench.ts',

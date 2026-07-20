@@ -525,3 +525,87 @@
 	gap: var(--vscode-agents-space-10);
 	align-items: flex-start;
 }
+
+/* Artifacts panel (#13 P1): session-grouped index rows, visually in line with
+   the changes list above. */
+.artifacts-view {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-12);
+	min-width: 0;
+}
+
+.artifacts-empty {
+	padding: var(--vscode-agents-space-4) 0;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 62%, transparent);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.artifacts-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-2);
+	min-width: 0;
+}
+
+.artifacts-group-header {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 58%, transparent);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.artifact-row {
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	min-height: 28px;
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label1);
+	text-align: left;
+	cursor: default;
+}
+
+.artifact-row:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
+.artifact-row:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-1);
+}
+
+.artifact-row .codicon {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.artifact-row-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.artifact-row-time {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-variant-numeric: tabular-nums;
+}
+
+.artifact-row-superseded .artifact-row-title {
+	color: var(--vscode-agents-color-text-muted);
+}
+
+/* A revealed-but-gone export: keep the row (the index remembers it) but say so. */
+.artifact-row-missing .artifact-row-title {
+	color: var(--vscode-agents-color-text-muted);
+	text-decoration: line-through;
+}

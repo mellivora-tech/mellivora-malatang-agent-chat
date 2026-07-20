@@ -500,6 +500,12 @@ export const zhCN = {
 	'surface.hole': '未定义: {0}',
 	'surface.errorNote': '{0} 处语句未能渲染（详见运行日志）',
 	'work.agentOrdinal': '子代理 {0} · {1}',
+
+	// --- 产出物面板（#13 P1）---
+	'aux.tab.artifacts': '产出物',
+	'artifacts.empty': '还没有产出物——计划、讲解、卡片、表格和导出会汇总在这里。',
+	'artifacts.missing': '文件已不存在',
+	'artifacts.superseded': '已被新版本取代',
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

@@ -62,4 +62,6 @@ export interface IArtifactsBridge {
 	list(filter?: IArtifactFilter): Promise<readonly IArtifactEntryData[]>;
 	/** Rebuild one scope's index from its session transcripts (projectId absent = the projectless scope). */
 	rebuild(projectId?: string): Promise<void>;
+	/** Show an export-payload path in the OS file manager; false = the file is gone (the panel marks the row stale). */
+	reveal(path: string): Promise<boolean>;
 }
