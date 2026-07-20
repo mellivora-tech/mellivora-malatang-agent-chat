@@ -1876,6 +1876,12 @@ button.conversation-plan-header {
    from TS (success below 70%, then a warning→danger color-mix ramp); labels
    and countdowns stay muted. Hidden when no provider exposes a usage
    endpoint. */
+.conversation-context-quota {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+}
+
 .conversation-quota {
 	display: inline-flex;
 	flex-direction: column;

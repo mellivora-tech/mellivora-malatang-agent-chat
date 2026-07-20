@@ -26,11 +26,21 @@ export class ConversationContext extends Disposable {
 	private branchError: string | undefined;
 	private branchMenu: HTMLElement | undefined;
 	private closeBranchMenuListeners: (() => void) | undefined;
+	// An externally-OWNED element (the quota indicator) re-adopted on every
+	// render — setContent rebuilds the bar, so anything with its own lifecycle
+	// must live outside and be re-appended, never recreated here.
+	private trailing: HTMLElement | undefined;
 
 	constructor() {
 		super();
 		this.element = this.bar.element;
 		this._register(toDisposable(() => this.closeBranchMenu()));
+		this.render();
+	}
+
+	/** Mount an externally-owned element at the bar's right edge (survives re-renders). */
+	setTrailing(element: HTMLElement): void {
+		this.trailing = element;
 		this.render();
 	}
 
@@ -112,6 +122,11 @@ export class ConversationContext extends Disposable {
 		const moreIcon = append(more, document.createElement('span'));
 		moreIcon.className = 'codicon codicon-ellipsis';
 		moreIcon.setAttribute('aria-hidden', 'true');
+
+		// space-between pushes the adopted element to the bar's right edge.
+		if (this.trailing) {
+			header.appendChild(this.trailing);
+		}
 
 		this.bar.setContent(header);
 	}
