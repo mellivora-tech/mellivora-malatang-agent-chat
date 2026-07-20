@@ -1871,44 +1871,47 @@ button.conversation-plan-header {
 	color: var(--vscode-agents-color-text-secondary);
 }
 
-/* Coding-plan quota pill (#19): mini ring + used-%. Its inline `color` carries
-   the ramped warning→danger severity (set from TS via color-mix over the
-   warning/danger tokens once usage crosses 70%); ring and text both ride
-   currentColor so the whole pill escalates together. Hidden when no provider
-   exposes a usage endpoint. */
+/* Coding-plan quota (#19): two compact lines — `5小时: 25% ⏱3h34m` over
+   `7天: 30% ⏱3d5h`. Each line's used-% carries an inline severity color set
+   from TS (success below 70%, then a warning→danger color-mix ramp); labels
+   and countdowns stay muted. Hidden when no provider exposes a usage
+   endpoint. */
 .conversation-quota {
 	display: inline-flex;
-	align-items: center;
-	gap: var(--vscode-agents-space-3);
+	flex-direction: column;
+	justify-content: center;
+	gap: var(--vscode-agents-space-1);
 	flex: 0 0 auto;
 	margin: 0 var(--vscode-agents-space-2);
 	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
 }
 
 .conversation-quota[hidden] {
 	display: none;
 }
 
-.conversation-quota svg {
-	width: var(--vscode-agents-space-16);
-	height: var(--vscode-agents-space-16);
-	flex: 0 0 auto;
+.conversation-quota-line {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-3);
+	white-space: nowrap;
 }
 
-.conversation-quota .ring-track {
-	fill: none;
-	stroke: color-mix(in srgb, currentColor 30%, transparent);
-	stroke-width: 2.5;
+.conversation-quota-line-value {
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
-.conversation-quota .ring-fill {
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 2.5;
-	stroke-linecap: round;
-	transition: stroke-dashoffset var(--vscode-agents-motion-duration-slow) var(--vscode-agents-motion-easing);
+.conversation-quota-line-reset {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-1);
+}
+
+.conversation-quota-line-reset .codicon {
+	font-size: var(--vscode-agents-fontSize-label2);
 }
 
 .conversation-context-ring[hidden] {

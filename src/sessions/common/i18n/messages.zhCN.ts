@@ -125,6 +125,8 @@ export const zhCN = {
 	'quota.resetLabel': '周额度刷新',
 	'quota.windowHours': '{0} 小时窗口',
 	'quota.windowShort': '短期窗口',
+	'quota.lineHours': '{0}小时',
+	'quota.lineWeek': '7天',
 	'quota.windowLeft': '剩 {0}%',
 	'quota.windowReset': '剩 {0}%（{1} 刷新）',
 	'quota.footnote': '数字为周额度 · 每 5 分钟自动刷新',

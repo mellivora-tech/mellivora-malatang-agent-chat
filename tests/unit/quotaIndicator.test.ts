@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatResetTime, quotaSeverityColor } from '../../src/sessions/browser/parts/quotaIndicator.js';
+import { formatCountdown, formatResetTime, quotaSeverityColor } from '../../src/sessions/browser/parts/quotaIndicator.js';
 
 test('quotaSeverityColor: silent below 70%, then a linear warning→danger ramp (#19 requirement 2)', () => {
 	assert.equal(quotaSeverityColor(0), undefined);
@@ -26,4 +26,14 @@ test('formatResetTime: ISO → local MM-DD HH:mm; garbage → undefined', () => 
 	assert.match(formatted, /^\d{2}-\d{2} \d{2}:\d{2}$/);
 	assert.equal(formatResetTime('not-a-date'), undefined);
 	assert.equal(formatResetTime(undefined), undefined);
+});
+
+test('formatCountdown: d/h/m compaction by horizon; past or garbage → undefined', () => {
+	const at = (ms: number): string => new Date(Date.now() + ms).toISOString();
+	assert.equal(formatCountdown(at(3 * 86400_000 + 5 * 3600_000)), '3d5h');
+	assert.equal(formatCountdown(at(3 * 3600_000 + 34 * 60_000)), '3h34m');
+	assert.equal(formatCountdown(at(34 * 60_000)), '34m');
+	assert.equal(formatCountdown(at(-60_000)), undefined);
+	assert.equal(formatCountdown('not-a-date'), undefined);
+	assert.equal(formatCountdown(undefined), undefined);
 });

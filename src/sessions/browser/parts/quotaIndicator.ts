@@ -6,7 +6,7 @@
 import { append } from '../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
 import { localize } from '../../common/i18n/i18n.js';
-import type { IQuotaSnapshot } from '../../services/models/common/models.js';
+import type { IQuotaSnapshot, IQuotaWindow } from '../../services/models/common/models.js';
 
 /**
  * Coding-plan quota pill (#19): a mini ring + used-% label beside the context
@@ -46,8 +46,28 @@ export function formatResetTime(iso: string | undefined): string | undefined {
 	return `${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }
 
-const RING_RADIUS = 6;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+/** Time until the reset as the pill's compact countdown — `3d5h` / `3h34m` / `34m`; undefined when past or garbage. Exported for unit tests. */
+export function formatCountdown(iso: string | undefined): string | undefined {
+	if (!iso) {
+		return undefined;
+	}
+	const deltaMs = new Date(iso).getTime() - Date.now();
+	if (Number.isNaN(deltaMs) || deltaMs <= 0) {
+		return undefined;
+	}
+	const totalMinutes = Math.round(deltaMs / 60_000);
+	const days = Math.floor(totalMinutes / 1440);
+	const hours = Math.floor((totalMinutes % 1440) / 60);
+	const minutes = totalMinutes % 60;
+	if (days > 0) {
+		return `${days}d${hours}h`;
+	}
+	if (hours > 0) {
+		return `${hours}h${minutes}m`;
+	}
+	return `${minutes}m`;
+}
+
 const REFRESH_INTERVAL_MS = 5 * 60_000;
 
 export interface IQuotaIndicatorOptions {
@@ -64,8 +84,6 @@ export interface IQuotaIndicator extends Disposable {
 
 class QuotaIndicator extends Disposable implements IQuotaIndicator {
 	private readonly pill: HTMLElement;
-	private readonly fill: SVGCircleElement | null;
-	private readonly label: HTMLElement;
 	private readonly popover: HTMLElement;
 	private inflight = false;
 	private disposed = false;
@@ -73,17 +91,14 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 	constructor(private readonly options: IQuotaIndicatorOptions) {
 		super();
 
+		// Two compact lines (short window above, weekly below), each
+		// `label: used% ⏱countdown` — the layout the user picked (2026-07-20)
+		// over the earlier ring+% pill: both horizons visible at a glance,
+		// no hover needed for the reset clock.
 		const pill = append(options.container, document.createElement('span'));
 		pill.className = 'conversation-quota';
 		pill.hidden = true;
-		pill.innerHTML =
-			'<svg viewBox="0 0 16 16" aria-hidden="true">' +
-			`<circle class="ring-track" cx="8" cy="8" r="${RING_RADIUS}"></circle>` +
-			`<circle class="ring-fill" cx="8" cy="8" r="${RING_RADIUS}" transform="rotate(-90 8 8)" stroke-dasharray="${RING_CIRCUMFERENCE}" stroke-dashoffset="${RING_CIRCUMFERENCE}"></circle>` +
-			'</svg>';
 		this.pill = pill;
-		this.fill = pill.querySelector<SVGCircleElement>('.ring-fill');
-		this.label = append(pill, document.createElement('span'));
 		this._register(
 			toDisposable(() => {
 				this.disposed = true;
@@ -134,15 +149,19 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 		const usedPct = Math.round((snapshot.usage.used / snapshot.usage.limit) * 100);
 		const leftPct = Math.max(0, 100 - usedPct);
 		this.pill.hidden = false;
-		this.label.textContent = `${usedPct}%`;
 		this.pill.setAttribute('aria-label', localize('quota.aria', usedPct));
-		if (this.fill) {
-			this.fill.style.strokeDashoffset = String(RING_CIRCUMFERENCE * Math.max(0, 1 - usedPct / 100));
+
+		// Short windows first (matches the reference layout: the horizon that
+		// bites first sits on top), the weekly line last.
+		this.pill.replaceChildren();
+		for (const window of snapshot.windows) {
+			const label =
+				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0
+					? localize('quota.lineHours', window.durationMinutes / 60)
+					: localize('quota.windowShort');
+			this.pill.append(quotaLine(label, window));
 		}
-		// The ramped severity color drives ring AND text via currentColor;
-		// clearing the override returns the pill to the muted toolbar color.
-		const severity = quotaSeverityColor(usedPct);
-		this.pill.style.color = severity ?? '';
+		this.pill.append(quotaLine(localize('quota.lineWeek'), snapshot.usage));
 
 		this.popover.replaceChildren();
 		const header = append(this.popover, document.createElement('span'));
@@ -200,6 +219,31 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 	private hidePopover(): void {
 		this.popover.classList.remove('is-visible');
 	}
+}
+
+/** One pill line: `5小时: 25% ⏱3h34m`. The used-% carries the severity color — success below the threshold, the warning→danger ramp above it. */
+function quotaLine(label: string, window: IQuotaWindow): HTMLElement {
+	const line = document.createElement('span');
+	line.className = 'conversation-quota-line';
+	const labelEl = append(line, document.createElement('span'));
+	labelEl.className = 'conversation-quota-line-label';
+	labelEl.textContent = `${label}:`;
+	const usedPct = window.limit > 0 ? Math.round((window.used / window.limit) * 100) : 0;
+	const valueEl = append(line, document.createElement('span'));
+	valueEl.className = 'conversation-quota-line-value';
+	valueEl.textContent = `${usedPct}%`;
+	valueEl.style.color = quotaSeverityColor(usedPct) ?? 'var(--vscode-agents-color-success)';
+	const countdown = formatCountdown(window.resetTime);
+	if (countdown) {
+		const resetEl = append(line, document.createElement('span'));
+		resetEl.className = 'conversation-quota-line-reset';
+		const clock = append(resetEl, document.createElement('span'));
+		clock.className = 'codicon codicon-clock';
+		clock.setAttribute('aria-hidden', 'true');
+		const time = append(resetEl, document.createElement('span'));
+		time.textContent = countdown;
+	}
+	return line;
 }
 
 function quotaRow(label: string, value: string): HTMLElement {
