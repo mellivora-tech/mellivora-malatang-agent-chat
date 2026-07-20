@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatCountdown, formatResetTime, quotaSeverityColor } from '../../src/sessions/browser/parts/quotaIndicator.js';
+import { formatAge, formatCountdown, formatResetTime, quotaSeverityColor } from '../../src/sessions/browser/parts/quotaIndicator.js';
 
 test('quotaSeverityColor: silent below 70%, then a linear warning→danger ramp (#19 requirement 2)', () => {
 	assert.equal(quotaSeverityColor(0), undefined);
@@ -36,4 +36,11 @@ test('formatCountdown: d/h/m compaction by horizon; past or garbage → undefine
 	assert.equal(formatCountdown(at(-60_000)), undefined);
 	assert.equal(formatCountdown('not-a-date'), undefined);
 	assert.equal(formatCountdown(undefined), undefined);
+});
+
+test('formatAge: s → m → h compaction, clamped at zero', () => {
+	assert.equal(formatAge(3000), '3s前');
+	assert.equal(formatAge(-500), '0s前');
+	assert.equal(formatAge(2 * 60_000 + 5000), '2m前');
+	assert.equal(formatAge(3 * 3600_000 + 60_000), '3h前');
 });

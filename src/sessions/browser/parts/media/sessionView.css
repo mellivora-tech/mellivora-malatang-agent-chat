@@ -1886,6 +1886,7 @@ button.conversation-plan-header {
 	display: inline-flex;
 	flex-direction: column;
 	justify-content: center;
+	align-items: flex-end;
 	gap: var(--vscode-agents-space-1);
 	flex: 0 0 auto;
 	margin: 0 var(--vscode-agents-space-2);
@@ -1899,11 +1900,52 @@ button.conversation-plan-header {
 	display: none;
 }
 
+/* Freshness line: `3s前 ⟳` — a locally-ticking age plus the manual refresh. */
+.conversation-quota-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-2);
+	white-space: nowrap;
+}
+
+.conversation-quota-refresh {
+	display: inline-flex;
+	align-items: center;
+	border: 0;
+	padding: 0 var(--vscode-agents-space-1);
+	background: transparent;
+	color: inherit;
+	cursor: default;
+	border-radius: var(--vscode-agents-radius-control);
+}
+
+.conversation-quota-refresh:hover {
+	color: var(--vscode-agents-color-text-primary);
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+.conversation-quota-refresh .codicon {
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
 .conversation-quota-line {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-4);
+	white-space: nowrap;
+}
+
+.conversation-quota-segment {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--vscode-agents-space-3);
 	white-space: nowrap;
+}
+
+/* Dot divider between the merged horizons on the data line. */
+.conversation-quota-segment + .conversation-quota-segment::before {
+	content: '·';
+	margin-right: var(--vscode-agents-space-3);
 }
 
 .conversation-quota-line-value {

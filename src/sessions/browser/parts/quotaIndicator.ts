@@ -68,7 +68,21 @@ export function formatCountdown(iso: string | undefined): string | undefined {
 	return `${minutes}m`;
 }
 
+/** How stale the display may claim to be, compactly: `3s前` → `2m前` → `1h前`. Exported for unit tests. */
+export function formatAge(ageMs: number): string {
+	const seconds = Math.max(0, Math.floor(ageMs / 1000));
+	if (seconds < 60) {
+		return localize('quota.ageSeconds', seconds);
+	}
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) {
+		return localize('quota.ageMinutes', minutes);
+	}
+	return localize('quota.ageHours', Math.floor(minutes / 60));
+}
+
 const REFRESH_INTERVAL_MS = 5 * 60_000;
+const AGE_TICK_MS = 1000;
 
 export interface IQuotaIndicatorOptions {
 	/** Toolbar container the pill is appended to. */
@@ -84,21 +98,48 @@ export interface IQuotaIndicator extends Disposable {
 
 class QuotaIndicator extends Disposable implements IQuotaIndicator {
 	private readonly pill: HTMLElement;
+	private readonly ageLabel: HTMLElement;
+	private readonly refreshIcon: HTMLElement;
+	private readonly dataLine: HTMLElement;
 	private readonly popover: HTMLElement;
 	private inflight = false;
 	private disposed = false;
+	/** Epoch ms of the last SUCCESSFUL fetch — drives the freshness line. */
+	private fetchedAt: number | undefined;
 
 	constructor(private readonly options: IQuotaIndicatorOptions) {
 		super();
 
-		// Two compact lines (short window above, weekly below), each
-		// `label: used% ⏱countdown` — the layout the user picked (2026-07-20)
-		// over the earlier ring+% pill: both horizons visible at a glance,
-		// no hover needed for the reset clock.
+		// Layout (user-picked 2026-07-20, round 3): a freshness line over the
+		// quota line — `🕐3s前 ⟳` answers "is this 26% NOW?" before the number
+		// is trusted, and the button is the "I want it fresh NOW" escape hatch
+		// on top of the automatic cadence (run end / focus / 5-minute timer).
 		const pill = append(options.container, document.createElement('span'));
 		pill.className = 'conversation-quota';
 		pill.hidden = true;
 		this.pill = pill;
+
+		const status = append(pill, document.createElement('span'));
+		status.className = 'conversation-quota-status';
+		this.ageLabel = append(status, document.createElement('span'));
+		this.ageLabel.className = 'conversation-quota-age';
+		const refresh = append(status, document.createElement('button')) as HTMLButtonElement;
+		refresh.className = 'conversation-quota-refresh';
+		refresh.type = 'button';
+		refresh.title = localize('quota.refresh');
+		refresh.setAttribute('aria-label', localize('quota.refresh'));
+		// codicon-sync (circular arrows), not codicon-refresh: the bundled
+		// codicon.css only animates codicon-modifier-spin on sync/loading.
+		this.refreshIcon = append(refresh, document.createElement('span'));
+		this.refreshIcon.className = 'codicon codicon-sync';
+		this.refreshIcon.setAttribute('aria-hidden', 'true');
+		refresh.addEventListener('click', () => this.refresh());
+
+		// Both quota horizons merged onto ONE line, short window first (the
+		// horizon that bites first leads).
+		this.dataLine = append(pill, document.createElement('span'));
+		this.dataLine.className = 'conversation-quota-line';
+
 		this._register(
 			toDisposable(() => {
 				this.disposed = true;
@@ -119,6 +160,9 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 
 		const timer = setInterval(() => this.refresh(), REFRESH_INTERVAL_MS);
 		this._register(toDisposable(() => clearInterval(timer)));
+		// The freshness text ticks locally — cheap textContent write, no fetch.
+		const ageTimer = setInterval(() => this.updateAge(), AGE_TICK_MS);
+		this._register(toDisposable(() => clearInterval(ageTimer)));
 		const onFocus = (): void => this.refresh();
 		window.addEventListener('focus', onFocus);
 		this._register(toDisposable(() => window.removeEventListener('focus', onFocus)));
@@ -131,37 +175,51 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 			return;
 		}
 		this.inflight = true;
+		this.refreshIcon.classList.add('codicon-modifier-spin');
 		void this.options
 			.fetchQuota()
 			.then(snapshot => this.render(snapshot))
 			.catch(() => this.render(undefined))
 			.finally(() => {
 				this.inflight = false;
+				this.refreshIcon.classList.remove('codicon-modifier-spin');
 			});
+	}
+
+	private updateAge(): void {
+		if (this.fetchedAt !== undefined && !this.pill.hidden) {
+			this.ageLabel.textContent = formatAge(Date.now() - this.fetchedAt);
+		}
 	}
 
 	private render(snapshot: IQuotaSnapshot | undefined): void {
 		if (this.disposed || !snapshot || snapshot.usage.limit <= 0) {
-			this.pill.hidden = true;
-			this.hidePopover();
+			// A failed refresh KEEPS the last data on screen — the freshness
+			// line growing stale is the honest signal; blanking would punish
+			// a flaky lookup. Hide only when there has never been data.
+			if (this.fetchedAt === undefined) {
+				this.pill.hidden = true;
+				this.hidePopover();
+			}
 			return;
 		}
 		const usedPct = Math.round((snapshot.usage.used / snapshot.usage.limit) * 100);
 		const leftPct = Math.max(0, 100 - usedPct);
 		this.pill.hidden = false;
 		this.pill.setAttribute('aria-label', localize('quota.aria', usedPct));
+		const parsedFetchedAt = new Date(snapshot.fetchedAt).getTime();
+		this.fetchedAt = Number.isNaN(parsedFetchedAt) ? Date.now() : parsedFetchedAt;
+		this.updateAge();
 
-		// Short windows first (matches the reference layout: the horizon that
-		// bites first sits on top), the weekly line last.
-		this.pill.replaceChildren();
+		this.dataLine.replaceChildren();
 		for (const window of snapshot.windows) {
 			const label =
 				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0
 					? localize('quota.lineHours', window.durationMinutes / 60)
 					: localize('quota.windowShort');
-			this.pill.append(quotaLine(label, window));
+			this.dataLine.append(quotaSegment(label, window));
 		}
-		this.pill.append(quotaLine(localize('quota.lineWeek'), snapshot.usage));
+		this.dataLine.append(quotaSegment(localize('quota.lineWeek'), snapshot.usage));
 
 		this.popover.replaceChildren();
 		const header = append(this.popover, document.createElement('span'));
@@ -221,10 +279,10 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 	}
 }
 
-/** One pill line: `5小时: 25% ⏱3h34m`. The used-% carries the severity color — success below the threshold, the warning→danger ramp above it. */
-function quotaLine(label: string, window: IQuotaWindow): HTMLElement {
+/** One quota segment on the data line: `5小时: 25% ⏱3h34m`. The used-% carries the severity color — success below the threshold, the warning→danger ramp above it. */
+function quotaSegment(label: string, window: IQuotaWindow): HTMLElement {
 	const line = document.createElement('span');
-	line.className = 'conversation-quota-line';
+	line.className = 'conversation-quota-segment';
 	const labelEl = append(line, document.createElement('span'));
 	labelEl.className = 'conversation-quota-line-label';
 	labelEl.textContent = `${label}:`;
