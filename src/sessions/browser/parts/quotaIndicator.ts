@@ -165,7 +165,9 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0
 					? localize('quota.windowHours', window.durationMinutes / 60)
 					: localize('quota.windowShort');
-			rows.append(quotaRow(label, localize('quota.windowLeft', Math.round((window.remaining / window.limit) * 100))));
+			const windowLeft = Math.round((window.remaining / window.limit) * 100);
+			const windowReset = formatResetTime(window.resetTime);
+			rows.append(quotaRow(label, windowReset ? localize('quota.windowReset', windowLeft, windowReset) : localize('quota.windowLeft', windowLeft)));
 		}
 
 		const footnote = append(this.popover, document.createElement('span'));
