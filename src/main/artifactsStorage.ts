@@ -151,6 +151,28 @@ export function extractArtifactsFromEntries(sessionId: string, projectId: string
  */
 export async function rebuildArtifacts(root: string, projectId?: string): Promise<void> {
 	const file = artifactsFilePath(root, projectId);
+	// Export entries point OUTSIDE the data root — the index is their only
+	// record, so a rebuild carries them over instead of wiping them (the P1
+	// panel rebuilds on every mount; dropping exports there would erase the
+	// very records #13 set out to keep).
+	const preserved: string[] = [];
+	try {
+		for (const line of (await readFile(file, 'utf8')).split('\n')) {
+			if (line.trim() === '') {
+				continue;
+			}
+			try {
+				const parsed = JSON.parse(line) as { kind?: unknown };
+				if (parsed !== null && typeof parsed === 'object' && parsed.kind === 'export') {
+					preserved.push(line);
+				}
+			} catch {
+				// Torn line — nothing to preserve from it.
+			}
+		}
+	} catch {
+		// No existing index — nothing to preserve.
+	}
 	await rm(file, { force: true });
 
 	const sessionsDir = projectId !== undefined ? join(root, 'projects', projectId, 'sessions') : join(root, 'sessions');
@@ -206,6 +228,10 @@ export async function rebuildArtifacts(root: string, projectId?: string): Promis
 	if (lines.length > 0) {
 		await mkdir(dirname(file), { recursive: true });
 		await writeFile(file, `${lines.map(line => JSON.stringify(line)).join('\n')}\n`, 'utf8');
+	}
+	if (preserved.length > 0) {
+		await mkdir(dirname(file), { recursive: true });
+		await appendFile(file, `${preserved.join('\n')}\n`, 'utf8');
 	}
 }
 

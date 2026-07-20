@@ -11,6 +11,11 @@ export const ISessionsPartService = createDecorator<ISessionsPartService>('sessi
 
 export type WorkbenchMode = 'newSession' | 'conversation';
 
+export interface IArtifactRevealRequest {
+	readonly sessionId: string;
+	readonly messageId: string;
+}
+
 export interface ISessionsPartService {
 	readonly mode: ReturnType<typeof observableValue<WorkbenchMode>>;
 	readonly sidePaneVisible: ReturnType<typeof observableValue<boolean>>;
@@ -34,6 +39,9 @@ export interface ISessionsPartService {
 	/** Chat → workbench surface: open/focus the surface tab (#12 M4); the side pane consumes it. */
 	readonly surfaceOpenRequest: ReturnType<typeof observableValue<number | undefined>>;
 	openSurfacePanel(): void;
+	/** Artifacts panel → conversation (#13 P1): scroll to and flash this message; the matching conversation view consumes it. */
+	readonly artifactRevealRequest: ReturnType<typeof observableValue<IArtifactRevealRequest | undefined>>;
+	revealArtifactMessage(sessionId: string, messageId: string): void;
 	/** Append structured reference text to the conversation composer. */
 	insertIntoComposer(text: string): void;
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void;
@@ -94,6 +102,15 @@ export class SessionsPartService implements ISessionsPartService {
 	openSurfacePanel(): void {
 		this.showConversation(true);
 		this.surfaceOpenRequest.set(Date.now());
+	}
+
+	readonly artifactRevealRequest = observableValue<IArtifactRevealRequest | undefined>(undefined);
+
+	revealArtifactMessage(sessionId: string, messageId: string): void {
+		// The caller opens the session first; this only carries the scroll target
+		// to whichever conversation view ends up hosting that session.
+		this.showConversation();
+		this.artifactRevealRequest.set({ sessionId, messageId });
 	}
 
 	insertIntoComposer(text: string): void {

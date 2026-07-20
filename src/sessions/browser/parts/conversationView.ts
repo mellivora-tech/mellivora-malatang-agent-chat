@@ -386,10 +386,46 @@ export class ConversationView extends Disposable {
 					this.input.setSelectionRange(this.input.value.length, this.input.value.length);
 				}),
 			);
+
+			// Artifacts panel → transcript (#13 P1): only the view hosting the
+			// requested session consumes (split views each subscribe; a mismatch
+			// must leave the request for the right one).
+			const revealRequest = this.sessionsPartService.artifactRevealRequest;
+			this._register(
+				revealRequest.subscribe(() => {
+					const request = revealRequest.get();
+					if (!request || this.session?.sessionId !== request.sessionId) {
+						return;
+					}
+					revealRequest.set(undefined);
+					this.revealMessage(request.messageId);
+				}),
+			);
 		}
 
 		this._registerEventListeners();
 		this.render();
+	}
+
+	/**
+	 * Scroll a message into view and flash it. Two async producers must finish
+	 * first: React commits row content after the synchronous reconcile
+	 * (createRoot), and a freshly opened session runs settleScrollAtBottom,
+	 * which would re-pin the bottom right over this scroll — so retry frames
+	 * until the row exists and the settle loop has terminated (~2s cap, then
+	 * give up silently: the message no longer exists).
+	 */
+	private revealMessage(messageId: string, attempt = 0): void {
+		const row = this.transcript.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
+		if (!row || this.scrollSettleFrame !== undefined) {
+			if (attempt < 120) {
+				requestAnimationFrame(() => this.revealMessage(messageId, attempt + 1));
+			}
+			return;
+		}
+		row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		row.classList.add('artifact-reveal-highlight');
+		setTimeout(() => row.classList.remove('artifact-reveal-highlight'), 2000);
 	}
 
 	openSession(session: IActiveSession | undefined): void {

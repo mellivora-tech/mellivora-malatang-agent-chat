@@ -235,7 +235,7 @@ test('rebuildArtifacts regenerates the same index the live hooks produced (expor
 	}
 });
 
-test('rebuildArtifacts loses export entries — the documented limitation', async () => {
+test('rebuildArtifacts preserves export entries — the index is their only record (P1 panel rebuilds on every mount)', async () => {
 	const root = await createTempRoot();
 	try {
 		await mkdir(join(root, 'sessions'), { recursive: true });
@@ -248,7 +248,9 @@ test('rebuildArtifacts loses export entries — the documented limitation', asyn
 		assert.equal((await listArtifacts(root)).length, 1);
 
 		await rebuildArtifacts(root);
-		assert.deepEqual(await listArtifacts(root), []);
+		const after = await listArtifacts(root);
+		assert.equal(after.length, 1, 'the export row survived the rebuild');
+		assert.equal(after[0]!.kind, 'export');
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

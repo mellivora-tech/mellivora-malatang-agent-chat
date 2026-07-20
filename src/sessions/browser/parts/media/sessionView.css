@@ -2271,3 +2271,12 @@ button.conversation-plan-header {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* Artifact reveal (#13 P1): a temporary attention flash on the message a
+   panel row jumped to — the class is removed by the view after 2s. */
+.conversation-transcript .artifact-reveal-highlight {
+	outline: var(--vscode-agents-space-2) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
+	border-radius: var(--vscode-agents-radius-card);
+	background: color-mix(in srgb, var(--vscode-agents-color-focusBorder) 8%, transparent);
+}

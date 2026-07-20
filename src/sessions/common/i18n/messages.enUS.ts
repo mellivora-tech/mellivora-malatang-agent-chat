@@ -465,4 +465,8 @@ export const enUS: Record<MessageKey, string> = {
 	'surface.hole': 'Undefined: {0}',
 	'surface.errorNote': '{0} statement(s) failed to render (see run log)',
 	'work.agentOrdinal': 'Agent {0} · {1}',
+	'aux.tab.artifacts': 'Artifacts',
+	'artifacts.empty': 'No artifacts yet — plans, walkthroughs, cards, tables and exports gather here.',
+	'artifacts.missing': 'File no longer exists',
+	'artifacts.superseded': 'Superseded by a newer version',
 };

@@ -101,6 +101,7 @@ const dataFiles: IDataFilesBridge = {
 const artifacts: IArtifactsBridge = {
 	list: (filter?: IArtifactFilter) => ipcRenderer.invoke('artifacts:list', filter),
 	rebuild: (projectId?: string) => ipcRenderer.invoke('artifacts:rebuild', projectId),
+	reveal: (path: string) => ipcRenderer.invoke('artifacts:reveal', path),
 };
 
 const git: IGitBridge = {

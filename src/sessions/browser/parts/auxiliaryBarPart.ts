@@ -8,7 +8,9 @@ import { LayoutPriority } from '../../base/browser/grid.js';
 import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
 import { SurfaceView } from './surfaceView.js';
+import { ArtifactsView } from './artifactsView.js';
 import { DataBrowserView } from '../../contrib/data/browser/dataBrowserView.js';
+import type { IArtifactsBridge } from '../../services/artifacts/common/artifacts.js';
 import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
 import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
@@ -20,9 +22,10 @@ export interface IAuxiliaryBarPartOptions {
 	readonly sessionsPartService?: ISessionsPartService;
 	readonly environmentsService?: IEnvironmentsService;
 	readonly dataFiles?: IDataFilesBridge;
+	readonly artifacts?: IArtifactsBridge;
 }
 
-type AuxiliaryTabKind = 'review' | 'data' | 'surface' | 'terminal' | 'browser';
+type AuxiliaryTabKind = 'review' | 'data' | 'surface' | 'artifacts' | 'terminal' | 'browser';
 
 const tabKinds: readonly {
 	readonly kind: AuxiliaryTabKind;
@@ -44,6 +47,11 @@ const tabKinds: readonly {
 		kind: 'surface',
 		label: localize('aux.tab.surface'),
 		icon: 'codicon-window',
+	},
+	{
+		kind: 'artifacts',
+		label: localize('aux.tab.artifacts'),
+		icon: 'codicon-package',
 	},
 	{
 		kind: 'terminal',
@@ -222,6 +230,14 @@ export class AuxiliaryBarPart extends Part {
 			);
 		} else if (kind === 'surface') {
 			disposables.add(new SurfaceView(body, { ...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}) }));
+		} else if (kind === 'artifacts') {
+			disposables.add(
+				new ArtifactsView(body, {
+					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
+					...(this.options.artifacts ? { artifacts: this.options.artifacts } : {}),
+				}),
+			);
 		} else if (kind === 'data') {
 			instance.dataView = new DataBrowserView(body, {
 				...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),
