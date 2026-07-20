@@ -41,6 +41,8 @@ export interface ISessionsProvider {
 	startSession(query: string, options?: IStartSessionOptions): Promise<ISession>;
 	sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
+	/** Resume a quota/rate-frozen run by resending its frozen transcript verbatim (#19 缺陷 2). No-op when nothing is paused. */
+	resumeSession?(sessionId: string): Promise<void>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionArchived(sessionId: string, isArchived: boolean): Promise<ISession>;
 	deleteSession(sessionId: string): Promise<void>;

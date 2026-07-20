@@ -266,12 +266,33 @@ export interface ICompactionAnchor {
 	readonly prefixChars: number;
 }
 
-/** 'max_output_tokens': the reply was cut off by the max_tokens budget — surfaced explicitly so truncation shows up in logs instead of masquerading as 'completed'. */
-export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'max_output_tokens' | 'refusal';
+/** 'max_output_tokens': the reply was cut off by the max_tokens budget — surfaced explicitly so truncation shows up in logs instead of masquerading as 'completed'. 'paused': quota/rate exhaustion froze the run resumable (#19 缺陷 2) — see IAgentTerminal.paused. */
+export type AgentStopReason = 'completed' | 'aborted' | 'max_turns' | 'max_output_tokens' | 'refusal' | 'paused';
+
+/**
+ * A resumable pause (#19 缺陷 2, route b): quota exhaustion is a waiting
+ * state, not a failure. The frozen transcript is the loop's message history
+ * at the pause point — including every tool_result already collected but not
+ * yet consumed by the model (the six sub-agent reports of the 2026-07-18
+ * incident). Resume = run again with this transcript verbatim; the model
+ * continues from mid-run as if the wall had never been hit.
+ */
+export interface IAgentPause {
+	/** 'quota': hard 403 (weekly quota / permissions — fast-stopped on first hit). 'rate_limit': 429 that survived the full retry ladder (usually the 5h window). */
+	readonly cause: 'quota' | 'rate_limit';
+	/** The original transport error, for the humanized copy. */
+	readonly message: string;
+	/** Resend verbatim to continue. Never partial: a turn interrupted mid-stream is excluded (it regenerates on resume). */
+	readonly frozenTranscript: readonly IAgentMessage[];
+	/** ISO time the relevant window refreshes — attached by the caller when the usage endpoint answers; drives auto-resume. */
+	readonly resetTime?: string;
+}
 
 export interface IAgentTerminal {
 	readonly reason: AgentStopReason;
 	readonly turns: number;
+	/** Present iff reason === 'paused'. */
+	readonly paused?: IAgentPause;
 }
 
 export interface IAgentRunConfig {
@@ -287,6 +308,23 @@ export interface IAgentRunConfig {
 	 * dig further itself), so a topical-relevance retry buys nothing but latency.
 	 */
 	readonly disableReplyVerifier?: boolean;
+	/**
+	 * Marks a TOP-LEVEL pausable run (#19 缺陷 2): quota/rate exhaustion
+	 * returns a 'paused' terminal with the frozen transcript instead of dying.
+	 * Absent for child loops — a child that exhausts its retries fails as an
+	 * error tool_result and the PARENT pauses (with the child's partial results
+	 * already frozen into its transcript).
+	 */
+	readonly pauseOnExhaustion?: {
+		/**
+		 * The fast-stop bridge: the shared model-client wrapper aborts the run's
+		 * signal on the first quota 403 and this callback returns that error's
+		 * message — telling the loop the abort means PAUSE, not user-stop.
+		 */
+		readonly quotaHit: () => string | undefined;
+	};
+	/** Test seam: base delay of the stream-retry backoff ladder (default 1s). The 429-exhaustion path needs all 10 rungs — real delays would make its test take a minute. */
+	readonly streamRetryBaseDelayMs?: number;
 	/**
 	 * How `system` is composed, broken into the context panel's rows. The caller
 	 * assembles `system` from these same segments, so the lengths are exact, not

@@ -34,6 +34,7 @@ function createSession(sessionId: string, providerId: string): ISession {
 		reconnect: observableValue(undefined),
 		permissionMode: observableValue('ask' as const),
 		contextUsage: observableValue(undefined),
+		pausedRun: observableValue(undefined),
 	};
 }
 

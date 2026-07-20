@@ -5,7 +5,7 @@
 
 import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
-import type { IAgentBridge, IAgentMessage, PermissionMode } from '../../../services/agent/common/agent.js';
+import type { IAgentBridge, IAgentMessage, PermissionMode, IAgentPause } from '../../../services/agent/common/agent.js';
 import type { IGitBridge } from '../../../services/git/common/git.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type {
@@ -15,6 +15,7 @@ import type {
 	ISessionChangesSummary,
 	ISessionContextUsage,
 	ISessionMessage,
+	ISessionPausedRun,
 	ISessionPendingApproval,
 	ISessionReconnect,
 	ISessionDataBrowse,
@@ -25,7 +26,7 @@ import { RENDERED_TABLE_MARKER, SessionInteractivity, SessionStatus, estimateSes
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { materializeUi, parseUiInput, uiToMarkdown, type IRenderUiInput } from '../../../services/sessions/common/uiArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
-import type { ISessionCompactionAnchorData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
+import type { ISessionCompactionAnchorData, ISessionPausedRunData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
 import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
@@ -40,6 +41,9 @@ interface IPendingReply {
 }
 
 const DEFAULT_RESPONSE_DELAY_MS = 3000;
+// Auto-resume fires this long AFTER the reported reset time — the provider's
+// clock and the reset edge need a little daylight (#19 缺陷 2).
+const RESUME_BUFFER_MS = 30_000;
 
 type GitGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge } };
 
@@ -60,8 +64,11 @@ interface IMutableSession extends ISession {
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
 	readonly permissionMode: ObservableValue<PermissionMode>;
 	readonly contextUsage: ObservableValue<ISessionContextUsage | undefined>;
+	readonly pausedRun: ObservableValue<ISessionPausedRun | undefined>;
 	/** Cross-run compaction anchor — internal harness state, never rendered, hence no observable. */
 	compactionAnchor?: ISessionCompactionAnchorData;
+	/** The frozen transcript of a paused run (#19 缺陷 2) — resent verbatim on resume. Internal like the anchor; pausedRun is its UI projection. */
+	pausedTranscript?: readonly IAgentMessage[];
 }
 
 function createSession(options: {
@@ -83,6 +90,8 @@ function createSession(options: {
 	permissionMode?: PermissionMode;
 	compactionAnchor?: ISessionCompactionAnchorData;
 	contextUsage?: ISessionContextUsage;
+	pausedRun?: ISessionPausedRun;
+	pausedTranscript?: readonly IAgentMessage[];
 	planComments?: readonly IPlanComment[];
 }): IMutableSession {
 	return {
@@ -108,7 +117,9 @@ function createSession(options: {
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 		permissionMode: observableValue<PermissionMode>(options.permissionMode ?? 'ask'),
 		contextUsage: observableValue<ISessionContextUsage | undefined>(options.contextUsage),
+		pausedRun: observableValue<ISessionPausedRun | undefined>(options.pausedRun),
 		...(options.compactionAnchor ? { compactionAnchor: options.compactionAnchor } : {}),
+		...(options.pausedTranscript ? { pausedTranscript: options.pausedTranscript } : {}),
 	};
 }
 
@@ -127,6 +138,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 	readonly onDidChangeSessions = this.onDidChangeSessionsEmitter.event;
 
 	private readonly sessions: IMutableSession[] = [];
+	/** Auto-resume timers for frozen runs, keyed by sessionId (#19 缺陷 2). */
+	private readonly resumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private readonly refs = new Map<string, ISessionRef>();
 	private readonly pendingReplies = new Map<string, IPendingReply>();
 	/** Raw base64 of stored images, keyed `sessionId:path` — populated on store and on first read-back. */
@@ -188,6 +201,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 
 		if (added.length > 0) {
 			this.onDidChangeSessionsEmitter.fire({ added, removed: [], changed: [] });
+		}
+		// Rehydrated freezes re-arm their auto-resume timers (a reset already
+		// past arms nothing — the banner's manual button takes over).
+		for (const session of added) {
+			if (session.pausedRun.get() !== undefined) {
+				this.armAutoResume(session);
+			}
 		}
 	}
 
@@ -294,9 +314,85 @@ export class FileSessionsProvider implements ISessionsProvider {
 		session.status.set(SessionStatus.InProgress);
 		session.updatedAt.set(now);
 		session.isRead.set(false);
+		// A new message while a run sits frozen abandons the freeze — the user
+		// chose a different continuation over resuming (#19 缺陷 2). The frozen
+		// tool results are gone with it; the digest already marked the run
+		// interrupted, so the next model treats prior findings as provisional.
+		this.clearPausedRun(session, true);
 		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		this.generateReply(session);
 		return session;
+	}
+
+	/**
+	 * Resume a quota/rate-frozen run (#19 缺陷 2): resend the frozen transcript
+	 * VERBATIM — the model continues from mid-run with every already-collected
+	 * tool result in view; nothing is re-explored. If the wall is still there,
+	 * the run simply freezes again (same transcript, refreshed reset time).
+	 */
+	async resumeSession(sessionId: string): Promise<void> {
+		const session = this.getMutableSession(sessionId);
+		const frozen = session.pausedTranscript;
+		if (!frozen || frozen.length === 0 || session.status.get() === SessionStatus.InProgress) {
+			return;
+		}
+		this.clearPausedRun(session, true);
+		const now = new Date();
+		await this.enqueueWrite(() => this.bridge.append(this.getRef(sessionId), { type: 'state', timestamp: now.toISOString(), status: SessionStatus.InProgress }));
+		session.status.set(SessionStatus.InProgress);
+		session.updatedAt.set(now);
+		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		this.runAgentReply(session, frozen);
+	}
+
+	/** Drop the frozen run (observable + transcript + timer); `persist` appends the null tombstone so the clear survives restarts. */
+	private clearPausedRun(session: IMutableSession, persist: boolean): void {
+		const timer = this.resumeTimers.get(session.sessionId);
+		if (timer !== undefined) {
+			clearTimeout(timer);
+			this.resumeTimers.delete(session.sessionId);
+		}
+		if (session.pausedRun.get() === undefined && session.pausedTranscript === undefined) {
+			return;
+		}
+		session.pausedRun.set(undefined);
+		delete session.pausedTranscript;
+		if (persist) {
+			this.enqueueWrite(() => this.bridge.append(this.getRef(session.sessionId), { type: 'state', timestamp: new Date().toISOString(), pausedRun: null })).catch(error =>
+				console.error(`Failed to clear paused run for ${session.sessionId}:`, error),
+			);
+		}
+	}
+
+	/**
+	 * Auto-resume (#19 缺陷 2): with the reset time known, the pause ends
+	 * itself — the timer fires shortly after the window refreshes and resends
+	 * the frozen transcript. A pause with no reset time (usage endpoint had no
+	 * answer) waits for the manual button only, as does one whose reset was
+	 * already past on rehydration (firing a surprise run on app start is worse
+	 * than showing the banner).
+	 */
+	private armAutoResume(session: IMutableSession): void {
+		const existing = this.resumeTimers.get(session.sessionId);
+		if (existing !== undefined) {
+			clearTimeout(existing);
+			this.resumeTimers.delete(session.sessionId);
+		}
+		const resetTime = session.pausedRun.get()?.resetTime;
+		if (resetTime === undefined) {
+			return;
+		}
+		const delayMs = new Date(resetTime).getTime() - Date.now() + RESUME_BUFFER_MS;
+		if (Number.isNaN(delayMs) || delayMs <= 0) {
+			return;
+		}
+		const timer = setTimeout(() => {
+			this.resumeTimers.delete(session.sessionId);
+			if (session.pausedRun.get() !== undefined && session.status.get() !== SessionStatus.InProgress) {
+				void this.resumeSession(session.sessionId);
+			}
+		}, delayMs);
+		this.resumeTimers.set(session.sessionId, timer);
 	}
 
 	async stopSession(sessionId: string): Promise<ISession> {
@@ -475,6 +571,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 	async deleteSession(sessionId: string): Promise<void> {
 		const session = this.getMutableSession(sessionId);
 		this.cancelPendingReply(sessionId);
+		this.clearPausedRun(session, false);
 		await this.enqueueWrite(() => this.bridge.delete(this.getRef(sessionId)));
 		const index = this.sessions.indexOf(session);
 		if (index !== -1) {
@@ -526,6 +623,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 			...(snapshot.workspace !== undefined ? { workspace: snapshot.workspace } : {}),
 			...(snapshot.changesSummary !== undefined ? { changesSummary: snapshot.changesSummary } : {}),
 			...(snapshot.compactionAnchor !== undefined ? { compactionAnchor: snapshot.compactionAnchor } : {}),
+			// A frozen run survives restarts: the UI projection and the raw
+			// transcript rehydrate separately (#19 缺陷 2).
+			...(snapshot.pausedRun !== undefined
+				? {
+						pausedRun: {
+							cause: snapshot.pausedRun.cause,
+							message: snapshot.pausedRun.message,
+							...(snapshot.pausedRun.resetTime !== undefined ? { resetTime: snapshot.pausedRun.resetTime } : {}),
+							pausedAt: new Date(snapshot.pausedRun.pausedAt),
+						},
+						pausedTranscript: snapshot.pausedRun.transcript as readonly IAgentMessage[],
+					}
+				: {}),
 			// A persisted reading is a real bill from a previous run — restored
 			// as 'restored' so the UI labels it "(last run)" until this process
 			// produces a fresh one.
@@ -645,7 +755,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		this.scheduleNoModelReply(session);
 	}
 
-	private runAgentReply(session: IMutableSession): void {
+	private runAgentReply(session: IMutableSession, resumeTranscript?: readonly IAgentMessage[]): void {
 		const agent = this.agent;
 		if (!agent) {
 			return;
@@ -660,6 +770,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 		let text = '';
 		let created = false;
 		let finalized = false;
+		// A quota/rate-frozen terminal (#19 缺陷 2): captured from the done event,
+		// persisted by finalize, and surfaced as banner + humanized copy.
+		let pendingPause: IAgentPause | undefined;
 
 		// The work block tracks how the run spends its time: thinking stretches
 		// between events, and one step per tool call. Timestamps are taken on the
@@ -941,6 +1054,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 					text = abortSummary('应用退出');
 				}
 			}
+			// The pause copy always lands — appended to a partial reply, or as
+			// the whole bubble. humanizeAgentRunError reads the [quota-reset]
+			// marker and renders the concrete recovery time.
+			if (reason === 'paused' && pendingPause) {
+				const raw = pendingPause.resetTime !== undefined ? `${pendingPause.message}\n[quota-reset: ${pendingPause.resetTime}]` : pendingPause.message;
+				const human = humanizeAgentRunError(raw);
+				text = created && text.trim() !== '' ? `${text}\n\n${human}` : human;
+			}
 			const hasReply = text !== '';
 			if (hasReply) {
 				updateAssistant();
@@ -950,6 +1071,26 @@ export class FileSessionsProvider implements ISessionsProvider {
 				session.compactionAnchor = pendingAnchor;
 			}
 			const anchorToPersist = pendingAnchor;
+			// Freeze (#19 缺陷 2): UI projection on the session, raw transcript
+			// held provider-side, both persisted so the pause survives restarts.
+			let pausedRunToPersist: ISessionPausedRunData | undefined;
+			if (reason === 'paused' && pendingPause) {
+				pausedRunToPersist = {
+					cause: pendingPause.cause,
+					message: pendingPause.message,
+					...(pendingPause.resetTime !== undefined ? { resetTime: pendingPause.resetTime } : {}),
+					pausedAt: new Date().toISOString(),
+					transcript: pendingPause.frozenTranscript,
+				};
+				session.pausedRun.set({
+					cause: pendingPause.cause,
+					message: pendingPause.message,
+					...(pendingPause.resetTime !== undefined ? { resetTime: pendingPause.resetTime } : {}),
+					pausedAt: new Date(),
+				});
+				session.pausedTranscript = pendingPause.frozenTranscript;
+				this.armAutoResume(session);
+			}
 			// The meter's last reading survives restarts (rehydrated as "last
 			// run"). Estimates are never persisted — restoring a guess as if it
 			// were a bill would defeat the labeling.
@@ -1005,7 +1146,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			// the next run's transcript carries it at the tail — see toTranscript,
 			// which forwards only the most recent digest.
 			let digestText = pendingDigest;
-			if (reason === 'aborted' || reason === 'app_quit') {
+			if (reason === 'aborted' || reason === 'app_quit' || reason === 'paused') {
 				// An interrupted run marks the digest so the NEXT model treats the
 				// carried state as provisional. The abort summary (assistant text)
 				// aligns the user-visible memory; this line aligns the model's.
@@ -1057,6 +1198,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					isRead: false,
 					...(anchorToPersist ? { compactionAnchor: anchorToPersist } : {}),
 					...(usageToPersist ? { contextUsage: usageToPersist } : {}),
+					...(pausedRunToPersist ? { pausedRun: pausedRunToPersist } : {}),
 				});
 			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
 
@@ -1328,6 +1470,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 					}
 				}
 			} else if (payload.done) {
+				if (payload.done.reason === 'paused' && payload.done.paused) {
+					pendingPause = payload.done.paused;
+				}
 				finalize(payload.done.reason);
 			}
 		});
@@ -1364,7 +1509,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 		this.inflightFinalizers.add(quitFlush);
 		runCleanups.push(() => this.inflightFinalizers.delete(quitFlush));
 
-		void this.buildTranscript(session)
+		// Resume (#19 缺陷 2) sends the frozen transcript VERBATIM — rebuilding
+		// from session messages would lose the unconsumed tool results that are
+		// the whole point of the freeze.
+		void (resumeTranscript !== undefined ? Promise.resolve([...resumeTranscript]) : this.buildTranscript(session))
 			.then(transcript => {
 				sentTranscript = transcript;
 				return agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get()), session.compactionAnchor);

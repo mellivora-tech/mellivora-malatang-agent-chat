@@ -134,6 +134,11 @@ export const zhCN = {
 	'quota.windowLeft': '剩 {0}%',
 	'quota.windowReset': '剩 {0}%（{1} 刷新）',
 	'quota.footnote': '数字为周额度 · 每 5 分钟自动刷新',
+	'paused.causeQuota': '订阅额度已用尽',
+	'paused.causeRate': '触发限流（窗口额度耗尽）',
+	'paused.bannerWithReset': '{0}，任务已冻结暂停 · 额度约 {1} 恢复，届时自动续跑',
+	'paused.banner': '{0}，任务已冻结暂停 · 额度恢复后点击续跑',
+	'paused.resumeNow': '立即续跑',
 
 	// --- plan / walkthrough cards -------------------------------------------------
 	'plan.title.fallback': '实现方案',

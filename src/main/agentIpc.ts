@@ -235,9 +235,9 @@ export function registerAgentIpc(dataRoot: string): void {
 		// Quota fast-stop (#19): a 403 means EVERY further request this run —
 		// parent or any parallel child — hits the same wall. The wrapper aborts
 		// the shared signal at the first one, so the whole run collapses now
-		// instead of grinding through doomed retries; the loop unwinds to an
-		// 'aborted' terminal and the original error is rethrown below so the
-		// renderer shows the quota copy, not a user-stop summary.
+		// instead of grinding through doomed retries; pauseOnExhaustion.quotaHit
+		// tells the loop this abort means PAUSE — it settles as a resumable
+		// 'paused' terminal carrying the frozen transcript, not a user-stop.
 		let quotaError: Error | undefined;
 		const modelClient: typeof rawModelClient = {
 			async *stream(request) {
@@ -412,6 +412,8 @@ export function registerAgentIpc(dataRoot: string): void {
 				modelClient,
 				permissionGate: createGateForMode(mode, requestApproval),
 				signal: controller.signal,
+				// Top-level run: quota/rate exhaustion freezes resumable (#19 缺陷 2).
+				pauseOnExhaustion: { quotaHit: () => quotaError?.message },
 				// No configured context window → compaction stays off (never guessed).
 				...(config.contextLength
 					? {
@@ -435,28 +437,29 @@ export function registerAgentIpc(dataRoot: string): void {
 
 			runLogger.end(step.value);
 
-			// Quota fast-stop (#19): the 'aborted' terminal above is synthetic —
-			// the wrapper pulled the plug, not the user. Surface the REAL cause,
-			// enriched with the plan's reset time when the usage endpoint answers
-			// (best-effort: a failed lookup changes nothing).
-			if (quotaError) {
-				if (supportsCodingQuota({ baseURL: config.baseURL }) && config.apiKey) {
-					const quota = await fetchCodingQuota(config.baseURL, config.apiKey);
-					const resetTime = quota?.usage.resetTime;
-					if (resetTime) {
-						quotaError = new Error(`${quotaError.message}\n[quota-reset: ${resetTime}]`);
-					}
+			// A paused terminal (#19 缺陷 2) gets the relevant window's reset
+			// time attached when the usage endpoint answers — quota (403) waits
+			// on the WEEKLY reset, rate_limit (429) on the nearest rolling
+			// window. Best-effort: a failed lookup just means no countdown.
+			let terminal = step.value;
+			if (terminal.reason === 'paused' && terminal.paused && supportsCodingQuota({ baseURL: config.baseURL }) && config.apiKey) {
+				const quota = await fetchCodingQuota(config.baseURL, config.apiKey);
+				const resetTime =
+					terminal.paused.cause === 'quota'
+						? quota?.usage.resetTime
+						: (quota?.windows.find(window => window.resetTime !== undefined)?.resetTime ?? quota?.usage.resetTime);
+				if (resetTime !== undefined) {
+					terminal = { ...terminal, paused: { ...terminal.paused, resetTime } };
 				}
-				throw quotaError;
 			}
 
 			// The terminal rides the same channel so it can never overtake a
 			// trailing event the way the handler's return value can.
 			if (!sender.isDestroyed()) {
-				sender.send('agent:event', { sessionId: payload.sessionId, done: step.value });
+				sender.send('agent:event', { sessionId: payload.sessionId, done: terminal });
 			}
 
-			return step.value;
+			return terminal;
 		} catch (error) {
 			runLogger.error('run', error instanceof Error ? error.message : String(error));
 			throw error;

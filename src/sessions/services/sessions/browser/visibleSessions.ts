@@ -80,6 +80,9 @@ class ActiveSession implements IActiveSession {
 	get contextUsage() {
 		return this.session.contextUsage;
 	}
+	get pausedRun() {
+		return this.session.pausedRun;
+	}
 }
 
 export class VisibleSessions {

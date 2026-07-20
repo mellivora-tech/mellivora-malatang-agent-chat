@@ -130,6 +130,12 @@ function isRetryableStreamError(error: unknown): boolean {
 	return /fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|EAI_AGAIN|socket hang up|network|terminated/i.test(message);
 }
 
+/** A 429 — retryable, but when the whole backoff ladder fails it means a rate WINDOW is exhausted (usually the 5h window): a pausable run freezes instead of dying (#19 缺陷 2). */
+function isRateLimitStreamError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /failed: 429/.test(message);
+}
+
 function delay(ms: number, signal: AbortSignal): Promise<void> {
 	return new Promise(resolve => {
 		const timer = setTimeout(done, ms);
@@ -221,9 +227,22 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	let lastCompactionAttemptTokens = 0;
 	let turn = 0;
 
+	// Every abort checkpoint routes through here: an abort caused by the quota
+	// fast-stop (the wrapper flags it, see pauseOnExhaustion.quotaHit) settles
+	// as a resumable PAUSE carrying the frozen transcript; a plain abort is the
+	// user's stop. `messages` at any checkpoint ends on a completed message
+	// (assistant turn or tool_results) — partial streams never enter it, so the
+	// frozen transcript is always a valid resume point.
+	const settleAbort = (): IAgentTerminal => {
+		const quotaMessage = config.pauseOnExhaustion?.quotaHit();
+		return quotaMessage !== undefined
+			? { reason: 'paused', turns: turn, paused: { cause: 'quota', message: quotaMessage, frozenTranscript: [...messages] } }
+			: { reason: 'aborted', turns: turn };
+	};
+
 	while (true) {
 		if (signal.aborted) {
-			return { reason: 'aborted', turns: turn };
+			return settleAbort();
 		}
 
 		turn += 1;
@@ -273,7 +292,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 						};
 					} catch {
 						if (signal.aborted) {
-							return { reason: 'aborted', turns: turn };
+							return settleAbort();
 						}
 						// Fail-open: keep sending uncompacted — a few more turns usually
 						// still fit, and the provider's own error stays the backstop.
@@ -340,7 +359,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 			try {
 				for await (const event of config.modelClient.stream(request)) {
 					if (signal.aborted) {
-						return { reason: 'aborted', turns: turn };
+						return settleAbort();
 					}
 
 					switch (event.type) {
@@ -382,12 +401,26 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 				break;
 			} catch (error) {
 				if (signal.aborted) {
-					return { reason: 'aborted', turns: turn };
+					return settleAbort();
 				}
-				if (assistantText.length > 0 || attempt >= MAX_STREAM_ATTEMPTS || !isRetryableStreamError(error)) {
+				const exhausted = assistantText.length > 0 || attempt >= MAX_STREAM_ATTEMPTS;
+				// 429 exhaustion on a pausable run: the whole backoff ladder failed,
+				// so a rate WINDOW (usually the 5h one) is empty — freeze resumable
+				// instead of dying (#19 缺陷 2). Note the trigger lives HERE, not in
+				// the fast-stop wrapper: a first-sight 429 usually heals on retry
+				// and aborting it early would kill healthy runs. The partial turn
+				// (if any streamed) is NOT in `messages` — resume regenerates it.
+				if (config.pauseOnExhaustion && exhausted && isRateLimitStreamError(error)) {
+					return {
+						reason: 'paused',
+						turns: turn,
+						paused: { cause: 'rate_limit', message: error instanceof Error ? error.message : String(error), frozenTranscript: [...messages] },
+					};
+				}
+				if (exhausted || !isRetryableStreamError(error)) {
 					throw error;
 				}
-				const delayMs = Math.min(MAX_RETRY_DELAY_MS, BASE_RETRY_DELAY_MS * 2 ** (attempt - 1));
+				const delayMs = Math.min(MAX_RETRY_DELAY_MS, (config.streamRetryBaseDelayMs ?? BASE_RETRY_DELAY_MS) * 2 ** (attempt - 1));
 				yield { type: 'stream_retry', attempt, maxAttempts: MAX_STREAM_ATTEMPTS, delayMs };
 				await delay(delayMs, signal);
 			}
@@ -471,7 +504,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 				verifierFired = true;
 				const verification = await verifyReply({ client: config.modelClient, question, answer: assistantText, signal });
 				if (signal.aborted) {
-					return { reason: 'aborted', turns: turn };
+					return settleAbort();
 				}
 				const retried = verification.verdict === 'fail';
 				yield { type: 'reply_verifier', verdict: verification.verdict, retried, ...(verification.reason ? { reason: verification.reason } : {}) };

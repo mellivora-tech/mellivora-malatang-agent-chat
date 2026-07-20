@@ -1316,3 +1316,91 @@ test('action-claim nudge: does NOT fire when the run used tools or made no compl
 		delete process.env['MELLIVORA_REPLY_VERIFIER'];
 	}
 });
+
+test('quota fast-stop settles as a resumable pause: the frozen transcript carries the unconsumed tool_result (#19 缺陷 2)', async () => {
+	// Mirrors the agentIpc wiring: the shared-client wrapper flags the 403 and
+	// aborts the run's signal; the loop's abort checkpoints settle as PAUSED.
+	const controller = new AbortController();
+	let quotaError: Error | undefined;
+	let call = 0;
+	const scripted = createScriptedModelClient([{ emit: [{ type: 'tool_use', id: 't1', name: 'echo', input: { text: '子代理报告' } }] }]);
+	const client: IModelClient = {
+		async *stream(request: IModelRequest): AsyncGenerator<IModelStreamEvent, void> {
+			if (call++ === 0) {
+				yield* scripted.stream(request);
+				return;
+			}
+			// Turn 2: the quota wall. Wrapper behavior inlined.
+			const error = new Error('Anthropic request failed: 403 {"error":{"type":"permission_error","message":"credits exhausted"}}');
+			quotaError = error;
+			controller.abort();
+			throw error;
+		},
+	};
+
+	const { terminal } = await drive(
+		runAgentLoop([userMessage('梳理项目')], {
+			system: 's',
+			tools: [echoTool],
+			modelClient: client,
+			permissionGate: allowAllPermissionGate,
+			signal: controller.signal,
+			disableReplyVerifier: true,
+			pauseOnExhaustion: { quotaHit: () => quotaError?.message },
+		}),
+	);
+
+	assert.equal(terminal.reason, 'paused');
+	assert.equal(terminal.paused?.cause, 'quota');
+	assert.match(terminal.paused?.message ?? '', /403/);
+	const frozen = terminal.paused?.frozenTranscript ?? [];
+	// user → assistant(tool_use) → user(tool_result): the collected-but-unread
+	// result is IN the freeze — the whole point of route b.
+	assert.equal(frozen.length, 3);
+	assert.equal(frozen[2]?.role, 'user');
+	const lastBlock = frozen[2]?.content[0];
+	assert.equal(lastBlock?.type, 'tool_result');
+	assert.match((lastBlock as { content: string }).content, /子代理报告/);
+});
+
+test('429 pauses only after the retry ladder is exhausted — and only on a pausable (top-level) run (#19 缺陷 2)', async () => {
+	const rateLimited: IModelClient = {
+		// eslint-disable-next-line require-yield
+		async *stream(): AsyncGenerator<IModelStreamEvent, void> {
+			throw new Error('Anthropic request failed: 429 rate limited');
+		},
+	};
+
+	const pausable = await drive(
+		runAgentLoop([userMessage('q')], {
+			system: 's',
+			tools: [],
+			modelClient: rateLimited,
+			permissionGate: allowAllPermissionGate,
+			disableReplyVerifier: true,
+			pauseOnExhaustion: { quotaHit: () => undefined },
+			streamRetryBaseDelayMs: 1,
+		}),
+	);
+	// The full ladder ran first: 9 retries announced, the 10th attempt pauses.
+	assert.equal(pausable.events.filter(event => event.type === 'stream_retry').length, 9);
+	assert.equal(pausable.terminal.reason, 'paused');
+	assert.equal(pausable.terminal.paused?.cause, 'rate_limit');
+	assert.equal(pausable.terminal.paused?.frozenTranscript.length, 1, 'nothing but the initial message — no partial turn leaks into the freeze');
+
+	// A child loop (no pauseOnExhaustion) still THROWS on exhaustion — the
+	// parent is the one that freezes, with the child's error result in view.
+	await assert.rejects(
+		drive(
+			runAgentLoop([userMessage('q')], {
+				system: 's',
+				tools: [],
+				modelClient: rateLimited,
+				permissionGate: allowAllPermissionGate,
+				disableReplyVerifier: true,
+				streamRetryBaseDelayMs: 1,
+			}),
+		),
+		/429/,
+	);
+});

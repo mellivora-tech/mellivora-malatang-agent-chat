@@ -6,10 +6,10 @@
 // The harness message/event contracts are the single source of truth (main
 // process). These are type-only re-exports — erased at runtime, so the renderer
 // gains no runtime dependency on the main bundle.
-import type { IAgentEvent, IAgentMessage, IAgentTerminal, ICompactionAnchor } from '../../../../main/agent/agentTypes.js';
+import type { IAgentEvent, IAgentMessage, IAgentPause, IAgentTerminal, ICompactionAnchor } from '../../../../main/agent/agentTypes.js';
 import type { PermissionMode } from '../../../../main/agent/permission.js';
 
-export type { IAgentEvent, IAgentMessage, IAgentTerminal, ICompactionAnchor, PermissionMode };
+export type { IAgentEvent, IAgentMessage, IAgentPause, IAgentTerminal, ICompactionAnchor, PermissionMode };
 
 export interface IAgentEventPayload {
 	readonly sessionId: string;
