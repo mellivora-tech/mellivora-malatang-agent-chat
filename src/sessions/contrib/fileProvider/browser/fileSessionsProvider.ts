@@ -1224,6 +1224,17 @@ export class FileSessionsProvider implements ISessionsProvider {
 					actionCall.label = slot.action;
 				}
 				updateWork();
+			} else if (event?.type === 'subagent_progress') {
+				// The child model is streaming with no tool events (#19 缺陷 1) — a
+				// long final report used to freeze the running row on the last tool
+				// line for minutes. Live label only: no step is closed, and facts
+				// stay on the last real tool action.
+				const progressAction = openCalls.get(event.agentId);
+				if (progressAction !== undefined) {
+					const amount = event.chars >= 1000 ? `${(event.chars / 1000).toFixed(1)}k 字` : `${event.chars} 字`;
+					progressAction.label = `⑃ ${event.phase === 'thinking' ? '思考中' : '撰写结论中'} · ${amount}`;
+					updateWork();
+				}
 			} else if (event?.type === 'subagent_end') {
 				const slot = subagentSlots.get(event.agentId);
 				if (slot?.action !== undefined) {
@@ -1359,7 +1370,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				return agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get()), session.compactionAnchor);
 			})
 			.catch(error => {
-				text = created ? text : `Agent error: ${error instanceof Error ? error.message : String(error)}`;
+				text = created ? text : humanizeAgentRunError(error instanceof Error ? error.message : String(error));
 				updateAssistant();
 				finalize();
 			});
@@ -1434,6 +1445,43 @@ function parseBrowsePayload(name: string, input: unknown): ISessionDataBrowse | 
 }
 
 /** The most telling argument of a tool call, first-line bounded — the structured `arg` fact on work steps (#14 Q3). */
+/**
+ * Turn a raw model-transport failure into copy a person can act on (#19). The
+ * 2026-07-18 quota exhaustion surfaced verbatim as "Agent error: Anthropic
+ * request failed: 403 {json}". Recognized statuses get a plain-language line
+ * (the provider's own message rides along when the body parses); anything
+ * unrecognized keeps the raw text — still the best evidence there is.
+ */
+export function humanizeAgentRunError(raw: string): string {
+	const match = /request failed: (\d{3})([\s\S]*)$/.exec(raw);
+	if (!match) {
+		return `Agent error: ${raw}`;
+	}
+	const status = Number(match[1]);
+	let providerMessage: string | undefined;
+	try {
+		const body = JSON.parse(match[2]!.trim()) as { error?: { message?: unknown }; message?: unknown };
+		const candidate = typeof body.error?.message === 'string' ? body.error.message : typeof body.message === 'string' ? body.message : undefined;
+		providerMessage = candidate !== undefined && candidate.trim() !== '' ? (candidate.length > 200 ? `${candidate.slice(0, 200)}…` : candidate) : undefined;
+	} catch {
+		providerMessage = undefined;
+	}
+	const detail = providerMessage === undefined ? '' : `\n\n> ${providerMessage}`;
+	if (status === 401) {
+		return `模型认证失败（HTTP 401）：API Key 无效或已过期。请到 设置 › 模型 检查密钥后重新发送。${detail}`;
+	}
+	if (status === 403) {
+		return `模型请求被拒（HTTP 403）：通常是订阅额度已用尽，或当前 Key 没有此模型的权限。等额度刷新（或升级订阅）后重新发送这条消息即可继续。${detail}`;
+	}
+	if (status === 429) {
+		return `模型限流（HTTP 429）：请求过于频繁，多次自动重试后仍被拒。稍等片刻再重新发送。${detail}`;
+	}
+	if (status >= 500) {
+		return `模型服务端异常（HTTP ${status}）：多次自动重试后仍失败，通常会自行恢复。请过几分钟重新发送。${detail}`;
+	}
+	return `Agent error: ${raw}`;
+}
+
 export function workToolArg(input: unknown): string | undefined {
 	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
 	const arg = [record['command'], record['path'], record['pattern'], record['task'], record['component'], record['sql'], record['source']].find(

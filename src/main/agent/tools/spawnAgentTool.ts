@@ -60,8 +60,12 @@ export type SubagentRecord = (
 	event:
 		| { readonly type: 'subagent_start'; readonly agentId: string; readonly task: string }
 		| { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly summary: string; readonly turn: number }
+		| { readonly type: 'subagent_progress'; readonly agentId: string; readonly phase: 'thinking' | 'replying'; readonly chars: number }
 		| { readonly type: 'subagent_end'; readonly agentId: string; readonly reason: string; readonly turns: number; readonly toolCalls: number; readonly tokens: number; readonly outputChars: number },
 ) => void;
+
+/** Repeat progress at most this often — each delta would otherwise spam the log/IPC. A phase ENTRY always reports immediately, so even the first chunk of a long report flips the frozen tool row to "writing". */
+const PROGRESS_REPEAT_MS = 2000;
 
 /** One line for the work panel: tool + its one telling argument, bounded. */
 function describeChildCall(name: string, input: unknown): string {
@@ -91,6 +95,8 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 			'anything scoped to 2-3 files → read them yourself; and never re-delegate work a sub-agent already covered. ' +
 			'The sub-agent has a hard budget of ~24 turns — a sweep too big for that (e.g. hundreds of files) MUST be SHARDED: ' +
 			'several spawn_agent calls, each scoped to one module/directory, instead of one call for everything. ' +
+			'Size each shard to finish comfortably within ~15 turns; when unsure, cut SMALLER — a shard that runs out of budget ' +
+			'reports PARTIAL and forces a serial remainder round, doubling wall-clock time. ' +
 			'Independent sweeps MUST be issued in a SINGLE message with multiple spawn_agent calls — they run concurrently. ' +
 			'Write the task self-contained (the sub-agent sees nothing of this conversation), state the expected output shape ' +
 			'(e.g. "list every X with file:line"), and say how thorough to be.',
@@ -149,6 +155,26 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 			let toolCalls = 0;
 			let tokens = 0;
 			let childTurn = 0;
+			// Streaming liveness (#19 缺陷 1): a child's last turn can be one multi-
+			// minute model request with zero tool events — indistinguishable from a
+			// hang. Fold its deltas into subagent_progress: report on every phase
+			// entry, then at most every PROGRESS_REPEAT_MS while the phase streams.
+			let progressPhase: 'thinking' | 'replying' | undefined;
+			let progressChars = 0;
+			let progressReportedAt = 0;
+			const streamProgress = (phase: 'thinking' | 'replying', chunk: string): void => {
+				if (phase !== progressPhase) {
+					progressPhase = phase;
+					progressChars = 0;
+					progressReportedAt = 0;
+				}
+				progressChars += chunk.length;
+				const now = Date.now();
+				if (progressReportedAt === 0 || now - progressReportedAt >= PROGRESS_REPEAT_MS) {
+					progressReportedAt = now;
+					deps.record?.({ type: 'subagent_progress', agentId, phase, chars: progressChars });
+				}
+			};
 			let step = await loop.next();
 			while (!step.done) {
 				const event = step.value;
@@ -156,8 +182,14 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 					conclusion = event.text; // the LAST assistant text wins — same as CC's finalizeAgentTool
 				} else if (event.type === 'turn_start') {
 					childTurn = event.turn;
+					progressPhase = undefined; // next delta re-announces its phase
+				} else if (event.type === 'thinking_delta') {
+					streamProgress('thinking', event.text);
+				} else if (event.type === 'assistant_delta') {
+					streamProgress('replying', event.text);
 				} else if (event.type === 'tool_use') {
 					toolCalls += 1;
+					progressPhase = undefined; // the tool row takes the live label back
 					deps.record?.({ type: 'subagent_tool', agentId, name: event.name, summary: describeChildCall(event.name, event.input), turn: childTurn });
 				} else if (event.type === 'usage') {
 					tokens += event.inputTokens + (event.outputTokens ?? 0) + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0);

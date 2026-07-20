@@ -74,6 +74,8 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly detail?: { readonly task: string } })
 	/** One child tool call — the child's whole activity trace, since its loop events never reach the log directly. The summary (paths/patterns) stays in detail. */
 	| (IBaseEvent & { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly turn: number; readonly detail?: { readonly summary: string } })
+	/** The child model is mid-stream (throttled) — the liveness trace for a multi-minute single request, which previously logged nothing between subagent_tool and subagent_end. Counts only; no content. */
+	| (IBaseEvent & { readonly type: 'subagent_progress'; readonly agentId: string; readonly phase: 'thinking' | 'replying'; readonly chars: number })
 	/** Mid-call progress for a long-running tool (SFTP upload). The note (paths, rates) stays in detail. */
 	| (IBaseEvent & { readonly type: 'tool_progress'; readonly toolUseId: string; readonly name: string; readonly detail?: { readonly note: string } })
 	/** A spawn_agent child loop finished. Watch outputChars≈0 rate (misfired delegations) and tokens (delegation cost). */

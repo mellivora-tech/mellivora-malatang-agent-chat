@@ -206,6 +206,8 @@ export type IAgentEvent =
 	| { readonly type: 'subagent_start'; readonly agentId: string; readonly task: string }
 	/** One child tool call — lets the work panel narrate the sub-agent live. Same side channel as subagent_start. */
 	| { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly summary: string; readonly turn: number }
+	/** The child model is streaming (thinking or writing its conclusion) — the liveness signal for a long single request, where tool events go quiet for minutes (#19 缺陷 1). `chars` is cumulative for the current phase within the turn. Same side channel as subagent_start. */
+	| { readonly type: 'subagent_progress'; readonly agentId: string; readonly phase: 'thinking' | 'replying'; readonly chars: number }
 	/** A spawn_agent child loop finished. Same side channel as subagent_start. */
 	| { readonly type: 'subagent_end'; readonly agentId: string; readonly reason: string; readonly turns: number; readonly toolCalls: number; readonly tokens: number; readonly outputChars: number }
 	/** Mid-execution progress for a long-running tool call (e.g. an SFTP upload) — the work panel live-updates the open step. Same side channel as subagent events. */

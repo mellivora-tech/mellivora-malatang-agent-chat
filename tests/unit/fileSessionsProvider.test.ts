@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { FileSessionsProvider, formatSessionContext, toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
+import { FileSessionsProvider, formatSessionContext, humanizeAgentRunError, toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fileSessionsProvider.js';
 import type { ISessionMessage } from '../../src/sessions/services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus } from '../../src/sessions/services/sessions/common/session.js';
 import type { IAgentBridge, IAgentEventPayload } from '../../src/sessions/services/agent/common/agent.js';
@@ -1628,4 +1628,23 @@ test('an aborted run persists a substantive summary and an INTERRUPTED digest no
 
 	const persistedReply = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
 	assert.ok(persistedReply, 'the summary is persisted');
+});
+
+test('humanizeAgentRunError: quota 403 becomes actionable copy carrying the provider message (#19)', () => {
+	const raw = 'Anthropic request failed: 403 {"type":"error","error":{"type":"permission_error","message":"Your credits are exhausted for this billing cycle."}}';
+	const text = humanizeAgentRunError(raw);
+	assert.match(text, /HTTP 403/);
+	assert.match(text, /额度已用尽/);
+	assert.match(text, /重新发送/);
+	assert.match(text, /credits are exhausted/, 'provider message rides along as evidence');
+	assert.doesNotMatch(text, /Agent error:/, 'recognized statuses drop the raw prefix');
+});
+
+test('humanizeAgentRunError: 401/429/5xx get their own copy; unparseable bodies and unknown errors stay raw', () => {
+	assert.match(humanizeAgentRunError('Anthropic request failed: 401 '), /API Key 无效或已过期/);
+	assert.match(humanizeAgentRunError('Anthropic request failed: 429 not-json'), /限流/);
+	assert.match(humanizeAgentRunError('Anthropic request failed: 529 {"error":{"message":"overloaded"}}'), /服务端异常（HTTP 529）/);
+	// A 400 is a request-shape bug, not something the user can act on — raw text is the evidence.
+	assert.match(humanizeAgentRunError('Anthropic request failed: 400 {"error":{"message":"bad request"}}'), /^Agent error: Anthropic request failed: 400/);
+	assert.equal(humanizeAgentRunError('fetch failed'), 'Agent error: fetch failed');
 });

@@ -46,16 +46,49 @@ test('spawn_agent: child conclusion comes back with usage trailer and the child 
 	assert.match(result.content, /<work-digest>[\s\S]*src\/a\.ts[\s\S]*<\/work-digest>/);
 	assert.deepEqual(
 		events.map(event => (event as { type: string }).type),
-		['subagent_start', 'subagent_tool', 'subagent_end'],
+		// The conclusion turn streams text → one liveness report (#19 缺陷 1).
+		['subagent_start', 'subagent_tool', 'subagent_progress', 'subagent_end'],
 	);
 	const progress = events[1] as { agentId: string; name: string; summary: string; turn: number };
 	assert.equal(progress.name, 'read_file');
 	assert.match(progress.summary, /read_file src\/a\.ts/);
 	assert.equal(progress.agentId, 'tu-spawn', 'agentId is the spawning toolUseId');
-	const end = events[2] as { reason: string; toolCalls: number; outputChars: number };
+	const end = events[3] as { reason: string; toolCalls: number; outputChars: number };
 	assert.equal(end.reason, 'completed');
 	assert.equal(end.toolCalls, 1);
 	assert.ok(end.outputChars > 0);
+});
+
+test('spawn_agent: streaming folds into subagent_progress — one report per phase entry, repeats throttled, tool calls reset the phase (#19 缺陷 1)', async () => {
+	const root = workspace();
+	const events: Array<{ type: string; phase?: string; chars?: number }> = [];
+	const tool = createSpawnAgentTool({
+		roots: [root],
+		modelClient: createScriptedModelClient([
+			// Turn 1: narrates, then calls a tool — the narration gets ONE report,
+			// and the tool call hands the live label back to the tool row.
+			{ emit: [{ type: 'text', text: 'scanning…' }, { type: 'tool_use', id: 'c1', name: 'read_file', input: { path: 'src/a.ts' } }] },
+			// Turn 2: the long-report shape — two deltas back to back. Entry
+			// reports immediately; the second lands inside the throttle window.
+			{ emit: [{ type: 'text', text: 'Report part one. ' }, { type: 'text', text: 'Part two.' }] },
+		]),
+		record: event => events.push(event as { type: string; phase?: string; chars?: number }),
+	});
+
+	const result = await tool.call({ task: 'anything' }, CALL_CONTEXT);
+
+	assert.ok(!result.isError);
+	assert.deepEqual(
+		events.map(event => event.type),
+		['subagent_start', 'subagent_progress', 'subagent_tool', 'subagent_progress', 'subagent_end'],
+	);
+	const [narration, report] = events.filter(event => event.type === 'subagent_progress');
+	assert.equal(narration?.phase, 'replying');
+	assert.equal(narration?.chars, 'scanning…'.length);
+	// The tool call between the phases reset the counter — turn 2's report
+	// counts only its own first chunk, and its second chunk was throttled.
+	assert.equal(report?.phase, 'replying');
+	assert.equal(report?.chars, 'Report part one. '.length);
 });
 
 test('spawn_agent: anti-recursion is structural — a child calling spawn_agent gets an error result, not a grandchild', async () => {
