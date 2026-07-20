@@ -39,6 +39,22 @@ step        := Set($var, expr) | Run(tool, args) | Reset($var) | ToAssistant(tex
 - **Autocloser**：流中截断的半行按括号/引号栈补齐成合法语句先渲染，下一 chunk 到达后以完整行覆盖。
 - 目录规模对齐三家共识（18–29 原语）；样式不可控，只有 variant 枚举（A2UI v1.0 删 primaryColor 的教训照单全收）。
 
+## 2.5 词表海拔（2026-07-20 修正，用户确认）
+
+```
+原子（语言词表）      Stack / Text / Table / Select / Button / Code(待补) …——三家共识的 18–29 目录
+机制组件（词表条目）   原子拼不出的交互机制，机制内建（首个：field_mapping 拖线画布）
+场景卡（已废弃）      migration_preview——业务名词烤进组件，P1c 已判死
+```
+
+P1c 旧计划的"三原语卡"按此尺重新裁定：
+
+- **field_mapping**：保留，**唯一的机制组件**——直接操纵（拖线配对）是三家规范共同空白，原子不可组合出，机制必须内建（对比报告轴 3）。名字合规（"两列字段集配对"是交互范式非业务名词）。
+- **data_preview**：**取消独立组件**——它 = `Table` + 单元格可编辑 + 校验高亮，后两者正是 Q-D 能力属性层的正题（ChatKit `Text.editable` 是唯一业界实证）。作为"原子+能力属性"的第一个验证场景存在。
+- **artifact_review**：**取消独立组件**——≈ 原子组合 + 缺失的 `Code` 原子 + Action 步骤（导出 @Run、授权执行 @ToAssistant）。作为组合性的第二个验证场景存在。
+
+原则：**组合性最大化，专用组件只留给真正不可分解的机制**——这才是"原子级词表+模型组合"的字面兑现。机制组件命名沿用同一禁令（无业务名词）。
+
 ## 3. 同源目录（Q-F 承重墙）
 
 每个原语一个 Zod 式 schema（沿用 common/uiComponents 的 validator 位置）：
@@ -73,7 +89,7 @@ schema ──┬──▶ parser 的参数校验器（位置参数按键序解�
 | **M2 真模冒烟（先于全面开工）** | 最小 parser + 3–5 原语目录 + 同源提示词，k2.7/k3 实测 | **DSL 良率 ≥90%（语句级）且自纠一轮后 ≥98%，否则回头评审杂交路线（JSON 扁平表），此时沉没成本最小**。✅ **2026-07-20 已过闸**：k2.7 与 k3 均为语句级 100%、8/8 程序首发零错、零围栏违规（6 原语目录、8 个域内任务、同源提示词为唯一教学来源；harness=`scripts/ui-dsl-smoke.mjs`）。注记：冒烟验证的是文法+同源闭环的可行性，M5 真实词表（画布/能力属性）复杂度更高，届时复测 |
 | M3 | parser/Autocloser/增量合并 + 同源目录管线 + fold 运行时 | 解析测试成体系（截断/乱序/非法行/覆盖）；老会话零迁移 |
 | M4 | surface 面板 + 投影卡 + 事件通道（@Set/@Run/@ToAssistant） | 重开会话逐像素一致；确认 turn 平移"原样执行" |
-| M5 | 三原语卡（field_mapping/data_preview/artifact_review）迁到 DSL 词表；Q-D 能力属性层设计+首个机制（拖线）；migration_preview 报废 | 三场景（表→表/文件→表/表→文件）共用同三张原语卡；真模冒烟编排出不同流程 |
+| M5（2026-07-20 重塑，见 §2.5） | ① 原子补全（`Code` 等）② Q-D 能力属性层设计+实现（editable/validation 标记先行，拖线其次）③ field_mapping 作为首个机制组件进目录 ④ migration_preview 报废 | data_preview/artifact_review 两场景用**原子+能力属性**组合复现（不新增组件）；三迁移场景共用 field_mapping+组合；smoke harness 换真实词表复测良率 |
 
 ## 7. 风险登记
 
