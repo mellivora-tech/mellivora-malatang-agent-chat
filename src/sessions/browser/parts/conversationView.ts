@@ -229,17 +229,23 @@ export class ConversationView extends Disposable {
 		const rightControls = append(toolbar, document.createElement('div'));
 		rightControls.className = 'conversation-toolbar-right';
 
-		// Coding-plan quota (#19): leftmost of the right controls so the
-		// subscription-level number sits apart from the per-conversation ring.
+		// Coding-plan quota (#19): lives at the RIGHT EDGE of the context bar
+		// above the composer (user-picked placement 2026-07-20) — subscription
+		// state sits with the workspace context, not among the send controls.
+		// The host wrapper is owned here; ConversationContext re-adopts it on
+		// each of its re-renders.
+		const quotaHost = document.createElement('span');
+		quotaHost.className = 'conversation-context-quota';
 		this.quotaIndicator = this._register(
 			installQuotaIndicator({
-				container: rightControls,
+				container: quotaHost,
 				fetchQuota: () => {
 					const models = (globalThis as typeof globalThis & { readonly agentWindow?: { readonly models?: IModelsBridge } }).agentWindow?.models;
 					return models?.codingQuota() ?? Promise.resolve(undefined);
 				},
 			}),
 		);
+		this.header.setTrailing(quotaHost);
 
 		// A standalone read-only indicator — deliberately not part of the
 		// model button, which is an interactive picker.
