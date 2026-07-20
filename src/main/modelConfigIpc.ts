@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ipcMain } from 'electron';
-import type { IModelEntryInput, IProviderInput, IProviderVerificationRequest, IRemoteModelsRequest, ModelEffort } from '../sessions/services/models/common/models.js';
+import type { IModelEntryInput, IProviderInput, IProviderVerificationRequest, IQuotaSnapshot, IRemoteModelsRequest, ModelEffort } from '../sessions/services/models/common/models.js';
+import { fetchCodingQuota, supportsCodingQuota } from './codingQuota.js';
 import { findProviderConnection, listModels, moveModel, removeModel, removeProvider, setModelEffort, setModelEnabled, upsertModel, upsertProvider } from './modelConfigStorage.js';
 import { fetchRemoteModels, verifyProviderConnection, type IRemoteModelsConnection } from './remoteModels.js';
 
@@ -23,6 +24,25 @@ export function registerModelConfigIpc(dataRoot: string): void {
 	ipcMain.handle('models:verifyProvider', async (_event, request: IProviderVerificationRequest) => {
 		await verifyProviderConnection(await resolveConnection(dataRoot, request), request.probeModel);
 	});
+	ipcMain.handle('models:codingQuota', () => readCodingQuota(dataRoot));
+}
+
+/** First provider whose plan exposes a usage endpoint; undefined on any failure (best-effort contract). */
+async function readCodingQuota(dataRoot: string): Promise<IQuotaSnapshot | undefined> {
+	const registry = await listModels(dataRoot);
+	const provider = registry.providers.find(supportsCodingQuota);
+	if (!provider) {
+		return undefined;
+	}
+	const connection = await findProviderConnection(dataRoot, provider.id);
+	if (!connection?.apiKey) {
+		return undefined;
+	}
+	const parsed = await fetchCodingQuota(connection.baseURL, connection.apiKey);
+	if (!parsed) {
+		return undefined;
+	}
+	return { providerId: provider.id, providerName: provider.name, ...parsed, fetchedAt: new Date().toISOString() };
 }
 
 /**

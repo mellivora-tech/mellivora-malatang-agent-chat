@@ -22,6 +22,7 @@ import { createRenderDataTool } from './agent/tools/renderDataTool.js';
 import { storeSessionTableCsv } from './sessionsStorage.js';
 import { createSshTools, type ISshServer } from './agent/tools/sshTool.js';
 import { createModelClient } from './agent/createModelClient.js';
+import { fetchCodingQuota, isQuotaExhaustedError, supportsCodingQuota } from './codingQuota.js';
 import { createSpawnAgentTool } from './agent/tools/spawnAgentTool.js';
 import { generateSessionTitle } from './agent/sessionTitle.js';
 import { getCredential } from './credentialStorage.js';
@@ -230,7 +231,27 @@ export function registerAgentIpc(dataRoot: string): void {
 				: [];
 
 		// One client instance serves the run AND any sub-agent loops it spawns.
-		const modelClient = createModelClient(config);
+		const rawModelClient = createModelClient(config);
+		// Quota fast-stop (#19): a 403 means EVERY further request this run —
+		// parent or any parallel child — hits the same wall. The wrapper aborts
+		// the shared signal at the first one, so the whole run collapses now
+		// instead of grinding through doomed retries; the loop unwinds to an
+		// 'aborted' terminal and the original error is rethrown below so the
+		// renderer shows the quota copy, not a user-stop summary.
+		let quotaError: Error | undefined;
+		const modelClient: typeof rawModelClient = {
+			async *stream(request) {
+				try {
+					yield* rawModelClient.stream(request);
+				} catch (error) {
+					if (quotaError === undefined && isQuotaExhaustedError(error)) {
+						quotaError = error instanceof Error ? error : new Error(String(error));
+						controller.abort();
+					}
+					throw error;
+				}
+			},
+		};
 
 		// render_data: the agent pushes tabular results into the data panel; the
 		// csv lands beside the transcript so the chip replays after restarts.
@@ -413,6 +434,21 @@ export function registerAgentIpc(dataRoot: string): void {
 			}
 
 			runLogger.end(step.value);
+
+			// Quota fast-stop (#19): the 'aborted' terminal above is synthetic —
+			// the wrapper pulled the plug, not the user. Surface the REAL cause,
+			// enriched with the plan's reset time when the usage endpoint answers
+			// (best-effort: a failed lookup changes nothing).
+			if (quotaError) {
+				if (supportsCodingQuota({ baseURL: config.baseURL }) && config.apiKey) {
+					const quota = await fetchCodingQuota(config.baseURL, config.apiKey);
+					const resetTime = quota?.usage.resetTime;
+					if (resetTime) {
+						quotaError = new Error(`${quotaError.message}\n[quota-reset: ${resetTime}]`);
+					}
+				}
+				throw quotaError;
+			}
 
 			// The terminal rides the same channel so it can never overtake a
 			// trailing event the way the handler's return value can.

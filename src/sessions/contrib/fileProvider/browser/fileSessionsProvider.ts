@@ -1370,7 +1370,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 				return agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get()), session.compactionAnchor);
 			})
 			.catch(error => {
-				text = created ? text : humanizeAgentRunError(error instanceof Error ? error.message : String(error));
+				// A partially-streamed reply keeps its text with the error appended —
+				// silently keeping the truncated text used to hide quota failures
+				// entirely when the model had already said anything (#19).
+				const message = humanizeAgentRunError(error instanceof Error ? error.message : String(error));
+				text = created && text.trim() !== '' ? `${text}\n\n${message}` : message;
 				updateAssistant();
 				finalize();
 			});
@@ -1453,9 +1457,14 @@ function parseBrowsePayload(name: string, input: unknown): ISessionDataBrowse | 
  * unrecognized keeps the raw text — still the best evidence there is.
  */
 export function humanizeAgentRunError(raw: string): string {
-	const match = /request failed: (\d{3})([\s\S]*)$/.exec(raw);
+	// Main enriches a quota stop with the plan's real reset time when the
+	// usage endpoint answered (agentIpc appends the marker; best-effort).
+	const resetMatch = /\n\[quota-reset: ([^\]]+)\]/.exec(raw);
+	const resetNote = formatQuotaResetNote(resetMatch?.[1]);
+	const cleaned = resetMatch ? raw.replace(resetMatch[0], '') : raw;
+	const match = /request failed: (\d{3})([\s\S]*)$/.exec(cleaned);
 	if (!match) {
-		return `Agent error: ${raw}`;
+		return `Agent error: ${cleaned}`;
 	}
 	const status = Number(match[1]);
 	let providerMessage: string | undefined;
@@ -1471,7 +1480,8 @@ export function humanizeAgentRunError(raw: string): string {
 		return `模型认证失败（HTTP 401）：API Key 无效或已过期。请到 设置 › 模型 检查密钥后重新发送。${detail}`;
 	}
 	if (status === 403) {
-		return `模型请求被拒（HTTP 403）：通常是订阅额度已用尽，或当前 Key 没有此模型的权限。等额度刷新（或升级订阅）后重新发送这条消息即可继续。${detail}`;
+		const recovery = resetNote ?? '等额度刷新（或升级订阅）后';
+		return `模型请求被拒（HTTP 403）：通常是订阅额度已用尽，或当前 Key 没有此模型的权限。${recovery}重新发送这条消息即可继续。${detail}`;
 	}
 	if (status === 429) {
 		return `模型限流（HTTP 429）：请求过于频繁，多次自动重试后仍被拒。稍等片刻再重新发送。${detail}`;
@@ -1479,7 +1489,27 @@ export function humanizeAgentRunError(raw: string): string {
 	if (status >= 500) {
 		return `模型服务端异常（HTTP ${status}）：多次自动重试后仍失败，通常会自行恢复。请过几分钟重新发送。${detail}`;
 	}
-	return `Agent error: ${raw}`;
+	return `Agent error: ${cleaned}`;
+}
+
+/** `2026-07-23T02:55Z` → `额度将于 07-23 10:55 恢复（约 2 天 3 小时后）` — local time plus a rough countdown; undefined for garbage or past times (fall back to the vague copy rather than claim "恢复于 0 分钟前"). */
+function formatQuotaResetNote(iso: string | undefined): string | undefined {
+	if (!iso) {
+		return undefined;
+	}
+	const reset = new Date(iso);
+	const deltaMs = reset.getTime() - Date.now();
+	if (Number.isNaN(reset.getTime()) || deltaMs <= 0) {
+		return undefined;
+	}
+	const pad = (value: number): string => String(value).padStart(2, '0');
+	const stamp = `${pad(reset.getMonth() + 1)}-${pad(reset.getDate())} ${pad(reset.getHours())}:${pad(reset.getMinutes())}`;
+	const totalMinutes = Math.round(deltaMs / 60_000);
+	const days = Math.floor(totalMinutes / 1440);
+	const hours = Math.floor((totalMinutes % 1440) / 60);
+	const minutes = totalMinutes % 60;
+	const countdown = days > 0 ? `${days} 天 ${hours} 小时` : hours > 0 ? `${hours} 小时 ${minutes} 分钟` : `${minutes} 分钟`;
+	return `额度将于 ${stamp} 恢复（约 ${countdown}后），届时`;
 }
 
 export function workToolArg(input: unknown): string | undefined {

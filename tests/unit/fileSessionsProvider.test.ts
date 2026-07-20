@@ -1648,3 +1648,16 @@ test('humanizeAgentRunError: 401/429/5xx get their own copy; unparseable bodies 
 	assert.match(humanizeAgentRunError('Anthropic request failed: 400 {"error":{"message":"bad request"}}'), /^Agent error: Anthropic request failed: 400/);
 	assert.equal(humanizeAgentRunError('fetch failed'), 'Agent error: fetch failed');
 });
+
+test('humanizeAgentRunError: a quota-reset marker becomes a concrete recovery time; a past reset falls back to the vague copy', () => {
+	const future = new Date(Date.now() + 2 * 3600_000).toISOString();
+	const enriched = humanizeAgentRunError(`Anthropic request failed: 403 {"error":{"message":"credits exhausted"}}\n[quota-reset: ${future}]`);
+	assert.match(enriched, /额度将于 \d{2}-\d{2} \d{2}:\d{2} 恢复/);
+	assert.match(enriched, /约 (1 小时|2 小时)/, 'countdown rides along');
+	assert.doesNotMatch(enriched, /quota-reset/, 'the marker never leaks into the copy');
+
+	const past = new Date(Date.now() - 60_000).toISOString();
+	const stale = humanizeAgentRunError(`Anthropic request failed: 403 x\n[quota-reset: ${past}]`);
+	assert.match(stale, /等额度刷新/);
+	assert.doesNotMatch(stale, /额度将于/);
+});
