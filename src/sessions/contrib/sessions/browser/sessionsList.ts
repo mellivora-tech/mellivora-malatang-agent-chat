@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../common/i18n/i18n.js';
+import { getActiveLocale, localize, type LocalePreference } from '../../../common/i18n/i18n.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { append, clearNode } from '../../../base/browser/dom.js';
 import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChanges, type ISearchPaletteTask } from '../../search/browser/searchPalette.js';
@@ -1058,6 +1058,23 @@ export class SessionsList extends Disposable {
 			value => updatePreferences({ theme: value as ThemeId }),
 		);
 
+		// #9 P2: language. The active locale resolves once at module load
+		// (same reload model the theme restyle effectively has), so the row's
+		// description says a change applies on next launch — no silent
+		// half-translated in-between state.
+		const languageCard = settingsSection(page, localize('settings.language'));
+		const language = settingsRow(languageCard, { title: localize('settings.language.pick'), description: localize('settings.language.desc') });
+		settingsDropdown(
+			language,
+			[
+				{ value: 'system', label: localize('settings.language.system') },
+				{ value: 'zh-CN', label: '中文（简体）' },
+				{ value: 'en-US', label: 'English (US)' },
+			],
+			prefs.locale,
+			value => updatePreferences({ locale: value as LocalePreference }),
+		);
+
 		return page;
 	}
 
@@ -1213,5 +1230,6 @@ function formatTimestamp(date: Date): string {
 		return localize('time.days', days);
 	}
 
-	return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	// The APP locale, not the OS locale — a pinned en-US must not show 中文 dates (#9 P1).
+	return date.toLocaleDateString(getActiveLocale(), { month: 'short', day: 'numeric' });
 }

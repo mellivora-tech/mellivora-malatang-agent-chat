@@ -55,12 +55,12 @@ export function registerDataFilesIpc(dataRoot: string): void {
 
 	ipcMain.handle('dataFiles:readTable', async (_event, path: string, sheet?: string): Promise<FileTableResult> => {
 		if (typeof path !== 'string' || (!pickedPaths.has(path) && !insideDataRoot(path))) {
-			return { ok: false, message: '文件未经选择器打开。' };
+			return { ok: false, message: '[i18n:dferr.notPicked]' };
 		}
 		try {
 			return await readTable(path, sheet);
 		} catch (error) {
-			return { ok: false, message: `读取失败: ${error instanceof Error ? error.message : String(error)}` };
+			return { ok: false, message: `[i18n:dferr.readFailed|${error instanceof Error ? error.message : String(error)}]` };
 		}
 	});
 
@@ -110,11 +110,11 @@ async function readTable(path: string, sheet?: string): Promise<FileTableResult>
 		const sheets = workbook.SheetNames;
 		const active = sheet && sheets.includes(sheet) ? sheet : sheets[0];
 		if (!active) {
-			return { ok: false, message: '这个工作簿里没有工作表。' };
+			return { ok: false, message: '[i18n:dferr.noSheets]' };
 		}
 		const grid = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[active]!, { header: 1, defval: null }) as unknown[][];
 		const table = toTable(grid);
 		return { ok: true, sheets, sheet: active, ...table };
 	}
-	return { ok: false, message: `不支持的文件格式: ${extension || '(无扩展名)'}` };
+	return { ok: false, message: `[i18n:dferr.unsupportedFormat|${extension}]` };
 }

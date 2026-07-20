@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { WorkbenchGrid } from '../base/browser/grid.js';
+import { localize } from '../common/i18n/i18n.js';
 import { auxiliaryBarWidthPx, editorWidthPx, panelHeightPx, sidebarWidthPx, titlebarHeightPx } from '../common/sizes.js';
 import { DisposableStore, toDisposable, type IDisposable } from '../base/common/lifecycle.js';
 import { registerFileSessionsProvider } from '../contrib/fileProvider/browser/fileSessions.contribution.js';
@@ -178,7 +179,7 @@ export class Workbench {
 	private createSash(): void {
 		this.sash.className = 'workbench-sash';
 		this.sash.style.display = 'none';
-		this.sash.title = '拖动调整宽度 · 双击恢复自动';
+		this.sash.title = localize('wb.sashTitle');
 		this.root.appendChild(this.sash);
 
 		this.sash.addEventListener('pointerdown', event => {

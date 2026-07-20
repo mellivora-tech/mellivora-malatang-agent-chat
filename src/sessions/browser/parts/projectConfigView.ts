@@ -5,6 +5,7 @@
 
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
+import { localizeIpcMarker,localize } from '../../common/i18n/i18n.js';
 import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
 import { defaultPort, formatCoordinates, type IDataSource, type IDataSourceInput, type IDataSourceView, type IEnvironment, type IWorkspaceConfigView } from '../../services/environments/common/environments.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
@@ -15,7 +16,7 @@ import { settingsButton, settingsCardGrid, settingsEmptyCard, settingsPageHeader
 /** Kinds with a sub-type get a type-card catalog (pick a type to add); others use a plain add button. */
 const KIND_SUBTYPES: Partial<Record<'database' | 'redis' | 'mq' | 'nacos' | 'elasticsearch' | 'server', readonly { driver: string; title: string; description: string }[]>> = {
 	database: [
-		{ driver: 'mysql', title: 'MySQL', description: 'MySQL 及兼容协议(MariaDB 等)' },
+		{ driver: 'mysql', title: 'MySQL', description: localize('projcfg.type.mysql.desc') },
 		{ driver: 'postgres', title: 'PostgreSQL', description: 'PostgreSQL' },
 	],
 	mq: [
@@ -80,15 +81,15 @@ interface ISectionDef {
 }
 
 const SECTIONS: readonly ISectionDef[] = [
-	{ id: 'code', icon: 'codicon-file-code', label: '代码', group: 1, env: false, description: '代码是环境无关的,跟随项目,不随 dev/test/prod 变化。Agent 的文件工具作用于这些代码来源。' },
-	{ id: 'knowledge', icon: 'codicon-book', label: '知识库', group: 1, env: false, placeholder: true, description: '把项目知识库接入 Agent。与环境无关,跟随项目。' },
-	{ id: 'approvals', icon: 'codicon-shield', label: '工具授权', group: 1, env: false, description: '批准卡上「本项目」授予的永久放行 pattern。存放在本机应用数据里(不进 git),只收 bash 命令前缀;沙箱外执行与文件修改永远不可持久化。' },
-	{ id: 'database', icon: 'codicon-database', label: '数据库', group: 2, env: true, description: '配置各环境下的数据库连接,供 Agent 按环境获取对应的数据。' },
-	{ id: 'redis', icon: 'codicon-server', label: 'Redis', group: 2, env: true, description: '各环境的 Redis 连接。' },
-	{ id: 'mq', icon: 'codicon-broadcast', label: 'MQ', group: 2, env: true, description: '各环境的消息队列连接(Kafka / RabbitMQ)。' },
-	{ id: 'nacos', icon: 'codicon-settings-gear', label: 'Nacos', group: 2, env: true, description: '各环境的配置中心连接。' },
-	{ id: 'elasticsearch', icon: 'codicon-search', label: 'Elasticsearch', group: 2, env: true, description: '各环境的 Elasticsearch 连接。' },
-	{ id: 'server', icon: 'codicon-vm', label: '服务器', group: 2, env: true, description: '各环境的服务器(SSH),Agent 可登录执行命令。' },
+	{ id: 'code', icon: 'codicon-file-code', label: localize('projcfg.section.code'), group: 1, env: false, description: localize('projcfg.section.code.desc') },
+	{ id: 'knowledge', icon: 'codicon-book', label: localize('projcfg.section.knowledge'), group: 1, env: false, placeholder: true, description: localize('projcfg.section.knowledge.desc') },
+	{ id: 'approvals', icon: 'codicon-shield', label: localize('projcfg.section.approvals'), group: 1, env: false, description: localize('projcfg.section.approvals.desc') },
+	{ id: 'database', icon: 'codicon-database', label: localize('projcfg.section.database'), group: 2, env: true, description: localize('projcfg.section.database.desc') },
+	{ id: 'redis', icon: 'codicon-server', label: 'Redis', group: 2, env: true, description: localize('projcfg.section.redis.desc') },
+	{ id: 'mq', icon: 'codicon-broadcast', label: 'MQ', group: 2, env: true, description: localize('projcfg.section.mq.desc') },
+	{ id: 'nacos', icon: 'codicon-settings-gear', label: 'Nacos', group: 2, env: true, description: localize('projcfg.section.nacos.desc') },
+	{ id: 'elasticsearch', icon: 'codicon-search', label: 'Elasticsearch', group: 2, env: true, description: localize('projcfg.section.es.desc') },
+	{ id: 'server', icon: 'codicon-vm', label: localize('projcfg.section.server'), group: 2, env: true, description: localize('projcfg.section.server.desc') },
 ];
 
 type EditState =
@@ -145,7 +146,7 @@ export class ProjectConfigView extends Disposable {
 		dialog.className = 'sessions-settings-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', `Configuration for ${this.projectName}`);
+		dialog.setAttribute('aria-label', localize('projcfg.dialogAria', this.projectName));
 
 		const dragStrip = append(dialog, document.createElement('div'));
 		dragStrip.className = 'sessions-settings-dragstrip';
@@ -153,8 +154,8 @@ export class ProjectConfigView extends Disposable {
 		const closeButton = append(dialog, document.createElement('button')) as HTMLButtonElement;
 		closeButton.className = 'sessions-settings-close';
 		closeButton.type = 'button';
-		closeButton.title = 'Close';
-		closeButton.setAttribute('aria-label', 'Close');
+		closeButton.title = localize('sidebar.close');
+		closeButton.setAttribute('aria-label', localize('sidebar.close'));
 		append(closeButton, document.createElement('span')).className = 'codicon codicon-close';
 		this._register({ dispose: () => closeButton.removeEventListener('click', this.onClose) });
 		closeButton.addEventListener('click', this.onClose);
@@ -163,7 +164,7 @@ export class ProjectConfigView extends Disposable {
 		body.className = 'sessions-settings-body';
 		this.navElement = append(body, document.createElement('nav'));
 		this.navElement.className = 'sessions-settings-nav';
-		this.navElement.setAttribute('aria-label', 'Project configuration');
+		this.navElement.setAttribute('aria-label', localize('sidebar.projectConfig'));
 		this.mainElement = append(body, document.createElement('main'));
 		this.mainElement.className = 'sessions-settings-main';
 
@@ -237,7 +238,7 @@ export class ProjectConfigView extends Disposable {
 		const backIcon = append(back, document.createElement('span'));
 		backIcon.className = 'codicon codicon-arrow-left';
 		backIcon.setAttribute('aria-hidden', 'true');
-		append(back, document.createElement('span')).textContent = '返回';
+		append(back, document.createElement('span')).textContent = localize('settings.back');
 		back.addEventListener('click', this.onClose);
 
 		let previousGroup: number | undefined;
@@ -286,7 +287,7 @@ export class ProjectConfigView extends Disposable {
 		} else {
 			settingsPageHeader(page, { title: def.label, description: def.description });
 			this.renderError(page);
-			settingsEmptyCard(page, { title: '暂未接入知识库', description: 'Notion / 飞书 / 语雀 等连接器即将支持。' });
+			settingsEmptyCard(page, { title: localize('projcfg.knowledge.empty'), description: localize('projcfg.knowledge.empty.desc') });
 		}
 	}
 
@@ -309,18 +310,18 @@ export class ProjectConfigView extends Disposable {
 		const repos = this.codeRoots.filter(root => root.vcs !== undefined);
 		const paths = this.codeRoots.filter(root => root.vcs === undefined);
 		this.renderCodeCategory(page, {
-			title: '本地仓库',
-			hint: '扫描本地发现的 git / svn 仓库。',
+			title: localize('projcfg.code.localRepos'),
+			hint: localize('projcfg.code.localRepos.hint'),
 			items: repos,
-			emptyText: '尚未发现仓库。',
-			...(this.projects ? { action: { label: '发现仓库', onClick: (): void => void this.openDiscover() } } : {}),
+			emptyText: localize('projcfg.code.localRepos.empty'),
+			...(this.projects ? { action: { label: localize('projcfg.code.discover'), onClick: (): void => void this.openDiscover() } } : {}),
 		});
 		this.renderCodeCategory(page, {
-			title: '代码路径',
-			hint: '手动添加的本地代码目录,Agent 的文件工具作用于此。',
+			title: localize('projcfg.code.paths'),
+			hint: localize('projcfg.code.paths.hint'),
 			items: paths,
-			emptyText: '尚未添加代码路径。',
-			...(this.projects ? { action: { label: '添加路径', onClick: (): void => void this.reloadCodeRoots(() => this.projects!.pickCodeRoot(this.projectId)) } } : {}),
+			emptyText: localize('projcfg.code.paths.empty'),
+			...(this.projects ? { action: { label: localize('projcfg.code.addPath'), onClick: (): void => void this.reloadCodeRoots(() => this.projects!.pickCodeRoot(this.projectId)) } } : {}),
 		});
 		this.renderRemoteCategory(page);
 	}
@@ -331,7 +332,7 @@ export class ProjectConfigView extends Disposable {
 		this.renderError(page);
 
 		if (this.approvalPatterns.length === 0) {
-			settingsEmptyCard(page, { title: '没有永久放行的命令', description: '在批准卡上点「本项目」即可把某类 bash 命令(如 mvn *)永久放行。' });
+			settingsEmptyCard(page, { title: localize('projcfg.approvals.empty'), description: localize('projcfg.approvals.empty.desc') });
 			return;
 		}
 		const pills = append(page, document.createElement('div'));
@@ -349,8 +350,8 @@ export class ProjectConfigView extends Disposable {
 				const remove = append(pill, document.createElement('button')) as HTMLButtonElement;
 				remove.className = 'sessions-code-pill-remove';
 				remove.type = 'button';
-				remove.title = '撤销放行';
-				remove.setAttribute('aria-label', `撤销 ${pattern}`);
+				remove.title = localize('projcfg.approvals.revoke');
+				remove.setAttribute('aria-label', localize('projcfg.approvals.revokeNamed', pattern));
 				append(remove, document.createElement('span')).className = 'codicon codicon-close';
 				remove.addEventListener('click', () => {
 					void this.projects!.removeApprovalAllowPattern(this.projectId, pattern).then(next => {
@@ -371,18 +372,18 @@ export class ProjectConfigView extends Disposable {
 		titles.className = 'sessions-code-cat-titles';
 		const label = append(titles, document.createElement('div'));
 		label.className = 'sessions-settings-section-title';
-		label.textContent = '远程仓库';
+		label.textContent = localize('projcfg.remote.title');
 		const hint = append(titles, document.createElement('div'));
 		hint.className = 'sessions-code-cat-hint';
-		hint.textContent = '仓库地址,运行时自动下载代码(用系统 git 凭据)。';
+		hint.textContent = localize('projcfg.remote.hint');
 		if (this.projects) {
-			settingsButton(head, '添加仓库地址', () => this.openAddRemote());
+			settingsButton(head, localize('projcfg.remote.add'), () => this.openAddRemote());
 		}
 
 		if (this.remotes.length === 0) {
 			const empty = append(category, document.createElement('div'));
 			empty.className = 'sessions-code-empty';
-			empty.textContent = '尚未添加远程仓库。';
+			empty.textContent = localize('projcfg.remote.empty');
 			return;
 		}
 		const pills = append(category, document.createElement('div'));
@@ -397,20 +398,20 @@ export class ProjectConfigView extends Disposable {
 			append(pill, document.createElement('span')).textContent = remote.name;
 			const state = append(pill, document.createElement('span'));
 			state.className = `sessions-code-pill-state ${remote.cloned ? 'is-cloned' : ''}`;
-			state.textContent = remote.cloned ? '已克隆' : '未克隆';
+			state.textContent = remote.cloned ? localize('projcfg.remote.cloned') : localize('projcfg.remote.notCloned');
 			if (this.projects) {
 				const clone = append(pill, document.createElement('button')) as HTMLButtonElement;
 				clone.className = 'sessions-code-pill-remove';
 				clone.type = 'button';
-				clone.title = remote.cloned ? '更新' : '克隆';
+				clone.title = remote.cloned ? localize('projcfg.remote.update') : localize('projcfg.remote.clone');
 				clone.setAttribute('aria-label', clone.title);
 				append(clone, document.createElement('span')).className = 'codicon codicon-cloud-download';
 				clone.addEventListener('click', () => void this.reloadRemotes(() => this.projects!.cloneRemote(this.projectId, remote.id)));
 				const remove = append(pill, document.createElement('button')) as HTMLButtonElement;
 				remove.className = 'sessions-code-pill-remove';
 				remove.type = 'button';
-				remove.title = '移除';
-				remove.setAttribute('aria-label', `移除 ${remote.name}`);
+				remove.title = localize('projcfg.remove');
+				remove.setAttribute('aria-label', localize('projcfg.removeNamed', remote.name));
 				append(remove, document.createElement('span')).className = 'codicon codicon-close';
 				remove.addEventListener('click', () => void this.reloadRemotes(() => this.projects!.removeRemote(this.projectId, remote.id)));
 			}
@@ -429,15 +430,15 @@ export class ProjectConfigView extends Disposable {
 		dialog.className = 'sessions-discover-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', '添加远程仓库');
-		append(append(dialog, document.createElement('div')), document.createElement('span')).textContent = '添加远程仓库';
+		dialog.setAttribute('aria-label', localize('projcfg.remote.dialogTitle'));
+		append(append(dialog, document.createElement('div')), document.createElement('span')).textContent = localize('projcfg.remote.dialogTitle');
 		dialog.firstElementChild!.className = 'sessions-discover-header';
 
 		const body = append(dialog, document.createElement('div'));
 		body.className = 'sessions-discover-body';
 		const form = formGrid(body);
-		const urlInput = formInput(form, '仓库地址', '', { full: true, placeholder: 'https://github.com/acme/repo.git' });
-		const refInput = formInput(form, '分支 / Tag(可选)', '', { full: true, placeholder: '默认分支' });
+		const urlInput = formInput(form, localize('projcfg.remote.url'), '', { full: true, placeholder: 'https://github.com/acme/repo.git' });
+		const refInput = formInput(form, localize('projcfg.remote.ref'), '', { full: true, placeholder: localize('projcfg.remote.refPlaceholder') });
 
 		const close = (): void => {
 			backdrop.remove();
@@ -457,7 +458,7 @@ export class ProjectConfigView extends Disposable {
 
 		const footer = append(dialog, document.createElement('div'));
 		footer.className = 'sessions-discover-footer';
-		settingsButton(footer, '添加', () => {
+		settingsButton(footer, localize('projcfg.add'), () => {
 			const url = urlInput.value.trim();
 			if (url === '') {
 				return;
@@ -468,7 +469,7 @@ export class ProjectConfigView extends Disposable {
 			void this.reloadRemotes(() => this.projects!.addRemote(this.projectId, { url, vcs, ...(ref ? { ref } : {}) }));
 			close();
 		});
-		settingsButton(footer, '取消', close);
+		settingsButton(footer, localize('projcfg.cancel'), close);
 
 		host.appendChild(backdrop);
 		urlInput.focus();
@@ -511,8 +512,8 @@ export class ProjectConfigView extends Disposable {
 				const remove = append(pill, document.createElement('button')) as HTMLButtonElement;
 				remove.className = 'sessions-code-pill-remove';
 				remove.type = 'button';
-				remove.title = '移除';
-				remove.setAttribute('aria-label', `移除 ${item.name}`);
+				remove.title = localize('projcfg.remove');
+				remove.setAttribute('aria-label', localize('projcfg.removeNamed', item.name));
 				append(remove, document.createElement('span')).className = 'codicon codicon-close';
 				remove.addEventListener('click', () => void this.reloadCodeRoots(() => this.projects!.removeCodeRoot(this.projectId, item.path)));
 			}
@@ -531,13 +532,13 @@ export class ProjectConfigView extends Disposable {
 		dialog.className = 'sessions-discover-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', '发现仓库');
+		dialog.setAttribute('aria-label', localize('projcfg.code.discover'));
 		const header = append(dialog, document.createElement('div'));
 		header.className = 'sessions-discover-header';
-		append(header, document.createElement('span')).textContent = '发现仓库';
+		append(header, document.createElement('span')).textContent = localize('projcfg.code.discover');
 		const body = append(dialog, document.createElement('div'));
 		body.className = 'sessions-discover-body';
-		body.textContent = '扫描本地仓库中…';
+		body.textContent = localize('projcfg.discover.scanning');
 
 		const close = (): void => {
 			backdrop.remove();
@@ -560,14 +561,14 @@ export class ProjectConfigView extends Disposable {
 		try {
 			repos = await this.projects.discoverRepos(this.projectId);
 		} catch (error) {
-			body.textContent = `扫描失败:${error instanceof Error ? error.message : String(error)}`;
+			body.textContent = localize('projcfg.discover.failed', error instanceof Error ? error.message : String(error));
 			return;
 		}
 		const existing = new Set(this.codeRoots.map(root => root.path));
 		const selected = new Set<string>();
 		clearNode(body);
 		if (repos.length === 0) {
-			body.textContent = '未发现仓库。';
+			body.textContent = localize('projcfg.discover.none');
 		} else {
 			const list = append(body, document.createElement('div'));
 			list.className = 'sessions-discover-list';
@@ -586,7 +587,7 @@ export class ProjectConfigView extends Disposable {
 				text.className = 'sessions-discover-item-text';
 				const name = append(text, document.createElement('div'));
 				name.className = 'sessions-discover-item-name';
-				name.textContent = `${repo.name}${added ? '(已添加)' : ''}`;
+				name.textContent = `${repo.name}${added ? localize('projcfg.discover.added') : ''}`;
 				const path = append(text, document.createElement('div'));
 				path.className = 'sessions-discover-item-path';
 				path.textContent = repo.path;
@@ -595,7 +596,7 @@ export class ProjectConfigView extends Disposable {
 
 		const footer = append(dialog, document.createElement('div'));
 		footer.className = 'sessions-discover-footer';
-		settingsButton(footer, '添加所选', () => {
+		settingsButton(footer, localize('projcfg.discover.addSelected'), () => {
 			void (async (): Promise<void> => {
 				for (const path of selected) {
 					await this.projects!.addCodeRoot(this.projectId, path);
@@ -605,7 +606,7 @@ export class ProjectConfigView extends Disposable {
 				this.render();
 			})();
 		});
-		settingsButton(footer, '取消', close);
+		settingsButton(footer, localize('projcfg.cancel'), close);
 	}
 
 	// --- environment-scoped kinds -----------------------------------------------
@@ -618,14 +619,14 @@ export class ProjectConfigView extends Disposable {
 		// "环境管理", which stays pinned to the far right on every section.
 		const headerActions: { label: string; onClick: () => void }[] = [];
 		if (environmentReady && !subtypes) {
-			headerActions.push({ label: `添加${def.label}`, onClick: () => this.beginEdit({ kind: 'ds' }) });
+			headerActions.push({ label: localize('projcfg.addKind', def.label), onClick: () => this.beginEdit({ kind: 'ds' }) });
 		}
-		headerActions.push({ label: '环境管理', onClick: () => this.openEnvManager() });
+		headerActions.push({ label: localize('projcfg.envManage'), onClick: () => this.openEnvManager() });
 		settingsPageHeader(page, { title: def.label, description: def.description, actions: headerActions });
 		this.renderError(page);
 
 		if (this.config.environments.length === 0) {
-			settingsEmptyCard(page, { title: '尚无环境', description: '新建一个环境开始(默认已内置 dev / test / prod)。', actionLabel: '新建环境', onAction: () => this.openEnvManager('new') });
+			settingsEmptyCard(page, { title: localize('projcfg.env.none'), description: localize('projcfg.env.none.desc'), actionLabel: localize('projcfg.env.new'), onAction: () => this.openEnvManager('new') });
 			return;
 		}
 
@@ -652,7 +653,7 @@ export class ProjectConfigView extends Disposable {
 			// The rail only SWITCHES the viewed environment; editing lives in the manager modal.
 			const tag = append(tab, document.createElement('span'));
 			tag.className = `sessions-env-rail-tag sessions-env-role ${candidate.writable ? 'role-writable' : 'role-protected'}`;
-			tag.textContent = candidate.writable ? '可写' : '只读';
+			tag.textContent = candidate.writable ? localize('projcfg.env.writable') : localize('projcfg.env.readOnly');
 			const select = (): void => {
 				if (this.activeEnvId !== candidate.id) {
 					this.activeEnvId = candidate.id;
@@ -671,10 +672,10 @@ export class ProjectConfigView extends Disposable {
 		const add = append(rail, document.createElement('button')) as HTMLButtonElement;
 		add.className = 'sessions-env-rail-tab sessions-env-rail-add';
 		add.type = 'button';
-		add.title = '新建环境';
-		add.setAttribute('aria-label', '新建环境');
+		add.title = localize('projcfg.env.new');
+		add.setAttribute('aria-label', localize('projcfg.env.new'));
 		append(add, document.createElement('span')).className = 'codicon codicon-add';
-		append(add, document.createElement('span')).textContent = '新建环境';
+		append(add, document.createElement('span')).textContent = localize('projcfg.env.new');
 		add.addEventListener('click', () => this.openEnvManager('new'));
 
 		const right = append(split, document.createElement('div'));
@@ -686,7 +687,7 @@ export class ProjectConfigView extends Disposable {
 		}
 		const sources = this.config.dataSources.filter(ds => ds.environmentId === environment.id && ds.kind === kind);
 		if (sources.length === 0) {
-			this.renderPanelEmpty(body, `${environment.name} 下还没有${def.label}`, subtypes ? `从下方选择类型添加。` : `点击右上角“添加${def.label}”新建。`);
+			this.renderPanelEmpty(body, localize('projcfg.env.noneOfKind', environment.name, def.label), subtypes ? localize('projcfg.env.pickTypeHint') : localize('projcfg.env.addHint', def.label));
 		} else {
 			for (const dataSource of sources) {
 				this.renderDataSourceRow(body, environment, dataSource);
@@ -695,7 +696,7 @@ export class ProjectConfigView extends Disposable {
 		if (subtypes) {
 			settingsCardGrid(
 				page,
-				`${def.label}类型`,
+				localize('projcfg.kindTypes', def.label),
 				subtypes.map(type => ({
 					icon: def.icon,
 					title: type.title,
@@ -734,10 +735,10 @@ export class ProjectConfigView extends Disposable {
 			return;
 		}
 		if (this.edit.kind === 'ds') {
-			settingsPageHeader(page, { title: `${this.edit.ds ? '编辑' : '添加'}${def.label}` });
+			settingsPageHeader(page, { title: localize(this.edit.ds ? 'projcfg.editKind' : 'projcfg.addKind', def.label) });
 			this.renderDataSourceEditor(page, environment, def.id as DataSourceSectionId, this.edit.ds, this.edit.driver);
 		} else if (this.edit.kind === 'cred') {
-			settingsPageHeader(page, { title: '凭据', description: `${this.edit.ds.label} · ${environment.name}` });
+			settingsPageHeader(page, { title: localize('projcfg.credentials'), description: `${this.edit.ds.label} · ${environment.name}` });
 			this.renderCredentialEditor(page, this.edit.ds);
 		}
 	}
@@ -766,11 +767,11 @@ export class ProjectConfigView extends Disposable {
 		}
 		const cred = append(badges, document.createElement('span'));
 		cred.className = `sessions-env-badge ${dataSource.hasCredential ? 'cred-set' : 'cred-missing'}`;
-		cred.textContent = dataSource.hasCredential ? 'credential set' : 'no credential';
+		cred.textContent = dataSource.hasCredential ? localize('projcfg.badge.credSet') : localize('projcfg.badge.credMissing');
 
-		settingsButton(control, '凭据', () => this.beginEdit({ kind: 'cred', ds: dataSource }));
-		settingsButton(control, '编辑', () => this.beginEdit({ kind: 'ds', ds: dataSource }));
-		settingsButton(control, '删除', () => void this.mutate(() => this.service.removeDataSource(this.projectId, dataSource.id)));
+		settingsButton(control, localize('projcfg.credentials'), () => this.beginEdit({ kind: 'cred', ds: dataSource }));
+		settingsButton(control, localize('projcfg.edit'), () => this.beginEdit({ kind: 'ds', ds: dataSource }));
+		settingsButton(control, localize('projcfg.delete'), () => void this.mutate(() => this.service.removeDataSource(this.projectId, dataSource.id)));
 	}
 
 	/**
@@ -790,10 +791,10 @@ export class ProjectConfigView extends Disposable {
 		dialog.className = 'sessions-env-manager-dialog';
 		dialog.setAttribute('role', 'dialog');
 		dialog.setAttribute('aria-modal', 'true');
-		dialog.setAttribute('aria-label', '环境管理');
+		dialog.setAttribute('aria-label', localize('projcfg.envManage'));
 		const header = append(dialog, document.createElement('div'));
 		header.className = 'sessions-discover-header';
-		append(header, document.createElement('span')).textContent = '环境管理';
+		append(header, document.createElement('span')).textContent = localize('projcfg.envManage');
 		const split = append(dialog, document.createElement('div'));
 		split.className = 'sessions-env-manager-split';
 		const railEl = append(split, document.createElement('div'));
@@ -842,7 +843,7 @@ export class ProjectConfigView extends Disposable {
 				tab.firstElementChild!.textContent = candidate.name;
 				const tag = append(tab, document.createElement('span'));
 				tag.className = `sessions-env-rail-tag sessions-env-role ${candidate.writable ? 'role-writable' : 'role-protected'}`;
-				tag.textContent = candidate.writable ? '可写' : '只读';
+				tag.textContent = candidate.writable ? localize('projcfg.env.writable') : localize('projcfg.env.readOnly');
 				tab.addEventListener('click', () => {
 					selectedId = candidate.id;
 					rebuild();
@@ -853,7 +854,7 @@ export class ProjectConfigView extends Disposable {
 			addTab.type = 'button';
 			addTab.classList.toggle('active', selectedId === undefined);
 			append(addTab, document.createElement('span')).className = 'codicon codicon-add';
-			append(addTab, document.createElement('span')).textContent = '新建环境';
+			append(addTab, document.createElement('span')).textContent = localize('projcfg.env.new');
 			addTab.addEventListener('click', () => {
 				selectedId = undefined;
 				rebuild();
@@ -861,24 +862,24 @@ export class ProjectConfigView extends Disposable {
 
 			const environment = selectedId ? this.config.environments.find(candidate => candidate.id === selectedId) : undefined;
 			const form = formGrid(formEl);
-			const nameInput = formInput(form, '环境名称', environment?.name ?? '', { full: true, placeholder: '如 dev / test / prod / 预发' });
+			const nameInput = formInput(form, localize('projcfg.envm.name'), environment?.name ?? '', { full: true, placeholder: localize('projcfg.envm.namePlaceholder') });
 			const writableSelect = this.formSelect(
 				form,
-				'写权限',
+				localize('projcfg.envm.writability'),
 				[
-					{ value: 'writable', label: 'writable(允许写入)' },
-					{ value: 'protected', label: 'protected(只读,如 prod)' },
+					{ value: 'writable', label: localize('projcfg.envm.writableOption') },
+					{ value: 'protected', label: localize('projcfg.envm.protectedOption') },
 				],
 				environment ? (environment.writable ? 'writable' : 'protected') : 'writable',
 				{ full: true },
 				store,
 			);
-			const frontInput = formInput(form, '前端地址', environment?.frontendUrl ?? '', { full: true, placeholder: '如 https://dev.example.com' });
-			const backInput = formInput(form, '后端地址', environment?.backendUrl ?? '', { full: true, placeholder: '如 https://api-dev.example.com' });
+			const frontInput = formInput(form, localize('projcfg.envm.frontendUrl'), environment?.frontendUrl ?? '', { full: true, placeholder: localize('projcfg.envm.frontendUrlPlaceholder') });
+			const backInput = formInput(form, localize('projcfg.envm.backendUrl'), environment?.backendUrl ?? '', { full: true, placeholder: localize('projcfg.envm.backendUrlPlaceholder') });
 
 			const actions = append(formEl, document.createElement('div'));
 			actions.className = 'sessions-skills-actions';
-			settingsButton(actions, '保存', () => {
+			settingsButton(actions, localize('projcfg.save'), () => {
 				void (async (): Promise<void> => {
 					const view = await this.service.upsertEnvironment(this.projectId, {
 						...(environment ? { id: environment.id } : {}),
@@ -895,7 +896,7 @@ export class ProjectConfigView extends Disposable {
 				})();
 			});
 			if (environment) {
-				settingsButton(actions, '删除环境', () => {
+				settingsButton(actions, localize('projcfg.envm.deleteEnv'), () => {
 					void (async (): Promise<void> => {
 						const view = await this.service.removeEnvironment(this.projectId, environment.id);
 						selectedId = view.environments[0]?.id;
@@ -916,10 +917,10 @@ export class ProjectConfigView extends Disposable {
 		editor.className = 'sessions-skills-editor';
 		const form = formGrid(editor);
 
-		const nameInput = formInput(form, '名称', dataSource?.label ?? '', { full: true, placeholder: '留空则用 host:port' });
+		const nameInput = formInput(form, localize('projcfg.form.name'), dataSource?.label ?? '', { full: true, placeholder: localize('projcfg.form.namePlaceholder') });
 		const envSelect = this.formSelect(
 			form,
-			'环境',
+			localize('projcfg.form.env'),
 			this.config.environments.map(candidate => ({ value: candidate.id, label: candidate.name })),
 			dataSource?.environmentId ?? environment.id,
 		);
@@ -929,39 +930,39 @@ export class ProjectConfigView extends Disposable {
 			kind === 'database'
 				? this.formSelect(form, 'Driver', DATABASE_DRIVERS, dataSource?.kind === 'database' ? dataSource.coordinates.driver : (presetDriver ?? 'mysql'))
 				: kind === 'mq'
-					? this.formSelect(form, '类型', MQ_DRIVERS, dataSource?.kind === 'mq' ? dataSource.coordinates.driver : (presetDriver ?? 'kafka'))
+					? this.formSelect(form, localize('projcfg.form.type'), MQ_DRIVERS, dataSource?.kind === 'mq' ? dataSource.coordinates.driver : (presetDriver ?? 'kafka'))
 					: undefined;
 
-		const hostInput = formInput(form, 'Host', dataSource?.coordinates.host ?? '', { placeholder: '如 localhost' });
+		const hostInput = formInput(form, 'Host', dataSource?.coordinates.host ?? '', { placeholder: localize('projcfg.form.hostPlaceholder') });
 		const portInput = formInput(form, 'Port', dataSource ? String(dataSource.coordinates.port) : '', { placeholder: String(defaultPort(kind)) });
 		portInput.type = 'number';
 
 		// Kind-specific extra fields.
-		const dbInput = kind === 'database' ? formInput(form, 'Database', dataSource?.kind === 'database' ? dataSource.coordinates.database : '', { full: true, placeholder: '如 orders' }) : undefined;
+		const dbInput = kind === 'database' ? formInput(form, 'Database', dataSource?.kind === 'database' ? dataSource.coordinates.database : '', { full: true, placeholder: localize('projcfg.form.databasePlaceholder') }) : undefined;
 		// Database credentials live in the SAME form as the connection (they still
 		// go to the credential store, never into the workspace config). An existing
 		// credential is kept when both fields are left blank.
-		const credUserInput = kind === 'database' ? formInput(form, '用户名', '', { placeholder: dataSource?.hasCredential ? '留空则保持不变' : '建议只读账号' }) : undefined;
-		const credPassInput = kind === 'database' ? formInput(form, '密码', '', { placeholder: dataSource?.hasCredential ? '留空则保持不变' : '' }) : undefined;
+		const credUserInput = kind === 'database' ? formInput(form, localize('projcfg.form.username'), '', { placeholder: dataSource?.hasCredential ? localize('projcfg.form.keepUnchanged') : localize('projcfg.form.readOnlyAccountHint') }) : undefined;
+		const credPassInput = kind === 'database' ? formInput(form, localize('projcfg.form.password'), '', { placeholder: dataSource?.hasCredential ? localize('projcfg.form.keepUnchanged') : '' }) : undefined;
 		if (credPassInput) {
 			credPassInput.type = 'password';
 		}
-		const redisDbInput = kind === 'redis' ? formInput(form, 'DB(库序号)', dataSource?.kind === 'redis' ? String(dataSource.coordinates.db) : '0', { placeholder: '0' }) : undefined;
+		const redisDbInput = kind === 'redis' ? formInput(form, localize('projcfg.form.redisDb'), dataSource?.kind === 'redis' ? String(dataSource.coordinates.db) : '0', { placeholder: '0' }) : undefined;
 		if (redisDbInput) {
 			redisDbInput.type = 'number';
 		}
 		const nsInput = kind === 'nacos' ? formInput(form, 'Namespace', dataSource?.kind === 'nacos' ? dataSource.coordinates.namespace : '', { placeholder: 'public' }) : undefined;
 		const groupInput = kind === 'nacos' ? formInput(form, 'Group', dataSource?.kind === 'nacos' ? dataSource.coordinates.group : '', { placeholder: 'DEFAULT_GROUP' }) : undefined;
-		const indexInput = kind === 'elasticsearch' ? formInput(form, 'Index(可选)', dataSource?.kind === 'elasticsearch' ? dataSource.coordinates.index : '', { full: true, placeholder: '如 logs-*' }) : undefined;
-		const userInput = kind === 'server' ? formInput(form, '用户名', dataSource?.kind === 'server' ? dataSource.coordinates.user : 'root', { placeholder: 'root' }) : undefined;
+		const indexInput = kind === 'elasticsearch' ? formInput(form, localize('projcfg.form.indexOptional'), dataSource?.kind === 'elasticsearch' ? dataSource.coordinates.index : '', { full: true, placeholder: localize('projcfg.form.indexPlaceholder') }) : undefined;
+		const userInput = kind === 'server' ? formInput(form, localize('projcfg.form.username'), dataSource?.kind === 'server' ? dataSource.coordinates.user : 'root', { placeholder: 'root' }) : undefined;
 		const authSelect =
 			kind === 'server'
 				? this.formSelect(
 						form,
-						'认证方式',
+						localize('projcfg.form.authMethod'),
 						[
-							{ value: 'password', label: '密码' },
-							{ value: 'key', label: '私钥' },
+							{ value: 'password', label: localize('projcfg.form.password') },
+							{ value: 'key', label: localize('projcfg.form.authKey') },
 						],
 						dataSource?.kind === 'server' ? dataSource.coordinates.auth : 'password',
 					)
@@ -973,7 +974,7 @@ export class ProjectConfigView extends Disposable {
 				? undefined
 				: this.formSelect(
 						form,
-						'账号权限',
+						localize('projcfg.form.accountAccess'),
 						[
 							{ value: 'read-only', label: 'read-only' },
 							{ value: 'read-write', label: 'read-write' },
@@ -984,7 +985,7 @@ export class ProjectConfigView extends Disposable {
 
 		const actions = append(editor, document.createElement('div'));
 		actions.className = 'sessions-skills-actions';
-		settingsButton(actions, '保存', () => {
+		settingsButton(actions, localize('projcfg.save'), () => {
 			const driver = driverSelect?.value;
 			const parsedPort = Number.parseInt(portInput.value, 10);
 			const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : defaultPort(kind, driver);
@@ -1015,7 +1016,7 @@ export class ProjectConfigView extends Disposable {
 		if (kind === 'database') {
 			const testStatus = document.createElement('span');
 			testStatus.className = 'sessions-env-test-result';
-			settingsButton(actions, '测试连接', () => {
+			settingsButton(actions, localize('projcfg.testConnection'), () => {
 				const driver = driverSelect?.value === 'postgres' ? 'postgres' : 'mysql';
 				const parsedPort = Number.parseInt(portInput.value, 10);
 				const payload = {
@@ -1029,17 +1030,17 @@ export class ProjectConfigView extends Disposable {
 					...(dataSource ? { dataSourceId: dataSource.id } : {}),
 					...(readTypedSecret() ? { secret: readTypedSecret()! } : {}),
 				};
-				testStatus.textContent = '测试中…';
+				testStatus.textContent = localize('projcfg.testing');
 				testStatus.classList.remove('ok', 'fail');
 				void this.service.testDataSource(this.projectId, payload).then(result => {
-					testStatus.textContent = result.message;
+					testStatus.textContent = localizeIpcMarker(result.message);
 					testStatus.classList.toggle('ok', result.ok);
 					testStatus.classList.toggle('fail', !result.ok);
 				});
 			});
 			actions.appendChild(testStatus);
 		}
-		settingsButton(actions, '取消', () => this.beginEdit({ kind: 'none' }));
+		settingsButton(actions, localize('projcfg.cancel'), () => this.beginEdit({ kind: 'none' }));
 
 		// The form-typed credential, or undefined when both fields are blank (keep the stored one).
 		function readTypedSecret(): { username?: string; password?: string } | undefined {
@@ -1063,31 +1064,31 @@ export class ProjectConfigView extends Disposable {
 		const heading = append(editor, document.createElement('div'));
 		heading.className = 'sessions-env-cred-heading';
 		heading.textContent = isServer
-			? `${dataSource.label} 的 SSH 凭据 — 加密存储,不会再显示。用户名在连接里配。`
-			: `${dataSource.label} 的凭据 — 加密存储,不会再显示。建议使用只读账号。`;
+			? localize('projcfg.cred.sshHeading', dataSource.label)
+			: localize('projcfg.cred.heading', dataSource.label);
 
 		const form = formGrid(editor);
 		// A server's username lives in its coordinates; DB-style sources take a username here.
-		const userInput = isServer ? undefined : formInput(form, '用户名', '', { full: true });
+		const userInput = isServer ? undefined : formInput(form, localize('projcfg.form.username'), '', { full: true });
 		let passInput: HTMLInputElement | undefined;
 		let keyInput: HTMLTextAreaElement | undefined;
 		if (isKeyAuth) {
 			const field = append(form, document.createElement('label'));
 			field.className = 'sessions-form-field sessions-form-field--full';
 			append(field, document.createElement('span')).className = 'sessions-form-label';
-			field.firstElementChild!.textContent = '私钥(PEM)';
+			field.firstElementChild!.textContent = localize('projcfg.cred.privateKeyPem');
 			keyInput = append(field, document.createElement('textarea')) as HTMLTextAreaElement;
 			keyInput.className = 'sessions-skills-body';
 			keyInput.rows = 8;
-			keyInput.placeholder = dataSource.hasCredential ? '留空则保持不变' : '-----BEGIN OPENSSH PRIVATE KEY-----';
+			keyInput.placeholder = dataSource.hasCredential ? localize('projcfg.form.keepUnchanged') : '-----BEGIN OPENSSH PRIVATE KEY-----';
 		} else {
-			passInput = formInput(form, '密码', '', { full: true, ...(dataSource.hasCredential ? { placeholder: '留空则保持不变' } : {}) });
+			passInput = formInput(form, localize('projcfg.form.password'), '', { full: true, ...(dataSource.hasCredential ? { placeholder: localize('projcfg.form.keepUnchanged') } : {}) });
 			passInput.type = 'password';
 		}
 
 		const actions = append(editor, document.createElement('div'));
 		actions.className = 'sessions-skills-actions';
-		settingsButton(actions, '保存', () =>
+		settingsButton(actions, localize('projcfg.save'), () =>
 			void this.mutate(() =>
 				this.service.setDataSourceCredential(
 					this.projectId,
@@ -1097,9 +1098,9 @@ export class ProjectConfigView extends Disposable {
 			),
 		);
 		if (dataSource.hasCredential) {
-			settingsButton(actions, '清除', () => void this.mutate(() => this.service.setDataSourceCredential(this.projectId, dataSource.id, {})));
+			settingsButton(actions, localize('projcfg.cred.clear'), () => void this.mutate(() => this.service.setDataSourceCredential(this.projectId, dataSource.id, {})));
 		}
-		settingsButton(actions, '取消', () => this.beginEdit({ kind: 'none' }));
+		settingsButton(actions, localize('projcfg.cancel'), () => this.beginEdit({ kind: 'none' }));
 		(userInput ?? passInput ?? keyInput)?.focus();
 	}
 
@@ -1126,7 +1127,7 @@ export class ProjectConfigView extends Disposable {
 /** Strip Electron's "Error invoking remote method '…':" IPC wrapper so the real message shows. */
 function cleanError(error: unknown): string {
 	const message = error instanceof Error ? error.message : String(error);
-	return message.replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^Error:\s*/, '');
+	return localizeIpcMarker(message.replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^Error:\s*/, ''));
 }
 
 /** A two-column form grid; fields default to one column, `full` spans both. */

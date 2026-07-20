@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../common/i18n/i18n.js';
+import { localizeIpcMarker,localize } from '../../../common/i18n/i18n.js';
 import 'tabulator-tables/dist/css/tabulator.min.css';
 import { TabulatorFull, type CellComponent, type ColumnDefinition } from 'tabulator-tables';
 import { Disposable } from '../../../base/common/lifecycle.js';
@@ -452,7 +452,7 @@ export class DataBrowserView extends Disposable {
 			// Query mode still works without a catalog (e.g. permission-limited
 			// information_schema) — only table mode is dead in the water.
 			if (this.baseQuery === undefined) {
-				this.setStatus(result.message, '');
+				this.setStatus(localizeIpcMarker(result.message), '');
 				return;
 			}
 		} else {

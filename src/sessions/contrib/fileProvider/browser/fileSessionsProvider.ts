@@ -5,6 +5,7 @@
 
 import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
+import { localize } from '../../../common/i18n/i18n.js';
 import type { IAgentBridge, IAgentMessage, PermissionMode, IAgentPause } from '../../../services/agent/common/agent.js';
 import type { IGitBridge } from '../../../services/git/common/git.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
@@ -22,7 +23,7 @@ import type {
 	ISessionWorkStep,
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
-import { RENDERED_TABLE_MARKER, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
+import { RENDERED_TABLE_MARKER, SUBAGENT_END_ARG_PREFIX, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { materializeUi, parseUiInput, uiToMarkdown, type IRenderUiInput } from '../../../services/sessions/common/uiArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
@@ -995,12 +996,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 			const parts: string[] = [];
 			if (lastThought) {
 				const thought = (lastThought.detail ?? lastThought.label).trim();
-				parts.push(`中止前的最后判断：${thought.length > 300 ? `${thought.slice(0, 300)}…` : thought}`);
+				parts.push(localize('run.abortLastThought', thought.length > 300 ? `${thought.slice(0, 300)}…` : thought));
 			}
 			if (lastTool) {
-				parts.push(`中止时正在执行：${lastTool.label}`);
+				parts.push(localize('run.abortLastTool', lastTool.label));
 			}
-			return parts.length === 0 ? `[本次运行被${cause}，任务未完成]` : `[本次运行被${cause}，任务未完成，以下状态未经最终验证]\n${parts.join('\n')}`;
+			return parts.length === 0 ? localize('run.abortNote', cause) : `${localize('run.abortNoteDetailed', cause)}\n${parts.join('\n')}`;
 		};
 
 		const finalize = (reason?: string): void => {
@@ -1049,9 +1050,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 					// visible text — without this note the run would end in silence.
 					text = 'I hit the output token limit before producing a reply — ask me to continue.';
 				} else if (reason === 'aborted') {
-					text = abortSummary('用户中止');
+					text = abortSummary(localize('run.causeUser'));
 				} else if (reason === 'app_quit') {
-					text = abortSummary('应用退出');
+					text = abortSummary(localize('run.causeQuit'));
 				}
 			}
 			// The pause copy always lands — appended to a partial reply, or as
@@ -1345,9 +1346,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// each own a slot — events route by agentId and never cross.
 				const spawnCall = openCalls.get(event.agentId);
 				subagentSlots.set(event.agentId, { spawnLabel: spawnCall?.label, actionStart: Date.now() });
-				closeStep('tool', `子代理 ⑃ ${firstLine(event.task)}`, undefined, { tool: 'spawn_agent', arg: firstLine(event.task), agent: event.agentId }, { startedAt: Date.now() });
+				closeStep('tool', localize('run.subagentSpawn', firstLine(event.task)), undefined, { tool: 'spawn_agent', arg: firstLine(event.task), agent: event.agentId }, { startedAt: Date.now() });
 				if (spawnCall !== undefined) {
-					spawnCall.label = '子代理启动中…';
+					spawnCall.label = localize('run.subagentStarting');
 				}
 				updateWork();
 			} else if (event?.type === 'subagent_tool') {
@@ -1373,8 +1374,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// stay on the last real tool action.
 				const progressAction = openCalls.get(event.agentId);
 				if (progressAction !== undefined) {
-					const amount = event.chars >= 1000 ? `${(event.chars / 1000).toFixed(1)}k 字` : `${event.chars} 字`;
-					progressAction.label = `⑃ ${event.phase === 'thinking' ? '思考中' : '撰写结论中'} · ${amount}`;
+					const amount = event.chars >= 1000 ? localize('run.charsK', (event.chars / 1000).toFixed(1)) : localize('run.chars', event.chars);
+					progressAction.label = localize('run.subagentProgress', event.phase === 'thinking' ? localize('run.phaseThinking') : localize('run.phaseWriting'), amount);
 					updateWork();
 				}
 			} else if (event?.type === 'subagent_end') {
@@ -1384,11 +1385,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 				}
 				closeStep(
 					'tool',
-					`子代理结束 · ${event.reason}`,
+					localize('run.subagentEndLabel', event.reason),
 					`${event.turns} turns · ${event.toolCalls} tool calls · ${Math.round(event.tokens / 1000)}k tokens`,
 					// arg carries the reason so the structured verb row ("子代理")
 					// keeps the outcome visible — the label is legacy-only now.
-					{ tool: 'subagent', arg: `结束 · ${event.reason}`, outcome: 'ok', agent: event.agentId },
+					{ tool: 'subagent', arg: `${SUBAGENT_END_ARG_PREFIX} · ${event.reason}`, outcome: 'ok', agent: event.agentId },
 					{ startedAt: Date.now() },
 				);
 				const endCall = openCalls.get(event.agentId);
@@ -1625,17 +1626,17 @@ export function humanizeAgentRunError(raw: string): string {
 	}
 	const detail = providerMessage === undefined ? '' : `\n\n> ${providerMessage}`;
 	if (status === 401) {
-		return `模型认证失败（HTTP 401）：API Key 无效或已过期。请到 设置 › 模型 检查密钥后重新发送。${detail}`;
+		return localize('run.err401', detail);
 	}
 	if (status === 403) {
-		const recovery = resetNote ?? '等额度刷新（或升级订阅）后';
-		return `模型请求被拒（HTTP 403）：通常是订阅额度已用尽，或当前 Key 没有此模型的权限。${recovery}重新发送这条消息即可继续。${detail}`;
+		const recovery = resetNote ?? localize('run.err403Recovery');
+		return localize('run.err403', recovery, detail);
 	}
 	if (status === 429) {
-		return `模型限流（HTTP 429）：请求过于频繁，多次自动重试后仍被拒。稍等片刻再重新发送。${detail}`;
+		return localize('run.err429', detail);
 	}
 	if (status >= 500) {
-		return `模型服务端异常（HTTP ${status}）：多次自动重试后仍失败，通常会自行恢复。请过几分钟重新发送。${detail}`;
+		return localize('run.err5xx', status, detail);
 	}
 	return `Agent error: ${cleaned}`;
 }
@@ -1656,8 +1657,8 @@ function formatQuotaResetNote(iso: string | undefined): string | undefined {
 	const days = Math.floor(totalMinutes / 1440);
 	const hours = Math.floor((totalMinutes % 1440) / 60);
 	const minutes = totalMinutes % 60;
-	const countdown = days > 0 ? `${days} 天 ${hours} 小时` : hours > 0 ? `${hours} 小时 ${minutes} 分钟` : `${minutes} 分钟`;
-	return `额度将于 ${stamp} 恢复（约 ${countdown}后），届时`;
+	const countdown = days > 0 ? localize('run.countdownDayHour', days, hours) : hours > 0 ? localize('run.countdownHourMin', hours, minutes) : localize('run.countdownMin', minutes);
+	return localize('run.quotaResetNote', stamp, countdown);
 }
 
 export function workToolArg(input: unknown): string | undefined {

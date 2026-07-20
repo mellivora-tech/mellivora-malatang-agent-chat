@@ -261,13 +261,13 @@ export async function addRemote(root: string, projectId: string, input: IRemoteR
 	}
 	const key = normalizeRepoUrl(url);
 	if (current.some(remote => normalizeRepoUrl(remote.url) === key)) {
-		throw new Error('该远程仓库已添加。');
+		throw new Error('[i18n:projcfg.err.repoExists]');
 	}
 	const signal = new AbortController().signal;
 	for (const codeRoot of project.codeRoots ?? []) {
 		const origin = await gitRemoteOrigin(codeRoot, signal, run);
 		if (origin && normalizeRepoUrl(origin) === key) {
-			throw new Error(`该仓库已作为本地代码存在(${basename(codeRoot)}),无需添加为远程。`);
+			throw new Error(`[i18n:projcfg.err.repoIsLocal|${basename(codeRoot)}]`);
 		}
 	}
 	const remote: IRemoteRepo = {

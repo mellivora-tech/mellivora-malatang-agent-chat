@@ -11,6 +11,7 @@
  * next run's transcript.
  */
 
+import { localize } from '../../../common/i18n/i18n.js';
 import type { IPlanArtifact, IPlanComment, IPlanSection } from './session.js';
 
 export const PLAN_SECTION_KINDS: readonly IPlanSection['kind'][] = ['overview', 'files', 'approach', 'steps', 'risks', 'verify'];
@@ -85,7 +86,7 @@ export function materializePlan(input: IProposePlanInput, planId: string, versio
 
 /** Markdown fallback: what older builds render, and what the next run's transcript carries. */
 export function planToMarkdown(plan: IPlanArtifact): string {
-	const lines: string[] = [plan.kind === 'walkthrough' ? `## 完成小结: ${plan.title}` : `## 实现方案 v${plan.version}: ${plan.title}`];
+	const lines: string[] = [plan.kind === 'walkthrough' ? localize('plan.md.walkthroughHeader', plan.title) : localize('plan.md.planHeader', plan.version, plan.title)];
 	for (const section of plan.sections) {
 		lines.push('', `### ${section.heading}`);
 		if (section.body.trim() !== '') {
@@ -109,11 +110,11 @@ export function buildReviseTurn(plan: IPlanArtifact, comments: readonly IPlanCom
 	if (open.length === 0) {
 		return undefined;
 	}
-	const heading = (sectionId: string): string => plan.sections.find(section => section.id === sectionId)?.heading ?? '方案';
+	const heading = (sectionId: string): string => plan.sections.find(section => section.id === sectionId)?.heading ?? localize('plan.revise.fallbackHeading');
 	const lines = [
-		`我评审了实现方案 v${plan.version},段落批注如下:`,
+		localize('plan.revise.intro', plan.version),
 		...open.map(comment => `- [${heading(comment.sectionId)}] ${comment.body}`),
-		'请据此修订,并重新调用 propose_plan 给出新版本。',
+		localize('plan.revise.outro'),
 	];
 	return lines.join('\n');
 }

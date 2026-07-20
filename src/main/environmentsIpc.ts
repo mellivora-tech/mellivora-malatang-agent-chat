@@ -135,7 +135,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 	ipcMain.handle('environments:testDataSource', async (_event, _projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult> => {
 		const { coordinates, label } = payload;
 		if (coordinates.driver !== 'mysql' && coordinates.driver !== 'postgres') {
-			return { ok: false, message: `暂不支持测试 ${String(coordinates.driver)} 连接。`, durationMs: 0 };
+			return { ok: false, message: `[i18n:envres.unsupportedDriver|${String(coordinates.driver)}]`, durationMs: 0 };
 		}
 		const typed = payload.secret && hasSecretContent(payload.secret) ? payload.secret : undefined;
 		const stored = !typed && payload.dataSourceId ? await getCredential(dataRoot, payload.dataSourceId, cipher) : undefined;
@@ -144,7 +144,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		const started = Date.now();
 		try {
 			await runDbQuery(coordinates, typed ?? stored, 'SELECT 1', { rowLimit: 1, signal: controller.signal });
-			return { ok: true, message: `连接成功（${Date.now() - started}ms）`, durationMs: Date.now() - started };
+			return { ok: true, message: `[i18n:envres.connected|${Date.now() - started}]`, durationMs: Date.now() - started };
 		} catch (error) {
 			return { ok: false, message: explainQueryError({ label, coordinates }, error), durationMs: Date.now() - started };
 		} finally {
@@ -158,15 +158,15 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 	const resolveDbSource = async (projectId: string, dataSourceId: string): Promise<{ source: IDatabaseSource; secret: IDataSourceSecret | undefined } | string> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
-			return '项目没有可用的工作目录。';
+			return '[i18n:envres.noWorkspace]';
 		}
 		const config = await readWorkspaceConfig(workspacePath);
 		const source = config.dataSources.find(candidate => candidate.id === dataSourceId);
 		if (!source) {
-			return '数据源不存在（可能已被删除）。';
+			return '[i18n:envres.sourceMissing]';
 		}
 		if (source.kind !== 'database') {
-			return `“${source.label}” 不是数据库类型的数据源。`;
+			return `[i18n:envres.notDatabase|${source.label}]`;
 		}
 		return { source, secret: await getCredential(dataRoot, dataSourceId, cipher) };
 	};
@@ -177,7 +177,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 	ipcMain.handle('environments:runQuery', async (_event, projectId: string, dataSourceId: string, sql: string, options?: { rowLimit?: number }): Promise<IDataQueryResult> => {
 		const started = Date.now();
 		if (typeof sql !== 'string' || !isReadOnlySql(sql)) {
-			return { ok: false, message: '只允许单条只读查询（SELECT / SHOW / EXPLAIN…）。', durationMs: 0 };
+			return { ok: false, message: '[i18n:envres.readonlyOnly]', durationMs: 0 };
 		}
 		const resolved = await resolveDbSource(projectId, dataSourceId);
 		if (typeof resolved === 'string') {

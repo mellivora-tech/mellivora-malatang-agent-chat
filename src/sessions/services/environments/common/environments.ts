@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
+
 /**
  * Environment / data-source contracts for the "system project" model.
  *
@@ -96,7 +98,7 @@ export function formatCoordinates(source: IDataSource): string {
 		case 'elasticsearch':
 			return `${source.coordinates.host}:${source.coordinates.port}${source.coordinates.index ? `/${source.coordinates.index}` : ''}`;
 		case 'server':
-			return `${source.coordinates.user}@${source.coordinates.host}:${source.coordinates.port} · ${source.coordinates.auth === 'key' ? '密钥' : '密码'}`;
+			return `${source.coordinates.user}@${source.coordinates.host}:${source.coordinates.port} · ${source.coordinates.auth === 'key' ? localize('env.authKey') : localize('env.authPassword')}`;
 	}
 }
 

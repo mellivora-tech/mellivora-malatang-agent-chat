@@ -28,6 +28,7 @@ export type FileTableResult =
 			/** True when the file had more rows than the cap. */
 			readonly truncated: boolean;
 	  }
+	/** #9 P1b: `message` may be an `[i18n:key|arg]` marker — display sites resolve it via localizeIpcMarker (main cannot localize; the locale lives in renderer storage). */
 	| { readonly ok: false; readonly message: string };
 
 /** The shape exposed on `agentWindow.dataFiles` by the preload script. */

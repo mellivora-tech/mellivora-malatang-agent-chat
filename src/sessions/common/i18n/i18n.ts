@@ -55,6 +55,22 @@ export function setActiveLocale(locale: ResolvedLocale): void {
 	activeLocale = locale;
 }
 
+/**
+ * #9 P1b: main-process strings cross IPC as `[i18n:key|arg0|arg1]` markers —
+ * main cannot localize (the locale preference lives in renderer storage), so
+ * it names the key and the renderer resolves it here. Unknown keys and plain
+ * strings pass through untouched (raw technical evidence stays visible).
+ */
+export function localizeIpcMarker(raw: string): string {
+	// At most ONE argument (everything after the first '|', newlines included)
+	// — real args are raw error text that may itself contain pipes.
+	const match = /^\[i18n:([\w.]+)(?:\|([\s\S]*))?\]$/.exec(raw);
+	if (!match || zhCN[match[1] as MessageKey] === undefined) {
+		return raw;
+	}
+	return match[2] !== undefined ? localize(match[1] as MessageKey, match[2]) : localize(match[1] as MessageKey);
+}
+
 /** The one lookup: translated template with `{n}` placeholders substituted.
  *  A missing translation falls back to the zh-CN source string. */
 export function localize(key: MessageKey, ...args: readonly (string | number)[]): string {
