@@ -12,9 +12,10 @@ import type { IAction } from '../../../base/common/actions.js';
 import { ModelSettingsView } from '../../../browser/parts/modelSettingsView.js';
 import { SkillSettingsView } from '../../../browser/parts/skillSettingsView.js';
 import { ProjectConfigView } from '../../../browser/parts/projectConfigView.js';
-import { settingsDropdown, settingsRow, settingsSection, settingsToggle } from '../../../browser/parts/settingsControls.js';
-import { readPreferences, updatePreferences } from '../../../browser/parts/settingsPrefs.js';
-import type { ThemeId } from '../../../platform/theme/theme.js';
+import { settingsButton, settingsDropdown, settingsRow, settingsSection, settingsToggle } from '../../../browser/parts/settingsControls.js';
+import { readPreferences, resolveActiveSeed, resolveActiveSlot, updatePreferences, type IAppearancePrefs } from '../../../browser/parts/settingsPrefs.js';
+import { findThemePreset, presetsForPolarity } from '../../../common/themePresets.js';
+import type { IThemeSeed } from '../../../common/themeSeed.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import { SessionStatus, type IActiveSession, type ISession, type ISessionChangesSummary, type ISessionWorkspace } from '../../../services/sessions/common/session.js';
 import type { IProjectsService } from '../../../services/projects/browser/projectsService.js';
@@ -1044,19 +1045,144 @@ export class SessionsList extends Disposable {
 		title.className = 'sessions-settings-page-title';
 		title.textContent = localize('settings.appearance');
 
-		const prefs = readPreferences();
+		// #8 P3 (Codex-shaped): mode selector + one preset slot per polarity +
+		// live seed editing for the ACTIVE slot. Everything below rebuilds from
+		// prefs on each change — the card body is cheap to re-derive.
 		const card = settingsSection(page, localize('settings.theme'));
-		const theme = settingsRow(card, { title: localize('settings.colorTheme'), description: localize('settings.colorTheme.desc') });
-		settingsDropdown(
-			theme,
-			[
-				{ value: 'dark', label: localize('settings.theme.dark') },
-				{ value: 'light', label: localize('settings.theme.light') },
-				{ value: 'highContrast', label: localize('settings.theme.highContrast') },
-			],
-			prefs.theme,
-			value => updatePreferences({ theme: value as ThemeId }),
-		);
+		const body = card.appendChild(document.createElement('div'));
+
+		const rebuildAppearance = (): void => {
+			const prefs = readPreferences();
+			const appearance = prefs.appearance;
+			body.replaceChildren();
+
+			const mode = settingsRow(body, { title: localize('appearance.mode'), description: localize('appearance.mode.desc') });
+			settingsDropdown(
+				mode,
+				[
+					{ value: 'system', label: localize('appearance.mode.system') },
+					{ value: 'light', label: localize('appearance.mode.light') },
+					{ value: 'dark', label: localize('appearance.mode.dark') },
+				],
+				appearance.mode,
+				value => {
+					updatePreferences({ appearance: { ...readPreferences().appearance, mode: value as IAppearancePrefs['mode'] } });
+					rebuildAppearance();
+				},
+			);
+
+			// One preset slot per polarity — each slot picks independently
+			// (GitHub Light + Gruvbox Dark is a legal pair). The dirty state
+			// (slot.seed present) tags the selected option.
+			for (const polarity of ['light', 'dark'] as const) {
+				const slot = appearance[polarity];
+				const row = settingsRow(body, {
+					title: polarity === 'light' ? localize('appearance.slot.light') : localize('appearance.slot.dark'),
+					description: localize('appearance.slot.desc'),
+				});
+				settingsDropdown(
+					row,
+					presetsForPolarity(polarity).map(preset => ({
+						value: preset.id,
+						label: preset.id === slot.presetId && slot.seed !== undefined ? localize('appearance.modified', preset.label) : preset.label,
+					})),
+					slot.presetId,
+					value => {
+						// Picking a preset clears the slot's customization — the
+						// preset IS the new seed.
+						updatePreferences({ appearance: { ...readPreferences().appearance, [polarity]: { presetId: value } } });
+						rebuildAppearance();
+					},
+				);
+				const effective = slot.seed ?? findThemePreset(slot.presetId)?.seed;
+				if (effective) {
+					body.appendChild(renderSeedSwatch(effective));
+				}
+			}
+
+			// Customize the ACTIVE slot (what the mode currently renders).
+			const { polarity: activePolarity, slot: activeSlot } = resolveActiveSlot(appearance);
+			const activeSeed = resolveActiveSeed(appearance);
+			const writeSeed = (patch: Partial<IThemeSeed>): void => {
+				const seed: IThemeSeed = { ...activeSeed, ...patch };
+				updatePreferences({ appearance: { ...readPreferences().appearance, [activePolarity]: { presetId: activeSlot.presetId, seed } } });
+				rebuildAppearance();
+			};
+
+			const customTitle = localize('appearance.customize', activePolarity === 'light' ? localize('appearance.mode.light') : localize('appearance.mode.dark'));
+			const custom = settingsRow(body, { title: customTitle, description: localize('appearance.customize.desc') });
+			custom.classList.add('sessions-appearance-colors');
+			for (const [key, labelKey] of [
+				['background', 'appearance.background'],
+				['foreground', 'appearance.foreground'],
+				['accent', 'appearance.accent'],
+			] as const) {
+				const wrap = custom.appendChild(document.createElement('label'));
+				wrap.className = 'sessions-appearance-color';
+				const caption = wrap.appendChild(document.createElement('span'));
+				caption.textContent = localize(labelKey);
+				const input = wrap.appendChild(document.createElement('input'));
+				input.type = 'color';
+				input.value = activeSeed[key];
+				input.addEventListener('change', () => writeSeed({ [key]: input.value }));
+			}
+
+			const contrastRow = settingsRow(body, { title: localize('appearance.contrast'), description: localize('appearance.contrast.desc') });
+			const slider = contrastRow.appendChild(document.createElement('input'));
+			slider.type = 'range';
+			slider.min = '0';
+			slider.max = '100';
+			slider.value = String(activeSeed.contrast ?? 50);
+			slider.className = 'sessions-appearance-slider';
+			slider.addEventListener('change', () => writeSeed({ contrast: Number(slider.value) }));
+
+			const fontsRow = settingsRow(body, { title: localize('appearance.fonts'), description: localize('appearance.fonts.desc') });
+			fontsRow.classList.add('sessions-appearance-fonts');
+			for (const [key, placeholderKey] of [
+				['uiFont', 'appearance.uiFont'],
+				['codeFont', 'appearance.codeFont'],
+			] as const) {
+				const input = fontsRow.appendChild(document.createElement('input'));
+				input.type = 'text';
+				input.className = 'sessions-appearance-font-input';
+				input.placeholder = localize(placeholderKey);
+				input.value = activeSeed[key] ?? '';
+				input.addEventListener('change', () => writeSeed({ [key]: input.value.trim() === '' ? undefined : input.value.trim() }));
+			}
+
+			const actionsRow = settingsRow(body, { title: localize('appearance.seed'), description: localize('appearance.seed.desc') });
+			if (activeSlot.seed !== undefined) {
+				settingsButton(actionsRow, localize('appearance.resetPreset'), () => {
+					updatePreferences({ appearance: { ...readPreferences().appearance, [activePolarity]: { presetId: activeSlot.presetId } } });
+					rebuildAppearance();
+				});
+			}
+			const copy = settingsButton(actionsRow, localize('appearance.copySeed'), () => {
+				void navigator.clipboard?.writeText(JSON.stringify(activeSeed, null, 2)).then(() => {
+					copy.textContent = localize('appearance.copied');
+					setTimeout(() => (copy.textContent = localize('appearance.copySeed')), 1500);
+				});
+			});
+
+			const importRow = body.appendChild(document.createElement('div'));
+			importRow.className = 'sessions-appearance-import';
+			const importInput = importRow.appendChild(document.createElement('input'));
+			importInput.type = 'text';
+			importInput.placeholder = localize('appearance.importPlaceholder');
+			importInput.className = 'sessions-appearance-font-input';
+			settingsButton(importRow, localize('appearance.importSeed'), () => {
+				try {
+					const parsed = JSON.parse(importInput.value) as Partial<IThemeSeed>;
+					if (typeof parsed.background !== 'string' || typeof parsed.foreground !== 'string' || typeof parsed.accent !== 'string') {
+						throw new Error('missing anchors');
+					}
+					writeSeed(parsed as IThemeSeed);
+				} catch {
+					importInput.value = localize('appearance.importInvalid');
+				}
+			});
+		};
+		rebuildAppearance();
 
 		// #9 P2: language. The active locale resolves once at module load
 		// (same reload model the theme restyle effectively has), so the row's
@@ -1071,7 +1197,7 @@ export class SessionsList extends Disposable {
 				{ value: 'zh-CN', label: '中文（简体）' },
 				{ value: 'en-US', label: 'English (US)' },
 			],
-			prefs.locale,
+			readPreferences().locale,
 			value => updatePreferences({ locale: value as LocalePreference }),
 		);
 
@@ -1232,4 +1358,22 @@ function formatTimestamp(date: Date): string {
 
 	// The APP locale, not the OS locale — a pinned en-US must not show 中文 dates (#9 P1).
 	return date.toLocaleDateString(getActiveLocale(), { month: 'short', day: 'numeric' });
+}
+
+/** Aa card + accent/status dots straight from a seed — the preview costs nothing because a preset IS its colors (#8 P3). */
+function renderSeedSwatch(seed: IThemeSeed): HTMLElement {
+	const strip = document.createElement('div');
+	strip.className = 'sessions-appearance-swatch';
+	const sample = strip.appendChild(document.createElement('span'));
+	sample.className = 'sessions-appearance-swatch-sample';
+	sample.style.background = seed.background;
+	sample.style.color = seed.foreground;
+	sample.style.borderColor = seed.accent;
+	sample.textContent = 'Aa';
+	for (const color of [seed.accent, seed.success, seed.danger, seed.warning].filter((value): value is string => typeof value === 'string')) {
+		const dot = strip.appendChild(document.createElement('span'));
+		dot.className = 'sessions-appearance-swatch-dot';
+		dot.style.background = color;
+	}
+	return strip;
 }

@@ -2729,3 +2729,86 @@
 	padding: var(--vscode-agents-space-8);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 60%, transparent);
 }
+
+/* Appearance page (#8 P3): seed swatches, color pickers, contrast slider,
+   seed import row. Swatch colors are DATA (the seed's own values) set inline
+   from TS — they must not follow the active theme. */
+.sessions-appearance-swatch {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: 0 var(--vscode-agents-space-12) var(--vscode-agents-space-8);
+}
+
+.sessions-appearance-swatch-sample {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--vscode-agents-space-40);
+	height: var(--vscode-agents-space-24);
+	border: var(--vscode-agents-space-1) solid;
+	border-radius: var(--vscode-agents-radius-control);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.sessions-appearance-swatch-dot {
+	width: var(--vscode-agents-space-10);
+	height: var(--vscode-agents-space-10);
+	border-radius: var(--vscode-agents-radius-round);
+}
+
+.sessions-appearance-colors {
+	display: flex;
+	gap: var(--vscode-agents-space-10);
+}
+
+.sessions-appearance-color {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-4);
+	font-size: var(--vscode-agents-fontSize-label2);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.sessions-appearance-color input {
+	width: var(--vscode-agents-space-28);
+	height: var(--vscode-agents-space-20);
+	padding: 0;
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+}
+
+.sessions-appearance-slider {
+	width: var(--vscode-agents-size-settingsControl);
+	accent-color: var(--vscode-agents-color-accent);
+}
+
+.sessions-appearance-fonts {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+}
+
+.sessions-appearance-font-input {
+	box-sizing: border-box;
+	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-6);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	font-size: var(--vscode-agents-fontSize-label2);
+	width: var(--vscode-agents-size-settingsControl);
+}
+
+.sessions-appearance-import {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-12) var(--vscode-agents-space-10);
+}
+
+.sessions-appearance-import .sessions-appearance-font-input {
+	flex: 1 1 auto;
+}
