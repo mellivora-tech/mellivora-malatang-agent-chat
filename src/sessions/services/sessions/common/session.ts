@@ -234,6 +234,21 @@ export function estimateSessionTokens(messages: readonly { readonly text: string
 	return Math.ceil(chars / 4);
 }
 
+/**
+ * A run frozen by quota/rate exhaustion, resumable (#19 缺陷 2). The frozen
+ * transcript itself stays provider-internal (persisted, never rendered) —
+ * this is the UI-facing projection driving the banner and auto-resume.
+ */
+export interface ISessionPausedRun {
+	/** 'quota': weekly quota / permissions (403). 'rate_limit': a rate window exhausted after the full retry ladder (429). */
+	readonly cause: 'quota' | 'rate_limit';
+	/** The original transport error, for the humanized copy. */
+	readonly message: string;
+	/** ISO time the relevant window refreshes; absent when the usage endpoint had no answer. */
+	readonly resetTime?: string;
+	readonly pausedAt: Date;
+}
+
 /** A tool call paused on the user's allow / deny. */
 export interface ISessionPendingApproval {
 	readonly requestId: string;
@@ -274,6 +289,8 @@ export interface ISession {
 	readonly permissionMode: IObservable<PermissionMode>;
 	/** Undefined until the first real usage reading arrives; the UI falls back to an estimate until then. */
 	readonly contextUsage: IObservable<ISessionContextUsage | undefined>;
+	/** Set while a quota/rate-exhausted run sits frozen awaiting resume (#19 缺陷 2). */
+	readonly pausedRun: IObservable<ISessionPausedRun | undefined>;
 }
 
 export interface IActiveSession extends ISession {

@@ -1661,3 +1661,89 @@ test('humanizeAgentRunError: a quota-reset marker becomes a concrete recovery ti
 	assert.match(stale, /等额度刷新/);
 	assert.doesNotMatch(stale, /额度将于/);
 });
+
+test('a paused run freezes resumable end to end: banner state + persisted transcript; resume resends it VERBATIM; a new message abandons it (#19 缺陷 2)', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const runCalls: Array<readonly unknown[]> = [];
+	const frozen = [
+		{ role: 'user', content: [{ type: 'text', text: '梳理项目' }] },
+		{ role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'spawn_agent', input: { task: 'x' } }] },
+		{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: '六份子代理报告之一' }] },
+	];
+	const resetTime = new Date(Date.now() + 2 * 3600_000).toISOString();
+	const agent: IAgentBridge = {
+		run: async (sessionId, messages) => {
+			runCalls.push(messages);
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			if (runCalls.length === 1) {
+				emit({ event: { type: 'turn_start', turn: 6 } });
+				emit({
+					done: {
+						reason: 'paused',
+						turns: 6,
+						paused: { cause: 'quota', message: 'Anthropic request failed: 403 {"error":{"message":"credits exhausted"}}', frozenTranscript: frozen, resetTime },
+					},
+				});
+				return { reason: 'paused', turns: 6 } as never;
+			}
+			emit({ event: { type: 'assistant_delta', text: '综合结论。' } });
+			emit({ done: { reason: 'completed', turns: 7 } });
+			return { reason: 'completed', turns: 7 } as never;
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+	};
+	const modelsService = {
+		registry: { get: () => ({ providers: [{ models: [{ enabled: true }] }] }) },
+		selectedModel: { get: () => ({ id: 'model-1' }) },
+	} as never;
+
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, modelsService);
+	await provider.initialize();
+	const session = await provider.startSession('梳理项目');
+	await new Promise(resolve => setTimeout(resolve, 10));
+
+	// Frozen: UI projection set, copy speaks quota with the concrete reset.
+	const paused = session.pausedRun.get();
+	assert.equal(paused?.cause, 'quota');
+	assert.equal(paused?.resetTime, resetTime);
+	const reply = session.messages.get().find(message => message.role === 'assistant');
+	assert.match(reply?.text ?? '', /HTTP 403/);
+	assert.match(reply?.text ?? '', /额度将于/);
+	// Persisted: the full transcript rides the state entry; the digest marks the interruption.
+	const frozenState = bridge.appends.find(call => call.entry.type === 'state' && (call.entry as { pausedRun?: unknown }).pausedRun !== undefined);
+	assert.ok(frozenState, 'pausedRun persisted');
+	const persisted = (frozenState.entry as { pausedRun: { transcript: readonly unknown[]; cause: string } }).pausedRun;
+	assert.equal(persisted.cause, 'quota');
+	assert.equal(persisted.transcript.length, 3);
+	const digest = session.messages.get().find(message => message.role === 'digest');
+	assert.match(digest?.text ?? '', /INTERRUPTED mid-task/);
+
+	// Resume: the SECOND run gets the frozen transcript verbatim — not a rebuild.
+	await provider.resumeSession(session.sessionId);
+	await new Promise(resolve => setTimeout(resolve, 10));
+	assert.equal(runCalls.length, 2);
+	assert.deepEqual(runCalls[1], frozen);
+	assert.equal(session.pausedRun.get(), undefined);
+	const tombstone = bridge.appends.find(call => call.entry.type === 'state' && (call.entry as { pausedRun?: unknown }).pausedRun === null);
+	assert.ok(tombstone, 'the clear persists as a null tombstone');
+	assert.match(session.messages.get().find(message => message.role === 'assistant' && message.text === '综合结论。')?.text ?? '', /综合结论/);
+
+	// A later freeze abandoned by a new message: cleared without resuming.
+	listener?.({
+		sessionId: session.sessionId,
+		done: { reason: 'paused', turns: 1, paused: { cause: 'rate_limit', message: 'Anthropic request failed: 429 x', frozenTranscript: frozen } },
+	} as never);
+	// A fresh run's done only affects state via its own closure — set directly for the abandon check.
+	await provider.sendMessage(session.sessionId, '换个问题');
+	await new Promise(resolve => setTimeout(resolve, 10));
+	assert.equal(session.pausedRun.get(), undefined, 'a new message abandons any freeze');
+});

@@ -203,6 +203,21 @@ export interface ISessionStateEntry {
 	readonly permissionMode?: string;
 	readonly compactionAnchor?: ISessionCompactionAnchorData;
 	readonly contextUsage?: ISessionContextUsageData;
+	/** A quota/rate-frozen run awaiting resume (#19 缺陷 2); `null` clears it (resume started or the user moved on). Fold is last-wins like the anchor. */
+	readonly pausedRun?: ISessionPausedRunData | null;
+}
+
+/**
+ * The frozen run persisted in the session file. `transcript` is the agent
+ * transcript (IAgentMessage[]) treated as opaque JSON here — the storage
+ * layer never looks inside; the provider casts it back when resuming.
+ */
+export interface ISessionPausedRunData {
+	readonly cause: 'quota' | 'rate_limit';
+	readonly message: string;
+	readonly resetTime?: string;
+	readonly pausedAt: string;
+	readonly transcript: readonly unknown[];
 }
 
 export type ISessionEntry = ISessionMessageEntry | ISessionStateEntry | ISessionFeedbackEntry | ISessionPlanStateEntry | ISessionPlanCommentEntry;
@@ -242,6 +257,7 @@ export interface ISessionSnapshot {
 	readonly permissionMode?: string;
 	readonly compactionAnchor?: ISessionCompactionAnchorData;
 	readonly contextUsage?: ISessionContextUsageData;
+	readonly pausedRun?: ISessionPausedRunData;
 	readonly messages: readonly ISessionSnapshotMessage[];
 	readonly planComments?: readonly IPlanCommentData[];
 }

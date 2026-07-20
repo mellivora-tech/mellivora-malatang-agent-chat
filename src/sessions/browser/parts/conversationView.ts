@@ -44,6 +44,8 @@ import { UiCard } from './agentUi/components/UiCard.js';
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[]; readonly images?: readonly IPendingImage[] }): Promise<unknown>;
 	stopSession(sessionId: string): Promise<unknown>;
+	/** Resume a quota/rate-frozen run (#19 缺陷 2). */
+	resumeSession?(sessionId: string): Promise<unknown>;
 	setSessionPermissionMode?(sessionId: string, mode: PermissionMode): Promise<unknown>;
 	setMessageFeedback?(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<unknown>;
 	/** Flip a plan artifact's review state (approve / supersede); the store overlays it onto the plan message. */
@@ -84,6 +86,9 @@ export class ConversationView extends Disposable {
 	// Portaled to <body> — see the comment on createContextRing for why.
 	private readonly contextPopover: HTMLElement;
 	private readonly quotaIndicator: IQuotaIndicator;
+	private readonly pausedBanner: HTMLElement;
+	private readonly pausedBannerText: HTMLElement;
+	private readonly pausedBannerResume: HTMLButtonElement;
 	private readonly header = this._register(new ConversationContext());
 	private readonly sessionDisposables = this._register(new DisposableStore());
 	private session: IActiveSession | undefined;
@@ -144,6 +149,28 @@ export class ConversationView extends Disposable {
 		this.composer.className = 'conversation-composer';
 		this.composer.appendChild(this.header.element);
 		this.header.element.hidden = true;
+
+		// Frozen-run banner (#19 缺陷 2): sits between the context bar and the
+		// input. Not an error — a waiting state with its own exit button.
+		this.pausedBanner = append(this.composer, document.createElement('div'));
+		this.pausedBanner.className = 'conversation-paused-banner';
+		this.pausedBanner.hidden = true;
+		const pausedIcon = append(this.pausedBanner, document.createElement('span'));
+		pausedIcon.className = 'codicon codicon-debug-pause';
+		pausedIcon.setAttribute('aria-hidden', 'true');
+		this.pausedBannerText = append(this.pausedBanner, document.createElement('span'));
+		this.pausedBannerText.className = 'conversation-paused-banner-text';
+		this.pausedBannerResume = append(this.pausedBanner, document.createElement('button')) as HTMLButtonElement;
+		this.pausedBannerResume.type = 'button';
+		this.pausedBannerResume.className = 'conversation-paused-banner-resume';
+		this.pausedBannerResume.textContent = localize('paused.resumeNow');
+		this.pausedBannerResume.addEventListener('click', () => {
+			const sessionId = this.session?.sessionId;
+			if (sessionId) {
+				this.pausedBannerResume.disabled = true;
+				void this.messageSender?.resumeSession?.(sessionId);
+			}
+		});
 
 		const inputWrap = append(this.composer, document.createElement('div'));
 		inputWrap.className = 'conversation-input-wrap';
@@ -412,7 +439,9 @@ export class ConversationView extends Disposable {
 			this.sessionDisposables.add(session.reconnect.subscribe(() => this.updateReconnectStatus()));
 			this.sessionDisposables.add(session.permissionMode.subscribe(() => this.notifyPermissionListeners()));
 			this.sessionDisposables.add(session.contextUsage.subscribe(() => this.updateContextRing()));
+			this.sessionDisposables.add(session.pausedRun.subscribe(() => this.updatePausedBanner()));
 		}
+		this.updatePausedBanner();
 		this.updateReconnectStatus();
 		this.notifyPermissionListeners();
 
@@ -1043,6 +1072,20 @@ export class ConversationView extends Disposable {
 		}
 	}
 
+	/** The frozen-run banner (#19 缺陷 2): cause + concrete recovery plan, and the manual resume. */
+	private updatePausedBanner(): void {
+		const paused = this.session?.pausedRun.get();
+		if (!paused) {
+			this.pausedBanner.hidden = true;
+			return;
+		}
+		this.pausedBanner.hidden = false;
+		this.pausedBannerResume.disabled = false;
+		const causeLabel = paused.cause === 'quota' ? localize('paused.causeQuota') : localize('paused.causeRate');
+		const reset = formatPausedReset(paused.resetTime);
+		this.pausedBannerText.textContent = reset !== undefined ? localize('paused.bannerWithReset', causeLabel, reset) : localize('paused.banner', causeLabel);
+	}
+
 	private showContextPopover(): void {
 		if (this.contextRing.hidden) {
 			return;
@@ -1499,6 +1542,19 @@ function createBreakdownRow(label: string, value: string): HTMLElement {
 	valueEl.textContent = value;
 	row.append(labelEl, valueEl);
 	return row;
+}
+
+/** Local `MM-DD HH:mm` for the paused banner's reset time; undefined for garbage. */
+function formatPausedReset(iso: string | undefined): string | undefined {
+	if (!iso) {
+		return undefined;
+	}
+	const parsed = new Date(iso);
+	if (Number.isNaN(parsed.getTime())) {
+		return undefined;
+	}
+	const pad = (value: number): string => String(value).padStart(2, '0');
+	return `${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }
 
 /** `~4.1K tokens (0.4%)` — one decimal, `<0.1` below that. Shared by every row (category estimates AND the real Free count) so the popover reads consistently. */

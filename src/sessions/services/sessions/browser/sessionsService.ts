@@ -24,6 +24,8 @@ export interface ISessionsService {
 	closeSession(sessionId: string): void;
 	sendMessage(sessionId: string, query: string, options?: ISendMessageOptions): Promise<ISession>;
 	stopSession(sessionId: string): Promise<ISession>;
+	/** Resume a quota/rate-frozen run (#19 缺陷 2). */
+	resumeSession(sessionId: string): Promise<void>;
 	setSessionPinned(sessionId: string, isPinned: boolean): Promise<ISession>;
 	setSessionPermissionMode(sessionId: string, mode: PermissionMode): Promise<ISession>;
 	setMessageFeedback(sessionId: string, messageId: string, feedback: 'like' | 'dislike' | undefined): Promise<ISession>;
@@ -104,6 +106,10 @@ export class SessionsService extends Disposable implements ISessionsService {
 
 	async stopSession(sessionId: string): Promise<ISession> {
 		return this.managementService.stopSession(sessionId);
+	}
+
+	async resumeSession(sessionId: string): Promise<void> {
+		return this.managementService.resumeSession(sessionId);
 	}
 
 	async resolveMedia(sessionId: string, path: string): Promise<string | undefined> {

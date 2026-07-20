@@ -155,6 +155,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	let permissionMode: string | undefined;
 	let compactionAnchor: ISessionStateEntry['compactionAnchor'];
 	let contextUsage: ISessionStateEntry['contextUsage'];
+	let pausedRun: NonNullable<ISessionStateEntry['pausedRun']> | undefined;
 	const feedback = new Map<string, 'like' | 'dislike'>();
 	const planStates = new Map<string, 'draft' | 'approved' | 'superseded'>();
 	const planComments = new Map<string, IPlanCommentData>();
@@ -235,6 +236,10 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		if (entry.contextUsage !== undefined) {
 			contextUsage = entry.contextUsage;
 		}
+		if (entry.pausedRun !== undefined) {
+			// null is the explicit clear (resume started / user moved on).
+			pausedRun = entry.pausedRun ?? undefined;
+		}
 	}
 
 	return {
@@ -261,6 +266,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 		...(summary !== undefined ? { changesSummary: summary } : {}),
 		...(compactionAnchor !== undefined ? { compactionAnchor } : {}),
 		...(contextUsage !== undefined ? { contextUsage } : {}),
+		...(pausedRun !== undefined ? { pausedRun } : {}),
 		...(planComments.size > 0 ? { planComments: [...planComments.values()] } : {}),
 	};
 }

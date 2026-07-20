@@ -1900,6 +1900,56 @@ button.conversation-plan-header {
 	display: none;
 }
 
+/* Frozen-run banner (#19 缺陷 2): a waiting state, not an error — warning
+   tint, one line, its own resume button. */
+.conversation-paused-banner {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-composer-contextGap);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-warning) 45%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: color-mix(in srgb, var(--vscode-agents-color-warning) 10%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	box-sizing: border-box;
+}
+
+.conversation-paused-banner[hidden] {
+	display: none;
+}
+
+.conversation-paused-banner .codicon {
+	color: var(--vscode-agents-color-warning);
+}
+
+.conversation-paused-banner-text {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.conversation-paused-banner-resume {
+	flex: 0 0 auto;
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-warning) 55%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-8);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label2);
+	cursor: default;
+}
+
+.conversation-paused-banner-resume:hover:not(:disabled) {
+	background: var(--vscode-agents-color-control-hoverBackground);
+}
+
+.conversation-paused-banner-resume:disabled {
+	opacity: 0.5;
+}
+
 /* Freshness line: `3s前 ⟳` — a locally-ticking age plus the manual refresh. */
 .conversation-quota-status {
 	display: inline-flex;
