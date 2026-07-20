@@ -119,6 +119,14 @@ export const zhCN = {
 	'conv.contextUsed': '已用 {0}%（剩余 {1}%）{2}',
 	'conv.contextAria': '上下文窗口: 已用 {0}%，约 {1} / {2} tokens{3}',
 	'conv.forkFromHere': '从这里分叉',
+	'quota.caption': '订阅额度 · {0}',
+	'quota.used': '已用 {0}%（剩余 {1}%）',
+	'quota.aria': '订阅额度: 已用 {0}%',
+	'quota.resetLabel': '额度刷新',
+	'quota.windowHours': '{0} 小时窗口',
+	'quota.windowShort': '短期窗口',
+	'quota.windowLeft': '剩 {0}%',
+	'quota.footnote': '每 5 分钟自动刷新',
 
 	// --- plan / walkthrough cards -------------------------------------------------
 	'plan.title.fallback': '实现方案',

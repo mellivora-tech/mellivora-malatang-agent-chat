@@ -123,6 +123,34 @@ export interface IProviderVerificationRequest extends IRemoteModelsRequest {
 	readonly probeModel?: string;
 }
 
+/** One quota window of a coding-plan subscription. Kimi reports percent points (limit 100 = 100%). */
+export interface IQuotaWindow {
+	readonly used: number;
+	readonly limit: number;
+	readonly remaining: number;
+	/** ISO timestamp when this window's quota refreshes. */
+	readonly resetTime?: string;
+	/** Window length (e.g. 300 for the 5-hour rolling window); absent on the primary (weekly) usage. */
+	readonly durationMinutes?: number;
+}
+
+/**
+ * A coding-plan subscription's quota, read from the provider's usage endpoint
+ * (#19). Best-effort by contract: the endpoint is undocumented, so the bridge
+ * resolves `undefined` whenever it can't answer — callers show nothing rather
+ * than an error.
+ */
+export interface IQuotaSnapshot {
+	readonly providerId: string;
+	readonly providerName: string;
+	/** The primary (weekly) usage. */
+	readonly usage: IQuotaWindow;
+	/** Additional rolling windows (Kimi: the 5-hour window). */
+	readonly windows: readonly IQuotaWindow[];
+	/** ISO timestamp of the fetch, for staleness display. */
+	readonly fetchedAt: string;
+}
+
 /** The shape exposed on `agentWindow.models` by the preload script. */
 export interface IModelsBridge {
 	list(): Promise<IModelRegistryView>;
@@ -139,4 +167,6 @@ export interface IModelsBridge {
 	listRemoteModels(request: IRemoteModelsRequest): Promise<readonly IRemoteModel[]>;
 	/** See {@link IProviderVerificationRequest}. */
 	verifyProvider(request: IProviderVerificationRequest): Promise<void>;
+	/** Coding-plan quota of the first provider that exposes one; undefined when none does or the lookup fails. */
+	codingQuota(): Promise<IQuotaSnapshot | undefined>;
 }

@@ -68,6 +68,7 @@ const models: IModelsBridge = {
 	moveModel: (modelId: string, direction: 'up' | 'down') => ipcRenderer.invoke('models:moveModel', modelId, direction),
 	listRemoteModels: (request: IRemoteModelsRequest) => ipcRenderer.invoke('models:listRemoteModels', request),
 	verifyProvider: (request: IProviderVerificationRequest) => ipcRenderer.invoke('models:verifyProvider', request),
+	codingQuota: () => ipcRenderer.invoke('models:codingQuota'),
 };
 
 const skills: ISkillsBridge = {

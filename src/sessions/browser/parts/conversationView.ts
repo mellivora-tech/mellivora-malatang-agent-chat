@@ -28,6 +28,8 @@ import { installPromptHistory, type IPromptHistoryController } from './composerH
 import { installFileMentions, installSessionMentions, installSkillMentions, type IMentionController } from './composerMentions.js';
 import { ConversationContext } from './conversationContext.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
+import { installQuotaIndicator, type IQuotaIndicator } from './quotaIndicator.js';
+import type { IModelsBridge } from '../../services/models/common/models.js';
 import { permissionMode } from '../../services/agent/browser/permissionModeService.js';
 import type { PermissionMode } from '../../services/agent/common/agent.js';
 import { toDisposable } from '../../base/common/lifecycle.js';
@@ -81,6 +83,7 @@ export class ConversationView extends Disposable {
 	private readonly contextRing: HTMLElement;
 	// Portaled to <body> — see the comment on createContextRing for why.
 	private readonly contextPopover: HTMLElement;
+	private readonly quotaIndicator: IQuotaIndicator;
 	private readonly header = this._register(new ConversationContext());
 	private readonly sessionDisposables = this._register(new DisposableStore());
 	private session: IActiveSession | undefined;
@@ -225,6 +228,18 @@ export class ConversationView extends Disposable {
 
 		const rightControls = append(toolbar, document.createElement('div'));
 		rightControls.className = 'conversation-toolbar-right';
+
+		// Coding-plan quota (#19): leftmost of the right controls so the
+		// subscription-level number sits apart from the per-conversation ring.
+		this.quotaIndicator = this._register(
+			installQuotaIndicator({
+				container: rightControls,
+				fetchQuota: () => {
+					const models = (globalThis as typeof globalThis & { readonly agentWindow?: { readonly models?: IModelsBridge } }).agentWindow?.models;
+					return models?.codingQuota() ?? Promise.resolve(undefined);
+				},
+			}),
+		);
 
 		// A standalone read-only indicator — deliberately not part of the
 		// model button, which is an interactive picker.
@@ -379,6 +394,12 @@ export class ConversationView extends Disposable {
 				session.status.subscribe(() => {
 					this.render();
 					this.flushQueuedFollowUp();
+					// A run settling is what moves the plan quota — re-read it as
+					// soon as the session leaves InProgress instead of waiting for
+					// the 5-minute timer.
+					if (session.status.get() !== SessionStatus.InProgress) {
+						this.quotaIndicator.refresh();
+					}
 				}),
 			);
 			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
