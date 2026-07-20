@@ -83,7 +83,8 @@ function registerColorTokens(tokens: Readonly<Record<string, string>>): void {
 	}
 }
 
-function withLegacyAliases(colors: SemanticColorMap): Readonly<Record<SemanticColorTokenId | LegacyColorTokenId, string>> {
+/** Exported for the seed-overlay pipeline (#8 P3): a custom seed's derived map must cover the legacy alias ids too, or pre-rename CSS keeps the base theme's colors. */
+export function withLegacyAliases(colors: SemanticColorMap): Readonly<Record<SemanticColorTokenId | LegacyColorTokenId, string>> {
 	return {
 		...colors,
 		'agents.background': colors[legacyAliases['agents.background']],

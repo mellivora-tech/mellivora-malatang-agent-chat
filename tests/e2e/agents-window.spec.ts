@@ -1611,8 +1611,12 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await expect(page.locator('.agent-sessions-workbench')).toHaveAttribute('data-agents-theme', 'light');
 	await themeDropdown.selectOption('dark');
 
-	// Language picker (#9 P2): three choices, persists via preferences.
-	const languageDropdown = dialog.locator('.sessions-settings-dropdown').nth(1);
+	// Preset slots (#8 P3): one dropdown per polarity beside the mode picker.
+	await expect(dialog.locator('.sessions-settings-dropdown')).toHaveCount(4);
+	await expect(dialog.locator('.sessions-appearance-swatch').first()).toBeVisible();
+
+	// Language picker (#9 P2) lives in its own section: three choices.
+	const languageDropdown = dialog.locator('.sessions-settings-section').nth(1).locator('.sessions-settings-dropdown');
 	await expect(languageDropdown).toBeVisible();
 	await expect(languageDropdown.locator('option')).toHaveCount(3);
 

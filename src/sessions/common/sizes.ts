@@ -113,6 +113,8 @@ export const agentsSizeActionSmall = registerSize('agents.size.actionSmall', '22
 export const agentsSizeActionMedium = registerSize('agents.size.actionMedium', '28px');
 export const agentsSizeButton = registerSize('agents.size.button', '32px');
 export const agentsSizeControl = registerSize('agents.size.control', '34px');
+/** Fixed width for settings-page inline inputs (seed import, font stacks, contrast slider) — dropdowns stay auto-width. */
+export const agentsSizeSettingsControl = registerSize('agents.size.settingsControl', '220px');
 // Layout dimensions shared by the CSS tokens below and the workbench grid
 // math (workbench.ts / grid.ts). Defined once as numbers here so the pixel
 // tokens and the JS layout can never drift apart.

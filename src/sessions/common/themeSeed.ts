@@ -84,6 +84,9 @@ export interface IThemeSeed {
 	readonly info?: string;
 	/** Solid border color (high-contrast style). Its presence ALSO flattens every surface to the background — HC's whole character. */
 	readonly border?: string;
+	/** CSS font-family stacks overriding the `agents.font.ui` / `agents.font.mono` tokens; absent → the built-in stacks. */
+	readonly uiFont?: string;
+	readonly codeFont?: string;
 	/** Pixel-true exceptions (deliberate design values the formula cannot know). Applied last. */
 	readonly overrides?: Readonly<Partial<Record<SemanticColorTokenId, string>>>;
 }

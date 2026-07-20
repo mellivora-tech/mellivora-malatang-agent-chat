@@ -82,3 +82,15 @@ test('overrides apply last and win verbatim', () => {
 	const derived = deriveTheme({ background: '#111111', foreground: '#cccccc', accent: '#0078d4', overrides: { 'agents.color.sidebar.background': '#24343a' } });
 	assert.equal(derived['agents.color.sidebar.background'], '#24343a');
 });
+
+test('every library preset derives WCAG-passing text and matches its declared polarity (#8 P3)', async () => {
+	const { THEME_PRESETS } = await import('../../src/sessions/common/themePresets.js');
+	const { relativeLuminance } = await import('../../src/sessions/common/themeSeed.js');
+	for (const preset of THEME_PRESETS) {
+		const derived = deriveTheme(preset.seed);
+		const ratio = contrastRatio(hexToRgb(derived['agents.color.text.primary']), hexToRgb(derived['agents.color.background']));
+		assert.ok(ratio >= 4.5, `${preset.id}: ${ratio.toFixed(2)}`);
+		const isDark = relativeLuminance(hexToRgb(preset.seed.background)) < 0.5;
+		assert.equal(isDark ? 'dark' : 'light', preset.polarity, `${preset.id} polarity`);
+	}
+});
