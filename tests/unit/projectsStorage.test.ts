@@ -243,7 +243,7 @@ test('addRemote / listRemotes / removeRemote manage remote repos and their clone
 		const project = await createProject(root, { name: 'app', path: '/tmp/app' });
 		const added = await addRemote(root, project.id, { url: 'https://github.com/acme/order-service.git' });
 		// A normalized-equal URL (ssh form here) is rejected as a duplicate.
-		await assert.rejects(() => addRemote(root, project.id, { url: 'git@github.com:acme/order-service.git' }), /已添加/);
+		await assert.rejects(() => addRemote(root, project.id, { url: 'git@github.com:acme/order-service.git' }), /\[i18n:projcfg\.err\.repoExists\]/);
 		assert.equal(added.length, 1);
 		const remote = added[0]!;
 		assert.equal(remote.name, 'order-service');
@@ -276,7 +276,7 @@ test('addRemote dedups against a local code root by its git origin (normalized)'
 			args.includes('/code/order-service') ? { code: 0, output: 'git@github.com:acme/order-service.git\n' } : { code: 1, output: '' };
 
 		// Same repo (https form) as the local root → rejected.
-		await assert.rejects(() => addRemote(root, project.id, { url: 'https://github.com/acme/order-service.git' }, fakeGit), /本地代码/);
+		await assert.rejects(() => addRemote(root, project.id, { url: 'https://github.com/acme/order-service.git' }, fakeGit), /\[i18n:projcfg\.err\.repoIsLocal\|order-service\]/);
 		// A different repo is accepted.
 		const ok = await addRemote(root, project.id, { url: 'https://github.com/acme/gateway.git' }, fakeGit);
 		assert.equal(ok.length, 1);

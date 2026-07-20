@@ -53,6 +53,13 @@ export type ISessionDataBrowse =
  *  from the step detail). Shared here because both sides must agree. */
 export const RENDERED_TABLE_MARKER = /\n\[table:(.+)\]$/;
 
+/** A subagent end step's `arg` starts with this marker (`结束 · <reason>`).
+ *  It is a PERSISTED step fact shared by writer (fileSessionsProvider) and
+ *  reader (workRender) — deliberately locale-independent: records written
+ *  under one locale must keep matching under another, so this never routes
+ *  through localize(). */
+export const SUBAGENT_END_ARG_PREFIX = '结束';
+
 /** One step inside a work block: a thinking stretch or a tool call. */
 export interface ISessionWorkStep {
 	/** 'narration': pre-tool announce text the model emitted in a WORK turn ("我来梳理一下…") — shown as a step, never as the answer bubble. */

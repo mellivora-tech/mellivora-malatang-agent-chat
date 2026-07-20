@@ -10,8 +10,8 @@
  * and old sessions render through the same path via the label fallback.
  */
 
-import type { MessageKey } from '../../../../common/i18n/i18n.js';
-import type { ISessionWorkStep } from '../../../../services/sessions/common/session.js';
+import { localize, type MessageKey } from '../../../../common/i18n/i18n.js';
+import { SUBAGENT_END_ARG_PREFIX, type ISessionWorkStep } from '../../../../services/sessions/common/session.js';
 
 /** Tool → i18n verb key. Kept as data (not localize calls) so this module stays pure and node-testable. */
 export const TOOL_VERB_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -271,7 +271,7 @@ export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSect
 				items.push({
 					kind: 'agentGroup',
 					agent: token.agent,
-					label: bucket.label ?? '子代理',
+					label: bucket.label ?? localize('workVerb.subagent'),
 					items: buildWorkRenderItems(bucket.members),
 					...(bucket.durationMs === undefined ? {} : { durationMs: bucket.durationMs }),
 					running: bucket.running,
@@ -317,7 +317,7 @@ export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSect
 				} else if (step.arg !== undefined) {
 					bucket.label = step.arg;
 				}
-			} else if (tool === 'subagent' && step.arg !== undefined && step.arg.startsWith('结束')) {
+			} else if (tool === 'subagent' && step.arg !== undefined && step.arg.startsWith(SUBAGENT_END_ARG_PREFIX)) {
 				if (step.detail !== undefined) {
 					bucket.endDetail = step.detail;
 				}

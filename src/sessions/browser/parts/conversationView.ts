@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../common/i18n/i18n.js';
+import { getActiveLocale, localize } from '../../common/i18n/i18n.js';
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
@@ -1476,7 +1476,7 @@ export function listReferencableSessions(
 		.filter(session => session.sessionId !== currentSessionId && !session.isArchived.get())
 		.sort((a, b) => b.updatedAt.get().getTime() - a.updatedAt.get().getTime())
 		.slice(0, limit)
-		.map(session => ({ id: session.sessionId, name: session.title.get(), description: session.updatedAt.get().toLocaleDateString() }));
+		.map(session => ({ id: session.sessionId, name: session.title.get(), description: session.updatedAt.get().toLocaleDateString(getActiveLocale()) }));
 }
 
 function appendCodicon(parent: HTMLElement, codicon: string): HTMLElement {

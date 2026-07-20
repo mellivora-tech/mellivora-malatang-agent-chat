@@ -1601,12 +1601,20 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await expect(dialog.locator('.sessions-settings-main')).toHaveCSS('overflow-y', 'auto');
 
 	// Appearance offers a real theme control that re-themes the app live.
+	// Two dropdowns live here now (theme + language, #9 P2) — target the
+	// theme one by position; the language row is asserted separately.
 	await dialog.locator('[data-settings-nav-id="appearance"]').click();
 	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('外观');
-	await expect(dialog.locator('.sessions-settings-dropdown')).toBeVisible();
-	await dialog.locator('.sessions-settings-dropdown').selectOption('light');
+	const themeDropdown = dialog.locator('.sessions-settings-dropdown').first();
+	await expect(themeDropdown).toBeVisible();
+	await themeDropdown.selectOption('light');
 	await expect(page.locator('.agent-sessions-workbench')).toHaveAttribute('data-agents-theme', 'light');
-	await dialog.locator('.sessions-settings-dropdown').selectOption('dark');
+	await themeDropdown.selectOption('dark');
+
+	// Language picker (#9 P2): three choices, persists via preferences.
+	const languageDropdown = dialog.locator('.sessions-settings-dropdown').nth(1);
+	await expect(languageDropdown).toBeVisible();
+	await expect(languageDropdown.locator('option')).toHaveCount(3);
 
 	// Models is a real section too.
 	await dialog.locator('[data-settings-nav-id="models"]').click();

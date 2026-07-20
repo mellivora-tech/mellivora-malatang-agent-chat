@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../common/i18n/i18n.js';
+import { localizeIpcMarker,localize } from '../../../common/i18n/i18n.js';
 import type { IEnvironmentsService } from '../../../services/environments/browser/environmentsService.js';
 import type { IDataColumn, IDatabaseSource, IDbTable } from '../../../services/environments/common/environments.js';
 import { compileBrowseSql, compileColumnFilter, compileQueryBrowseSql, type IBrowseState } from '../common/browseSql.js';
@@ -47,7 +47,7 @@ export class SqlDataProvider implements IDataProvider {
 		}
 		const result = await this.deps.service.runQuery(projectId, source.id, sql, { rowLimit: state.pageSize });
 		if (!result.ok) {
-			return { ok: false, message: result.message };
+			return { ok: false, message: localizeIpcMarker(result.message) };
 		}
 		this.lastColumns = result.columns;
 		const table = this.deps.getTable();

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../common/i18n/i18n.js';
+import { localize, localizeIpcMarker } from '../../../common/i18n/i18n.js';
 import { FILE_ROW_CAP, type FileTableResult, type IDataFilesBridge, type IPickedDataFile } from '../../../services/dataFiles/common/dataFiles.js';
 import type { IDataColumn } from '../../../services/environments/common/environments.js';
 import type { DataFetchResult, IDataProvider, IDataViewState } from '../common/dataProvider.js';
@@ -45,6 +45,10 @@ export class FileDataProvider implements IDataProvider {
 			return { ok: false, message: localize('data.noFileBridge') };
 		}
 		const result = await this.bridge.readTable(file.path, sheet);
+		if (!result.ok) {
+			// Main names the cause as an [i18n:…] marker — resolve it here (#9 P1b).
+			return { ok: false, message: localizeIpcMarker(result.message) };
+		}
 		if (result.ok) {
 			this.file = file;
 			this.sheets = result.sheets;
