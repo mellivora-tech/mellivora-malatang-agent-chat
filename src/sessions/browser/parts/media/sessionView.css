@@ -680,8 +680,16 @@ button.conversation-work-step-row:hover {
 
 .conversation-work-step-duration {
 	flex: 0 0 auto;
+	margin-left: var(--vscode-agents-space-6);
 	color: var(--vscode-agents-color-text-subtle);
 	font-variant-numeric: tabular-nums;
+}
+
+/* The running spinner and the expand chevron were touching (2026-07-20
+   screenshot) — give the pair the same breathing room a duration gets. */
+.conversation-work-step-duration + .conversation-work-step-chevron,
+.conversation-work-agent-row .conversation-work-step-chevron {
+	margin-left: var(--vscode-agents-space-4);
 }
 
 /* Intent verb + argument chip (#14 P0) — the verb reads as prose, the argument as code. */
@@ -697,6 +705,14 @@ button.conversation-work-step-row:hover {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
 	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
+	/* Long args (spawn task briefs) must not become wrapping gray walls —
+	   one line, bounded, the full text lives in the expandable detail. */
+	display: inline-block;
+	max-width: var(--vscode-agents-size-workChipMax);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: bottom;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

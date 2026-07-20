@@ -127,7 +127,13 @@ function AgentGroupRow(props: IAgentGroupRowProps): JSX.Element {
 
 	return (
 		<div className={`conversation-work-agent${group.error ? ' error' : ''}`}>
-			<button type="button" className="conversation-work-step-row conversation-work-agent-row" aria-expanded={open} onClick={() => setOpenOverride(!open)}>
+			<button
+				type="button"
+				className="conversation-work-step-row conversation-work-agent-row"
+				aria-expanded={open}
+				{...(group.fullLabel !== undefined && group.fullLabel !== group.label ? { title: group.fullLabel } : {})}
+				onClick={() => setOpenOverride(!open)}
+			>
 				<span className={`codicon ${group.error ? 'codicon-error' : 'codicon-type-hierarchy-sub'}`} aria-hidden="true" />
 				<span className="conversation-work-step-label">{group.label}</span>
 				{group.running ? (
@@ -224,6 +230,21 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 					<span className="conversation-work-step-label">{localize('conv.thinking')}</span>
 				</div>
 				{step.detail !== undefined && <div className="conversation-work-thinking-stream">{step.detail}</div>}
+			</div>
+		);
+	}
+
+	// 子代理直播行: the running spawn synthetic's LABEL carries the child's
+	// current activity (⑃ grep … / 撰写结论中 · 3.4k 字) — the facts path would
+	// flatten it to "Spawn <task>" and swallow the whole liveness signal
+	// (subagent_tool/subagent_progress), so it renders label-first.
+	if (step.kind === 'tool' && step.running === true && step.tool === 'spawn_agent') {
+		return (
+			<div className="conversation-work-step tool">
+				<div className="conversation-work-step-row">
+					<span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />
+					<span className="conversation-work-step-label">{step.label}</span>
+				</div>
 			</div>
 		);
 	}

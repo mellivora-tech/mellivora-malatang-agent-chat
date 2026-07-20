@@ -464,4 +464,5 @@ export const enUS: Record<MessageKey, string> = {
 	'surface.patchSummary': 'Workbench updated · {0} statement(s)',
 	'surface.hole': 'Undefined: {0}',
 	'surface.errorNote': '{0} statement(s) failed to render (see run log)',
+	'work.agentOrdinal': 'Agent {0} · {1}',
 };

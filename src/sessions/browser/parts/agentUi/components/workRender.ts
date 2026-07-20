@@ -214,8 +214,10 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 export interface IWorkAgentGroup {
 	readonly kind: 'agentGroup';
 	readonly agent: string;
-	/** The spawn task (from the spawn marker step's arg); the row header. */
+	/** Header text. With ≥2 sibling groups this is the SHORT form — `子代理 n · <去公共前缀的区分段>` — because parallel shards share near-identical task briefs and six identical 72-char headers distinguish nothing (2026-07-20 screenshot). */
 	readonly label: string;
+	/** The full spawn task, for the hover title when `label` is the short form. */
+	readonly fullLabel?: string;
 	/** Inner render items — the child's own steps, rollups applied. */
 	readonly items: readonly WorkRenderItem[];
 	/** The spawn call's real runtime, once its result closed. */
@@ -272,6 +274,7 @@ export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSect
 					kind: 'agentGroup',
 					agent: token.agent,
 					label: bucket.label ?? localize('workVerb.subagent'),
+					...(bucket.label !== undefined ? { fullLabel: bucket.label } : {}),
 					items: buildWorkRenderItems(bucket.members),
 					...(bucket.durationMs === undefined ? {} : { durationMs: bucket.durationMs }),
 					running: bucket.running,
@@ -281,6 +284,7 @@ export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSect
 				});
 			}
 		}
+		shortenSiblingAgentLabels(items);
 		sections.push({ ...(title === undefined ? {} : { title }), ...(titleDetail === undefined ? {} : { titleDetail }), items, firstIndex: sectionFirst });
 		tokens = [];
 		buckets = new Map();
@@ -310,7 +314,14 @@ export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSect
 				// synthetic shows the child's current action as a live row.
 				if (step.running === true) {
 					bucket.running = true;
-					bucket.members.push(step);
+					// The synthetic live row: its LABEL carries the child's current
+					// activity (⑃ grep … / 撰写结论中 · 3.4k 字). Before any child
+					// event takes the label over it still echoes the raw task —
+					// pure noise under a header that already shows the task, so it
+					// only renders once the label has moved on.
+					if (step.label !== `spawn_agent ${step.arg ?? ''}`.trim()) {
+						bucket.members.push(step);
+					}
 				} else if (step.outcome !== undefined) {
 					bucket.durationMs = step.durationMs;
 					bucket.error = bucket.error || stepError(step);
@@ -348,4 +359,39 @@ function buildWorkRenderItemsIndexed(members: readonly { step: ISessionWorkStep;
 			? { ...item, index: members[item.index]!.index }
 			: { ...item, steps: item.steps.map(entry => ({ step: entry.step, index: members[entry.index]!.index })) },
 	);
+}
+
+/**
+ * Parallel shards share near-identical task briefs; six identical truncated
+ * headers distinguish nothing. With ≥2 sibling groups the headers become
+ * `子代理 n · <后缀>` where the suffix is each task minus the siblings' longest
+ * common prefix — exactly the per-shard分工 the truncation used to hide. The
+ * full task stays on `fullLabel` (hover). Mutates in place on the freshly
+ * built section items (they are local until pushed).
+ */
+function shortenSiblingAgentLabels(items: WorkSectionItem[]): void {
+	const groups = items.filter((item): item is IWorkAgentGroup => item.kind === 'agentGroup' && item.fullLabel !== undefined);
+	if (groups.length < 2) {
+		return;
+	}
+	const labels = groups.map(group => group.fullLabel!);
+	let prefix = labels[0]!;
+	for (const label of labels) {
+		let length = 0;
+		const max = Math.min(prefix.length, label.length);
+		while (length < max && prefix[length] === label[length]) {
+			length++;
+		}
+		prefix = prefix.slice(0, length);
+	}
+	// A short shared prefix ("探索") is semantic, not boilerplate — strip only
+	// when the prefix is substantial; the ordinal always rides for scanning.
+	const strip = prefix.length >= 8;
+	for (let index = 0; index < groups.length; index++) {
+		const group = groups[index]!;
+		const suffix = strip ? group.fullLabel!.slice(prefix.length).trim() : group.fullLabel!;
+		const distinct = suffix === '' ? group.fullLabel! : suffix;
+		const bounded = distinct.length > 48 ? `${distinct.slice(0, 48)}…` : distinct;
+		(group as { label: string }).label = localize('work.agentOrdinal', index + 1, bounded);
+	}
 }
