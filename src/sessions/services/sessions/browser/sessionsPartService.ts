@@ -39,6 +39,9 @@ export interface ISessionsPartService {
 	/** Chat → workbench surface: open/focus the surface tab (#12 M4); the side pane consumes it. */
 	readonly surfaceOpenRequest: ReturnType<typeof observableValue<number | undefined>>;
 	openSurfacePanel(): void;
+	/** Artifacts panel → review tab (#13 P2): open/focus the review tab; the side pane consumes it. */
+	readonly reviewOpenRequest: ReturnType<typeof observableValue<number | undefined>>;
+	openReviewPanel(): void;
 	/** Artifacts panel → conversation (#13 P1): scroll to and flash this message; the matching conversation view consumes it. */
 	readonly artifactRevealRequest: ReturnType<typeof observableValue<IArtifactRevealRequest | undefined>>;
 	revealArtifactMessage(sessionId: string, messageId: string): void;
@@ -102,6 +105,13 @@ export class SessionsPartService implements ISessionsPartService {
 	openSurfacePanel(): void {
 		this.showConversation(true);
 		this.surfaceOpenRequest.set(Date.now());
+	}
+
+	readonly reviewOpenRequest = observableValue<number | undefined>(undefined);
+
+	openReviewPanel(): void {
+		this.showConversation(true);
+		this.reviewOpenRequest.set(Date.now());
 	}
 
 	readonly artifactRevealRequest = observableValue<IArtifactRevealRequest | undefined>(undefined);

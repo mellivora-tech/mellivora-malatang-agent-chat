@@ -20,7 +20,7 @@ import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
 import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
 import type { IDataFilesBridge, IExportTextMeta } from '../sessions/services/dataFiles/common/dataFiles.js';
-import type { IArtifactFilter, IArtifactsBridge } from '../sessions/services/artifacts/common/artifacts.js';
+import type { IArtifactEntryData, IArtifactFilter, IArtifactsBridge } from '../sessions/services/artifacts/common/artifacts.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -102,6 +102,7 @@ const dataFiles: IDataFilesBridge = {
 
 const artifacts: IArtifactsBridge = {
 	list: (filter?: IArtifactFilter) => ipcRenderer.invoke('artifacts:list', filter),
+	record: (entry: IArtifactEntryData) => ipcRenderer.invoke('artifacts:record', entry),
 	rebuild: (projectId?: string) => ipcRenderer.invoke('artifacts:rebuild', projectId),
 	reveal: (path: string) => ipcRenderer.invoke('artifacts:reveal', path),
 };

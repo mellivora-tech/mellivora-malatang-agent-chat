@@ -16,6 +16,9 @@ import type { ISessionEntry } from '../sessions/services/sessions/common/session
  * SAME extraction the live capture hooks run.
  */
 
+/** Kinds whose entries exist ONLY in the index — rebuildArtifacts cannot regenerate them and must carry them over. */
+const PRESERVED_KINDS: ReadonlySet<unknown> = new Set(['export', 'change-set']);
+
 export function artifactsFilePath(root: string, projectId?: string): string {
 	return projectId ? join(root, 'projects', projectId, 'artifacts.jsonl') : join(root, 'artifacts.jsonl');
 }
@@ -151,10 +154,11 @@ export function extractArtifactsFromEntries(sessionId: string, projectId: string
  */
 export async function rebuildArtifacts(root: string, projectId?: string): Promise<void> {
 	const file = artifactsFilePath(root, projectId);
-	// Export entries point OUTSIDE the data root — the index is their only
+	// Export entries point OUTSIDE the data root and change-set entries snapshot
+	// a TRANSIENT working-tree diff (#13 P2) — for both, the index is their only
 	// record, so a rebuild carries them over instead of wiping them (the P1
-	// panel rebuilds on every mount; dropping exports there would erase the
-	// very records #13 set out to keep).
+	// panel rebuilds on every mount; dropping them there would erase the very
+	// records #13 set out to keep).
 	const preserved: string[] = [];
 	try {
 		for (const line of (await readFile(file, 'utf8')).split('\n')) {
@@ -163,7 +167,7 @@ export async function rebuildArtifacts(root: string, projectId?: string): Promis
 			}
 			try {
 				const parsed = JSON.parse(line) as { kind?: unknown };
-				if (parsed !== null && typeof parsed === 'object' && parsed.kind === 'export') {
+				if (parsed !== null && typeof parsed === 'object' && PRESERVED_KINDS.has(parsed.kind)) {
 					preserved.push(line);
 				}
 			} catch {

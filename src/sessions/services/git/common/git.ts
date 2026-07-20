@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 // Type-only re-exports from the main-process git IPC (erased at runtime).
-import type { IGitBranchesResult, IGitCheckoutResult, IGitDiffStat } from '../../../../main/gitIpc.js';
+import type { IGitBranchesResult, IGitCheckoutResult, IGitDiffFile, IGitDiffStat } from '../../../../main/gitIpc.js';
 
-export type { IGitBranchesResult, IGitCheckoutResult, IGitDiffStat };
+export type { IGitBranchesResult, IGitCheckoutResult, IGitDiffFile, IGitDiffStat };
 
 /** The shape exposed on `agentWindow.git` by the preload script. */
 export interface IGitBridge {

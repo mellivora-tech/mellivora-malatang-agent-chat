@@ -282,11 +282,12 @@
 }
 
 .changes-summary-stat.additions .changes-summary-value,
-.changes-file-stats {
+.changes-file-added {
 	color: var(--vscode-agents-color-success);
 }
 
-.changes-summary-stat.deletions .changes-summary-value {
+.changes-summary-stat.deletions .changes-summary-value,
+.changes-file-removed {
 	color: var(--vscode-agents-color-danger);
 }
 
@@ -325,6 +326,8 @@
 }
 
 .changes-file-stats {
+	display: inline-flex;
+	gap: 6px;
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-variant-numeric: tabular-nums;
 }

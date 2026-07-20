@@ -7,7 +7,9 @@ import { Emitter } from '../../../base/common/event.js';
 import { observableValue, type ObservableValue } from '../../../base/common/observable.js';
 import { localize } from '../../../common/i18n/i18n.js';
 import type { IAgentBridge, IAgentMessage, PermissionMode, IAgentPause } from '../../../services/agent/common/agent.js';
-import type { IGitBridge } from '../../../services/git/common/git.js';
+import type { IGitBridge, IGitDiffFile } from '../../../services/git/common/git.js';
+import type { IArtifactsBridge } from '../../../services/artifacts/common/artifacts.js';
+import { buildChangeSetEntry } from '../../../services/artifacts/common/changeSet.js';
 import type { IModelsService } from '../../../services/models/browser/modelsService.js';
 import type {
 	IPlanComment,
@@ -46,7 +48,7 @@ const DEFAULT_RESPONSE_DELAY_MS = 3000;
 // clock and the reset edge need a little daylight (#19 缺陷 2).
 const RESUME_BUFFER_MS = 30_000;
 
-type GitGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge } };
+type BridgeGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge; readonly artifacts?: IArtifactsBridge } };
 
 interface IMutableSession extends ISession {
 	readonly workspace: ObservableValue<ISessionWorkspace | undefined>;
@@ -170,19 +172,57 @@ export class FileSessionsProvider implements ISessionsProvider {
 		}
 	}
 
-	private readonly git: IGitBridge | undefined = (globalThis as GitGlobals).agentWindow?.git;
+	private readonly git: IGitBridge | undefined = (globalThis as BridgeGlobals).agentWindow?.git;
+	private readonly artifactsBridge: IArtifactsBridge | undefined = (globalThis as BridgeGlobals).agentWindow?.artifacts;
+	/** Last change-set artifact id snapshotted per session — the append-side noise gate (#13 P2). */
+	private readonly lastChangeSetIds = new Map<string, string>();
 
-	/** Pull the project's real working-tree diff onto the session and persist it. */
-	private async refreshChangesSummary(session: IMutableSession): Promise<void> {
+	/**
+	 * Pull the project's real working-tree diff onto the session and persist it.
+	 * At run end (`captureChangeSet`) a non-empty diff is also snapshotted into
+	 * the artifacts index as a change-set (#13 P2) — the content-hash id both
+	 * dedups identical snapshots and lets a changed diff land as a new row.
+	 */
+	private async refreshChangesSummary(session: IMutableSession, captureChangeSet = false): Promise<void> {
 		if (!this.git || !session.projectId) {
 			return;
 		}
-		const summary = await this.git.diffStat(session.projectId);
+		const stat = await this.git.diffStat(session.projectId);
+		// The badge counts keep their pre-P2 口径: files = unique changed paths.
+		const summary = stat === undefined ? undefined : { files: stat.files.length, additions: stat.additions, deletions: stat.deletions, changedFiles: stat.files };
 		session.changesSummary.set(summary);
 		this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		if (captureChangeSet && stat !== undefined) {
+			void this.captureChangeSet(session, stat.files);
+		}
 		await this.enqueueWrite(async () => {
 			await this.bridge.append(this.getRef(session.sessionId), { type: 'state', timestamp: new Date().toISOString(), ...(summary ? { changesSummary: summary } : {}) });
 		});
+	}
+
+	/** Record the run-end diff as a change-set artifact (#13 P2). Best-effort: the index is a mirror, never worth failing a run over. */
+	private async captureChangeSet(session: IMutableSession, files: readonly IGitDiffFile[]): Promise<void> {
+		if (this.artifactsBridge?.record === undefined) {
+			return;
+		}
+		const entry = buildChangeSetEntry({
+			sessionId: session.sessionId,
+			...(session.projectId !== undefined ? { projectId: session.projectId } : {}),
+			files,
+			createdAt: new Date().toISOString(),
+		});
+		// undefined = empty diff (nothing to snapshot); an unchanged id = the
+		// same content this session already snapshotted — skip both, so repeated
+		// finalizes never stack duplicate index lines.
+		if (entry === undefined || this.lastChangeSetIds.get(session.sessionId) === entry.id) {
+			return;
+		}
+		this.lastChangeSetIds.set(session.sessionId, entry.id);
+		try {
+			await this.artifactsBridge.record(entry);
+		} catch (error) {
+			console.warn(`Recording the change-set artifact failed for ${session.sessionId}:`, error);
+		}
 	}
 
 	async initialize(): Promise<void> {
@@ -1260,8 +1300,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 			session.updatedAt.set(now);
 			session.isRead.set(false);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-			// The run may have edited files — reflect the real diff now.
-			void this.refreshChangesSummary(session);
+			// The run may have edited files — reflect the real diff now, and
+			// snapshot it as a change-set artifact when it is non-empty (#13 P2).
+			void this.refreshChangesSummary(session, true);
 		};
 
 		const dispose = agent.onEvent(payload => {

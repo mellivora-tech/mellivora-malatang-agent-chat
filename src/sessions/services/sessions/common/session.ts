@@ -26,10 +26,20 @@ export interface ISessionWorkspace {
 	readonly branchName?: string;
 }
 
+/** One changed file behind the summary counts (#13 P2) — the Review tab's real rows. */
+export interface ISessionChangedFile {
+	readonly path: string;
+	readonly added: number;
+	readonly removed: number;
+	readonly status?: 'untracked' | 'binary';
+}
+
 export interface ISessionChangesSummary {
 	readonly files: number;
 	readonly additions: number;
 	readonly deletions: number;
+	/** Absent on summaries persisted before #13 P2 — the Review tab shows a "detail pending" note instead. */
+	readonly changedFiles?: readonly ISessionChangedFile[];
 }
 
 /** A chat → data panel hand-off, riding a work step (#4/#7). `kind` absent

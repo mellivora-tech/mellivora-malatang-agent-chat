@@ -21,10 +21,20 @@ export interface ISessionWorkspaceData {
 	readonly branchName?: string;
 }
 
+/** Wire twin of ISessionChangedFile (#13 P2). */
+export interface ISessionChangedFileData {
+	readonly path: string;
+	readonly added: number;
+	readonly removed: number;
+	readonly status?: 'untracked' | 'binary';
+}
+
 export interface ISessionChangesSummaryData {
 	readonly files: number;
 	readonly additions: number;
 	readonly deletions: number;
+	/** Absent on entries persisted before #13 P2. */
+	readonly changedFiles?: readonly ISessionChangedFileData[];
 }
 
 export interface ISessionHeader {

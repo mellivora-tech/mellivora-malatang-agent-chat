@@ -3,14 +3,52 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../common/i18n/i18n.js';
 import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
-import type { IActiveSession, ISessionChangesSummary } from '../../../services/sessions/common/session.js';
+import type { ISessionChangesSummary } from '../../../services/sessions/common/session.js';
 import type { ISessionsPartService } from '../../../services/sessions/browser/sessionsPartService.js';
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 
 export interface IChangesViewOptions {
 	readonly sessionsService?: ISessionsService;
 	readonly sessionsPartService?: ISessionsPartService;
+}
+
+/** One rendered file row of the Review tab (#13 P2) — real diff data, presentation-ready. */
+export interface IChangesFileRow {
+	readonly path: string;
+	readonly icon: string;
+	readonly addedLabel: string;
+	readonly removedLabel: string;
+}
+
+export type ChangesFilesPresentation =
+	| { readonly kind: 'rows'; readonly rows: readonly IChangesFileRow[] }
+	/** Counts exist but no per-file detail — a summary persisted before #13 P2; the next run end fills it in. */
+	| { readonly kind: 'stale' }
+	| { readonly kind: 'empty' };
+
+/**
+ * Pure presenter for the file list (#13 P2), extracted so the bare-node unit
+ * tests can cover the real-data rendering without a DOM.
+ */
+export function presentChangedFiles(summary: ISessionChangesSummary): ChangesFilesPresentation {
+	const files = summary.changedFiles;
+	if (files === undefined) {
+		return summary.files > 0 ? { kind: 'stale' } : { kind: 'empty' };
+	}
+	if (files.length === 0) {
+		return { kind: 'empty' };
+	}
+	return {
+		kind: 'rows',
+		rows: files.map(file => ({
+			path: file.path,
+			icon: file.path.endsWith('.json') ? 'codicon-json' : 'codicon-file-code',
+			addedLabel: `+${file.added}`,
+			removedLabel: `-${file.removed}`,
+		})),
+	};
 }
 
 export class ChangesView extends Disposable {
@@ -51,20 +89,20 @@ export class ChangesView extends Disposable {
 		header.className = 'changes-view-header';
 		const title = document.createElement('div');
 		title.className = 'changes-view-title';
-		title.textContent = 'Changes';
+		title.textContent = localize('changes.title');
 		header.appendChild(title);
 		const subtitle = document.createElement('div');
 		subtitle.className = 'changes-view-subtitle';
-		subtitle.textContent = session?.title.get() ?? 'No active session';
+		subtitle.textContent = session?.title.get() ?? localize('changes.noSession');
 		header.appendChild(subtitle);
 		root.appendChild(header);
 
 		const summary = session?.changesSummary.get();
 		if (summary && session) {
 			this.renderSummary(root, summary);
-			this.renderChangedFiles(root, summary, session);
+			this.renderChangedFiles(root, summary);
 		} else {
-			this.renderEmpty(root, session);
+			this.renderEmpty(root, session !== undefined ? localize('changes.empty.noChanges') : localize('changes.empty.openSession'));
 		}
 	}
 
@@ -73,9 +111,9 @@ export class ChangesView extends Disposable {
 		summaryElement.className = 'changes-summary';
 
 		for (const item of [
-			{ label: 'Files', value: `${summary.files}`, className: 'files' },
-			{ label: 'Additions', value: `+${summary.additions}`, className: 'additions' },
-			{ label: 'Deletions', value: `-${summary.deletions}`, className: 'deletions' },
+			{ label: localize('changes.stat.files'), value: `${summary.files}`, className: 'files' },
+			{ label: localize('changes.stat.additions'), value: `+${summary.additions}`, className: 'additions' },
+			{ label: localize('changes.stat.deletions'), value: `-${summary.deletions}`, className: 'deletions' },
 		]) {
 			const stat = document.createElement('div');
 			stat.className = `changes-summary-stat ${item.className}`;
@@ -93,44 +131,57 @@ export class ChangesView extends Disposable {
 		container.appendChild(summaryElement);
 	}
 
-	private renderChangedFiles(container: HTMLElement, summary: ISessionChangesSummary, session: IActiveSession): void {
+	/** The real file list (#13 P2) — one row per changed path from git's numstat, no placeholders. */
+	private renderChangedFiles(container: HTMLElement, summary: ISessionChangesSummary): void {
+		const presentation = presentChangedFiles(summary);
+		if (presentation.kind === 'stale') {
+			// Counts persisted before #13 P2 carried no file detail — say so
+			// instead of inventing rows; the next run end refreshes the summary.
+			this.renderEmpty(container, localize('changes.list.stale'));
+			return;
+		}
+		if (presentation.kind === 'empty') {
+			this.renderEmpty(container, localize('changes.empty.noChanges'));
+			return;
+		}
+
 		const list = document.createElement('div');
 		list.className = 'changes-file-list';
 
-		const workspace = session.workspace.get()?.label ?? 'workspace';
-		const files = [
-			`src/sessions/browser/parts/titlebarPart.ts`,
-			`src/sessions/browser/parts/sidebarPart.ts`,
-			`src/sessions/browser/parts/auxiliaryBarPart.ts`,
-			`${workspace}/package.json`,
-		].slice(0, Math.max(1, Math.min(summary.files, 4)));
-
-		for (const [index, file] of files.entries()) {
-			const row = document.createElement('div');
-			row.className = 'changes-file-row';
+		for (const row of presentation.rows) {
+			const rowElement = document.createElement('div');
+			rowElement.className = 'changes-file-row';
+			rowElement.title = row.path;
 
 			const icon = document.createElement('span');
-			icon.className = `codicon ${index === files.length - 1 ? 'codicon-json' : 'codicon-file-code'}`;
+			icon.className = `codicon ${row.icon}`;
 			icon.setAttribute('aria-hidden', 'true');
-			row.appendChild(icon);
+			rowElement.appendChild(icon);
 
 			const name = document.createElement('span');
 			name.className = 'changes-file-name';
-			name.textContent = file;
-			row.appendChild(name);
+			name.textContent = row.path;
+			rowElement.appendChild(name);
 
 			const stats = document.createElement('span');
 			stats.className = 'changes-file-stats';
-			stats.textContent = `+${Math.max(1, Math.round(summary.additions / files.length))} -${Math.max(1, Math.round(summary.deletions / files.length))}`;
-			row.appendChild(stats);
+			const added = document.createElement('span');
+			added.className = 'changes-file-added';
+			added.textContent = row.addedLabel;
+			stats.appendChild(added);
+			const removed = document.createElement('span');
+			removed.className = 'changes-file-removed';
+			removed.textContent = row.removedLabel;
+			stats.appendChild(removed);
+			rowElement.appendChild(stats);
 
-			list.appendChild(row);
+			list.appendChild(rowElement);
 		}
 
 		container.appendChild(list);
 	}
 
-	private renderEmpty(container: HTMLElement, session: IActiveSession | undefined): void {
+	private renderEmpty(container: HTMLElement, message: string): void {
 		const empty = document.createElement('div');
 		empty.className = 'changes-empty';
 
@@ -139,9 +190,9 @@ export class ChangesView extends Disposable {
 		icon.setAttribute('aria-hidden', 'true');
 		empty.appendChild(icon);
 
-		const message = document.createElement('span');
-		message.textContent = session ? 'No changed files for this session' : 'Open a session to inspect changes';
-		empty.appendChild(message);
+		const messageElement = document.createElement('span');
+		messageElement.textContent = message;
+		empty.appendChild(messageElement);
 
 		container.appendChild(empty);
 	}

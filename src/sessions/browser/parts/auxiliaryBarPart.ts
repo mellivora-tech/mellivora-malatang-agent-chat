@@ -125,6 +125,16 @@ export class AuxiliaryBarPart extends Part {
 				}
 			}));
 		}
+		// Artifacts panel → review tab (#13 P2): a change-set row opens its diff here.
+		const reviewRequest = this.options.sessionsPartService?.reviewOpenRequest;
+		if (reviewRequest) {
+			this._register(reviewRequest.subscribe(() => {
+				if (reviewRequest.get() !== undefined) {
+					reviewRequest.set(undefined);
+					this.openTab('review');
+				}
+			}));
+		}
 		const request = this.options.sessionsPartService?.dataBrowseRequest;
 		if (request) {
 			this._register(request.subscribe(() => {
