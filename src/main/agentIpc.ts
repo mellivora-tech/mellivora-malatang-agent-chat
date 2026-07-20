@@ -15,6 +15,7 @@ import { createRunLogger } from './agent/observability/runLogger.js';
 import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
+import { createLanguageServerManager } from './agent/lsp/languageServerManager.js';
 import { createDataSourceTools, type IQueryableSource } from './agent/tools/dataSourceTools.js';
 import { createExecuteDataSourceTool } from './agent/tools/executeDataSourceTool.js';
 import { isEffectivelyWritable } from '../sessions/services/environments/common/environments.js';
@@ -49,8 +50,9 @@ function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): 
 		);
 	} else {
 		lines.push(
-			'Tools: read_file, list_dir, glob, grep to explore; write_file, edit_file to change files; bash to run commands; spawn_agent to delegate a read-only exploration to a sub-agent.',
-			'Open your reply with ONE sentence sizing up the task, then start. SHAPE sets the discipline: diagnosis → verify against the live code/data THIS run before concluding; change → plan via update_plan first; question → answer directly, read only what the answer needs. For delegation there is exactly ONE test — will you need the files\' contents again after the sweep? Needle lookups (a known path, a specific symbol, a 2-3 file scope) are ALWAYS direct reads, never delegated. Sweeps whose contents you will NOT need afterwards (audits, find-all-usages, structure surveys) go to spawn_agent, sharded by module/directory when large, all shards in ONE message so they run concurrently. Multi-step work gets an update_plan checklist first, whichever path executes it.',
+			'Tools: read_file, list_dir, glob, grep, read_symbol to explore; write_file, edit_file to change files; bash to run commands; spawn_agent to delegate a read-only exploration to a sub-agent.',
+			"Open your reply with ONE sentence sizing up the task, then start. SHAPE sets the discipline: diagnosis → verify against the live code/data THIS run before concluding; change → plan via update_plan first; question → answer directly, read only what the answer needs. For delegation there is exactly ONE test — will you need the files' contents again after the sweep? Needle lookups (a known path, a specific symbol, a 2-3 file scope) are ALWAYS direct reads, never delegated. Sweeps whose contents you will NOT need afterwards (audits, find-all-usages, structure surveys) go to spawn_agent, sharded by module/directory when large, all shards in ONE message so they run concurrently. Multi-step work gets an update_plan checklist first, whichever path executes it.",
+			'A diagnosis that turns into an open-ended, multi-round trace — repeated grep→read→grep across modules to reach a verdict — is a sweep too, even though each hop alone looks like a needle. Apply the same test: if you will distill it to a conclusion and will not reread the raw files, delegate it — and when it has independent tracks (e.g. backend / frontend / live data), split them into concurrent spawn_agent calls in ONE message, then keep only the file:line evidence your conclusion needs. Do NOT walk a long grep→read→grep chain by hand in this context when a sub-agent can return just the verdict.',
 			'When a sub-agent reports PARTIAL coverage, delegate the REMAINDER with a narrower scope — never redo in this context what it already covered. For mechanical extraction across many files (listing endpoints, counting patterns), a short bash/script pass usually beats reading files one by one — with or without a sub-agent.',
 			'Do not make claims about code you have not read this session, and do not propose changes to files you have not read — read them first.',
 			'Read-only tools never require approval: use them freely, and never ask the user for permission to read or search. When a tool call does need approval, the system prompts the user automatically; if denied, adjust your approach instead of retrying.',
@@ -59,6 +61,7 @@ function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): 
 			'For tasks that only need understanding the code — assessing, summarizing, reviewing, explaining — read the relevant files; do NOT run the build or test suite just to "check".',
 			'Use bash only for short, purposeful commands. Avoid long-running or blocking ones — dev servers, watch modes, full end-to-end / integration suites, or anything that launches the app or waits indefinitely — as they stall the turn. If a long command is genuinely required, scope it narrowly and set a timeout.',
 			'When you need several independent pieces of information, you MUST send a single message with MULTIPLE tool calls — e.g. reading three files is ONE message with three read_file calls; `git status` and `git diff` is ONE message with two bash calls. One tool call per turn wastes a full model round-trip every time; only sequence calls whose inputs depend on an earlier result.',
+			'Read WIDE, not in slivers. To understand a file, omit `limit` (read_file returns up to 2000 lines) or read a generous window in one call rather than paging it in 30-line slices — each narrow re-read of the same file burns another round-trip. When a grep hit is all you need to see in situ, pass grep a `context` window instead of following the grep with a separate read_file. To read the full body of a named function/method/class/interface, call read_symbol (one call, language-server-located) instead of grep-then-read_file. Context is cheap; round-trips are not.',
 			'For any multi-step task, call update_plan first to lay out a short finite checklist, keep it updated as you go, and once every step is done STOP and give your final answer — do not keep pulling threads. Escalate to the user only when you are genuinely stuck after investigating, not as a first response to friction: verify code-level claims by reading the source, and ask the user only for runtime data (logs, database contents, live request values) that the code cannot show.',
 			'After completing a multi-step task that CHANGED files, call write_walkthrough with a short sectioned report — what changed, how to verify — then close with one short sentence. Skip it for trivial or read-only tasks.',
 		);
@@ -185,7 +188,11 @@ export function registerAgentIpc(dataRoot: string): void {
 		// The primary root is the bash cwd + where relative paths and project
 		// instructions resolve.
 		const cwd = roots[0];
-		const fileTools = roots.length > 0 ? createWorkspaceTools(roots, { includeMutations: mode !== 'plan' }) : [];
+		// Lazily-spawned language servers back read_symbol (see languageServerManager):
+		// nothing starts until the tool is first called, so a run that never reads a
+		// symbol pays nothing. Shared with sub-agents so they reuse the same servers.
+		const languageServers = roots.length > 0 ? createLanguageServerManager(roots) : undefined;
+		const fileTools = roots.length > 0 ? createWorkspaceTools(roots, { includeMutations: mode !== 'plan', ...(languageServers ? { languageServers } : {}) }) : [];
 
 		// Read-only data-source tools: the project's configured databases become
 		// queryable (SELECT only). Coordinates come from the workspace config;
@@ -351,6 +358,7 @@ export function registerAgentIpc(dataRoot: string): void {
 					createSpawnAgentTool({
 						roots,
 						modelClient,
+						...(languageServers ? { languageServers } : {}),
 						record: event => {
 							runLogger.record(event);
 							if (!sender.isDestroyed()) {
@@ -445,9 +453,7 @@ export function registerAgentIpc(dataRoot: string): void {
 			if (terminal.reason === 'paused' && terminal.paused && supportsCodingQuota({ baseURL: config.baseURL }) && config.apiKey) {
 				const quota = await fetchCodingQuota(config.baseURL, config.apiKey);
 				const resetTime =
-					terminal.paused.cause === 'quota'
-						? quota?.usage.resetTime
-						: (quota?.windows.find(window => window.resetTime !== undefined)?.resetTime ?? quota?.usage.resetTime);
+					terminal.paused.cause === 'quota' ? quota?.usage.resetTime : (quota?.windows.find(window => window.resetTime !== undefined)?.resetTime ?? quota?.usage.resetTime);
 				if (resetTime !== undefined) {
 					terminal = { ...terminal, paused: { ...terminal.paused, resetTime } };
 				}
@@ -467,6 +473,9 @@ export function registerAgentIpc(dataRoot: string): void {
 			abortControllers.delete(payload.sessionId);
 			settleApprovals(payload.sessionId);
 			agentLog.flush();
+			// Tear down any language servers this run started (best-effort; a manager
+			// that never spawned one resolves immediately).
+			await languageServers?.dispose();
 		}
 	});
 

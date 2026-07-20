@@ -5,6 +5,7 @@
 
 import { UI_COMPONENT_NAMES } from '../../../sessions/services/sessions/common/uiComponents/index.js';
 import type { IAgentTool } from '../agentTypes.js';
+import type { ILanguageServerManager } from '../lsp/languageServerManager.js';
 import { createBashTool } from './bashTool.js';
 import { createEditFileTool } from './editFileTool.js';
 import { createGlobTool } from './globTool.js';
@@ -12,6 +13,7 @@ import { createGrepTool } from './grepTool.js';
 import { createListDirTool } from './listDirTool.js';
 import { createProposePlanTool } from './proposePlanTool.js';
 import { createReadFileTool } from './readFileTool.js';
+import { createReadSymbolTool } from './readSymbolTool.js';
 import { createRenderUiTool } from './renderUiTool.js';
 import { createUpdatePlanTool } from './updatePlanTool.js';
 import { createWalkthroughTool } from './walkthroughTool.js';
@@ -24,6 +26,12 @@ export interface IWorkspaceToolsOptions {
 	 * execute, ask for approval, or are denied (plan mode omits them entirely).
 	 */
 	readonly includeMutations?: boolean;
+	/**
+	 * When provided, adds the read-only `read_symbol` tool backed by this language
+	 * server manager. Omitted → no symbol tool (the manager owns process lifecycle,
+	 * so it is created once per run and threaded in, not spun up per tool set).
+	 */
+	readonly languageServers?: ILanguageServerManager;
 }
 
 /**
@@ -47,6 +55,7 @@ export function createWorkspaceTools(roots: readonly string[], options: IWorkspa
 		createListDirTool(roots),
 		createGlobTool(roots),
 		createGrepTool(roots),
+		...(options.languageServers ? [createReadSymbolTool({ roots, manager: options.languageServers })] : []),
 	];
 	if (!options.includeMutations) {
 		return readOnly;

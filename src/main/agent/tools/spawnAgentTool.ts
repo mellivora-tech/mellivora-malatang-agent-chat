@@ -6,6 +6,7 @@
 import { runAgentLoop } from '../agentLoop.js';
 import { allowAllPermissionGate, defineTool } from '../agentTools.js';
 import type { IAgentTool, IModelClient } from '../agentTypes.js';
+import type { ILanguageServerManager } from '../lsp/languageServerManager.js';
 import { createWorkspaceTools } from './index.js';
 import { asRecord, invalid, requireString, valid } from './workspace.js';
 
@@ -28,8 +29,8 @@ import { asRecord, invalid, requireString, valid } from './workspace.js';
  * simply absent (CC: ALL_AGENT_DISALLOWED_TOOLS, "Blocked to prevent recursion").
  */
 
-/** The child's whole tool surface. Meta-tools (update_plan etc.) are excluded: a 24-turn explorer doesn't need a checklist. */
-const CHILD_TOOL_NAMES: ReadonlySet<string> = new Set(['read_file', 'list_dir', 'glob', 'grep']);
+/** The child's whole tool surface. Meta-tools (update_plan etc.) are excluded: a 24-turn explorer doesn't need a checklist. read_symbol rides in only when a language-server manager is threaded through (see createWorkspaceTools). */
+const CHILD_TOOL_NAMES: ReadonlySet<string> = new Set(['read_file', 'list_dir', 'glob', 'grep', 'read_symbol']);
 
 /** A quarter of the parent's budget — an explorer that needs more should have been given a narrower task. */
 const CHILD_MAX_TURNS = 24;
@@ -42,7 +43,7 @@ function childSystemPrompt(roots: readonly string[]): string {
 	lines.push(
 		'Tools: read_file, list_dir, glob, grep. You cannot change files, run commands, or delegate further.',
 		'Your FINAL message is returned verbatim to the calling agent as a tool result — it is not shown to a human. Make it conclusions only: what was found, each claim backed by file:line evidence. No preamble, no narration of your process, no questions back.',
-		'Batch independent reads and searches into a single turn. Stop as soon as the task is answered — do not keep exploring past it.',
+		'Batch independent reads and searches into a single turn. Read WIDE — omit read_file `limit` or take a generous window rather than 30-line slices, and pass grep a `context` window instead of following a grep with a separate read_file. Stop as soon as the task is answered — do not keep exploring past it.',
 		roots.length > 1
 			? 'Relative paths resolve against the working directory; use absolute paths for the other code roots. You cannot access files outside these roots.'
 			: 'All paths are relative to the working directory; you cannot access files outside it.',
@@ -61,7 +62,15 @@ export type SubagentRecord = (
 		| { readonly type: 'subagent_start'; readonly agentId: string; readonly task: string }
 		| { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly summary: string; readonly turn: number }
 		| { readonly type: 'subagent_progress'; readonly agentId: string; readonly phase: 'thinking' | 'replying'; readonly chars: number }
-		| { readonly type: 'subagent_end'; readonly agentId: string; readonly reason: string; readonly turns: number; readonly toolCalls: number; readonly tokens: number; readonly outputChars: number },
+		| {
+				readonly type: 'subagent_end';
+				readonly agentId: string;
+				readonly reason: string;
+				readonly turns: number;
+				readonly toolCalls: number;
+				readonly tokens: number;
+				readonly outputChars: number;
+		  },
 ) => void;
 
 /** Repeat progress at most this often — each delta would otherwise spam the log/IPC. A phase ENTRY always reports immediately, so even the first chunk of a long report flips the frozen tool row to "writing". */
@@ -79,17 +88,19 @@ export interface ISpawnAgentDeps {
 	readonly roots: readonly string[];
 	readonly modelClient: IModelClient;
 	readonly record?: SubagentRecord;
+	/** Shared with the parent so a child's read_symbol reuses the same running servers. */
+	readonly languageServers?: ILanguageServerManager;
 }
 
 export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
-	const childTools = createWorkspaceTools(deps.roots).filter(tool => CHILD_TOOL_NAMES.has(tool.name));
+	const childTools = createWorkspaceTools(deps.roots, deps.languageServers ? { languageServers: deps.languageServers } : {}).filter(tool => CHILD_TOOL_NAMES.has(tool.name));
 	const system = childSystemPrompt(deps.roots);
 
 	return defineTool({
 		name: 'spawn_agent',
 		description:
 			'Delegate a read-only exploration to a sub-agent with its OWN context and return only its conclusions. ' +
-			'The ONE criterion is context economy — will you need the files\' contents again after the sweep? If not ' +
+			"The ONE criterion is context economy — will you need the files' contents again after the sweep? If not " +
 			'(audits, find-all-usages, tracing a value across modules, structure surveys): delegate — you keep the summary, not the file dumps. ' +
 			'When NOT to use it: a known file path → read_file directly; a specific class/function/symbol → grep or glob directly; ' +
 			'anything scoped to 2-3 files → read them yourself; and never re-delegate work a sub-agent already covered. ' +
