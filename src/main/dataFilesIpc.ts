@@ -16,6 +16,13 @@ const CSV_SHEET = '数据';
  * Local data files for the panel's file provider (#7 P1). readTable only ever
  * parses paths the user PICKED this process (or the MELLIVORA_PICK_FILE e2e
  * seam) — the renderer can't point main at arbitrary files.
+ *
+ * SECURITY (#10): this pick/dataRoot gate is what keeps xlsx@0.18.5's known
+ * prototype-pollution/ReDoS advisories (no npm fix published) off any
+ * network-reachable path — only files the user chose, or app-written session
+ * CSVs (which never hit the xlsx parser), ever reach parsing. Do not widen it
+ * (URL imports, shared/downloaded files, agent-supplied paths) without
+ * re-evaluating that vulnerability or moving off SheetJS first.
  */
 export function registerDataFilesIpc(dataRoot: string): void {
 	const pickedPaths = new Set<string>();
