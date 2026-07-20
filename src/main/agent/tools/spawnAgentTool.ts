@@ -6,6 +6,7 @@
 import { runAgentLoop } from '../agentLoop.js';
 import { allowAllPermissionGate, defineTool } from '../agentTools.js';
 import type { IAgentTool, IModelClient } from '../agentTypes.js';
+import type { ILanguageServerManager } from '../lsp/languageServerManager.js';
 import { createWorkspaceTools } from './index.js';
 import { asRecord, invalid, requireString, valid } from './workspace.js';
 
@@ -28,8 +29,8 @@ import { asRecord, invalid, requireString, valid } from './workspace.js';
  * simply absent (CC: ALL_AGENT_DISALLOWED_TOOLS, "Blocked to prevent recursion").
  */
 
-/** The child's whole tool surface. Meta-tools (update_plan etc.) are excluded: a 24-turn explorer doesn't need a checklist. */
-const CHILD_TOOL_NAMES: ReadonlySet<string> = new Set(['read_file', 'list_dir', 'glob', 'grep']);
+/** The child's whole tool surface. Meta-tools (update_plan etc.) are excluded: a 24-turn explorer doesn't need a checklist. read_symbol rides in only when a language-server manager is threaded through (see createWorkspaceTools). */
+const CHILD_TOOL_NAMES: ReadonlySet<string> = new Set(['read_file', 'list_dir', 'glob', 'grep', 'read_symbol']);
 
 /** A quarter of the parent's budget — an explorer that needs more should have been given a narrower task. */
 const CHILD_MAX_TURNS = 24;
@@ -79,10 +80,12 @@ export interface ISpawnAgentDeps {
 	readonly roots: readonly string[];
 	readonly modelClient: IModelClient;
 	readonly record?: SubagentRecord;
+	/** Shared with the parent so a child's read_symbol reuses the same running servers. */
+	readonly languageServers?: ILanguageServerManager;
 }
 
 export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
-	const childTools = createWorkspaceTools(deps.roots).filter(tool => CHILD_TOOL_NAMES.has(tool.name));
+	const childTools = createWorkspaceTools(deps.roots, deps.languageServers ? { languageServers: deps.languageServers } : {}).filter(tool => CHILD_TOOL_NAMES.has(tool.name));
 	const system = childSystemPrompt(deps.roots);
 
 	return defineTool({
