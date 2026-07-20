@@ -305,7 +305,7 @@ export const zhCN = {
 	// #9 P2 language picker (keys referenced by sessionsList's settings page).
 	'settings.language': '语言',
 	'settings.language.pick': '显示语言',
-	'settings.language.desc': '更改将在下次启动时生效。',
+	'settings.language.desc': '切换后界面会立即重载并应用所选语言。',
 	'settings.language.system': '跟随系统',
 
 	// --- project configuration page ------------------------------------------------

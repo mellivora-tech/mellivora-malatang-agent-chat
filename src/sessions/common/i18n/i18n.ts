@@ -17,13 +17,20 @@ export const LOCALE_PREFERENCES: readonly LocalePreference[] = ['system', 'zh-CN
 /** Shared with settingsPrefs — one localStorage object holds theme + motion + locale. */
 export const PREFERENCES_STORAGE_KEY = 'agentChat.preferences';
 
-/** zh-CN is the app's source language AND its default: 'system' resolves to
- *  it unconditionally in P0. Real OS-language detection (so an en-US system
- *  gets en-US without the user pinning it) is P1 — once locale switching is
- *  hot instead of reload-based, guessing wrong is cheap to correct; today a
- *  wrong guess would need a reload to undo, so P0 stays deterministic. */
+/** 'system' now REALLY follows the OS (#9 follow-up, 2026-07-20): any zh-*
+ *  UI language gets the zh-CN source catalog, everything else en-US. Gated on
+ *  `document`: node ≥21 ships a global `navigator` too, and letting bare-node
+ *  test runs read the HOST machine's language would make the whole unit suite
+ *  environment-dependent — tests stay pinned to the zh-CN source. E2E pins
+ *  itself the honest way: MELLIVORA_LOCALE=zh-CN → Chromium --lang. */
 export function resolveLocale(preference: LocalePreference): ResolvedLocale {
-	return preference === 'en-US' ? 'en-US' : 'zh-CN';
+	if (preference === 'en-US' || preference === 'zh-CN') {
+		return preference;
+	}
+	if (typeof document !== 'undefined' && typeof navigator !== 'undefined' && typeof navigator.language === 'string') {
+		return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US';
+	}
+	return 'zh-CN';
 }
 
 /** Resolved once per process at module load (locale changes apply on reload,

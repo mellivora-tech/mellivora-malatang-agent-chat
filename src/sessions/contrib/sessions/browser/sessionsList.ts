@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { getActiveLocale, localize, type LocalePreference } from '../../../common/i18n/i18n.js';
+import { getActiveLocale, localize, resolveLocale, type LocalePreference } from '../../../common/i18n/i18n.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { append, clearNode } from '../../../base/browser/dom.js';
 import { SearchPalette, type ISearchPaletteAction, type ISearchPaletteRecentChanges, type ISearchPaletteTask } from '../../search/browser/searchPalette.js';
@@ -1198,7 +1198,17 @@ export class SessionsList extends Disposable {
 				{ value: 'en-US', label: 'English (US)' },
 			],
 			readPreferences().locale,
-			value => updatePreferences({ locale: value as LocalePreference }),
+			value => {
+				const preference = value as LocalePreference;
+				updatePreferences({ locale: preference });
+				// Hot switch (#9 follow-up): the active locale resolves once at
+				// module load, so a live renderer reload re-boots every surface
+				// in the new language (~1s, VS Code's model). The unload hook
+				// flushes in-flight run state first (same path as app quit).
+				if (resolveLocale(preference) !== getActiveLocale()) {
+					location.reload();
+				}
+			},
 		);
 
 		return page;
