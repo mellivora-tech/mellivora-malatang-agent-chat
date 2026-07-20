@@ -185,7 +185,7 @@ test('side pane tabs are instances: + menu, close, and view keep-alive', async (
 
 		// Open a second tab through the "+" menu.
 		await page.locator('.auxiliary-tab-add').click();
-		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '终端', '浏览器']);
+		await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '工作台', '终端', '浏览器']);
 		await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
 		await expect(page.locator('.auxiliary-tab .auxiliary-tab-label')).toHaveText(['dev·orders', '终端']);
 		await expect(page.locator('.auxiliary-view[data-tab-id="data"]')).toBeHidden();
@@ -260,8 +260,21 @@ async function writeSessionWithQueryStep(dataDir: string, projectId: string, ses
 		JSON.stringify({ type: 'session', version: 1, sessionId, sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt, interactivity: 'full', projectId }),
 		JSON.stringify({ type: 'message', timestamp: createdAt, id: 'u1', role: 'user', text: '查一下订单' }),
 		JSON.stringify({
-			type: 'message', timestamp: createdAt, id: 'w1', role: 'work', text: '', durationMs: 5000,
-			steps: [{ kind: 'tool', label: 'query_data_source', durationMs: 1200, detail: 'id | name\n1 | a', browse: { source: 'ds-orders', sql: 'SELECT id, name, amount, created_at FROM shop.orders WHERE amount > 0' } }],
+			type: 'message',
+			timestamp: createdAt,
+			id: 'w1',
+			role: 'work',
+			text: '',
+			durationMs: 5000,
+			steps: [
+				{
+					kind: 'tool',
+					label: 'query_data_source',
+					durationMs: 1200,
+					detail: 'id | name\n1 | a',
+					browse: { source: 'ds-orders', sql: 'SELECT id, name, amount, created_at FROM shop.orders WHERE amount > 0' },
+				},
+			],
 		}),
 		JSON.stringify({ type: 'message', timestamp: createdAt, id: 'a1', role: 'assistant', text: '查到了 120 行。' }),
 		JSON.stringify({ type: 'state', timestamp: createdAt, status: 3, title: '数据浏览' }),
@@ -537,7 +550,15 @@ test('file provider: xlsx sheets ride the table dropdown and switch', async () =
 		// Build a two-sheet workbook with the project's own xlsx dependency.
 		const XLSX = await import('xlsx');
 		const workbook = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 'x'], [2, 'y']]), '订单');
+		XLSX.utils.book_append_sheet(
+			workbook,
+			XLSX.utils.aoa_to_sheet([
+				['a', 'b'],
+				[1, 'x'],
+				[2, 'y'],
+			]),
+			'订单',
+		);
 		XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['k'], ['only']]), '汇总');
 		const xlsxPath = join(workspace, 'book.xlsx');
 		XLSX.writeFile(workbook, xlsxPath);
@@ -579,15 +600,41 @@ test('render_data chip: an agent-rendered table opens in the panel, replayable a
 
 		const dir = join(dataDir, 'projects', 'shop', 'sessions');
 		const createdAt = '2026-01-01T00:00:00.000Z';
-		await writeFile(join(dir, 'session-render.jsonl'), [
-			JSON.stringify({ type: 'session', version: 1, sessionId: 'session-render', sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt, interactivity: 'full', projectId: 'shop' }),
-			JSON.stringify({ type: 'message', timestamp: createdAt, id: 'u1', role: 'user', text: '汇总一下' }),
-			JSON.stringify({
-				type: 'message', timestamp: createdAt, id: 'w1', role: 'work', text: '', durationMs: 3000,
-				steps: [{ kind: 'tool', label: 'render_data', durationMs: 800, detail: '已渲染 2 行 × 2 列到数据面板（汇总-abc123.csv）。', browse: { kind: 'file', path: csvPath, name: '汇总-abc123.csv' } }],
-			}),
-			JSON.stringify({ type: 'state', timestamp: createdAt, status: 3, title: '渲染表格' }),
-		].join('\n') + '\n', 'utf8');
+		await writeFile(
+			join(dir, 'session-render.jsonl'),
+			[
+				JSON.stringify({
+					type: 'session',
+					version: 1,
+					sessionId: 'session-render',
+					sessionType: 'agent-chat',
+					icon: 'codicon-new-session',
+					createdAt,
+					interactivity: 'full',
+					projectId: 'shop',
+				}),
+				JSON.stringify({ type: 'message', timestamp: createdAt, id: 'u1', role: 'user', text: '汇总一下' }),
+				JSON.stringify({
+					type: 'message',
+					timestamp: createdAt,
+					id: 'w1',
+					role: 'work',
+					text: '',
+					durationMs: 3000,
+					steps: [
+						{
+							kind: 'tool',
+							label: 'render_data',
+							durationMs: 800,
+							detail: '已渲染 2 行 × 2 列到数据面板（汇总-abc123.csv）。',
+							browse: { kind: 'file', path: csvPath, name: '汇总-abc123.csv' },
+						},
+					],
+				}),
+				JSON.stringify({ type: 'state', timestamp: createdAt, status: 3, title: '渲染表格' }),
+			].join('\n') + '\n',
+			'utf8',
+		);
 
 		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir } });
 		const page = await app.firstWindow();
