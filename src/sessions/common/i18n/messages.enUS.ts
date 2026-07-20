@@ -280,7 +280,7 @@ export const enUS: Record<MessageKey, string> = {
 	'settings.placeholder.tools.desc': 'Manage the built-in tools and their approval policy.',
 	'settings.language': 'Language',
 	'settings.language.pick': 'Display language',
-	'settings.language.desc': 'Changes apply on the next launch.',
+	'settings.language.desc': 'The window reloads immediately in the selected language.',
 	'settings.language.system': 'Follow system',
 
 	'projcfg.dialogAria': 'Configuration for {0}',

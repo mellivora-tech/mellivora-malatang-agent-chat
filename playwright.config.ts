@@ -5,6 +5,10 @@
 
 import { defineConfig } from '@playwright/test';
 
+// Every spec spreads process.env into its electron.launch — pinning the
+// locale here keeps zh-CN assertions honest on any host OS (see main.ts).
+process.env['MELLIVORA_LOCALE'] = 'zh-CN';
+
 export default defineConfig({
 	testDir: './tests/e2e',
 	timeout: 60_000,

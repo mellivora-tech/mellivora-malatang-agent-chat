@@ -22,6 +22,13 @@ import { ensureProjectsRoot, resolveDataRoot } from './projectsStorage.js';
 import { registerSessionsIpc } from './sessionsIpc.js';
 import { getInitialWindowBackgroundColor } from './windowTheme.js';
 
+// E2E locale pin (#9): Chromium's --lang drives navigator.language, which
+// resolveLocale('system') reads in the renderer — the harness sets
+// MELLIVORA_LOCALE so UI-string assertions never depend on the host OS.
+if (process.env['MELLIVORA_LOCALE']) {
+	app.commandLine.appendSwitch('lang', process.env['MELLIVORA_LOCALE']);
+}
+
 const distRoot = join(fileURLToPath(new URL('..', import.meta.url)));
 
 const rendererUrl = process.env['ELECTRON_RENDERER_URL'];
