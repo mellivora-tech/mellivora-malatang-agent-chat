@@ -97,3 +97,63 @@ test('the generated prompt documents every catalog component with its positional
 	assert.match(prompt, /0-BASED/);
 	assert.match(prompt, /@ToAssistant/);
 });
+
+// --- M3: Autocloser / incremental / fold ----------------------------------------
+
+test('autocloseFragment: open string and bracket stack close in order; dangling names drop (M3)', async () => {
+	const { autocloseFragment } = await import('../../src/sessions/common/uiDsl/incremental.js');
+	assert.equal(autocloseFragment('a = Text("half'), 'a = Text("half")');
+	assert.equal(autocloseFragment('root = Stack([a, b'), 'root = Stack([a, b])');
+	assert.equal(autocloseFragment('a = Text("x")\nb'), 'a = Text("x")');
+	assert.equal(autocloseFragment('a = Text("x")\nb ='), 'a = Text("x")');
+	assert.equal(autocloseFragment('a = Text("x")'), 'a = Text("x")', 'balanced text passes through');
+});
+
+test('incremental parser: chunked pushes render the streamed prefix and converge to the one-shot parse (M3)', async () => {
+	const { createIncrementalParser } = await import('../../src/sessions/common/uiDsl/incremental.js');
+	const full = ['root = Stack([title, tbl])', 'title = Text("报告", "title")', 'tbl = Table(["k"], [["v"]])'].join('\n');
+	const inc = createIncrementalParser(SMOKE_CATALOG);
+
+	// Mid-stream: truncated inside the Table call — earlier statements render,
+	// no missing-root/unresolved-forward-ref noise while streaming.
+	const mid = inc.push(full.slice(0, 58));
+	assert.ok(mid.statements.has('root'));
+	assert.ok(mid.statements.has('title'));
+	assert.equal(mid.errors.filter(error => /never defined|no `root/.test(error.message)).length, 0);
+
+	// Final: identical to a one-shot parse, and the memo actually reused work.
+	const final = inc.push(full, { final: true });
+	const oneShot = parse(full);
+	assert.deepEqual([...final.statements.keys()], [...oneShot.statements.keys()]);
+	assert.deepEqual(final.errors, oneShot.errors);
+	assert.ok(inc.stats.hits > 0, `memo hits: ${inc.stats.hits}`);
+});
+
+test('foldSurface: later batches override by name, cross-batch refs resolve, tree materializes (M3)', async () => {
+	const { foldSurface } = await import('../../src/sessions/common/uiDsl/fold.js');
+	const folded = foldSurface(
+		[
+			['$days = "7"', 'root = Stack([title, range])', 'title = Text("日志", "title")', 'range = Select("范围", ["7", "30"], $days)'].join('\n').replace('$days)', '$days)'),
+			// Turn 2: incremental edit — retitle and add a row via override + new statement.
+			['title = Text("日志(已筛选)", "title")', 'root = Stack([title, range, hint])', 'hint = Text("已应用 30 天", "caption")'].join('\n'),
+		],
+		SMOKE_CATALOG,
+	);
+	assert.equal(folded.errors.length, 0, JSON.stringify(folded.errors));
+	assert.equal(folded.states.get('$days'), '7');
+	assert.ok(folded.root);
+	assert.equal(folded.root.component, 'Stack');
+	const children = folded.root.args[0]!;
+	assert.equal(children.kind, 'array');
+	const names = (children as { items: readonly { kind: string; node?: { name: string } }[] }).items.map(item => item.node?.name);
+	assert.deepEqual(names, ['title', 'range', 'hint'], 'batch-2 root override wins; range resolves ACROSS batches');
+	const title = (children as { items: readonly { node?: { args: readonly { value?: unknown }[] } }[] }).items[0]!.node!;
+	assert.equal(title.args[0]!.value, '日志(已筛选)', 'the batch-2 title override won');
+});
+
+test('foldSurface: circular references render a hole with an attributed error, never hang (M3)', async () => {
+	const { foldSurface } = await import('../../src/sessions/common/uiDsl/fold.js');
+	const folded = foldSurface([['root = Stack([a])', 'a = Stack([root])'].join('\n')], SMOKE_CATALOG);
+	assert.match(folded.errors.map(error => error.message).join('\n'), /circular reference/);
+	assert.ok(folded.root, 'the tree still materializes around the hole');
+});

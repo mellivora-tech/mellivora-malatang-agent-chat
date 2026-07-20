@@ -457,60 +457,50 @@ function collectRefs(value: DslValue, into: { refs: string[]; states: string[] }
 
 // --- program parse -------------------------------------------------------------
 
-export function parseProgram(source: string, catalog: readonly IComponentSpec[]): IDslProgram {
-	const byName = new Map(catalog.map(component => [component.name, component]));
-	const raw = splitStatements(source);
-	const errors: IDslError[] = [];
-	const statements = new Map<string, IDslStatement>();
+/** One raw statement's parse+validate outcome — the incremental parser's memo unit (line re-stamped on reuse). */
+export interface IParsedRaw {
+	readonly statement?: IDslStatement;
+	readonly error?: IDslError;
+}
 
-	for (const { text, line } of raw) {
-		const tokens = tokenize(text);
-		if (typeof tokens === 'string') {
-			errors.push({ line, message: tokens });
-			continue;
-		}
-		const stream = new TokenStream(tokens);
-		const head = stream.next();
-		const isState = head?.kind === 'state';
-		if (!head || (head.kind !== 'ident' && !isState)) {
-			errors.push({ line, message: 'a statement must start with `name =` or `$name =`', hint: 'e.g. root = Stack([...]) or $days = "7"' });
-			continue;
-		}
-		if (!stream.expectPunct('=')) {
-			errors.push({ line, statement: head.text, message: 'expected "=" after the statement name' });
-			continue;
-		}
-		const value = parseValue(stream);
-		if (typeof value === 'string') {
-			errors.push({ line, statement: head.text, message: value });
-			continue;
-		}
-		if (!stream.done()) {
-			errors.push({ line, statement: head.text, message: 'unexpected trailing content after the statement value' });
-			continue;
-		}
-		if (isState) {
-			if (value.kind !== 'literal') {
-				errors.push({ line, statement: `$${head.text}`, message: 'state declarations take a literal default, e.g. $days = "7"' });
-				continue;
-			}
-			statements.set(`$${head.text}`, { name: `$${head.text}`, value, line, source: text });
-			continue;
-		}
-		if (value.kind === 'component') {
-			const problem = validateComponent(value, byName);
-			if (problem) {
-				errors.push({ line, statement: head.text, message: problem.message, ...(problem.hint ? { hint: problem.hint } : {}) });
-				continue;
-			}
-		}
-		// Last assignment wins (incremental-edit merge); first-definition order kept by Map insertion.
-		statements.set(head.text, { name: head.text, value, line, source: text });
+export function parseRawStatement(text: string, line: number, byName: ReadonlyMap<string, IComponentSpec>): IParsedRaw {
+	const tokens = tokenize(text);
+	if (typeof tokens === 'string') {
+		return { error: { line, message: tokens } };
 	}
+	const stream = new TokenStream(tokens);
+	const head = stream.next();
+	const isState = head?.kind === 'state';
+	if (!head || (head.kind !== 'ident' && !isState)) {
+		return { error: { line, message: 'a statement must start with `name =` or `$name =`', hint: 'e.g. root = Stack([...]) or $days = "7"' } };
+	}
+	if (!stream.expectPunct('=')) {
+		return { error: { line, statement: head.text, message: 'expected "=" after the statement name' } };
+	}
+	const value = parseValue(stream);
+	if (typeof value === 'string') {
+		return { error: { line, statement: head.text, message: value } };
+	}
+	if (!stream.done()) {
+		return { error: { line, statement: head.text, message: 'unexpected trailing content after the statement value' } };
+	}
+	if (isState) {
+		if (value.kind !== 'literal') {
+			return { error: { line, statement: `$${head.text}`, message: 'state declarations take a literal default, e.g. $days = "7"' } };
+		}
+		return { statement: { name: `$${head.text}`, value, line, source: text } };
+	}
+	if (value.kind === 'component') {
+		const problem = validateComponent(value, byName);
+		if (problem) {
+			return { error: { line, statement: head.text, message: problem.message, ...(problem.hint ? { hint: problem.hint } : {}) } };
+		}
+	}
+	return { statement: { name: head.text, value, line, source: text } };
+}
 
-	// Reference resolution: attributed to the REFERENCING statement (it is the
-	// one the model must fix). Forward references are legal by construction —
-	// this pass runs after the whole batch parsed.
+/** Reference/root resolution over an already-merged statement map — shared by parseProgram, the incremental parser and the cross-batch fold. */
+export function resolveProgram(statements: ReadonlyMap<string, IDslStatement>, errors: IDslError[], options?: { readonly requireRoot?: boolean }): void {
 	for (const statement of statements.values()) {
 		const into = { refs: [] as string[], states: [] as string[] };
 		collectRefs(statement.value, into);
@@ -525,9 +515,31 @@ export function parseProgram(source: string, catalog: readonly IComponentSpec[])
 			}
 		}
 	}
-	if (!statements.has('root')) {
+	if ((options?.requireRoot ?? true) && !statements.has('root')) {
 		errors.push({ line: 0, message: 'no `root = ...` statement — the surface has no mount point' });
 	}
+}
+
+export function parseProgram(source: string, catalog: readonly IComponentSpec[]): IDslProgram {
+	const byName = new Map(catalog.map(component => [component.name, component]));
+	const raw = splitStatements(source);
+	const errors: IDslError[] = [];
+	const statements = new Map<string, IDslStatement>();
+
+	for (const { text, line } of raw) {
+		const parsed = parseRawStatement(text, line, byName);
+		if (parsed.error) {
+			errors.push(parsed.error);
+		} else if (parsed.statement) {
+			// Last assignment wins (incremental-edit merge); first-definition order kept by Map insertion.
+			statements.set(parsed.statement.name, parsed.statement);
+		}
+	}
+
+	// Reference resolution: attributed to the REFERENCING statement (it is the
+	// one the model must fix). Forward references are legal by construction —
+	// this pass runs after the whole batch parsed.
+	resolveProgram(statements, errors);
 
 	return { statements, errors, attempts: raw.length };
 }
