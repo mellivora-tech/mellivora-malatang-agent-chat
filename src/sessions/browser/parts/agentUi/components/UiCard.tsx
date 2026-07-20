@@ -5,6 +5,7 @@
 
 import { type JSX } from 'react';
 import { localize } from '../../../../common/i18n/i18n.js';
+import type { IExportTextMeta } from '../../../../services/dataFiles/common/dataFiles.js';
 import type { ISessionMessage } from '../../../../services/sessions/common/session.js';
 import type { ISessionMessageSender } from '../../conversationView.js';
 import { resolveUiComponent, type IUiCardContext } from '../registry.js';
@@ -15,7 +16,7 @@ export interface IUiCardHostProps {
 	readonly sessionId: string | undefined;
 	readonly messageSender: ISessionMessageSender | undefined;
 	readonly onFocusComposer: () => void;
-	readonly exportText?: ((defaultName: string, content: string) => Promise<string | undefined>) | undefined;
+	readonly exportText?: ((defaultName: string, content: string, meta?: IExportTextMeta) => Promise<string | undefined>) | undefined;
 	readonly openSurface?: (() => void) | undefined;
 }
 

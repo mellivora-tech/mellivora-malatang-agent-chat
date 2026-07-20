@@ -780,7 +780,12 @@ export class ConversationView extends Disposable {
 					messageSender: this.messageSender,
 					onFocusComposer: () => this.input.focus(),
 					openSurface: this.sessionsPartService ? () => this.sessionsPartService!.openSurfacePanel() : undefined,
-					exportText: this.dataFiles ? (defaultName, content) => this.dataFiles!.exportText(defaultName, content) : undefined,
+					// The card supplies sessionId + title; only the view knows the
+					// project, so it enriches meta here (#13 P0 export capture).
+					exportText: this.dataFiles
+						? (defaultName, content, meta) =>
+								this.dataFiles!.exportText(defaultName, content, meta && { ...meta, ...(this.session?.projectId !== undefined ? { projectId: this.session.projectId } : {}) })
+						: undefined,
 				});
 			default:
 				return createElement(MessageRow, { message, actions: this.buildMessageActions(message), resolveImage: this.buildImageResolver() });

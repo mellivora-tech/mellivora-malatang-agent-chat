@@ -33,6 +33,7 @@ import type { ISkillsBridge } from '../services/skills/common/skills.js';
 import { EnvironmentsService } from '../services/environments/browser/environmentsService.js';
 import type { IEnvironmentsBridge } from '../services/environments/common/environments.js';
 import type { IDataFilesBridge } from '../services/dataFiles/common/dataFiles.js';
+import type { IArtifactsBridge } from '../services/artifacts/common/artifacts.js';
 
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
@@ -46,6 +47,8 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly skills?: ISkillsBridge;
 		readonly environments?: IEnvironmentsBridge;
 		readonly dataFiles?: IDataFilesBridge;
+		/** #13 P0: exposed for the P1 artifacts panel; unused by the renderer this phase. */
+		readonly artifacts?: IArtifactsBridge;
 	};
 };
 

@@ -116,7 +116,9 @@ export function MigrationPreviewCard(props: IUiCardProps<IMigrationPreviewProps>
 			return;
 		}
 		const name = `migration-${(preview.targetTable ?? 'target').replaceAll(/[^\w.-]+/g, '-')}.sql`;
-		void exportText(name, compiledSql).then(path => {
+		// No sessionId = no index record (never fabricate one); the export itself still runs.
+		const meta = sessionId !== undefined ? { sessionId, title: props.message.ui?.title ?? name } : undefined;
+		void exportText(name, compiledSql, meta).then(path => {
 			if (path !== undefined) {
 				setExportedPath(path);
 			}

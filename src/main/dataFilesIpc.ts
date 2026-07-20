@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { dialog, ipcMain } from 'electron';
+import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve, sep } from 'node:path';
-import type { FileTableResult, IPickedDataFile } from '../sessions/services/dataFiles/common/dataFiles.js';
+import type { FileTableResult, IExportTextMeta, IPickedDataFile } from '../sessions/services/dataFiles/common/dataFiles.js';
+import { appendArtifact } from './artifactsStorage.js';
 import { parseCsv, toTable } from './dataFiles.js';
 
 /** csv single-sheet placeholder name. */
@@ -67,7 +69,7 @@ export function registerDataFilesIpc(dataRoot: string): void {
 	// Save a renderer-produced text artifact (compiled migration .sql etc.) to a
 	// user-chosen location. The destination always comes from the save dialog —
 	// the renderer supplies content and a suggested NAME, never a path.
-	ipcMain.handle('dataFiles:exportText', async (_event, defaultName: string, content: string): Promise<string | undefined> => {
+	ipcMain.handle('dataFiles:exportText', async (_event, defaultName: string, content: string, meta?: IExportTextMeta): Promise<string | undefined> => {
 		if (typeof defaultName !== 'string' || typeof content !== 'string') {
 			return undefined;
 		}
@@ -75,6 +77,7 @@ export function registerDataFilesIpc(dataRoot: string): void {
 		const seeded = process.env['MELLIVORA_SAVE_FILE'];
 		if (seeded) {
 			await writeFile(seeded, content, 'utf8');
+			await recordExportArtifact(dataRoot, seeded, meta);
 			return seeded;
 		}
 		const result = await dialog.showSaveDialog({
@@ -88,8 +91,36 @@ export function registerDataFilesIpc(dataRoot: string): void {
 			return undefined;
 		}
 		await writeFile(result.filePath, content, 'utf8');
+		await recordExportArtifact(dataRoot, result.filePath, meta);
 		return result.filePath;
 	});
+}
+
+/**
+ * Artifact capture (#13 P0), best-effort: the export succeeded — index trouble
+ * must not turn it into an error. No meta (an older caller, or no session
+ * context) = no record; never fabricate one. The id hashes the destination so
+ * re-exporting to the same path updates one entry instead of piling up. Known
+ * limitation: export paths live outside the data root, so the index is their
+ * ONLY record — a rebuild loses them.
+ */
+async function recordExportArtifact(dataRoot: string, path: string, meta: IExportTextMeta | undefined): Promise<void> {
+	if (!meta || typeof meta.sessionId !== 'string' || typeof meta.title !== 'string') {
+		return;
+	}
+	try {
+		await appendArtifact(dataRoot, {
+			id: `${meta.sessionId}:export:${createHash('sha256').update(path).digest('hex').slice(0, 16)}`,
+			kind: 'export',
+			sessionId: meta.sessionId,
+			...(typeof meta.projectId === 'string' ? { projectId: meta.projectId } : {}),
+			title: meta.title,
+			createdAt: new Date().toISOString(),
+			payload: { type: 'export', path },
+		});
+	} catch (error) {
+		console.error('[artifacts] capture on export failed', error);
+	}
 }
 
 async function readTable(path: string, sheet?: string): Promise<FileTableResult> {

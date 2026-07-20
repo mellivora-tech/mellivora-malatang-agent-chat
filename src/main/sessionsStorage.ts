@@ -16,6 +16,7 @@ import type {
 	ISessionSnapshotMessage,
 	ISessionStateEntry,
 } from '../sessions/services/sessions/common/sessionsBridge.js';
+import { appendArtifact } from './artifactsStorage.js';
 
 const DEFAULT_STATUS_NEEDS_INPUT = 2;
 
@@ -84,6 +85,21 @@ export async function storeSessionTableCsv(root: string, ref: ISessionRef, title
 	const name = `${safe}-${hash}.csv`;
 	const file = join(dir, name);
 	await writeFile(file, csv, 'utf8');
+	// Artifact capture (#13 P0), best-effort: a broken index never fails the csv
+	// write. The id derives from the file name so rebuild regenerates it stably.
+	try {
+		await appendArtifact(root, {
+			id: `${ref.sessionId}:${name}`,
+			kind: 'table',
+			sessionId: ref.sessionId,
+			...(ref.projectId !== undefined ? { projectId: ref.projectId } : {}),
+			title,
+			createdAt: new Date().toISOString(),
+			payload: { type: 'media', path: file },
+		});
+	} catch (error) {
+		console.error('[artifacts] capture on table store failed', error);
+	}
 	return { path: file, name };
 }
 

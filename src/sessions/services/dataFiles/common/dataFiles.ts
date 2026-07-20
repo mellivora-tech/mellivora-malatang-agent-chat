@@ -31,6 +31,17 @@ export type FileTableResult =
 	/** #9 P1b: `message` may be an `[i18n:key|arg]` marker — display sites resolve it via localizeIpcMarker (main cannot localize; the locale lives in renderer storage). */
 	| { readonly ok: false; readonly message: string };
 
+/**
+ * Origin of an exported text artifact, for the artifacts index (#13 P0) — the
+ * saved path only exists there ("导出即失踪" fix). Optional end to end: without
+ * it the export still works, it just isn't recorded.
+ */
+export interface IExportTextMeta {
+	readonly sessionId: string;
+	readonly projectId?: string;
+	readonly title: string;
+}
+
 /** The shape exposed on `agentWindow.dataFiles` by the preload script. */
 export interface IDataFilesBridge {
 	/** OS file picker (csv/xlsx). Resolves undefined when cancelled. */
@@ -38,5 +49,5 @@ export interface IDataFilesBridge {
 	/** Parse one sheet of a previously PICKED file (main enforces that). */
 	readTable(path: string, sheet?: string): Promise<FileTableResult>;
 	/** Save-dialog + write for a renderer-produced text artifact (e.g. a compiled .sql). Resolves the saved path, or undefined when cancelled. */
-	exportText(defaultName: string, content: string): Promise<string | undefined>;
+	exportText(defaultName: string, content: string, meta?: IExportTextMeta): Promise<string | undefined>;
 }

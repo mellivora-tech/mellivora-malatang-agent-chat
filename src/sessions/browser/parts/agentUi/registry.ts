@@ -16,6 +16,7 @@
  */
 
 import type { ComponentType } from 'react';
+import type { IExportTextMeta } from '../../../services/dataFiles/common/dataFiles.js';
 import type { ISessionMessage } from '../../../services/sessions/common/session.js';
 import { parseMigrationPreviewProps } from '../../../services/sessions/common/uiComponents/migrationPreview.js';
 import type { ISessionMessageSender } from '../conversationView.js';
@@ -28,8 +29,8 @@ export interface IUiCardContext {
 	readonly sessionId: string | undefined;
 	readonly messageSender: ISessionMessageSender | undefined;
 	readonly onFocusComposer: () => void;
-	/** Save-dialog export for a card-produced text artifact (Tier 1: IPC, no model). Absent when the bridge isn't available. */
-	readonly exportText?: ((defaultName: string, content: string) => Promise<string | undefined>) | undefined;
+	/** Save-dialog export for a card-produced text artifact (Tier 1: IPC, no model). Absent when the bridge isn't available. `meta` records the export in the artifacts index (#13 P0) — omit it (e.g. no sessionId) to export without a record; the host fills in projectId. */
+	readonly exportText?: ((defaultName: string, content: string, meta?: IExportTextMeta) => Promise<string | undefined>) | undefined;
 	/** Open/focus the workbench-surface tab (#12 M4). Absent when the part service isn't wired. */
 	readonly openSurface?: (() => void) | undefined;
 }

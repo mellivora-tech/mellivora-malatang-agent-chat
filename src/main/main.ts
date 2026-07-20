@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAgentIpc } from './agentIpc.js';
+import { registerArtifactsIpc } from './artifactsIpc.js';
 import { agentLog } from './agent/observability/agentLog.js';
 import { registerGitIpc } from './gitIpc.js';
 import { registerSkillsIpc } from './skillsIpc.js';
@@ -90,6 +91,7 @@ app.whenReady().then(async () => {
 	registerSkillsIpc(dataRoot);
 	registerEnvironmentsIpc(dataRoot);
 	registerDataFilesIpc(dataRoot);
+	registerArtifactsIpc(dataRoot);
 	await createWindow();
 });
 // Flush any buffered agent logs before the process exits.

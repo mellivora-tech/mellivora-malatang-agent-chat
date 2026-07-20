@@ -19,7 +19,8 @@ import type { IProjectInput, IProjectsBridge, IRemoteRepoInput } from '../sessio
 import type { ISessionEntry, ISessionHeader, ISessionRef, ISessionsBridge } from '../sessions/services/sessions/common/sessionsBridge.js';
 import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/common/skills.js';
 import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
-import type { IDataFilesBridge } from '../sessions/services/dataFiles/common/dataFiles.js';
+import type { IDataFilesBridge, IExportTextMeta } from '../sessions/services/dataFiles/common/dataFiles.js';
+import type { IArtifactFilter, IArtifactsBridge } from '../sessions/services/artifacts/common/artifacts.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -94,7 +95,12 @@ const environments: IEnvironmentsBridge = {
 const dataFiles: IDataFilesBridge = {
 	pick: () => ipcRenderer.invoke('dataFiles:pick'),
 	readTable: (path: string, sheet?: string) => ipcRenderer.invoke('dataFiles:readTable', path, sheet),
-	exportText: (defaultName: string, content: string) => ipcRenderer.invoke('dataFiles:exportText', defaultName, content),
+	exportText: (defaultName: string, content: string, meta?: IExportTextMeta) => ipcRenderer.invoke('dataFiles:exportText', defaultName, content, meta),
+};
+
+const artifacts: IArtifactsBridge = {
+	list: (filter?: IArtifactFilter) => ipcRenderer.invoke('artifacts:list', filter),
+	rebuild: (projectId?: string) => ipcRenderer.invoke('artifacts:rebuild', projectId),
 };
 
 const git: IGitBridge = {
@@ -140,5 +146,6 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	skills,
 	environments,
 	dataFiles,
+	artifacts,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 });
