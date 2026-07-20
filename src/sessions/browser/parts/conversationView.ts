@@ -779,6 +779,7 @@ export class ConversationView extends Disposable {
 					sessionId: this.session?.sessionId,
 					messageSender: this.messageSender,
 					onFocusComposer: () => this.input.focus(),
+					openSurface: this.sessionsPartService ? () => this.sessionsPartService!.openSurfacePanel() : undefined,
 					exportText: this.dataFiles ? (defaultName, content) => this.dataFiles!.exportText(defaultName, content) : undefined,
 				});
 			default:

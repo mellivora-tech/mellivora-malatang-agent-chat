@@ -31,6 +31,9 @@ export interface ISessionsPartService {
 	showSidePane(): void;
 	/** Open the side pane on the data tab and run this query there. */
 	openDataBrowser(request: ISessionDataBrowse): void;
+	/** Chat → workbench surface: open/focus the surface tab (#12 M4); the side pane consumes it. */
+	readonly surfaceOpenRequest: ReturnType<typeof observableValue<number | undefined>>;
+	openSurfacePanel(): void;
 	/** Append structured reference text to the conversation composer. */
 	insertIntoComposer(text: string): void;
 	updateVisibleSessions(visible: readonly (IActiveSession | undefined)[], active: IActiveSession | undefined): void;
@@ -84,6 +87,13 @@ export class SessionsPartService implements ISessionsPartService {
 	openDataBrowser(request: ISessionDataBrowse): void {
 		this.showSidePane();
 		this.dataBrowseRequest.set(request);
+	}
+
+	readonly surfaceOpenRequest = observableValue<number | undefined>(undefined);
+
+	openSurfacePanel(): void {
+		this.showConversation(true);
+		this.surfaceOpenRequest.set(Date.now());
 	}
 
 	insertIntoComposer(text: string): void {

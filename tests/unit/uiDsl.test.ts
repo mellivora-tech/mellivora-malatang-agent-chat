@@ -157,3 +157,20 @@ test('foldSurface: circular references render a hole with an attributed error, n
 	assert.match(folded.errors.map(error => error.message).join('\n'), /circular reference/);
 	assert.ok(folded.root, 'the tree still materializes around the hole');
 });
+
+// --- M4: surface_patch component gate -------------------------------------------
+
+test('parseSurfacePatchProps: clean batches pass (default surface), lint violations reject with a structured explainer (M4)', async () => {
+	const { parseSurfacePatchProps, explainSurfacePatchProps } = await import('../../src/sessions/services/sessions/common/uiComponents/surfacePatch.js');
+	const clean = parseSurfacePatchProps({ statements: 'title = Text("hi")' });
+	assert.deepEqual(clean, { surface: 'main', statements: 'title = Text("hi")' });
+	// A later batch never re-declares root and may reference earlier skeletons —
+	// batch lint must NOT punish either.
+	const patch = parseSurfacePatchProps({ surface: 'main', statements: 'hint = Text("已应用")' });
+	assert.ok(patch);
+	// Statement-level violations reject, and the explainer carries parser hints.
+	assert.equal(parseSurfacePatchProps({ statements: 'x = Chart([1])' }), undefined);
+	assert.match(explainSurfacePatchProps({ statements: 'x = Chart([1])' }) ?? '', /unknown component "Chart"/);
+	assert.equal(parseSurfacePatchProps({ statements: '' }), undefined);
+	assert.equal(parseSurfacePatchProps({ surface: 'bad id!', statements: 'a = Text("x")' }), undefined);
+});

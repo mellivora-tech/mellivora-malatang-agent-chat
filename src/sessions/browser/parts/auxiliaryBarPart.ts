@@ -7,6 +7,7 @@ import { localize } from '../../common/i18n/i18n.js';
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
+import { SurfaceView } from './surfaceView.js';
 import { DataBrowserView } from '../../contrib/data/browser/dataBrowserView.js';
 import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
 import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
@@ -21,7 +22,7 @@ export interface IAuxiliaryBarPartOptions {
 	readonly dataFiles?: IDataFilesBridge;
 }
 
-type AuxiliaryTabKind = 'review' | 'data' | 'terminal' | 'browser';
+type AuxiliaryTabKind = 'review' | 'data' | 'surface' | 'terminal' | 'browser';
 
 const tabKinds: readonly {
 	readonly kind: AuxiliaryTabKind;
@@ -38,6 +39,11 @@ const tabKinds: readonly {
 		kind: 'data',
 		label: localize('aux.tab.data'),
 		icon: 'codicon-database',
+	},
+	{
+		kind: 'surface',
+		label: localize('aux.tab.surface'),
+		icon: 'codicon-window',
 	},
 	{
 		kind: 'terminal',
@@ -101,6 +107,16 @@ export class AuxiliaryBarPart extends Part {
 		}
 		// Chat → data browser: consume the request, open (or focus) the data tab,
 		// and hand the query to its view.
+		// Chat → workbench surface (#12 M4): open/focus the surface tab.
+		const surfaceRequest = this.options.sessionsPartService?.surfaceOpenRequest;
+		if (surfaceRequest) {
+			this._register(surfaceRequest.subscribe(() => {
+				if (surfaceRequest.get() !== undefined) {
+					surfaceRequest.set(undefined);
+					this.openTab('surface');
+				}
+			}));
+		}
 		const request = this.options.sessionsPartService?.dataBrowseRequest;
 		if (request) {
 			this._register(request.subscribe(() => {
@@ -204,6 +220,8 @@ export class AuxiliaryBarPart extends Part {
 					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 				}),
 			);
+		} else if (kind === 'surface') {
+			disposables.add(new SurfaceView(body, { ...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}) }));
 		} else if (kind === 'data') {
 			instance.dataView = new DataBrowserView(body, {
 				...(this.options.environmentsService ? { environmentsService: this.options.environmentsService } : {}),

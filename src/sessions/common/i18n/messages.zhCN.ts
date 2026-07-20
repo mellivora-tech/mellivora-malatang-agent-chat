@@ -491,6 +491,14 @@ export const zhCN = {
 	'appearance.importSeed': '导入',
 	'appearance.importPlaceholder': '粘贴种子 JSON…',
 	'appearance.importInvalid': '种子 JSON 无效',
+
+	// --- 工作台 surface（#12 M4）---
+	'aux.tab.surface': '工作台',
+	'surface.empty': '还没有工作台内容——agent 调用 surface_patch 后在这里呈现。',
+	'surface.open': '打开工作台',
+	'surface.patchSummary': '工作台已更新 · {0} 条语句',
+	'surface.hole': '未定义: {0}',
+	'surface.errorNote': '{0} 处语句未能渲染（详见运行日志）',
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

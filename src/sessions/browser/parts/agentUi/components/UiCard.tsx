@@ -16,6 +16,7 @@ export interface IUiCardHostProps {
 	readonly messageSender: ISessionMessageSender | undefined;
 	readonly onFocusComposer: () => void;
 	readonly exportText?: ((defaultName: string, content: string) => Promise<string | undefined>) | undefined;
+	readonly openSurface?: (() => void) | undefined;
 }
 
 /**
@@ -28,7 +29,7 @@ export interface IUiCardHostProps {
  * card is still a truthful one.
  */
 export function UiCard(props: IUiCardHostProps): JSX.Element {
-	const { message, sessionId, messageSender, onFocusComposer, exportText } = props;
+	const { message, sessionId, messageSender, onFocusComposer, exportText, openSurface } = props;
 	const ui = message.ui;
 
 	const entry = ui ? resolveUiComponent(ui.component) : undefined;
@@ -46,7 +47,7 @@ export function UiCard(props: IUiCardHostProps): JSX.Element {
 		);
 	}
 
-	const context: IUiCardContext = { sessionId, messageSender, onFocusComposer, exportText };
+	const context: IUiCardContext = { sessionId, messageSender, onFocusComposer, exportText, openSurface };
 	const Component = entry.Component;
 	return (
 		<section className="conversation-ui" data-message-id={message.id}>

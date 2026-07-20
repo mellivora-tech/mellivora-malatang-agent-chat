@@ -2229,3 +2229,29 @@ button.conversation-plan-header {
 	color: var(--vscode-agents-color-danger);
 	font-size: 12px;
 }
+
+/* surface_patch projection card (#12 M4): a light reference — the surface
+   panel is the interaction home; the stream keeps the audit trail. */
+.surface-patch-card {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-10);
+	padding: var(--vscode-agents-space-6) var(--vscode-agents-space-10);
+}
+
+.surface-patch-card-summary {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	min-width: 0;
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.surface-patch-card-names {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

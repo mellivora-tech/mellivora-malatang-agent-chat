@@ -20,6 +20,8 @@ import type { ISessionMessage } from '../../../services/sessions/common/session.
 import { parseMigrationPreviewProps } from '../../../services/sessions/common/uiComponents/migrationPreview.js';
 import type { ISessionMessageSender } from '../conversationView.js';
 import { MigrationPreviewCard } from './components/MigrationPreviewCard.js';
+import { parseSurfacePatchProps } from '../../../services/sessions/common/uiComponents/surfacePatch.js';
+import { SurfacePatchCard } from './components/SurfacePatchCard.js';
 
 /** Action surface handed to every ui card — the same bridge PlanCard uses. */
 export interface IUiCardContext {
@@ -28,6 +30,8 @@ export interface IUiCardContext {
 	readonly onFocusComposer: () => void;
 	/** Save-dialog export for a card-produced text artifact (Tier 1: IPC, no model). Absent when the bridge isn't available. */
 	readonly exportText?: ((defaultName: string, content: string) => Promise<string | undefined>) | undefined;
+	/** Open/focus the workbench-surface tab (#12 M4). Absent when the part service isn't wired. */
+	readonly openSurface?: (() => void) | undefined;
 }
 
 export interface IUiCardProps<P> {
@@ -49,6 +53,7 @@ function entry<P>(definition: IUiComponentEntry<P>): IUiComponentEntry<unknown> 
 
 const UI_COMPONENTS: Readonly<Record<string, IUiComponentEntry<unknown>>> = {
 	migration_preview: entry({ parseProps: parseMigrationPreviewProps, Component: MigrationPreviewCard }),
+	surface_patch: entry({ parseProps: parseSurfacePatchProps, Component: SurfacePatchCard }),
 };
 
 export function resolveUiComponent(name: string): IUiComponentEntry<unknown> | undefined {
