@@ -18,7 +18,8 @@
  * lands incrementally on top of this core.
  */
 
-export type HookEvent = 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'Stop' | 'SubagentStop' | 'PreCompact' | 'SessionStart' | 'SessionEnd';
+export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SubagentStop', 'PreCompact', 'SessionStart', 'SessionEnd'] as const;
+export type HookEvent = (typeof HOOK_EVENTS)[number];
 
 /** What a hook receives. Fields are event-specific; a hook reads only what its event carries. */
 export interface IHookInput {
