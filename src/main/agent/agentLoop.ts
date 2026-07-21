@@ -28,8 +28,15 @@ import {
 } from './compaction.js';
 import { createLoopGuard } from './loopGuard.js';
 import { isReplyVerifierEnabled } from './replyVerifier.js';
-import { HookRegistry, runHooks } from './hooks/hooks.js';
-import { createReplyVerifierHook, type IReplyVerifierData } from './hooks/builtinHooks.js';
+import { HookRegistry, runHooksUntilBlock } from './hooks/hooks.js';
+import {
+	createActionClaimNudgeHook,
+	createGroundingNudgeHook,
+	createReplyVerifierHook,
+	createStaleClaimNudgeHook,
+	createWalkthroughNudgeHook,
+	type IReplyVerifierData,
+} from './hooks/builtinHooks.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
 import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest, seedWorkDigestFromMessages, seedWorkDigestFromText } from './workDigest.js';
 import { executeToolUses } from './toolRunner.js';
@@ -52,43 +59,8 @@ const HARD_BRAKE_REMINDER =
  * but wrong "current code" quotes in real logs (2026-07-14). CC's counterpart
  * is the loop-exit verification nudge ("you cannot self-assign PARTIAL").
  */
-const GROUNDING_NUDGE =
-	'<system-reminder>Your reply quotes or describes code, but you made no tool calls in this run. The work digest carries only file NAMES from earlier runs — the file contents are no longer in your context, so code quoted from memory may be wrong. Re-read the relevant files now (read-only tools never need approval), verify every code-level claim against the actual source, then give your corrected answer. Ask the user only for runtime data the code cannot show.</system-reminder>';
-
-/**
- * Injected once when a reply asserts a connection/availability failure while
- * this run never touched a data-source tool. Observed failure (2026-07-14): an
- * earlier run's "connect ETIMEDOUT" rode the transcript as prose, the user
- * fixed the config, and the next run declared the database unreachable —
- * quoting a fabricated error — without ever retrying. Environment state is
- * transient; only a THIS-run tool call may ground such a claim.
- */
-const STALE_CLAIM_NUDGE =
-	'<system-reminder>Your reply claims a connection or availability failure, but you did not call any data-source tool in this run. An earlier failure may have been fixed since — configurations change between runs. Test it NOW: call query_data_source (or list_data_sources), report what actually happens, and quote only errors produced in this run. If the connection works, answer the user with real data instead.</system-reminder>';
-/** Connection-failure assertions that must be grounded by a this-run tool call (zh + en + raw error codes). */
-const CONNECTION_CLAIM =
-	/连不上|连接不上|无法连接|连接失败|连接超时|数据库.{0,8}不可用|cannot connect|can't connect|connection (?:failed|refused|timed out)|unreachable|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|UnknownHostException/i;
 /** The tools whose absence makes a connection claim ungrounded. */
 const DATA_SOURCE_TOOLS: ReadonlySet<string> = new Set(['query_data_source', 'list_data_sources']);
-
-/**
- * Injected once when a reply claims actions were PERFORMED (deployed, uploaded,
- * restarted, built…) while this run made zero tool calls. Observed failure
- * (2026-07-14): told "重新部署到开发环境", the model produced a full deploy
- * report — invented server label included — in 8 seconds with no tool use;
- * "重新" plus remembered earlier deploys read as "already done". Third member
- * of the ungrounded-claim family (code quotes, connection failures, and now
- * completed side effects — the most dangerous one).
- */
-const ACTION_CLAIM_NUDGE =
-	'<system-reminder>Your reply claims actions were performed (deploy / upload / restart / build …), but you made ZERO tool calls in this run — nothing was actually executed. Either perform the work NOW with your tools, or state plainly that it has NOT been done yet and what you would do. Never present remembered or planned work as completed.</system-reminder>';
-/** Completed-action assertions that must be grounded by a this-run tool call (zh + en). */
-const ACTION_CLAIM =
-	/已部署|部署完成|部署成功|部署结果|已上传|上传完成|上传成功|已重启|重启完成|重启成功|已执行|执行成功|编译成功|构建成功|已提交|提交成功|deployed successfully|upload(?:ed)? (?:complete|successful)|restarted successfully|build succeeded/i;
-
-/** Injected once when a file-changing run ends without a walkthrough — forces one. */
-const WALKTHROUGH_NUDGE =
-	'<system-reminder>You changed files in this task but have not recorded a walkthrough. Call write_walkthrough now with a short sectioned report — what changed (files) and how to verify it (verify) — then close with one short sentence. Do not repeat the edits; just summarize.</system-reminder>';
 
 /** Append a reminder to the model's view of the transcript without touching history. */
 function withReminder(messages: readonly IAgentMessage[], reminder: string): IAgentMessage[] {
@@ -179,14 +151,6 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// transcript; at most one verification (and one retry) per run.
 	const question = extractLatestUserText(initialMessages);
 	const verifierEnabled = !config.disableReplyVerifier && isReplyVerifierEnabled(process.env);
-	let verifierFired = false;
-	// Stop-event hooks (design docs/design/hooks): the reply verifier is the first
-	// interception migrated onto the hook subsystem. Its verdict rides the hook's
-	// `data` so this loop still emits the exact `reply_verifier` event.
-	const stopHooks = new HookRegistry();
-	if (verifierEnabled) {
-		stopHooks.register(createReplyVerifierHook({ client: config.modelClient, signal: () => signal }));
-	}
 	// Walkthrough nudge: if a run actually changed files but never wrote a
 	// walkthrough, force ONE hidden turn asking for it (the prompt's soft
 	// request is unreliable — models often just stop). Only when the tool is in
@@ -194,7 +158,6 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	const walkthroughToolAvailable = config.tools.some(tool => tool.name === 'write_walkthrough');
 	let filesChangedThisRun = false;
 	let walkthroughWritten = false;
-	let walkthroughNudged = false;
 	// Work digest: deterministically accumulate what this run touched (files
 	// read/changed + activity counts) and sink it at run end, so the next run's
 	// transcript opens knowing what was already explored (see workDigest.ts).
@@ -213,13 +176,33 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	// most once per run.
 	const seededDigestHasFiles = workDigest.filesRead.size + workDigest.filesEdited.size + workDigest.filesWritten.size > 0;
 	let anyToolCallThisRun = false;
-	let groundingNudged = false;
 	// Stale-claim nudge state: only meaningful when the session actually has
 	// data-source tools to test a connection claim with; at most once per run.
 	const dataSourceToolsAvailable = config.tools.some(tool => DATA_SOURCE_TOOLS.has(tool.name));
 	let dataSourceToolCalledThisRun = false;
-	let staleClaimNudged = false;
-	let actionClaimNudged = false;
+	// Stop-event hooks (design docs/design/hooks §7): the completed-branch
+	// interceptions — grounding / stale-claim / action-claim / reply-verifier /
+	// walkthrough — as registered Stop hooks, dispatched first-block-wins in this
+	// order. `firedStopHooks` is the once-per-run guard; each hook reads its
+	// run-state live through getters. Gated on the same static availability the
+	// old inline conditions used.
+	const firedStopHooks = new Set<string>();
+	const stopHooks = new HookRegistry();
+	if (seededDigestHasFiles) {
+		stopHooks.register(createGroundingNudgeHook({ seededDigestHasFiles, anyToolCall: () => anyToolCallThisRun }));
+	}
+	if (dataSourceToolsAvailable) {
+		stopHooks.register(createStaleClaimNudgeHook({ dataSourceToolsAvailable, dataSourceToolCalled: () => dataSourceToolCalledThisRun }));
+	}
+	if (config.tools.length > 0) {
+		stopHooks.register(createActionClaimNudgeHook({ toolsAvailable: config.tools.length > 0, anyToolCall: () => anyToolCallThisRun }));
+	}
+	if (verifierEnabled) {
+		stopHooks.register(createReplyVerifierHook({ client: config.modelClient, signal: () => signal }));
+	}
+	if (walkthroughToolAvailable) {
+		stopHooks.register(createWalkthroughNudgeHook({ walkthroughToolAvailable, filesChanged: () => filesChangedThisRun, walkthroughWritten: () => walkthroughWritten }));
+	}
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -472,68 +455,58 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		if (toolUses.length === 0) {
 			const reason = stopReason === 'refusal' ? 'refusal' : stopReason === 'max_tokens' ? 'max_output_tokens' : 'completed';
 
-			// Grounding nudge: a fenced code block in the reply of a run that never
-			// called a tool can only be reconstructed from digest memory — force one
-			// re-grounded turn BEFORE the verifier so the verifier judges the
-			// corrected answer. Deterministic; fires at most once per run.
-			if (reason === 'completed' && seededDigestHasFiles && !anyToolCallThisRun && !groundingNudged && assistantText.includes('```')) {
-				groundingNudged = true;
-				yield { type: 'grounding_nudge' };
-				messages.push({ role: 'user', content: [{ type: 'text', text: GROUNDING_NUDGE }] });
-				continue;
-			}
-
-			// Stale-claim nudge: a connection-failure assertion is only credible if a
-			// data-source tool produced it THIS run — otherwise force one real test.
-			// Deterministic; fires at most once per run, before the verifier so the
-			// verifier judges the grounded answer.
-			if (reason === 'completed' && dataSourceToolsAvailable && !dataSourceToolCalledThisRun && !staleClaimNudged && CONNECTION_CLAIM.test(assistantText)) {
-				staleClaimNudged = true;
-				yield { type: 'stale_claim_nudge' };
-				messages.push({ role: 'user', content: [{ type: 'text', text: STALE_CLAIM_NUDGE }] });
-				continue;
-			}
-
-			// Action-claim nudge: "I deployed/uploaded/restarted it" from a run that
-			// never called a tool is fabricated completion — force one turn to
-			// actually do the work or retract. Deterministic; at most once per run.
-			if (reason === 'completed' && config.tools.length > 0 && !anyToolCallThisRun && !actionClaimNudged && ACTION_CLAIM.test(assistantText)) {
-				actionClaimNudged = true;
-				yield { type: 'action_claim_nudge' };
-				messages.push({ role: 'user', content: [{ type: 'text', text: ACTION_CLAIM_NUDGE }] });
-				continue;
-			}
-
-			// Reply verifier: at the moment of a genuine submission, one cheap judge
-			// call checks the reply addresses the question. A 'fail' feeds the
-			// rejection back (hidden user message, CC Stop-hook style) and grants
-			// exactly one retry; 'error' is fail-open. Other stop reasons have
-			// their own handling and are never verified.
-			if (reason === 'completed' && verifierEnabled && !verifierFired && question !== undefined && assistantText.trim() !== '') {
-				verifierFired = true;
-				const stopOutcome = await runHooks(stopHooks.forEvent('Stop'), { event: 'Stop', question, answer: assistantText });
-				if (signal.aborted) {
-					return settleAbort();
+			// Stop-event hooks (design docs/design/hooks §7): the five completed-branch
+			// interceptions, dispatched FIRST-BLOCK-WINS in registration order (grounding,
+			// stale-claim, action-claim, reply-verifier, walkthrough). At most one fires
+			// per completed turn, then a retry; each fired/ran hook emits its own event,
+			// and `firedStopHooks` enforces once-per-run.
+			if (reason === 'completed') {
+				const eligible = stopHooks.forEvent('Stop').filter(hook => !firedStopHooks.has(hook.id));
+				if (eligible.length > 0) {
+					const outcome = await runHooksUntilBlock(eligible, { event: 'Stop', ...(question !== undefined ? { question } : {}), answer: assistantText });
+					if (signal.aborted) {
+						return settleAbort();
+					}
+					for (const result of outcome.results) {
+						switch (result.hookId) {
+							case 'builtin:grounding-nudge':
+								if (result.decision === 'block') {
+									firedStopHooks.add(result.hookId);
+									yield { type: 'grounding_nudge' };
+								}
+								break;
+							case 'builtin:stale-claim-nudge':
+								if (result.decision === 'block') {
+									firedStopHooks.add(result.hookId);
+									yield { type: 'stale_claim_nudge' };
+								}
+								break;
+							case 'builtin:action-claim-nudge':
+								if (result.decision === 'block') {
+									firedStopHooks.add(result.hookId);
+									yield { type: 'action_claim_nudge' };
+								}
+								break;
+							case 'builtin:walkthrough-nudge':
+								if (result.decision === 'block') {
+									firedStopHooks.add(result.hookId);
+								}
+								break;
+							case 'builtin:reply-verifier': {
+								if (result.data !== undefined) {
+									firedStopHooks.add(result.hookId);
+									const { verdict, reason: judgeReason } = result.data as IReplyVerifierData;
+									yield { type: 'reply_verifier', verdict, retried: verdict === 'fail', ...(judgeReason ? { reason: judgeReason } : {}) };
+								}
+								break;
+							}
+						}
+					}
+					if (outcome.decision === 'block' && outcome.reason !== undefined) {
+						messages.push({ role: 'user', content: [{ type: 'text', text: outcome.reason }] });
+						continue;
+					}
 				}
-				const verifierResult = stopOutcome.results.find(result => result.hookId === 'builtin:reply-verifier');
-				if (verifierResult?.data) {
-					const { verdict, reason: judgeReason } = verifierResult.data as IReplyVerifierData;
-					yield { type: 'reply_verifier', verdict, retried: verdict === 'fail', ...(judgeReason ? { reason: judgeReason } : {}) };
-				}
-				if (stopOutcome.decision === 'block' && stopOutcome.reason !== undefined) {
-					messages.push({ role: 'user', content: [{ type: 'text', text: stopOutcome.reason }] });
-					continue;
-				}
-			}
-
-			// Walkthrough nudge: a run that changed files but never wrote a
-			// walkthrough gets exactly one forced turn to produce one. Deterministic
-			// (based on the tools actually called), so it never relies on the model
-			// remembering the prompt's soft request.
-			if (reason === 'completed' && walkthroughToolAvailable && filesChangedThisRun && !walkthroughWritten && !walkthroughNudged) {
-				walkthroughNudged = true;
-				messages.push({ role: 'user', content: [{ type: 'text', text: WALKTHROUGH_NUDGE }] });
-				continue;
 			}
 
 			if (digestEnabled && digestWorkedThisRun) {

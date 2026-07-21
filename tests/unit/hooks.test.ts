@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { HookRegistry, runHooks, type IHook, type IHookDecision } from '../../src/main/agent/hooks/hooks.js';
+import { HookRegistry, runHooks, runHooksUntilBlock, type IHook, type IHookDecision } from '../../src/main/agent/hooks/hooks.js';
 import { createReplyVerifierHook } from '../../src/main/agent/hooks/builtinHooks.js';
 import type { IModelClient } from '../../src/main/agent/agentTypes.js';
 
@@ -89,6 +89,38 @@ test('HookRegistry.forEvent: filters by event and by tool matcher', () => {
 		registry.forEvent('PreToolUse', 'read_file').map(h => h.id),
 		['any'],
 		'the bash-only matcher is filtered out for a non-matching tool',
+	);
+});
+
+test('runHooksUntilBlock: stops at the first block; later hooks never run; results end at the blocker', async () => {
+	let cRan = false;
+	const c: IHook = {
+		id: 'c',
+		event: 'Stop',
+		run: () => {
+			cRan = true;
+			return { decision: 'allow' };
+		},
+	};
+	const outcome = await runHooksUntilBlock([fixed('a', { decision: 'allow' }), fixed('b', { decision: 'block', reason: 'stop-here' }), c], { event: 'Stop' });
+	assert.equal(outcome.decision, 'block');
+	assert.deepEqual(outcome.blockedBy, ['b']);
+	assert.equal(outcome.reason, 'stop-here');
+	assert.deepEqual(
+		outcome.results.map(r => r.hookId),
+		['a', 'b'],
+		'only hooks up to and including the blocker ran',
+	);
+	assert.equal(cRan, false, 'the hook after the blocker was never invoked');
+});
+
+test('runHooksUntilBlock: no block → allow, every hook ran (results in order)', async () => {
+	const outcome = await runHooksUntilBlock([fixed('a', { decision: 'allow' }), fixed('b', { decision: 'allow', additionalContext: 'ctx' })], { event: 'Stop' });
+	assert.equal(outcome.decision, 'allow');
+	assert.equal(outcome.additionalContext, 'ctx');
+	assert.deepEqual(
+		outcome.results.map(r => r.hookId),
+		['a', 'b'],
 	);
 });
 

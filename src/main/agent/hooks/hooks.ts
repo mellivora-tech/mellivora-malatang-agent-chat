@@ -166,3 +166,47 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 		...(modified ? { modifiedInput: currentInput } : {}),
 	};
 }
+
+/**
+ * First-block-wins dispatch: run hooks in order and STOP at the first block,
+ * returning its reason. This is the Stop/PreToolUse semantics — the loop's
+ * hardcoded nudges fired at most one per completed turn (first match, then
+ * retry), and PreToolUse denies on the first refusal. `results` holds every
+ * hook evaluated up to and including the blocker, so the loop can emit the
+ * observability event of each hook that actually ran. fail-open on throw.
+ */
+export async function runHooksUntilBlock(hooks: readonly IHook[], input: IHookInput): Promise<IHookOutcome> {
+	const contexts: string[] = [];
+	const results: IHookResult[] = [];
+
+	for (const hook of hooks) {
+		let decision: IHookDecision;
+		try {
+			decision = await hook.run(input);
+		} catch {
+			continue; // fail-open.
+		}
+		results.push({
+			hookId: hook.id,
+			decision: decision.decision,
+			...(decision.note !== undefined ? { note: decision.note } : {}),
+			...(decision.data !== undefined ? { data: decision.data } : {}),
+		});
+		if (decision.additionalContext) {
+			contexts.push(decision.additionalContext);
+		}
+		if (decision.decision === 'block') {
+			const context = contexts.length > 0 ? contexts.join('\n') : undefined;
+			return {
+				decision: 'block',
+				blockedBy: [hook.id],
+				results,
+				...(decision.reason !== undefined ? { reason: decision.reason } : {}),
+				...(context !== undefined ? { additionalContext: context } : {}),
+			};
+		}
+	}
+
+	const context = contexts.length > 0 ? contexts.join('\n') : undefined;
+	return { decision: 'allow', results, ...(context !== undefined ? { additionalContext: context } : {}) };
+}
