@@ -25,6 +25,7 @@ import { createSshTools, type ISshServer } from './agent/tools/sshTool.js';
 import { createModelClient } from './agent/createModelClient.js';
 import { fetchCodingQuota, isQuotaExhaustedError, supportsCodingQuota } from './codingQuota.js';
 import { createSpawnAgentTool } from './agent/tools/spawnAgentTool.js';
+import { loadUserHooks } from './agent/hooks/userHookLoader.js';
 import { generateSessionTitle } from './agent/sessionTitle.js';
 import { getCredential } from './credentialStorage.js';
 import { createSafeStorageCipher } from './secretCipher.js';
@@ -419,6 +420,12 @@ export function registerAgentIpc(dataRoot: string): void {
 					accepted: anchor !== undefined,
 				});
 			}
+			// User-configured hooks (design §10 M3): GLOBAL config only for now
+			// (~/.mellivora/hooks.json — always trusted). Project hooks and their
+			// approval prompt arrive with the settings UI; loadUserHooks already
+			// gates them, so wiring a projectDir later is additive.
+			const { hooks: userHooks } = await loadUserHooks({ globalDir: dataRoot });
+
 			const loop = runAgentLoop(messages, {
 				system,
 				systemBreakdown,
@@ -426,6 +433,7 @@ export function registerAgentIpc(dataRoot: string): void {
 				modelClient,
 				permissionGate: createGateForMode(mode, requestApproval),
 				signal: controller.signal,
+				...(userHooks.length > 0 ? { userHooks } : {}),
 				// Top-level run: quota/rate exhaustion freezes resumable (#19 缺陷 2).
 				pauseOnExhaustion: { quotaHit: () => quotaError?.message },
 				// No configured context window → compaction stays off (never guessed).

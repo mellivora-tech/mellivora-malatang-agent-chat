@@ -10,6 +10,7 @@ import { runAgentLoop } from '../../src/main/agent/agentLoop.js';
 import { allowAllPermissionGate, createApprovalPermissionGate, defineTool, toolSpec } from '../../src/main/agent/agentTools.js';
 import { createScriptedModelClient } from '../../src/main/agent/scriptedModelClient.js';
 import type { IAgentEvent, IAgentMessage, IAgentTerminal, IModelClient, IModelRequest, IModelStreamEvent } from '../../src/main/agent/agentTypes.js';
+import type { IHook } from '../../src/main/agent/hooks/hooks.js';
 
 async function drive(loop: AsyncGenerator<IAgentEvent, IAgentTerminal>): Promise<{ events: IAgentEvent[]; terminal: IAgentTerminal }> {
 	const events: IAgentEvent[] = [];
@@ -452,6 +453,22 @@ test('reply verifier: a failed judgment feeds back and grants exactly one retry'
 
 	const replies = events.filter(event => event.type === 'assistant_message');
 	assert.equal(replies.length, 2, 'both attempts streamed as assistant messages');
+});
+
+test('user hooks: a wired Stop hook blocks and forces one retry, then is guarded (fires once, no spin)', async () => {
+	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
+	const { client, requests } = sequenceClient(['first answer', 'second answer']);
+	// This hook would block on EVERY call; only the once-per-run guard stops an infinite loop.
+	const stopHook: IHook = { id: 'user:redo', event: 'Stop', run: () => ({ decision: 'block', reason: 'user hook says redo' }) };
+
+	const { terminal } = await drive(
+		runAgentLoop([userMessage('hi')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate, userHooks: [stopHook] }),
+	);
+
+	assert.equal(terminal.turns, 2, 'the block forced exactly one retry');
+	assert.equal(requests.length, 2, 'the Stop hook fired once and was guarded — no spin');
+	assert.match(JSON.stringify(requests[1]!.messages), /user hook says redo/, 'the block reason was fed back as the retry');
+	delete process.env['MELLIVORA_REPLY_VERIFIER'];
 });
 
 test('reply verifier: a passing judgment changes nothing', async () => {
@@ -1286,7 +1303,10 @@ test('action-claim nudge: claiming completed actions with zero tool calls forces
 		);
 		assert.equal(terminal.reason, 'completed');
 		assert.ok(terminal.turns >= 3, `expected a forced turn, got ${terminal.turns}`);
-		assert.ok(events.some(event => event.type === 'action_claim_nudge'), 'an action_claim_nudge event was emitted');
+		assert.ok(
+			events.some(event => event.type === 'action_claim_nudge'),
+			'an action_claim_nudge event was emitted',
+		);
 		assert.match(lastUserText(requests[1]!), /ZERO tool calls/, 'the nudge reminder was injected');
 	} finally {
 		delete process.env['MELLIVORA_REPLY_VERIFIER'];
@@ -1296,13 +1316,8 @@ test('action-claim nudge: claiming completed actions with zero tool calls forces
 test('action-claim nudge: does NOT fire when the run used tools or made no completion claim', async () => {
 	process.env['MELLIVORA_REPLY_VERIFIER'] = 'off';
 	try {
-		const worked = capturingModelClient([
-			{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: {} }] },
-			{ emit: [{ type: 'text', text: '部署成功，服务已重启。' }] },
-		]);
-		const workedRun = await drive(
-			runAgentLoop([userMessage('部署')], { system: 's', tools: [readFileTool], modelClient: worked.client, permissionGate: allowAllPermissionGate }),
-		);
+		const worked = capturingModelClient([{ emit: [{ type: 'tool_use', id: 't1', name: 'read_file', input: {} }] }, { emit: [{ type: 'text', text: '部署成功，服务已重启。' }] }]);
+		const workedRun = await drive(runAgentLoop([userMessage('部署')], { system: 's', tools: [readFileTool], modelClient: worked.client, permissionGate: allowAllPermissionGate }));
 		assert.equal(workedRun.terminal.turns, 2, 'a grounded completion claim stops naturally');
 		assert.ok(!workedRun.events.some(event => event.type === 'action_claim_nudge'));
 

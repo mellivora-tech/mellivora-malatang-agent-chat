@@ -13,6 +13,8 @@
  * injected dependencies so the provider (Claude / GLM / …) plugs in at one seam.
  */
 
+import type { IHook } from './hooks/hooks.js';
+
 // ---------------------------------------------------------------------------
 // Message model — provider-agnostic, shaped like Anthropic content blocks.
 // tool_result blocks live inside a `user` message (same as the Messages API).
@@ -209,7 +211,15 @@ export type IAgentEvent =
 	/** The child model is streaming (thinking or writing its conclusion) — the liveness signal for a long single request, where tool events go quiet for minutes (#19 缺陷 1). `chars` is cumulative for the current phase within the turn. Same side channel as subagent_start. */
 	| { readonly type: 'subagent_progress'; readonly agentId: string; readonly phase: 'thinking' | 'replying'; readonly chars: number }
 	/** A spawn_agent child loop finished. Same side channel as subagent_start. */
-	| { readonly type: 'subagent_end'; readonly agentId: string; readonly reason: string; readonly turns: number; readonly toolCalls: number; readonly tokens: number; readonly outputChars: number }
+	| {
+			readonly type: 'subagent_end';
+			readonly agentId: string;
+			readonly reason: string;
+			readonly turns: number;
+			readonly toolCalls: number;
+			readonly tokens: number;
+			readonly outputChars: number;
+	  }
 	/** Mid-execution progress for a long-running tool call (e.g. an SFTP upload) — the work panel live-updates the open step. Same side channel as subagent events. */
 	| { readonly type: 'tool_progress'; readonly toolUseId: string; readonly name: string; readonly note: string }
 	/** The reply asserted a connection failure without any this-run data-source call; one forced real test follows. The renderer may ignore it. */
@@ -308,6 +318,13 @@ export interface IAgentRunConfig {
 	 * dig further itself), so a topical-relevance retry buys nothing but latency.
 	 */
 	readonly disableReplyVerifier?: boolean;
+	/**
+	 * User-configured hooks (design docs/design/hooks §10 M3), already loaded and
+	 * trust-gated by the caller. They register AFTER the built-in hooks (§4 — the
+	 * built-ins are the safety/correctness floor). Only hooks for events with a
+	 * live dispatch point (Stop, PreToolUse) fire today.
+	 */
+	readonly userHooks?: readonly IHook[];
 	/**
 	 * Marks a TOP-LEVEL pausable run (#19 缺陷 2): quota/rate exhaustion
 	 * returns a 'paused' terminal with the frozen transcript instead of dying.

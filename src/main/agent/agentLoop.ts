@@ -223,6 +223,16 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	if (spawnAgentAvailable && isFanOutNudgeEnabled(process.env)) {
 		preToolHooks.push(createFanOutNudgeHook({ streak: () => singleExploreStreak, spawnAvailable: true }));
 	}
+	// User hooks register AFTER the built-ins (§4: built-ins are the safety floor).
+	// Only Stop and PreToolUse have live dispatch points today; hooks for other
+	// events are inert until those fire points land.
+	for (const hook of config.userHooks ?? []) {
+		if (hook.event === 'Stop') {
+			stopHooks.register(hook);
+		} else if (hook.event === 'PreToolUse') {
+			preToolHooks.push(hook);
+		}
+	}
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
 	let lastPrunedResults = 0;
@@ -520,6 +530,14 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 								}
 								break;
 							}
+							default:
+								// A user hook: guard on block so it fires at most once per run (a
+								// re-blocking hook must not spin the loop). Its reason rides the
+								// pushed retry message below.
+								if (result.decision === 'block') {
+									firedStopHooks.add(result.hookId);
+								}
+								break;
 						}
 					}
 					if (outcome.decision === 'block' && outcome.reason !== undefined) {
