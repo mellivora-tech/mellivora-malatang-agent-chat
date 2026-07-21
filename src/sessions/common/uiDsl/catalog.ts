@@ -105,6 +105,14 @@ export const SMOKE_CATALOG: readonly IComponentSpec[] = [
 		],
 	},
 	{
+		name: 'Code',
+		doc: 'A monospace code / snippet block for exportable artifacts (SQL, scripts). Read-only display; export/run go through a Button Action.',
+		args: [
+			{ name: 'content', type: { kind: 'string' }, doc: 'the code text (use \\n for line breaks)' },
+			{ name: 'language', type: { kind: 'string' }, optional: true, doc: 'a language tag shown as a label, e.g. "sql" / "python"' },
+		],
+	},
+	{
 		name: 'TextField',
 		doc: 'Single-line input.',
 		args: [

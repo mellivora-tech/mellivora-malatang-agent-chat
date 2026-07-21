@@ -190,6 +190,17 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 				const className = variant === 'title' ? 'surface-text-title' : variant === 'caption' ? 'surface-text-caption' : 'surface-text-body';
 				return <div className={className}>{asText(literal(node.args[0]))}</div>;
 			}
+			case 'Code': {
+				const language = asText(literal(node.args[1]));
+				return (
+					<div className="surface-code">
+						{language !== '' ? <div className="surface-code-lang">{language}</div> : null}
+						<pre className="surface-code-body">
+							<code>{asText(literal(node.args[0]))}</code>
+						</pre>
+					</div>
+				);
+			}
 			case 'Table': {
 				const columns = node.args[0]?.kind === 'array' ? node.args[0].items : [];
 				const rows = node.args[1]?.kind === 'array' ? node.args[1].items : [];

@@ -55,11 +55,13 @@ async function seedSession(dataDir: string): Promise<void> {
 	await writeFile(join(dataDir, 'sessions', 'surface-sess.jsonl'), `${lines.join('\n')}\n`, 'utf8');
 }
 
-// M5 Q-D: a Table carrying @Editable / @Validate caps — data_preview reproduced
-// with atoms + capabilities, no bespoke component.
+// M5 Q-D + Code atom: an editable/validated Table (data_preview) alongside an
+// exportable Code artifact reviewed via a Button Action (artifact_review). Both
+// scenarios reproduced with atoms + capabilities — no bespoke component.
 const CAP_BATCH = [
-	'root = Stack([tbl, apply])',
+	'root = Stack([tbl, sql, apply])',
 	'tbl = Table(["字段", "金额"], [["order_no", "128"], ["amt", "0"]], [@Editable("金额"), @Validate("金额", "^[0-9]+$", "金额需为数字")])',
+	'sql = Code("INSERT INTO orders SELECT * FROM staging", "sql")',
 	'apply = Button("导出", Action([@ToAssistant("按当前映射导出")]))',
 ].join('\n');
 
@@ -100,6 +102,10 @@ test('surface caps: @Editable renders cell inputs, @Validate highlights invalid 
 
 		await page.locator('.surface-patch-card button').first().click();
 		await page.waitForSelector('.surface-view');
+
+		// The Code artifact renders as a read-only monospace block with its language label.
+		await expect(page.locator('.surface-code')).toContainText('INSERT INTO orders');
+		await expect(page.locator('.surface-code-lang')).toHaveText('sql');
 
 		// The 金额 column is editable — two cell inputs; 字段 column is static text.
 		await expect(page.locator('.surface-table .surface-cell-input')).toHaveCount(2);

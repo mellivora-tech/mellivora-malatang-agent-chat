@@ -505,6 +505,34 @@
 	border-color: var(--vscode-agents-color-danger);
 }
 
+/* Code atom (design §2.5): read-only monospace artifact block. */
+.surface-code {
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+	border-radius: var(--vscode-agents-radius-control);
+	overflow: hidden;
+}
+
+.surface-code-lang {
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-8);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label2);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.surface-code-body {
+	margin: 0;
+	padding: var(--vscode-agents-space-8);
+	overflow-x: auto;
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-text-primary);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: 1.5;
+	white-space: pre;
+}
+
 .surface-field {
 	display: flex;
 	align-items: center;

@@ -42,7 +42,7 @@ step        := Set($var, expr) | Run(tool, args) | Reset($var) | ToAssistant(tex
 ## 2.5 词表海拔（2026-07-20 修正，用户确认）
 
 ```
-原子（语言词表）      Stack / Text / Table / Select / Button / Code(待补) …——三家共识的 18–29 目录
+原子（语言词表）      Stack / Text / Table / Select / Button / Code …——三家共识的 18–29 目录
 机制组件（词表条目）   原子拼不出的交互机制，机制内建（首个：field_mapping 拖线画布）
 场景卡（已废弃）      migration_preview——业务名词烤进组件，P1c 已判死
 ```
@@ -203,4 +203,8 @@ Q-D 能力属性层已按 §8.1–8.7 实现，`npm run verify` 除既有环境�
 - **解析/校验**：`parser.ts` 新增 `DslValue.cap`，`parseValue` 遇前导 `@` 走 cap 分支（Action 内核零冲突复用）；`validateCap` 按 `allow` + 位置 ABI + 类型逐参校验，结构化 hint 回喂（`@Frobnicate 不允许` / `@Validate takes 3` / `argument 0 (target): expected a "string"`）。违规语句照常单条丢弃、其余渲染。
 - **物化 + 渲染**：`fold.ts` 加 `SurfaceValue.cap`；`SurfacePanel.tsx` 的 Table 读第三参 caps → `@Editable` 列渲染 `.surface-cell-input` 就地输入、`@Validate` 列正则不匹配加 `.surface-cell-invalid`（danger 描边）+ title=hint（非阻断）。编辑态按 `表名.列名[行]` 键入 formState，`@ToAssistant` 快照携带编辑值 + `# invalid …` 行（含用户未触碰但原值即非法的单元格）。坏正则降级为"有效"（不误伤）。
 
-**data_preview 第一验证场景达成**：编辑 + 校验用 `Table + @Editable + @Validate` 复现，零新组件。**M5 未竟**：`Code` 原子、`field_mapping` 机制组件（@xyflow）、`migration_preview` 报废、smoke harness 换真实词表复测——见 §6 M5 行。
+**data_preview 第一验证场景达成**：编辑 + 校验用 `Table + @Editable + @Validate` 复现，零新组件。
+
+**（2026-07-21 续）`Code` 原子 + artifact_review 第二验证场景达成**：`Code(content, language?)` 进目录（同源，renderer `.surface-code` 只读等宽块 + 语言标签）；artifact_review = `Stack([Text 统计, Code, Button(Action([@Run 导出, @ToAssistant 授权执行]))])` 纯原子组合复现，**零专用组件**（单测锁定 + e2e 渲染断言）。至此**组合性双向证毕**：data_preview 靠"增强"（能力属性）、artifact_review 靠"组合"（原子+Action），§8.1 判定线两侧各有实证。
+
+**M5 未竟**：`field_mapping` 机制组件（@xyflow 拖线画布，M5 主体量）、`migration_preview` 报废、smoke harness 换真实词表复测——见 §6 M5 行。

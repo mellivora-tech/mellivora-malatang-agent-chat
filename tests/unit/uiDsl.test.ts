@@ -177,6 +177,35 @@ test('foldSurface materializes caps onto the resolved Table node so the renderer
 	assert.equal(caps.items![1]!.args![2]!.value, '需为数字', 'the @Validate hint survives the fold');
 });
 
+test('Code atom parses and is documented same-source (M5 atom completion)', () => {
+	const program = parse(['root = Stack([snippet])', 'snippet = Code("SELECT * FROM orders", "sql")'].join('\n'));
+	assert.deepEqual(program.errors, []);
+	const snippet = program.statements.get('snippet')!.value as { component: string; args: readonly { value?: unknown }[] };
+	assert.equal(snippet.component, 'Code');
+	assert.equal(snippet.args[0]!.value, 'SELECT * FROM orders');
+	assert.equal(snippet.args[1]!.value, 'sql');
+	// language is optional.
+	const bare = parse(['root = Stack([s])', 's = Code("echo hi")'].join('\n'));
+	assert.deepEqual(bare.errors, []);
+	assert.match(generateDslPrompt(), /Code\(content, language\?\)/);
+});
+
+test('artifact_review composes from atoms alone — Code + Text stats + Button Action, zero bespoke component (M5 §8.6)', () => {
+	// The second verification scenario: an exportable artifact reviewed and
+	// authorized purely by composition — @Run exports locally, @ToAssistant asks
+	// to authorize execution. No component named after the business.
+	const program = parse(
+		[
+			'root = Stack([summary, sql, actions])',
+			'summary = Text("将写入 orders 表 128 行", "body")',
+			'sql = Code("INSERT INTO orders SELECT * FROM staging", "sql")',
+			'actions = Button("导出并授权执行", Action([@Run("export_sql"), @ToAssistant("已复核，授权执行这段 SQL")]))',
+		].join('\n'),
+	);
+	assert.deepEqual(program.errors, []);
+	assert.equal(statementYield(program).valid, 4);
+});
+
 // --- M3: Autocloser / incremental / fold ----------------------------------------
 
 test('autocloseFragment: open string and bracket stack close in order; dangling names drop (M3)', async () => {
