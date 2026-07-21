@@ -17,6 +17,8 @@ import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstr
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createLanguageServerManager } from './agent/lsp/languageServerManager.js';
 import { createDataSourceTools, type IQueryableSource } from './agent/tools/dataSourceTools.js';
+import { createElasticsearchTools, type IElasticsearchQueryableSource } from './agent/tools/elasticsearchTools.js';
+import type { IElasticsearchCoordinates } from '../sessions/services/environments/common/environments.js';
 import { createExecuteDataSourceTool } from './agent/tools/executeDataSourceTool.js';
 import { isEffectivelyWritable } from '../sessions/services/environments/common/environments.js';
 import { createRenderDataTool } from './agent/tools/renderDataTool.js';
@@ -215,6 +217,18 @@ export function registerAgentIpc(dataRoot: string): void {
 				writable: isEffectivelyWritable(envWritable.get(dataSource.environmentId) ?? false, dataSource.access),
 			}));
 		const dataSourceTools = querySources.length > 0 ? createDataSourceTools({ sources: querySources, getSecret: id => getCredential(dataRoot, id, cipher) }) : [];
+		// Elasticsearch sources get their own READ-ONLY query tool (#21 W3): ES is a
+		// first-class data-source kind but query_data_source is SQL-only, so ES
+		// diagnosis used to fall back to hand-rolled curl. query_elasticsearch fills it.
+		const esSources: IElasticsearchQueryableSource[] = (wsConfig?.dataSources ?? [])
+			.filter(dataSource => dataSource.kind === 'elasticsearch')
+			.map(dataSource => ({
+				id: dataSource.id,
+				label: dataSource.label,
+				environmentName: envName.get(dataSource.environmentId) ?? '',
+				coordinates: dataSource.coordinates as IElasticsearchCoordinates,
+			}));
+		const elasticsearchTools = createElasticsearchTools({ sources: esSources, getSecret: id => getCredential(dataRoot, id, cipher) });
 		// The write tool is mutation-class: omitted in plan mode (like bash/ssh);
 		// in every other mode the permission gate asks per statement.
 		const executeDataSourceTools =
@@ -272,7 +286,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		const renderDataTool = createRenderDataTool({
 			storeCsv: (title, csv) => storeSessionTableCsv(dataRoot, { sessionId: payload.sessionId, ...(payload.projectId ? { projectId: payload.projectId } : {}) }, title, csv),
 		});
-		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...executeDataSourceTools, ...sshTools, renderDataTool];
+		const baseTools: readonly IAgentTool[] = [...fileTools, ...dataSourceTools, ...executeDataSourceTools, ...elasticsearchTools, ...sshTools, renderDataTool];
 		// spawn_agent (in-process read-only sub-agent, see spawnAgentTool.ts) is
 		// added below, after the run logger exists to receive its telemetry —
 		// it is read-only, so every permission mode admits it.
