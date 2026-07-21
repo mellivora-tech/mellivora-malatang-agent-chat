@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ACTION_STEPS, type ActionStepName, type ArgType, type IComponentSpec } from './catalog.js';
+import { ACTION_STEPS, CAP_SPECS, type ActionStepName, type ArgType, type CapName, type IComponentSpec } from './catalog.js';
+
+const CAP_BY_NAME = new Map(CAP_SPECS.map(cap => [cap.name, cap]));
 
 /**
  * The line-DSL parser (#12 M2, design §2): statements split on lines (a line
@@ -20,7 +22,8 @@ export type DslValue =
 	| { readonly kind: 'state'; readonly name: string }
 	| { readonly kind: 'array'; readonly items: readonly DslValue[] }
 	| { readonly kind: 'component'; readonly component: string; readonly args: readonly DslValue[] }
-	| { readonly kind: 'action'; readonly steps: readonly IDslActionStep[] };
+	| { readonly kind: 'action'; readonly steps: readonly IDslActionStep[] }
+	| { readonly kind: 'cap'; readonly name: string; readonly args: readonly DslValue[] }; // @Cap(...) — a capability declaration (design §8)
 
 export interface IDslActionStep {
 	readonly step: ActionStepName;
@@ -232,6 +235,29 @@ function parseValue(stream: TokenStream): DslValue | string {
 	if (token.kind === 'state') {
 		return { kind: 'state', name: token.text };
 	}
+	if (token.kind === 'step') {
+		// A `@Cap(...)` in value position (only reachable inside a capabilities
+		// array — Action parses its own steps and never delegates a leading @).
+		const args: DslValue[] = [];
+		if (stream.expectPunct('(')) {
+			if (!stream.expectPunct(')')) {
+				while (true) {
+					const arg = parseValue(stream);
+					if (typeof arg === 'string') {
+						return arg;
+					}
+					args.push(arg);
+					if (stream.expectPunct(')')) {
+						break;
+					}
+					if (!stream.expectPunct(',')) {
+						return `expected "," or ")" in @${token.text}(...)`;
+					}
+				}
+			}
+		}
+		return { kind: 'cap', name: token.text, args };
+	}
 	if (token.kind === 'punct' && token.text === '[') {
 		const items: DslValue[] = [];
 		if (stream.expectPunct(']')) {
@@ -283,7 +309,8 @@ function parseValue(stream: TokenStream): DslValue | string {
 		}
 		return { kind: 'ref', name: token.text };
 	}
-	return `unexpected token "${token.kind === 'punct' ? token.text : (token as { text?: string }).text ?? token.kind}"`;
+	// Only a stray punctuation token can reach here (string/number/state/step/ident all handled above).
+	return `unexpected token "${token.text}"`;
 }
 
 function parseAction(stream: TokenStream): DslValue | string {
@@ -357,6 +384,8 @@ function typeLabel(type: ArgType): string {
 			return 'an array of strings';
 		case 'cells':
 			return 'an array of rows (arrays of string/number/boolean/null)';
+		case 'capabilities':
+			return `an array of capability declarations (${type.allow.map(cap => `@${cap}(...)`).join(' / ')})`;
 	}
 }
 
@@ -383,14 +412,40 @@ function checkArg(value: DslValue, type: ArgType): string | undefined {
 			}
 			return undefined;
 		case 'cells':
-			if (
-				value.kind !== 'array' ||
-				value.items.some(row => row.kind !== 'array' || row.items.some(cell => cell.kind !== 'literal'))
-			) {
+			if (value.kind !== 'array' || value.items.some(row => row.kind !== 'array' || row.items.some(cell => cell.kind !== 'literal'))) {
+				return `expected ${typeLabel(type)}`;
+			}
+			return undefined;
+		case 'capabilities':
+			// Shape only here (array of caps); each cap's name/allow/arity is
+			// validated in validateComponent, where the hint can name the signature.
+			if (value.kind !== 'array' || value.items.some(item => item.kind !== 'cap')) {
 				return `expected ${typeLabel(type)}`;
 			}
 			return undefined;
 	}
+}
+
+/** Validate one `@Cap(...)` against CAP_SPECS and the slot's allow-list (positional ABI, same as components). */
+function validateCap(cap: Extract<DslValue, { kind: 'cap' }>, allow: readonly CapName[]): { message: string; hint?: string } | undefined {
+	if (!(allow as readonly string[]).includes(cap.name)) {
+		return { message: `capability "@${cap.name}" is not allowed here`, hint: `allowed: ${allow.map(name => '@' + name).join(', ')}` };
+	}
+	const spec = CAP_BY_NAME.get(cap.name as CapName)!;
+	const required = spec.args.filter(arg => !arg.optional).length;
+	if (cap.args.length < required || cap.args.length > spec.args.length) {
+		return {
+			message: `@${cap.name} takes ${required === spec.args.length ? required : `${required}-${spec.args.length}`} argument(s), got ${cap.args.length}`,
+			hint: `@${spec.name}(${spec.args.map(arg => arg.name + (arg.optional ? '?' : '')).join(', ')})`,
+		};
+	}
+	for (let index = 0; index < cap.args.length; index++) {
+		const problem = checkArg(cap.args[index]!, spec.args[index]!.type);
+		if (problem) {
+			return { message: `@${cap.name} argument ${index} (${spec.args[index]!.name}): ${problem}` };
+		}
+	}
+	return undefined;
 }
 
 /** Validate one component call (recursively, for inline calls) against the catalog. Returns error text or undefined. */
@@ -412,6 +467,16 @@ function validateComponent(value: Extract<DslValue, { kind: 'component' }>, byNa
 		const problem = checkArg(arg, spec_.type);
 		if (problem) {
 			return { message: `${value.component} argument ${index} (${spec_.name}): ${problem}` };
+		}
+		if (spec_.type.kind === 'capabilities' && arg.kind === 'array') {
+			for (const item of arg.items) {
+				if (item.kind === 'cap') {
+					const capProblem = validateCap(item, spec_.type.allow);
+					if (capProblem) {
+						return { message: `${value.component} argument ${index} (${spec_.name}): ${capProblem.message}`, ...(capProblem.hint ? { hint: capProblem.hint } : {}) };
+					}
+				}
+			}
 		}
 		if (arg.kind === 'component') {
 			const nested = validateComponent(arg, byName);
@@ -451,6 +516,10 @@ function collectRefs(value: DslValue, into: { refs: string[]; states: string[] }
 			for (const arg of step.args) {
 				collectRefs(arg, into);
 			}
+		}
+	} else if (value.kind === 'cap') {
+		for (const arg of value.args) {
+			collectRefs(arg, into);
 		}
 	}
 }
@@ -506,7 +575,12 @@ export function resolveProgram(statements: ReadonlyMap<string, IDslStatement>, e
 		collectRefs(statement.value, into);
 		for (const ref of into.refs) {
 			if (!statements.has(ref)) {
-				errors.push({ line: statement.line, statement: statement.name, message: `reference "${ref}" is never defined`, hint: 'every referenced name needs its own `name = ...` statement' });
+				errors.push({
+					line: statement.line,
+					statement: statement.name,
+					message: `reference "${ref}" is never defined`,
+					hint: 'every referenced name needs its own `name = ...` statement',
+				});
 			}
 		}
 		for (const state of into.states) {
@@ -578,7 +652,5 @@ export function statementYield(program: IDslProgram): { valid: number; attempts:
 
 /** Format errors the way the self-correction turn feeds them back. */
 export function formatErrors(errors: readonly IDslError[]): string {
-	return errors
-		.map(error => `- line ${error.line}${error.statement ? ` (${error.statement})` : ''}: ${error.message}${error.hint ? ` — hint: ${error.hint}` : ''}`)
-		.join('\n');
+	return errors.map(error => `- line ${error.line}${error.statement ? ` (${error.statement})` : ''}: ${error.message}${error.hint ? ` — hint: ${error.hint}` : ''}`).join('\n');
 }

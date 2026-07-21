@@ -33,10 +33,28 @@ export function resolveLocale(preference: LocalePreference): ResolvedLocale {
 	return 'zh-CN';
 }
 
+/** The locale the preload pinned from MELLIVORA_LOCALE (e2e harness) — the
+ *  reliable, cross-platform stand-in for 'system' when the OS/navigator can't
+ *  be trusted (macOS ignores Chromium's --lang for navigator.language). */
+function pinnedLocale(): ResolvedLocale | undefined {
+	const value = (globalThis as { agentWindow?: { locale?: unknown } }).agentWindow?.locale;
+	return value === 'zh-CN' || value === 'en-US' ? value : undefined;
+}
+
 /** Resolved once per process at module load (locale changes apply on reload,
  *  the same model the theme preference uses in practice for full restyles).
- *  Reads the raw preference directly so no UI module has to run first. */
+ *  Reads the raw preference directly so no UI module has to run first.
+ *
+ *  Order: the MELLIVORA_LOCALE pin outranks everything — it is a harness/dev
+ *  override, never set in production, and Chromium's localStorage is NOT
+ *  isolated by MELLIVORA_DATA_DIR, so a stale stored pref would otherwise leak
+ *  across e2e runs and defeat the pin. Absent the pin: stored preference, then
+ *  the OS. */
 function bootstrapLocale(): ResolvedLocale {
+	const pin = pinnedLocale();
+	if (pin) {
+		return pin;
+	}
 	try {
 		if (typeof localStorage !== 'undefined') {
 			const raw = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) ?? '{}') as Record<string, unknown>;

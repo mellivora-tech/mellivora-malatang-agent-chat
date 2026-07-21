@@ -23,9 +23,11 @@ import { ensureProjectsRoot, resolveDataRoot } from './projectsStorage.js';
 import { registerSessionsIpc } from './sessionsIpc.js';
 import { getInitialWindowBackgroundColor } from './windowTheme.js';
 
-// E2E locale pin (#9): Chromium's --lang drives navigator.language, which
-// resolveLocale('system') reads in the renderer — the harness sets
-// MELLIVORA_LOCALE so UI-string assertions never depend on the host OS.
+// E2E locale pin (#9): set Chromium's --lang (drives navigator.language on
+// Linux; a no-op for navigator.language on macOS). The RELIABLE path is the
+// preload crossing MELLIVORA_LOCALE to the renderer as agentWindow.locale, which
+// bootstrapLocale honors directly — so UI-string assertions never depend on the
+// host OS. This switch stays as Linux/Chromium-UI defense in depth.
 if (process.env['MELLIVORA_LOCALE']) {
 	app.commandLine.appendSwitch('lang', process.env['MELLIVORA_LOCALE']);
 }

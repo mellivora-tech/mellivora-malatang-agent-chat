@@ -16,7 +16,7 @@
 | Q-F 校验-提示词同源 | **Zod 式目录 → 同源生成校验器 + 系统提示词**，从"值得抄"升格为承重墙（API 层 JSON schema 校验被 DSL 绕开，防线在 parser 层重建且更强——schema/guidance 漂移结构性不可能） | 随 Q-A 定 |
 | Q-C 绑定与编辑态 | 响应式 `$variables`（声明即默认值、$binding 双向、依赖自动重算）；编辑态归 renderer，模型只在事件时刻拿 formState 快照 | 随 Q-A 定 |
 | Q-B 事件分档 | OpenUI Action 步骤模型：`@Set/@Run` 本地消化不上抛；`@ToAssistant` 回模型（自然语言 + formState 快照）——既有"原样执行"结构化确认 turn 即其载荷形态，平移 | 随 Q-A 定 |
-| Q-D 能力属性层 | 仍为原创设计；表达位置已定：机制归组件内建 + 原语上的能力属性声明。**具体词表/约束语法在 M5 前单独过一轮** | 部分开放 |
+| Q-D 能力属性层 | 仍为原创设计；表达位置已定：机制归组件内建 + 原语上的能力属性声明。**词表/约束语法草案见 §8，决议点待拍板（§8.7）** | 部分开放 → §8 提案 |
 | Q-H 迁移路径 | 信封留作语句流持久化载体；旧 props-JSON 卡走 legacy 渲染路径永不迁移；migration_preview 按 P1c 原计划报废 | 随 Q-A/Q-G 定 |
 
 **为什么这对组合互相成就**：行式 DSL 的增量编辑（改 20 条语句中的 2 条，token -85%）只有在持久 surface 上才有意义；反之 surface 需要 patch 协议——**DSL 语句本身就是 patch 协议**。
@@ -97,3 +97,110 @@ schema ──┬──▶ parser 的参数校验器（位置参数按键序解�
 2. parser + Autocloser 是真工程量——解析测试先行（fuzz 式截断用例）。
 3. 系统提示词增量（文法 + 目录文档）按 token 计费——同源生成器要带"精简模式"（只注入本会话注册的原语）。
 4. 审批卡在词表之外的原则不变（安全轴三家共同弱点，我们的既有原则无先例也无反例，保持）。
+
+## 8. Q-D 能力属性层设计（M5 前置 · 草案待拍板）
+
+> 2026-07-21 起草。§1 承诺"Q-D 词表/约束语法在 M5 前单独过一轮"，本节即此轮。Q-A/Q-G 是用户拍板，**Q-D 是原创设计（轴 3 结论：业界无现成答案）**，故本节是**提案**——决议点集中在末尾 §8.7，其余为随 Q-A/Q-B/Q-C/Q-F 推定的结构性结论。
+
+### 8.0 一句话
+
+**能力属性 = 挂在原语某个参数上的"能力声明"**，本体是一个复用 Action `@Step` 形态的 mini 构造器（`@Editable(...)` / `@Validate(...)`），进**同一 catalog spec 表**，同源驱动校验器 + 提示词。它让既有原子的既有结构"就地长出交互"，不新增组件——这正是 §2.5「data_preview 降级为原子+能力属性第一验证场景」的兑现物。
+
+### 8.1 判定线：能力属性 vs 机制组件（Q-D 的承重规则）
+
+三层海拔（§2.5）里最容易糊的一刀，就在"能力属性"与"机制组件"之间。判据一句话：
+
+> **交互产出的值能不能塞进原子的既有数据形状？** 能 → **能力属性**；产出的是一个原子结构里没有的**新结构** → **机制组件**。
+
+| 交互 | 产出 | 落点 |
+|---|---|---|
+| 单元格就地编辑 | 一个 cell 值（Table 既有形状内） | 能力属性 `@Editable` |
+| 校验高亮 | 一个 valid/invalid 标记（附着于既有 target） | 能力属性 `@Validate` |
+| 拖线把源字段连到目标字段 | 一对 mapping（**任何原子结构里都没有**） | 机制组件 `field_mapping`（内建） |
+
+这条线同时解释了为什么 `field_mapping` 必须是机制组件而非属性：配对关系是新结构，原子拼不出（轴 3 结论），机制只能内建。**能力属性只做"增强"，绝不"造结构"。**
+
+### 8.2 词表（M5 开局集：editable/validation 先行）
+
+严格照 §92 M5 排序（editable/validation 先，拖线其次）。开局只上两条，均有业界实证或明确旁路：
+
+| 能力 | 签名（位置参数 ABI） | 语义 | 实证 |
+|---|---|---|---|
+| `@Editable(target, placeholder?)` | target: 列头字符串；placeholder?: string | target 列单元格就地变输入框；**无 action，值进 formState**（Tier 0） | ChatKit `Text.editable`（轴 3 唯一实证）；砍掉 `autoFocus/autoSelect`（UX 抛光，later） |
+| `@Validate(target, pattern, hint)` | pattern: JS 正则源；hint: 违约文案 | target 列按正则校验；不匹配→**高亮 + hint，非阻断**；invalid target 进 formState 快照 | ChatKit 客户端原生校验（实证仅 `required?/pattern?`），我们加**自定义 hint**（ChatKit 没有）|
+
+> **落地细化（2026-07-21，草案 §8.2 的 `rule` 集收敛）**：草案给 `@Validate` 列的 `rule ∈ {pattern/range/oneOf/notNull}` 落地为**单一正则谓词**——理由：① ChatKit 唯一校验实证就是 `required?/pattern?`；② 正则是单 target 内自足的通用谓词（`required` = `.+`、枚举 = `a|b|c`），range 这类数值判等留 later 或用正则近似；③ 最关键——**避免引入嵌套 rule 构造器**（`range(0,999)` 会污染 parser 的 `ident(` = 组件调用假设），死守"处处位置参数 ABI"。`@Editable` 的 `required` 也并入校验轴（用 `@Validate(target, ".+", ...)`），使 `@Editable` 只管"可编辑"这一件事。
+
+保留位（不在 M5 开局，登记以固定语法走向）：`@Selectable(mode)`（行/单元格选中）、`@Reorderable`（拖排）——两者一旦触及"直接操纵"就逼近机制组件边界，届时用 §8.1 判定线复裁。
+
+### 8.3 同源接线（Q-F 承重墙的延伸）
+
+能力属性**不是**新语法，是 `catalog.ts` 里一个新 `ArgType` + 一张平行的 cap spec 表：
+
+```ts
+// ArgType 增一支
+| { readonly kind: 'capabilities'; readonly allow: readonly CapName[] }
+
+// 平行于 IComponentSpec 的 CAP_SPECS（同款位置参数 ABI + doc）
+// @Editable / @Validate 各一条；parser 按同一位置 ABI 校验其参数，
+// generateDslPrompt 只为"本会话注册原语实际 allow 的 cap"注入文档（§7.3 token diet 自然延伸）
+```
+
+于是 `Table` 长出可选第三参：
+
+```text
+Table(columns, rows, caps?)
+  caps?: [@Cap(...), ...] — allow: [Editable, Validate]
+```
+
+调用长这样（data_preview 第一验证场景，**零新组件**）：
+
+```text
+tbl = Table(
+  ["源字段", "目标字段", "金额"],
+  [["order_no", "order_id", 128], ["amt", "amount", 0]],
+  [@Editable("目标字段", required), @Validate("金额", range(0, 999999), "金额需为非负数")]
+)
+```
+
+`@Cap(...)` 的分词/递归下降与 `Action([@Set(...)])` **同一套内核**（parser 已有 `@Name(args)` 步骤解析）——所以 Q-D 的实现增量极小，主要是加两条 spec + 复用已存在的步骤解析器。这也是"能力属性挂在 Action 同款机制上"能成立的工程理由。
+
+### 8.4 事件归档（对齐 Q-B/Q-C）
+
+能力属性产出的一切都是 **Tier 0 本地**，与 §1 Q-C「编辑态归 renderer」严格一致：
+
+- `@Editable` 改动 → 写进按 target 键控的结构化 formState；**永不自动上抛模型**。
+- `@Validate` 结果（每 target 的 valid/invalid + hint）→ 同样进 formState。
+- 只有显式 `@ToAssistant` 才把 formState 快照（含**已编辑值 + 哪些 target invalid**）作为 `<form-state>` 回模型——模型**看得到** invalid，但从不亲自算校验。M4 已落地的"确认 turn 携 `<form-state>` 快照"直接复用，零新通道。
+
+### 8.5 1-based 防线 与 目标寻址
+
+- **优先按 name 寻址**（列头字符串 / 字段名），把 §3 的 0/1-based 火药桶从源头绕开——列本来就有名字，无须报索引。
+- 仅当 target 无名可用时才退回索引，此时该 cap 参数在 spec 层打 `zeroBased: true`，文档生成器自动写 "0-BASED" 警示（§3 已制度化的教训，cap 层白拿）。
+
+### 8.6 安全不变量（承接 §7.4）
+
+- 能力属性**不引入新信任边界**：cap 产出只进 formState，@ToAssistant 时作为 **untrusted 快照**回模型（ChatKit "treat action payloads as untrusted" 同款立场）。
+- **cap 不能声明"自动执行"**：执行永远走 `@Run(工具)` 且受既有审批闸——**审批卡仍在词表之外**（§7.4 原则不变）。
+- 复杂交互的逃生口是 **`@ToAssistant`（回模型），不是 ChatKit 式 client modal**：任何 cap 表达不干净的交互，降级为一个模型 turn，而非再造 cap——词表保持封闭、增长可控。
+
+> artifact_review 第二验证场景由此闭合：它 = 原子组合 + `Code` 原子 + Action 步骤（`@Run` 导出、`@ToAssistant` 授权执行），**一条 cap 都不需要**——反向证明"组合"与"增强"两条路各司其职，专用组件无处安放。
+
+### 8.7 决议点（2026-07-21 用户拍板：D1–D4 全部照提案通过，进入开发）
+
+1. **D1 · 跨字段校验**：✅ **不做**（`@Validate` 恒为单 target 谓词，跨字段一律 `@ToAssistant` 交模型）——照 ChatKit"复杂校验官方劝退"。
+2. **D2 · 目标寻址默认**：✅ **name-first、index 兜底**（§8.5）。此决定外溢到 field_mapping 端点寻址，一次定。
+3. **D3 · invalid 是否阻断 @ToAssistant**：✅ **只标注不阻断**（客户端原生、非阻断，"要不要带病提交"留给模型）。
+4. **D4 · 开局词表就两条**（`@Editable`/`@Validate`）：✅ 够 M5 两场景；`@Selectable/@Reorderable` 留保留位、触发时按 §8.1 复裁。
+
+> 实现落点（本轮）：`catalog.ts` 加 `ArgType.capabilities` + `CAP_SPECS`（同源）、`Table` 增 `caps?` 第三参；`parser.ts` 复用 Action `@Step` 内核解析 `@Cap(...)`、按 `allow` + 位置 ABI 校验；`fold.ts` 物化 cap 进 SurfaceValue；`SurfacePanel.tsx` 的 Table 渲染可编辑单元格 + 校验高亮，编辑态进 formState、@ToAssistant 快照携带。smoke harness 换真实词表复测留到 field_mapping 一并做（§92 M5 验收）。
+
+### 8.8 实现状态（2026-07-21 · ✅ Q-D 落地）
+
+Q-D 能力属性层已按 §8.1–8.7 实现，`npm run verify` 除既有环境级 locale 失败外全绿（单测 578 全绿，含 5 组 cap 新测；cap e2e 通过）：
+
+- **同源目录**：`ArgType.capabilities{allow}` + `CAP_SPECS`（`@Editable`/`@Validate`）落 `catalog.ts`；`generateDslPrompt` 只为注册原语 `allow` 的 cap 注入 CAPABILITIES 段 + EXAMPLE 3（token diet 延伸）。校验器与提示词同一张表 —— Q-F 漂移不可能扩到 cap 层。
+- **解析/校验**：`parser.ts` 新增 `DslValue.cap`，`parseValue` 遇前导 `@` 走 cap 分支（Action 内核零冲突复用）；`validateCap` 按 `allow` + 位置 ABI + 类型逐参校验，结构化 hint 回喂（`@Frobnicate 不允许` / `@Validate takes 3` / `argument 0 (target): expected a "string"`）。违规语句照常单条丢弃、其余渲染。
+- **物化 + 渲染**：`fold.ts` 加 `SurfaceValue.cap`；`SurfacePanel.tsx` 的 Table 读第三参 caps → `@Editable` 列渲染 `.surface-cell-input` 就地输入、`@Validate` 列正则不匹配加 `.surface-cell-invalid`（danger 描边）+ title=hint（非阻断）。编辑态按 `表名.列名[行]` 键入 formState，`@ToAssistant` 快照携带编辑值 + `# invalid …` 行（含用户未触碰但原值即非法的单元格）。坏正则降级为"有效"（不误伤）。
+
+**data_preview 第一验证场景达成**：编辑 + 校验用 `Table + @Editable + @Validate` 复现，零新组件。**M5 未竟**：`Code` 原子、`field_mapping` 机制组件（@xyflow）、`migration_preview` 报废、smoke harness 换真实词表复测——见 §6 M5 行。

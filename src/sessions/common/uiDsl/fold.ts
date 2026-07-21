@@ -33,6 +33,7 @@ export type SurfaceValue =
 	| { readonly kind: 'state'; readonly name: string }
 	| { readonly kind: 'array'; readonly items: readonly SurfaceValue[] }
 	| { readonly kind: 'action'; readonly steps: readonly { readonly step: string; readonly args: readonly SurfaceValue[] }[] }
+	| { readonly kind: 'cap'; readonly name: string; readonly args: readonly SurfaceValue[] }
 	| { readonly kind: 'node'; readonly node: ISurfaceNode }
 	| { readonly kind: 'dangling'; readonly name: string };
 
@@ -72,9 +73,7 @@ export function foldSurface(batches: readonly string[], catalog: readonly ICompo
 
 	const rootStatement = statements.get('root');
 	const root =
-		rootStatement && rootStatement.value.kind === 'component'
-			? resolveNode('root', rootStatement.value, statements, new Set(['root']), errors, batches.length - 1)
-			: undefined;
+		rootStatement && rootStatement.value.kind === 'component' ? resolveNode('root', rootStatement.value, statements, new Set(['root']), errors, batches.length - 1) : undefined;
 
 	return { statements, errors, states, root };
 }
@@ -110,6 +109,8 @@ function resolveValue(
 			return { kind: 'array', items: value.items.map(item => resolveValue(item, statements, visiting, errors, batch)) };
 		case 'action':
 			return { kind: 'action', steps: value.steps.map(step => ({ step: step.step, args: step.args.map(arg => resolveValue(arg, statements, visiting, errors, batch)) })) };
+		case 'cap':
+			return { kind: 'cap', name: value.name, args: value.args.map(arg => resolveValue(arg, statements, visiting, errors, batch)) };
 		case 'component':
 			return { kind: 'node', node: resolveNode('(inline)', value, statements, visiting, errors, batch) };
 		case 'ref': {

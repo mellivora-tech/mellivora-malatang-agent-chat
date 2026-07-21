@@ -68,8 +68,8 @@ test('violations produce structured, attributed errors; healthy statements still
 
 test('arity errors carry the positional signature as the hint', () => {
 	const program = parse(['root = Stack([t])', 't = Table(["a"])'].join('\n'));
-	assert.match(program.errors[0]!.message, /Table takes 2 argument\(s\), got 1/);
-	assert.match(program.errors[0]!.hint ?? '', /Table\(columns, rows\)/);
+	assert.match(program.errors[0]!.message, /Table takes 2-3 argument\(s\), got 1/);
+	assert.match(program.errors[0]!.hint ?? '', /Table\(columns, rows, caps\?\)/);
 });
 
 test('a program without root is flagged; junk lines and unterminated strings fail atomically', () => {
@@ -96,6 +96,85 @@ test('the generated prompt documents every catalog component with its positional
 	}
 	assert.match(prompt, /0-BASED/);
 	assert.match(prompt, /@ToAssistant/);
+});
+
+// --- M5: Q-D capability attributes (@Editable / @Validate) -----------------------
+
+test('caps parse clean: a Table carries @Editable + @Validate in its optional third arg', () => {
+	const program = parse(
+		[
+			'root = Stack([tbl])',
+			'tbl = Table(["源字段", "目标字段", "金额"], [["order_no", "order_id", "128"]], [@Editable("目标字段"), @Validate("金额", "^\\d+$", "金额需为数字")])',
+		].join('\n'),
+	);
+	assert.deepEqual(program.errors, []);
+	assert.equal(statementYield(program).valid, 2);
+	const tbl = program.statements.get('tbl')!.value as { args: readonly { kind: string; items?: readonly { kind: string; name?: string }[] }[] };
+	const caps = tbl.args[2]!;
+	assert.equal(caps.kind, 'array');
+	assert.deepEqual(
+		caps.items!.map(item => item.kind),
+		['cap', 'cap'],
+	);
+	assert.deepEqual(
+		caps.items!.map(item => item.name),
+		['Editable', 'Validate'],
+	);
+});
+
+test('caps validate against CAP_SPECS + the slot allow-list: bad name, arity, and arg type each reject with a hint', () => {
+	// Unknown/disallowed cap name — the allow-list check fires first.
+	const unknown = parse(['root = Stack([t])', 't = Table(["a"], [["1"]], [@Frobnicate("a")])'].join('\n'));
+	assert.match(unknown.errors[0]!.message, /capability "@Frobnicate" is not allowed here/);
+	assert.match(unknown.errors[0]!.hint ?? '', /@Editable, @Validate/);
+	assert.ok(!unknown.statements.has('t'), 'the cap violation drops its statement');
+
+	// Arity: @Validate needs target+pattern+hint.
+	const arity = parse(['root = Stack([t])', 't = Table(["a"], [["1"]], [@Validate("a")])'].join('\n'));
+	assert.match(arity.errors[0]!.message, /@Validate takes 3 argument\(s\), got 1/);
+	assert.match(arity.errors[0]!.hint ?? '', /@Validate\(target, pattern, hint\)/);
+
+	// Arg type: target must be a string, not a number.
+	const type = parse(['root = Stack([t])', 't = Table(["a"], [["1"]], [@Editable(42)])'].join('\n'));
+	assert.match(type.errors[0]!.message, /@Editable argument 0 \(target\): expected a "string"/);
+});
+
+test('a non-cap where caps are expected is rejected (shape check)', () => {
+	const program = parse(['root = Stack([t])', 't = Table(["a"], [["1"]], ["oops"])'].join('\n'));
+	assert.match(program.errors[0]!.message, /caps.*capability declarations|@Editable\(\.\.\.\) \/ @Validate/);
+	assert.ok(!program.statements.has('t'));
+});
+
+test('the generated prompt documents allowed capabilities and a same-source example (M5)', () => {
+	const prompt = generateDslPrompt();
+	assert.match(prompt, /CAPABILITIES/);
+	assert.match(prompt, /@Editable\(target, placeholder\?\)/);
+	assert.match(prompt, /@Validate\(target, pattern, hint\)/);
+	assert.match(prompt, /EXAMPLE 3/);
+});
+
+test('foldSurface materializes caps onto the resolved Table node so the renderer can honor them (M5)', async () => {
+	const { foldSurface } = await import('../../src/sessions/common/uiDsl/fold.js');
+	const folded = foldSurface(
+		[['root = Stack([tbl])', 'tbl = Table(["金额"], [["128"], ["x"]], [@Editable("金额"), @Validate("金额", "^\\d+$", "需为数字")])'].join('\n')],
+		SMOKE_CATALOG,
+	);
+	assert.equal(folded.errors.length, 0, JSON.stringify(folded.errors));
+	const tblNode = (
+		folded.root!.args[0] as {
+			items: readonly {
+				node?: { component: string; args: readonly { kind: string; items?: readonly { kind: string; name?: string; args?: readonly { kind: string; value?: unknown }[] }[] }[] };
+			}[];
+		}
+	).items[0]!.node!;
+	assert.equal(tblNode.component, 'Table');
+	const caps = tblNode.args[2]!;
+	assert.equal(caps.kind, 'array');
+	assert.deepEqual(
+		caps.items!.map(cap => cap.name),
+		['Editable', 'Validate'],
+	);
+	assert.equal(caps.items![1]!.args![2]!.value, '需为数字', 'the @Validate hint survives the fold');
 });
 
 // --- M3: Autocloser / incremental / fold ----------------------------------------

@@ -24,6 +24,72 @@ export interface ISurfacePanelProps {
 
 type FormValue = string | number | boolean | null;
 
+interface IColValidator {
+	readonly pattern: string;
+	readonly hint: string;
+}
+
+interface ITableCaps {
+	readonly colNames: readonly string[];
+	/** column header → placeholder (present ⇒ editable). */
+	readonly editable: ReadonlyMap<string, string>;
+	readonly validators: ReadonlyMap<string, IColValidator>;
+}
+
+const cellText = (value: SurfaceValue | undefined): string => (value?.kind === 'literal' && value.value !== null ? String(value.value) : '');
+
+/** A regex that fails to compile must never mark data invalid — degrade to "valid". */
+const regexOk = (pattern: string, text: string): boolean => {
+	try {
+		return new RegExp(pattern).test(text);
+	} catch {
+		return true;
+	}
+};
+
+/** Stable, model-readable key for one editable/validated cell (name-first addressing, design §8.5). */
+const cellKey = (tableName: string, colName: string, rowIndex: number): string => `${tableName}.${colName}[${rowIndex}]`;
+
+/** Read a Table node's @Editable / @Validate caps off its optional third arg. */
+const readTableCaps = (node: ISurfaceNode): ITableCaps => {
+	const columns = node.args[0]?.kind === 'array' ? node.args[0].items : [];
+	const caps = node.args[2]?.kind === 'array' ? node.args[2].items : [];
+	const editable = new Map<string, string>();
+	const validators = new Map<string, IColValidator>();
+	for (const cap of caps) {
+		if (cap.kind !== 'cap') {
+			continue;
+		}
+		const target = cellText(cap.args[0]);
+		if (cap.name === 'Editable') {
+			editable.set(target, cellText(cap.args[1]));
+		} else if (cap.name === 'Validate') {
+			validators.set(target, { pattern: cellText(cap.args[1]), hint: cellText(cap.args[2]) });
+		}
+	}
+	return { colNames: columns.map(cellText), editable, validators };
+};
+
+/** Visit every Table node in a resolved surface tree (for the snapshot's validity pass). */
+const eachTable = (node: ISurfaceNode, visit: (node: ISurfaceNode) => void): void => {
+	if (node.component === 'Table') {
+		visit(node);
+	}
+	for (const arg of node.args) {
+		eachTableInValue(arg, visit);
+	}
+};
+
+const eachTableInValue = (value: SurfaceValue, visit: (node: ISurfaceNode) => void): void => {
+	if (value.kind === 'node') {
+		eachTable(value.node, visit);
+	} else if (value.kind === 'array') {
+		for (const item of value.items) {
+			eachTableInValue(item, visit);
+		}
+	}
+};
+
 export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): React.ReactElement {
 	const folded = useMemo(() => foldSurface(batches, SMOKE_CATALOG), [batches]);
 	const [edits, setEdits] = useState<Record<string, FormValue>>({});
@@ -39,6 +105,35 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 			if (!key.startsWith('$')) {
 				entries.push(`${key} = ${JSON.stringify(value)}`);
 			}
+		}
+		// Invalid targets ride the snapshot (design §8.4): non-blocking, but the
+		// model must be able to SEE which cells fail — including original cells the
+		// user never touched.
+		if (folded.root) {
+			eachTable(folded.root, node => {
+				const { colNames, validators } = readTableCaps(node);
+				if (validators.size === 0) {
+					return;
+				}
+				const rows = node.args[1]?.kind === 'array' ? node.args[1].items : [];
+				rows.forEach((row, rowIndex) => {
+					if (row.kind !== 'array') {
+						return;
+					}
+					row.items.forEach((cell, colIndex) => {
+						const colName = colNames[colIndex] ?? '';
+						const validator = validators.get(colName);
+						if (!validator) {
+							return;
+						}
+						const key = cellKey(node.name, colName, rowIndex);
+						const value = key in edits ? asText(edits[key] ?? null) : cellText(cell);
+						if (!regexOk(validator.pattern, value)) {
+							entries.push(`# invalid ${key} = ${JSON.stringify(value)} (${validator.hint})`);
+						}
+					});
+				});
+			});
 		}
 		return entries.join('\n');
 	};
@@ -98,6 +193,7 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 			case 'Table': {
 				const columns = node.args[0]?.kind === 'array' ? node.args[0].items : [];
 				const rows = node.args[1]?.kind === 'array' ? node.args[1].items : [];
+				const { colNames, editable, validators } = readTableCaps(node);
 				return (
 					<table className="surface-table">
 						<thead>
@@ -110,7 +206,31 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 						<tbody>
 							{rows.map((row, rowIndex) => (
 								<tr key={rowIndex}>
-									{row.kind === 'array' ? row.items.map((cell, cellIndex) => <td key={cellIndex}>{cell.kind === 'literal' ? asText(cell.value) : null}</td>) : null}
+									{row.kind === 'array'
+										? row.items.map((cell, cellIndex) => {
+												const colName = colNames[cellIndex] ?? '';
+												const key = cellKey(node.name, colName, rowIndex);
+												const current: FormValue = key in edits ? (edits[key] ?? null) : cell.kind === 'literal' ? cell.value : null;
+												const validator = validators.get(colName);
+												const invalid = validator !== undefined && !regexOk(validator.pattern, asText(current));
+												return (
+													<td key={cellIndex} className={invalid ? 'surface-cell-invalid' : undefined} title={invalid ? validator.hint : undefined}>
+														{editable.has(colName) ? (
+															<input
+																type="text"
+																className="surface-cell-input"
+																value={asText(current)}
+																placeholder={editable.get(colName) || undefined}
+																aria-invalid={invalid || undefined}
+																onChange={event => setEdits(previous => ({ ...previous, [key]: event.target.value }))}
+															/>
+														) : (
+															asText(current)
+														)}
+													</td>
+												);
+											})
+										: null}
 								</tr>
 							))}
 						</tbody>

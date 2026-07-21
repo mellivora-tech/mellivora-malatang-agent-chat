@@ -55,6 +55,73 @@ async function seedSession(dataDir: string): Promise<void> {
 	await writeFile(join(dataDir, 'sessions', 'surface-sess.jsonl'), `${lines.join('\n')}\n`, 'utf8');
 }
 
+// M5 Q-D: a Table carrying @Editable / @Validate caps — data_preview reproduced
+// with atoms + capabilities, no bespoke component.
+const CAP_BATCH = [
+	'root = Stack([tbl, apply])',
+	'tbl = Table(["字段", "金额"], [["order_no", "128"], ["amt", "0"]], [@Editable("金额"), @Validate("金额", "^[0-9]+$", "金额需为数字")])',
+	'apply = Button("导出", Action([@ToAssistant("按当前映射导出")]))',
+].join('\n');
+
+async function seedCapSession(dataDir: string): Promise<void> {
+	const now = new Date().toISOString();
+	await mkdir(join(dataDir, 'sessions'), { recursive: true });
+	const lines = [
+		JSON.stringify({ type: 'session', version: 1, sessionId: 'cap-sess', sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt: now, interactivity: 'full' }),
+		JSON.stringify({ type: 'message', timestamp: now, id: 'u1', role: 'user', text: '做个金额校验台' }),
+		JSON.stringify({
+			type: 'message',
+			timestamp: now,
+			id: 'm-c1',
+			role: 'ui',
+			text: '## 工作台\n\n带能力属性的表。',
+			ui: { id: 'cp-1', component: 'surface_patch', title: '金额校验台', props: { surface: 'main', statements: CAP_BATCH } },
+		}),
+		JSON.stringify({ type: 'state', timestamp: now, status: 2, title: 'cap session' }),
+	];
+	await writeFile(join(dataDir, 'sessions', 'cap-sess.jsonl'), `${lines.join('\n')}\n`, 'utf8');
+}
+
+test('surface caps: @Editable renders cell inputs, @Validate highlights invalid cells, and the @ToAssistant snapshot carries the edit + invalid target', async () => {
+	const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-cap-'));
+	await seedCapSession(dataDir);
+
+	let app: ElectronApplication | undefined;
+	const errors: string[] = [];
+	try {
+		// Pin the locale (#9): these tests assert i18n-bundle strings (e.g.
+		// surface.patchSummary), so the UI language must not depend on the host OS.
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_LOCALE: 'zh-CN' } });
+		const page = await app.firstWindow();
+		page.on('pageerror', error => errors.push(error.message));
+		await page.setViewportSize({ width: 1400, height: 1000 });
+		await page.waitForSelector('.sessions-sidebar');
+		await page.locator('.sessions-project-task-row').filter({ hasText: 'cap session' }).click();
+
+		await page.locator('.surface-patch-card button').first().click();
+		await page.waitForSelector('.surface-view');
+
+		// The 金额 column is editable — two cell inputs; 字段 column is static text.
+		await expect(page.locator('.surface-table .surface-cell-input')).toHaveCount(2);
+		// Seeded values ("128", "0") satisfy ^[0-9]+$ — nothing invalid yet.
+		await expect(page.locator('.surface-table td.surface-cell-invalid')).toHaveCount(0);
+
+		// Type a non-numeric value → the cell goes invalid (non-blocking highlight).
+		await page.locator('.surface-table .surface-cell-input').first().fill('abc');
+		await expect(page.locator('.surface-table td.surface-cell-invalid')).toHaveCount(1);
+
+		// @ToAssistant: the confirm turn carries the edited cell AND the invalid marker.
+		await page.locator('.surface-view .surface-button', { hasText: '导出' }).click();
+		await expect(page.locator('.conversation-transcript')).toContainText('按当前映射导出');
+		await expect(page.locator('.conversation-transcript')).toContainText('tbl.金额[0] = "abc"');
+		await expect(page.locator('.conversation-transcript')).toContainText('金额需为数字');
+
+		expect(errors, errors.join('\n')).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
 test('surface_patch: projection cards in the stream, cross-batch fold in the workbench tab, @ToAssistant carries the form snapshot', async () => {
 	const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-surface-'));
 	await seedSession(dataDir);
@@ -62,7 +129,9 @@ test('surface_patch: projection cards in the stream, cross-batch fold in the wor
 	let app: ElectronApplication | undefined;
 	const errors: string[] = [];
 	try {
-		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir } });
+		// Pin the locale (#9): these tests assert i18n-bundle strings (e.g.
+		// surface.patchSummary), so the UI language must not depend on the host OS.
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_LOCALE: 'zh-CN' } });
 		const page = await app.firstWindow();
 		page.on('pageerror', error => errors.push(error.message));
 		await page.setViewportSize({ width: 1400, height: 1000 });

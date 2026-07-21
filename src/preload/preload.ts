@@ -24,6 +24,12 @@ import type { IArtifactEntryData, IArtifactFilter, IArtifactsBridge } from '../s
 
 const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
+// Locale pin (#9): Chromium's --lang drives navigator.language on Linux but NOT
+// on macOS (there it stays tied to the OS AppleLanguages), so the renderer can't
+// rely on it. Cross the pinned locale explicitly instead — bootstrapLocale reads
+// this as the deterministic 'system' answer under the e2e harness.
+const pinnedLocale = process.env['MELLIVORA_LOCALE'];
+
 const projects: IProjectsBridge = {
 	list: () => ipcRenderer.invoke('projects:list'),
 	create: (input: IProjectInput) => ipcRenderer.invoke('projects:create', input),
@@ -152,4 +158,5 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	dataFiles,
 	artifacts,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
+	...(pinnedLocale === 'zh-CN' || pinnedLocale === 'en-US' ? { locale: pinnedLocale } : {}),
 });

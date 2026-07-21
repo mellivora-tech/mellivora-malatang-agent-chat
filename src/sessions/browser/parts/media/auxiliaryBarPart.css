@@ -484,6 +484,27 @@
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
+/* @Editable cells (design §8): an in-place text input inside the table cell. */
+.surface-cell-input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-4);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-input-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-input-background);
+	color: var(--vscode-agents-color-input-foreground);
+	font: inherit;
+}
+
+/* @Validate: non-blocking highlight; the hint rides the cell's title attribute. */
+.surface-table td.surface-cell-invalid {
+	border-color: var(--vscode-agents-color-danger);
+}
+
+.surface-cell-invalid .surface-cell-input {
+	border-color: var(--vscode-agents-color-danger);
+}
+
 .surface-field {
 	display: flex;
 	align-items: center;
