@@ -151,3 +151,50 @@ export function createLiveSystemNudgeHook(): IHook {
 		},
 	};
 }
+
+// --- W2: exploration fan-out discipline (design docs/design/hooks §10 M2) ---------
+// The run-6 anti-pattern was 22 serial single-tool exploration turns — the model
+// paying the expensive per-turn overhead 22 times to gather things it could have
+// fanned out. This PreToolUse hook watches the streak of consecutive single-tool
+// exploration turns (counted by the loop) and, once it crosses a threshold,
+// injects a reminder to issue parallel spawn_agent calls for independent probes.
+// Inject, never block (Q1): serial exploration is sometimes correct (each step
+// depending on the last), so this nudges rather than forbids; data-driven
+// escalation to a soft block comes only if the reminder proves insufficient.
+
+/** Read-only "gather" tools whose single-tool-per-turn streak signals serial exploration. */
+export const EXPLORE_TOOLS: ReadonlySet<string> = new Set(['grep', 'glob', 'list_dir', 'read_symbol', 'bash']);
+const EXPLORE_TOOLS_MATCHER = /^(grep|glob|list_dir|read_symbol|bash)$/;
+
+/** After this many consecutive single-exploration-tool turns, the next exploration call gets the fan-out reminder. */
+export const FAN_OUT_STREAK_THRESHOLD = 5;
+
+export const FAN_OUT_NUDGE =
+	'<system-reminder>You have run several single-step probes in a row. If the remaining things to check are INDEPENDENT (different files, subsystems, or data sources — not each depending on the previous result), issue them as PARALLEL spawn_agent calls in ONE message instead of one tool at a time: it is cheaper and far faster, and keeps your own context clean. Reserve serial tool calls for steps that genuinely need the previous step output.</system-reminder>';
+
+/** Kill switch: MELLIVORA_FANOUT_NUDGE=off. */
+export function isFanOutNudgeEnabled(env: NodeJS.ProcessEnv): boolean {
+	return env['MELLIVORA_FANOUT_NUDGE'] !== 'off';
+}
+
+/** Injects the fan-out reminder once the single-exploration streak crosses the threshold; re-arms when the streak breaks. */
+export function createFanOutNudgeHook(deps: { readonly streak: () => number; readonly spawnAvailable: boolean; readonly threshold?: number }): IHook {
+	const threshold = deps.threshold ?? FAN_OUT_STREAK_THRESHOLD;
+	let nudged = false;
+	return {
+		id: 'builtin:fanout-nudge',
+		event: 'PreToolUse',
+		toolMatcher: EXPLORE_TOOLS_MATCHER,
+		run: () => {
+			if (!deps.spawnAvailable || deps.streak() < threshold) {
+				nudged = false; // streak not (yet) over the line — re-arm for next time it crosses.
+				return { decision: 'allow' };
+			}
+			if (nudged) {
+				return { decision: 'allow' };
+			}
+			nudged = true;
+			return { decision: 'allow', additionalContext: FAN_OUT_NUDGE };
+		},
+	};
+}

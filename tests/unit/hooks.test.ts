@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { HookRegistry, runHooks, runHooksUntilBlock, type IHook, type IHookDecision } from '../../src/main/agent/hooks/hooks.js';
-import { createReplyVerifierHook } from '../../src/main/agent/hooks/builtinHooks.js';
+import { createFanOutNudgeHook, createReplyVerifierHook } from '../../src/main/agent/hooks/builtinHooks.js';
 import type { IModelClient } from '../../src/main/agent/agentTypes.js';
 
 /** A trivial hook that returns a fixed decision, ignoring its input. */
@@ -161,4 +161,28 @@ test('reply-verifier hook: judge YES → allow; judge error → allow (fail-open
 
 	const empty = await createReplyVerifierHook({ client: stubClient('NO\nx'), signal }).run({ event: 'Stop', question: 'q', answer: '   ' });
 	assert.equal(empty.decision, 'allow', 'nothing to verify without a real reply');
+});
+
+// --- W2 fan-out nudge hook (design §10 M2) ---------------------------------------
+
+test('W2 fan-out hook: nudges once after the single-exploration streak crosses threshold, re-arms when it breaks', () => {
+	let streak = 0;
+	const hook = createFanOutNudgeHook({ streak: () => streak, spawnAvailable: true, threshold: 3 });
+	const ctx = (): string | undefined => (hook.run({ event: 'PreToolUse', toolName: 'grep' }) as IHookDecision).additionalContext;
+
+	streak = 2;
+	assert.equal(ctx(), undefined, 'below threshold — no nudge');
+	streak = 3;
+	assert.match(ctx() ?? '', /parallel spawn_agent/i, 'crossing the threshold nudges');
+	streak = 4;
+	assert.equal(ctx(), undefined, 'still over but already nudged — no repeat');
+	streak = 0;
+	assert.equal(ctx(), undefined, 'streak broke — re-armed, no nudge below threshold');
+	streak = 3;
+	assert.match(ctx() ?? '', /spawn_agent/, 're-crossing nudges again');
+});
+
+test('W2 fan-out hook: never nudges when spawn_agent is unavailable', () => {
+	const hook = createFanOutNudgeHook({ streak: () => 99, spawnAvailable: false, threshold: 3 });
+	assert.equal((hook.run({ event: 'PreToolUse', toolName: 'grep' }) as IHookDecision).additionalContext, undefined);
 });

@@ -30,12 +30,15 @@ import { createLoopGuard } from './loopGuard.js';
 import { isReplyVerifierEnabled } from './replyVerifier.js';
 import { HookRegistry, runHooksUntilBlock, type IHook } from './hooks/hooks.js';
 import {
+	EXPLORE_TOOLS,
 	createActionClaimNudgeHook,
+	createFanOutNudgeHook,
 	createGroundingNudgeHook,
 	createLiveSystemNudgeHook,
 	createReplyVerifierHook,
 	createStaleClaimNudgeHook,
 	createWalkthroughNudgeHook,
+	isFanOutNudgeEnabled,
 	isLiveSystemNudgeEnabled,
 	type IReplyVerifierData,
 } from './hooks/builtinHooks.js';
@@ -206,11 +209,19 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		stopHooks.register(createWalkthroughNudgeHook({ walkthroughToolAvailable, filesChanged: () => filesChangedThisRun, walkthroughWritten: () => walkthroughWritten }));
 	}
 	// PreToolUse hooks (design §10 M2): discipline checks fired before each tool
-	// runs, per run. W4 — inject the live-system quiescence reminder onto the
-	// first data-source query so a diff of a moving target gets caught.
+	// runs, per run.
+	//  · W4 — inject the live-system quiescence reminder onto the first data-source
+	//    query so a diff of a moving target gets caught.
+	//  · W2 — after a streak of single-exploration-tool turns, nudge toward parallel
+	//    spawn_agent fan-out. `singleExploreStreak` is maintained below per turn.
+	let singleExploreStreak = 0;
+	const spawnAgentAvailable = config.tools.some(tool => tool.name === 'spawn_agent');
 	const preToolHooks: IHook[] = [];
 	if (dataSourceToolsAvailable && isLiveSystemNudgeEnabled(process.env)) {
 		preToolHooks.push(createLiveSystemNudgeHook());
+	}
+	if (spawnAgentAvailable && isFanOutNudgeEnabled(process.env)) {
+		preToolHooks.push(createFanOutNudgeHook({ streak: () => singleExploreStreak, spawnAvailable: true }));
 	}
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
@@ -531,6 +542,10 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// tool_results before every tool has finished would interleave them with
 		// plain user content and the API would reject the next request.
 		const toolResults = yield* executeToolUses(toolUses, config.tools, config.permissionGate, signal, loopGuard, preToolHooks);
+
+		// W2 streak: a turn that made exactly ONE exploration tool call extends the
+		// serial-probe streak; anything else (a batch, a non-explore tool) breaks it.
+		singleExploreStreak = toolUses.length === 1 && EXPLORE_TOOLS.has(toolUses[0]!.name) ? singleExploreStreak + 1 : 0;
 		messages.push({ role: 'user', content: toolResults });
 
 		// A sub-agent's result carries its own <work-digest> block: fold those
