@@ -15,7 +15,6 @@
  */
 
 import { generateDslPrompt } from '../../../../common/uiDsl/catalog.js';
-import { parseMigrationPreviewProps } from './migrationPreview.js';
 import { explainSurfacePatchProps, parseSurfacePatchProps } from './surfacePatch.js';
 
 /**
@@ -26,7 +25,6 @@ import { explainSurfacePatchProps, parseSurfacePatchProps } from './surfacePatch
 export type UiPropsValidator = (props: unknown) => unknown | undefined;
 
 export const UI_COMPONENT_VALIDATORS: Readonly<Record<string, UiPropsValidator>> = {
-	migration_preview: parseMigrationPreviewProps,
 	surface_patch: parseSurfacePatchProps,
 };
 
@@ -55,9 +53,4 @@ export const UI_COMPONENT_GUIDANCE: Readonly<Record<string, string>> = {
 		'--- DSL reference ---\n' +
 		generateDslPrompt() +
 		'\n--- end DSL reference ---',
-	migration_preview:
-		'migration_preview — use when proposing a data migration / field mapping. First read BOTH schemas (list_data_sources + query_data_source), then present the source→target mappings and a TRANSFORMED sample (max 50 rows, 500 chars/cell — a sample, never the full set) for the user to review and correct. ' +
-		'props: { sourceLabel, targetLabel, sourceTable, targetTable, dialect (mysql|postgres), mappings: [{ source, target, transform? (prose for the reviewer), transformSql? (executable SQL expression producing the target value, e.g. "TRIM(cust_name)" — omit when the column carries over as-is), note? }], columns: [target column order], sampleRows: [[cells matching columns]], validations?: [{ row (0-BASED index into sampleRows: first row = 0), column, level: error|warning, message }], totalRowCount?, filterSql? (WHERE-clause body, no keyword), note? }. ' +
-		'ALWAYS supply sourceTable/targetTable/dialect and a transformSql for every non-trivial mapping — they let the card compile and export the migration script locally; without them the card is review-only. ' +
-		'Put suspicious conversions in validations. The user can edit sample cells; their confirmation or corrections come back as a message.',
 };

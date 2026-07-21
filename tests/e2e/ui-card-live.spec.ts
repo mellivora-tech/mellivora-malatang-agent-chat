@@ -23,18 +23,12 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
  */
 
 const UI_ARGS = JSON.stringify({
-	component: 'migration_preview',
+	component: 'surface_patch',
 	title: '订单迁移映射',
 	markdown: '把 user_bak 迁到 user,字段一一对应。',
 	props: {
-		sourceLabel: 'mysql:user_bak',
-		targetLabel: 'mysql:user',
-		sourceTable: 'test.user_bak',
-		targetTable: 'user',
-		dialect: 'mysql',
-		mappings: [{ source: 'username', target: 'username', transform: '直接对应' }],
-		columns: ['username'],
-		sampleRows: [['admin'], ['zhangsan']],
+		surface: 'main',
+		statements: 'title = Text("订单迁移映射", "title")\nmap = Text("user_bak.username → user.username", "body")\nroot = Stack([title, map])',
 	},
 });
 
@@ -122,11 +116,12 @@ test('a model tool_call becomes a rendered, persisted ui card (capture → mater
 		await page.locator('.new-session-input').fill('把 user_bak 迁到 user,先给映射预览');
 		await page.locator('.new-session-send-button').click();
 
-		// The card materializes live, mid-conversation.
-		const card = page.locator('.conversation-ui').filter({ hasText: '订单迁移映射' });
+		// The surface_patch projection card materializes live, mid-conversation.
+		const card = page.locator('.surface-patch-card');
 		await expect(card).toBeVisible({ timeout: 30_000 });
-		await expect(card.locator('.tabulator-row')).toHaveCount(2);
-		await expect(page.locator('.conversation-work-step-label').filter({ hasText: 'render_ui migration_preview' })).toHaveCount(1);
+		// The render_ui work step names the component it rendered (verb + component
+		// chip; locale-independent on the chip).
+		await expect(page.locator('.conversation-work-step-label').filter({ hasText: 'surface_patch' })).toHaveCount(1);
 
 		// And persists: the session JSONL carries the role:'ui' entry.
 		const sessionsDir = join(projectDir, 'sessions');

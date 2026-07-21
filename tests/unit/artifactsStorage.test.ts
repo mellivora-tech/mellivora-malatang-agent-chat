@@ -112,7 +112,7 @@ test('extractArtifactsFromEntries maps plan/walkthrough/ui messages and planStat
 			role: 'ui',
 			text: 'card md',
 			timestamp: '2026-07-20T10:00:04.000Z',
-			ui: { id: 'ui-1', component: 'migration_preview', title: '订单表迁移映射', props: {} },
+			ui: { id: 'ui-1', component: 'surface_patch', title: '订单表迁移映射', props: {} },
 		},
 		// A plan-role message without its payload (older/corrupt line) yields nothing.
 		{ type: 'message', id: 'p2', role: 'plan', text: 'bare', timestamp: '2026-07-20T10:00:05.000Z' },
@@ -189,7 +189,7 @@ test('rebuildArtifacts regenerates the same index the live hooks produced (expor
 			id: 'c1',
 			role: 'ui',
 			text: 'card md',
-			ui: { id: 'ui-1', component: 'migration_preview', title: '订单表迁移映射', props: {} },
+			ui: { id: 'ui-1', component: 'surface_patch', title: '订单表迁移映射', props: {} },
 		};
 		const sessionA = [
 			{ type: 'session', version: 1, sessionId: 'sess-a', sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt: t(0), interactivity: 'full' },

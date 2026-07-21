@@ -18,9 +18,7 @@
 import type { ComponentType } from 'react';
 import type { IExportTextMeta } from '../../../services/dataFiles/common/dataFiles.js';
 import type { ISessionMessage } from '../../../services/sessions/common/session.js';
-import { parseMigrationPreviewProps } from '../../../services/sessions/common/uiComponents/migrationPreview.js';
 import type { ISessionMessageSender } from '../conversationView.js';
-import { MigrationPreviewCard } from './components/MigrationPreviewCard.js';
 import { parseSurfacePatchProps } from '../../../services/sessions/common/uiComponents/surfacePatch.js';
 import { SurfacePatchCard } from './components/SurfacePatchCard.js';
 
@@ -53,7 +51,6 @@ function entry<P>(definition: IUiComponentEntry<P>): IUiComponentEntry<unknown> 
 }
 
 const UI_COMPONENTS: Readonly<Record<string, IUiComponentEntry<unknown>>> = {
-	migration_preview: entry({ parseProps: parseMigrationPreviewProps, Component: MigrationPreviewCard }),
 	surface_patch: entry({ parseProps: parseSurfacePatchProps, Component: SurfacePatchCard }),
 };
 

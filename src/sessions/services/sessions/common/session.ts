@@ -169,7 +169,7 @@ export interface IPlanArtifact {
  */
 export interface IUiArtifact {
 	readonly id: string;
-	/** Which registered component renders this card (e.g. 'migration_preview'). */
+	/** Which registered component renders this card (e.g. 'surface_patch'). */
 	readonly component: string;
 	readonly title: string;
 	readonly props: unknown;

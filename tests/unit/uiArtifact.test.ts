@@ -16,22 +16,19 @@ import { toTranscript } from '../../src/sessions/contrib/fileProvider/browser/fi
 import { UI_PROPS_CHAR_CAP, materializeUi, parseUiInput, uiToMarkdown } from '../../src/sessions/services/sessions/common/uiArtifact.js';
 import type { ISessionMessage, IUiArtifact } from '../../src/sessions/services/sessions/common/session.js';
 
-// A minimal VALID migration_preview payload — the smallest registered
-// component; envelope tests ride on it so they exercise the real
-// per-component validator dispatch, not a mock.
-const MIGRATION_PROPS = {
-	sourceLabel: 'mysql:legacy_orders',
-	targetLabel: 'pg:orders_v2',
-	mappings: [{ source: 'orders.cust_name', target: 'customers.name', transform: 'trim' }],
-	columns: ['name'],
-	sampleRows: [['张三']],
+// A minimal VALID surface_patch payload — the sole registered component after
+// migration_preview's retirement; envelope tests ride on it so they exercise
+// the real per-component validator dispatch, not a mock.
+const SURFACE_PROPS = {
+	surface: 'main',
+	statements: 'title = Text("订单迁移映射")',
 };
 
 const INPUT = {
-	component: 'migration_preview',
+	component: 'surface_patch',
 	title: '订单迁移映射',
-	markdown: '把 legacy_orders 的 cust_name 迁到 orders_v2 的 name,做 trim。',
-	props: MIGRATION_PROPS,
+	markdown: '把 legacy_orders 迁到 orders_v2。',
+	props: SURFACE_PROPS,
 };
 
 // --- parseUiInput (the envelope) ---
@@ -39,7 +36,7 @@ const INPUT = {
 test('parseUiInput accepts a valid card and refuses each envelope violation', () => {
 	const parsed = parseUiInput(INPUT);
 	assert.ok(parsed, 'valid input accepted');
-	assert.equal(parsed.component, 'migration_preview');
+	assert.equal(parsed.component, 'surface_patch');
 
 	assert.equal(parseUiInput(undefined), undefined, 'non-object refused');
 	assert.equal(parseUiInput({ ...INPUT, component: 'unknown_thing' }), undefined, 'unregistered component refused');
@@ -47,17 +44,17 @@ test('parseUiInput accepts a valid card and refuses each envelope violation', ()
 	assert.equal(parseUiInput({ ...INPUT, markdown: '' }), undefined, 'empty markdown refused — the fallback/transcript turn can never be blank');
 	assert.equal(parseUiInput({ ...INPUT, props: [] }), undefined, 'array props refused');
 	assert.equal(parseUiInput({ ...INPUT, props: null }), undefined, 'null props refused');
-	assert.equal(parseUiInput({ ...INPUT, props: { ...MIGRATION_PROPS, note: 'x'.repeat(UI_PROPS_CHAR_CAP) } }), undefined, 'over-cap props refused');
-	assert.equal(parseUiInput({ ...INPUT, props: { sourceLabel: 'a' } }), undefined, 'props failing the component validator refused');
+	assert.equal(parseUiInput({ ...INPUT, props: { ...SURFACE_PROPS, note: 'x'.repeat(UI_PROPS_CHAR_CAP) } }), undefined, 'over-cap props refused');
+	assert.equal(parseUiInput({ ...INPUT, props: { statements: 'x = Chart([1])' } }), undefined, 'props failing the component validator refused');
 });
 
 test('materializeUi threads the renderer-assigned id; uiToMarkdown carries title + summary', () => {
 	const parsed = parseUiInput(INPUT)!;
 	const artifact = materializeUi(parsed, 'sess-ui-1');
 	assert.equal(artifact.id, 'sess-ui-1');
-	assert.equal(artifact.component, 'migration_preview');
+	assert.equal(artifact.component, 'surface_patch');
 	assert.equal(artifact.title, '订单迁移映射');
-	assert.deepEqual(artifact.props, MIGRATION_PROPS);
+	assert.deepEqual(artifact.props, SURFACE_PROPS);
 
 	const markdown = uiToMarkdown(parsed);
 	assert.match(markdown, /^## 订单迁移映射/);
@@ -74,12 +71,12 @@ test('render_ui is read-only, validates via the envelope, and echoes a one-line 
 	const ok = tool.validateInput(INPUT);
 	assert.ok(ok.ok, 'valid input accepted');
 	const result = await tool.call(ok.ok ? ok.value : undefined, { toolUseId: 't', signal: new AbortController().signal });
-	assert.match(result.content, /UI card recorded: "订单迁移映射" \(migration_preview\)/);
+	assert.match(result.content, /UI card recorded: "订单迁移映射" \(surface_patch\)/);
 	assert.match(result.content, /one short sentence/);
 
 	const bad = tool.validateInput({ ...INPUT, component: 'nope' });
 	assert.equal(bad.ok, false);
-	assert.match(!bad.ok ? bad.error : '', /migration_preview/, 'the corrective error names the available components');
+	assert.match(!bad.ok ? bad.error : '', /surface_patch/, 'the corrective error names the available components');
 });
 
 test('render_ui is registered in every mode, including plan mode', () => {

@@ -210,4 +210,6 @@ Q-D 能力属性层已按 §8.1–8.7 实现，`npm run verify` 除既有环境�
 **（2026-07-21 续）`field_mapping` 机制组件达成**：`field_mapping(source, sourceFields, target, targetFields, mappings?)` 进目录（同源），renderer `@xyflow/react` 拖线画布（左源右目标、拖 handle 成对、删边解对），xyflow 主题 CSS-var 全量重映射到 `--vscode-agents-*` token（含 danger/accent/input）。**机制逻辑纯函数化**（`common/uiDsl/fieldMapping.ts`：解析/1:1 连接淘汰/断开/序列化/孤立节点）——拖线交互本身脆，机制**逻辑走单测**、画布**渲染+快照走 e2e**（渲染源/目标节点 + 声明边、未拖动也把有效配对写进 @ToAssistant 快照）。三迁移场景（表→表/文件→表/表→文件）共用同一画布，靠端点 label 区分，零场景专属组件。
 > 用户拍板用 @xyflow/react（设计原定，非手写 SVG）。落地代价：新增依赖（bundle 1.8→2.19MB）+ `tsconfig` 开 `skipLibCheck`（xyflow d.ts 不满足本仓 `exactOptionalPropertyTypes`，标准做法，只跳过 lib 声明内部检查、自有代码仍全检）。
 
-**M5 未竟**：`migration_preview` 报废（移除 legacy 场景组件）、smoke harness 换真实词表（画布/能力属性）复测良率——见 §6 M5 行。
+**（2026-07-21 续）`migration_preview` 报废完成**：整组场景卡移除——`migrationPreview.ts` / `MigrationPreviewCard.tsx` / `MigrationGrid.tsx` / 其单测 / 218 行 CSS / 32 条 `ui.migration.*` i18n / 两处注册表条目 / render_ui guidance / agentIpc 提示（重指向 surface_patch+field_mapping）。**旧会话零崩**：`UiCard.tsx` 对未注册组件天然降级为 markdown fallback（Q-H「legacy 渲染永不迁移」的兑现物），退役 migration_preview 卡回落为可读摘要——`ui-card.spec` 重写为此 fallback 契约的专测。`surface_patch` 成为唯一注册组件；共享 SQL 闸（`isReadOnlySql`/`isSingleStatement` 在 dbQuery，非迁移私有）原样保留。live 管线 spec 与 uiArtifact 信封测平移到 surface_patch。
+
+**M5 未竟（仅剩）**：smoke harness 换真实词表复测良率——已备 harness（`scripts/ui-dsl-smoke.mjs` +3 真实词表任务：field_mapping 画布 / Table 能力属性 / Code 产物；同源提示词自动含新词表）；实跑需 Kimi 凭证（k2.7/k3，~40 次付费调用，同 M2 由用户执行）。门槛不变：初始语句级 ≥90%、自纠后 ≥98%。

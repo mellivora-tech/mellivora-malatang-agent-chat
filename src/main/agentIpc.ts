@@ -384,7 +384,7 @@ export function registerAgentIpc(dataRoot: string): void {
 							? ' Writes go through execute_data_source — one statement per call, each individually approved by the user; sources marked READ-ONLY are refused unconditionally.'
 							: '') +
 						(hasRenderUi
-							? ' When the user asks for a data-migration or field-mapping preview, present it with render_ui (component=migration_preview) — NEVER as markdown tables in prose; the card lets the user correct sample cells and confirm.'
+							? ' When the user asks for a data-migration or field-mapping workbench, build it with render_ui (component=surface_patch) using the field_mapping / Table primitives — NEVER as markdown tables in prose; the surface lets the user pair fields and correct cells directly.'
 							: '')
 					: '';
 			const sshNote =
