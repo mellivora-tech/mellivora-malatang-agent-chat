@@ -5,6 +5,7 @@
 
 import type { IAgentEvent, IAgentTool, IPermissionGate, IToolResultBlock, IToolUseBlock } from './agentTypes.js';
 import type { ILoopGuard } from './loopGuard.js';
+import { runHooksUntilBlock, type IHook } from './hooks/hooks.js';
 
 /**
  * Run the tool_use blocks from one assistant turn, yielding tool_use / tool_result
@@ -26,6 +27,7 @@ export async function* executeToolUses(
 	permissionGate: IPermissionGate,
 	signal: AbortSignal,
 	guard?: ILoopGuard,
+	preToolHooks: readonly IHook[] = [],
 ): AsyncGenerator<IAgentEvent, IToolResultBlock[]> {
 	const results: IToolResultBlock[] = [];
 
@@ -46,7 +48,7 @@ export async function* executeToolUses(
 				continue;
 			}
 
-			const block = await runSingleToolUse(use, tools, permissionGate, signal);
+			const block = await runSingleToolUse(use, tools, permissionGate, signal, preToolHooks);
 			results.push(block);
 			yield { type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError };
 			continue;
@@ -68,7 +70,7 @@ export async function* executeToolUses(
 		}
 		const running = startWithLimit(checked, maxToolConcurrency(), async ({ use, blocked }) => {
 			const startedAt = Date.now();
-			const block = blocked ? errorResult(use.id, blocked.message) : await runSingleToolUse(use, tools, permissionGate, signal);
+			const block = blocked ? errorResult(use.id, blocked.message) : await runSingleToolUse(use, tools, permissionGate, signal, preToolHooks);
 			return { block, durationMs: Date.now() - startedAt };
 		});
 		// Stream results in call order as they settle — the first call's result
@@ -162,7 +164,13 @@ function partitionBySafety(toolUses: readonly IToolUseBlock[], tools: readonly I
  * bad input, denied permission, thrown tool — becomes an error tool_result fed
  * back to the model. It never throws and never halts the loop.
  */
-async function runSingleToolUse(use: IToolUseBlock, tools: readonly IAgentTool[], permissionGate: IPermissionGate, signal: AbortSignal): Promise<IToolResultBlock> {
+async function runSingleToolUse(
+	use: IToolUseBlock,
+	tools: readonly IAgentTool[],
+	permissionGate: IPermissionGate,
+	signal: AbortSignal,
+	preToolHooks: readonly IHook[],
+): Promise<IToolResultBlock> {
 	const tool = tools.find(candidate => candidate.name === use.name);
 	if (!tool) {
 		return errorResult(use.id, `No such tool available: ${use.name}`);
@@ -173,9 +181,23 @@ async function runSingleToolUse(use: IToolUseBlock, tools: readonly IAgentTool[]
 		return errorResult(use.id, `InputValidationError: ${validation.error}`);
 	}
 
+	// PreToolUse hooks (design docs/design/hooks): discipline checks after input
+	// validation, before permission + execution. block → the call becomes an
+	// error result fed back to the model; modify → the chained input flows on;
+	// allow + additionalContext → the reminder rides the tool result so the
+	// model sees it alongside the output (the inject-not-block posture, Q1).
+	// Permissions and the loop guard stay native — tool-coupled / concurrency-
+	// synchronous, they are not routed through the generic registry.
+	const matching = preToolHooks.filter(hook => hook.toolMatcher === undefined || hook.toolMatcher.test(use.name));
+	const pre = await runHooksUntilBlock(matching, { event: 'PreToolUse', toolName: use.name, toolInput: validation.value });
+	if (pre.decision === 'block' && pre.reason !== undefined) {
+		return errorResult(use.id, pre.reason);
+	}
+	const hookedInput = pre.decision === 'modify' && 'modifiedInput' in pre ? pre.modifiedInput : validation.value;
+
 	let decision;
 	try {
-		decision = await permissionGate.check(tool, validation.value, { toolUseId: use.id });
+		decision = await permissionGate.check(tool, hookedInput, { toolUseId: use.id });
 	} catch (error) {
 		return errorResult(use.id, `Permission check failed: ${describeError(error)}`);
 	}
@@ -184,11 +206,14 @@ async function runSingleToolUse(use: IToolUseBlock, tools: readonly IAgentTool[]
 		return errorResult(use.id, decision.message);
 	}
 
-	const input = decision.updatedInput !== undefined ? decision.updatedInput : validation.value;
+	const input = decision.updatedInput !== undefined ? decision.updatedInput : hookedInput;
 
 	try {
 		const result = await tool.call(input, { toolUseId: use.id, signal });
-		return { type: 'tool_result', toolUseId: use.id, content: result.content, isError: result.isError ?? false };
+		const isError = result.isError ?? false;
+		// A successful result carries any PreToolUse-injected reminder appended.
+		const content = pre.additionalContext !== undefined && !isError ? `${result.content}\n\n${pre.additionalContext}` : result.content;
+		return { type: 'tool_result', toolUseId: use.id, content, isError };
 	} catch (error) {
 		return errorResult(use.id, `Tool ${tool.name} threw: ${describeError(error)}`);
 	}

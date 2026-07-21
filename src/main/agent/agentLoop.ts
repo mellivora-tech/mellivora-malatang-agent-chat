@@ -28,13 +28,15 @@ import {
 } from './compaction.js';
 import { createLoopGuard } from './loopGuard.js';
 import { isReplyVerifierEnabled } from './replyVerifier.js';
-import { HookRegistry, runHooksUntilBlock } from './hooks/hooks.js';
+import { HookRegistry, runHooksUntilBlock, type IHook } from './hooks/hooks.js';
 import {
 	createActionClaimNudgeHook,
 	createGroundingNudgeHook,
+	createLiveSystemNudgeHook,
 	createReplyVerifierHook,
 	createStaleClaimNudgeHook,
 	createWalkthroughNudgeHook,
+	isLiveSystemNudgeEnabled,
 	type IReplyVerifierData,
 } from './hooks/builtinHooks.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
@@ -202,6 +204,13 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	}
 	if (walkthroughToolAvailable) {
 		stopHooks.register(createWalkthroughNudgeHook({ walkthroughToolAvailable, filesChanged: () => filesChangedThisRun, walkthroughWritten: () => walkthroughWritten }));
+	}
+	// PreToolUse hooks (design §10 M2): discipline checks fired before each tool
+	// runs, per run. W4 — inject the live-system quiescence reminder onto the
+	// first data-source query so a diff of a moving target gets caught.
+	const preToolHooks: IHook[] = [];
+	if (dataSourceToolsAvailable && isLiveSystemNudgeEnabled(process.env)) {
+		preToolHooks.push(createLiveSystemNudgeHook());
 	}
 	// Tool-output aging: emit telemetry only when the pruned set grows.
 	const pruneEnabled = isToolPruneEnabled(process.env);
@@ -521,7 +530,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// Run the tools, then feed all results back as one user message. Appending
 		// tool_results before every tool has finished would interleave them with
 		// plain user content and the API would reject the next request.
-		const toolResults = yield* executeToolUses(toolUses, config.tools, config.permissionGate, signal, loopGuard);
+		const toolResults = yield* executeToolUses(toolUses, config.tools, config.permissionGate, signal, loopGuard, preToolHooks);
 		messages.push({ role: 'user', content: toolResults });
 
 		// A sub-agent's result carries its own <work-digest> block: fold those

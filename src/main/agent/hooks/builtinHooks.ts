@@ -118,3 +118,36 @@ export function createWalkthroughNudgeHook(deps: {
 		run: () => (deps.walkthroughToolAvailable && deps.filesChanged() && !deps.walkthroughWritten() ? { decision: 'block', reason: WALKTHROUGH_NUDGE } : { decision: 'allow' }),
 	};
 }
+
+// --- W4: live-system discipline (design docs/design/hooks §10 M2) -----------------
+// The first M2 discipline hook. A PreToolUse hook on data-source queries that,
+// the first time per run, injects a reminder to verify the source is quiescent
+// before treating precise counts as a stable snapshot to diff — the exact
+// misstep that sent the run-6 diagnosis chasing a moving target (an ES index
+// being re-synced live). Inject, never block (Q1): the query still runs; the
+// reminder rides its result so the model sees it while looking at the data.
+
+export const LIVE_SYSTEM_NUDGE =
+	'<system-reminder>Before treating these counts/rows as a STABLE snapshot to diff or reconcile: is anything WRITING to this data source right now (a running sync, an app under test, a scheduled job)? A concurrent writer makes exact numbers a moving target — a static diff of a live system chases values that change between queries. Verify the source is quiescent, or explicitly account for the churn, before drawing conclusions from precise counts. Report the stable MECHANISM, not a transient count, when the system is live.</system-reminder>';
+
+/** Kill switch: MELLIVORA_LIVE_SYSTEM_NUDGE=off (same pattern as the reply verifier / loop guard). */
+export function isLiveSystemNudgeEnabled(env: NodeJS.ProcessEnv): boolean {
+	return env['MELLIVORA_LIVE_SYSTEM_NUDGE'] !== 'off';
+}
+
+/** Injects the quiescence reminder onto the FIRST data-source query per run (once-per-run via closure state). */
+export function createLiveSystemNudgeHook(): IHook {
+	let fired = false;
+	return {
+		id: 'builtin:live-system-nudge',
+		event: 'PreToolUse',
+		toolMatcher: /^query_data_source$/,
+		run: () => {
+			if (fired) {
+				return { decision: 'allow' };
+			}
+			fired = true;
+			return { decision: 'allow', additionalContext: LIVE_SYSTEM_NUDGE };
+		},
+	};
+}

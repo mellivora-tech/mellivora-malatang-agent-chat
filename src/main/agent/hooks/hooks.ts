@@ -178,11 +178,13 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 export async function runHooksUntilBlock(hooks: readonly IHook[], input: IHookInput): Promise<IHookOutcome> {
 	const contexts: string[] = [];
 	const results: IHookResult[] = [];
+	let currentInput = input.toolInput;
+	let modified = false;
 
 	for (const hook of hooks) {
 		let decision: IHookDecision;
 		try {
-			decision = await hook.run(input);
+			decision = await hook.run({ ...input, toolInput: currentInput });
 		} catch {
 			continue; // fail-open.
 		}
@@ -205,8 +207,17 @@ export async function runHooksUntilBlock(hooks: readonly IHook[], input: IHookIn
 				...(context !== undefined ? { additionalContext: context } : {}),
 			};
 		}
+		if (decision.decision === 'modify' && 'modifiedInput' in decision) {
+			currentInput = decision.modifiedInput;
+			modified = true;
+		}
 	}
 
 	const context = contexts.length > 0 ? contexts.join('\n') : undefined;
-	return { decision: 'allow', results, ...(context !== undefined ? { additionalContext: context } : {}) };
+	return {
+		decision: modified ? 'modify' : 'allow',
+		results,
+		...(context !== undefined ? { additionalContext: context } : {}),
+		...(modified ? { modifiedInput: currentInput } : {}),
+	};
 }

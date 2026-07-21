@@ -101,7 +101,7 @@ test('a concurrent batch emits every tool_use up front, then results in call ord
 	assert.deepEqual(flow, ['ut1', 'ut2', 'ut3', 'rt1', 'rt2', 'rt3']);
 });
 
-test('tool_result events carry each call\'s OWN runtime — a fast call behind a slow one is not billed the wait', async () => {
+test("tool_result events carry each call's OWN runtime — a fast call behind a slow one is not billed the wait", async () => {
 	const delays: Record<string, number> = { slow: 80, fast: 5 };
 	const safeTool = defineTool({
 		name: 'safe',
@@ -146,10 +146,7 @@ test('the batch concurrency cap bounds in-flight calls without changing result o
 			},
 		});
 
-		const { results } = await drain(
-			[use('t1', 'safe', { n: 1 }), use('t2', 'safe', { n: 2 }), use('t3', 'safe', { n: 3 }), use('t4', 'safe', { n: 4 })],
-			[safeTool],
-		);
+		const { results } = await drain([use('t1', 'safe', { n: 1 }), use('t2', 'safe', { n: 2 }), use('t3', 'safe', { n: 3 }), use('t4', 'safe', { n: 4 })], [safeTool]);
 
 		assert.equal(peakActive, 2, 'no more than the cap in flight');
 		assert.deepEqual(
@@ -159,4 +156,69 @@ test('the batch concurrency cap bounds in-flight calls without changing result o
 	} finally {
 		delete process.env['MELLIVORA_TOOL_CONCURRENCY'];
 	}
+});
+
+// --- PreToolUse fire-point + W4 live-system hook (design §10 M2) -----------------
+
+import type { IHook } from '../../src/main/agent/hooks/hooks.js';
+import { createLiveSystemNudgeHook } from '../../src/main/agent/hooks/builtinHooks.js';
+
+function drainWithHooks(toolUses: readonly IToolUseBlock[], tools: Parameters<typeof executeToolUses>[1], preToolHooks: readonly IHook[]): Promise<IToolResultBlock[]> {
+	return (async () => {
+		const generator = executeToolUses(toolUses, tools, allowAllPermissionGate, new AbortController().signal, undefined, preToolHooks);
+		let step = await generator.next();
+		while (!step.done) {
+			step = await generator.next();
+		}
+		return step.value;
+	})();
+}
+
+const echoTool = defineTool({
+	name: 'echo',
+	description: 'echoes its input',
+	inputSchema: { type: 'object' },
+	isReadOnly: () => true,
+	isConcurrencySafe: () => false,
+	validateInput: input => ({ ok: true, value: input }),
+	call: async input => ({ content: JSON.stringify(input) }),
+});
+
+test('PreToolUse hook: block → the call becomes an error result; the tool never runs', async () => {
+	let ran = false;
+	const tool = { ...echoTool, call: async () => ((ran = true), { content: 'ran' }) };
+	const blocker: IHook = { id: 'b', event: 'PreToolUse', run: () => ({ decision: 'block', reason: 'blocked by discipline' }) };
+	const results = await drainWithHooks([use('t1', 'echo', { x: 1 })], [tool], [blocker]);
+	assert.equal(results[0]!.isError, true);
+	assert.match(results[0]!.content, /blocked by discipline/);
+	assert.equal(ran, false, 'a blocked PreToolUse call skips execution');
+});
+
+test('PreToolUse hook: modify → the tool receives the chained input', async () => {
+	const modifier: IHook = { id: 'm', event: 'PreToolUse', run: () => ({ decision: 'modify', modifiedInput: { x: 99 } }) };
+	const results = await drainWithHooks([use('t1', 'echo', { x: 1 })], [echoTool], [modifier]);
+	assert.match(results[0]!.content, /"x":99/, 'the tool saw the hook-modified input, not the original');
+});
+
+test('W4 live-system hook: injects the quiescence reminder onto the FIRST query_data_source result, once per run', async () => {
+	const qds = defineTool({
+		name: 'query_data_source',
+		description: 'runs a query',
+		inputSchema: { type: 'object' },
+		isReadOnly: () => true,
+		isConcurrencySafe: () => false,
+		validateInput: input => ({ ok: true, value: input }),
+		call: async () => ({ content: 'count: 9842' }),
+	});
+	const hook = createLiveSystemNudgeHook();
+	const results = await drainWithHooks([use('q1', 'query_data_source', { sql: 'a' }), use('q2', 'query_data_source', { sql: 'b' })], [qds], [hook]);
+	assert.match(results[0]!.content, /count: 9842/, 'the query still ran (inject, not block)');
+	assert.match(results[0]!.content, /concurrent writer|STABLE snapshot/, 'the reminder rides the first result');
+	assert.doesNotMatch(results[1]!.content, /concurrent writer/, 'once per run — the second query is clean');
+});
+
+test('W4 live-system hook: does not touch non-matching tools (toolMatcher)', async () => {
+	const hook = createLiveSystemNudgeHook();
+	const results = await drainWithHooks([use('t1', 'echo', { x: 1 })], [echoTool], [hook]);
+	assert.doesNotMatch(results[0]!.content, /concurrent writer/, 'echo is not query_data_source — the matcher filters the hook out');
 });
