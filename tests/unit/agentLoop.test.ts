@@ -461,13 +461,17 @@ test('user hooks: a wired Stop hook blocks and forces one retry, then is guarded
 	// This hook would block on EVERY call; only the once-per-run guard stops an infinite loop.
 	const stopHook: IHook = { id: 'user:redo', event: 'Stop', run: () => ({ decision: 'block', reason: 'user hook says redo' }) };
 
-	const { terminal } = await drive(
+	const { events, terminal } = await drive(
 		runAgentLoop([userMessage('hi')], { system: 's', tools: [], modelClient: client as never, permissionGate: allowAllPermissionGate, userHooks: [stopHook] }),
 	);
 
 	assert.equal(terminal.turns, 2, 'the block forced exactly one retry');
 	assert.equal(requests.length, 2, 'the Stop hook fired once and was guarded — no spin');
 	assert.match(JSON.stringify(requests[1]!.messages), /user hook says redo/, 'the block reason was fed back as the retry');
+
+	// Observability (§9): the block is recorded as a hook event.
+	const hookEvents = events.filter((event): event is Extract<IAgentEvent, { type: 'hook' }> => event.type === 'hook');
+	assert.deepEqual(hookEvents, [{ type: 'hook', event: 'Stop', hookId: 'user:redo', decision: 'block' }]);
 	delete process.env['MELLIVORA_REPLY_VERIFIER'];
 });
 
