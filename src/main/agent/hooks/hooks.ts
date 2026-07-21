@@ -62,6 +62,8 @@ export interface IHookResult {
 	readonly decision: 'allow' | 'block' | 'modify';
 	readonly note?: string;
 	readonly data?: unknown;
+	/** Set when this hook injected context — lets the dispatch point attribute an injection to its hook (observability §9). */
+	readonly additionalContext?: string;
 }
 
 export interface IHook {
@@ -134,6 +136,7 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 			decision: decision.decision,
 			...(decision.note !== undefined ? { note: decision.note } : {}),
 			...(decision.data !== undefined ? { data: decision.data } : {}),
+			...(decision.additionalContext !== undefined ? { additionalContext: decision.additionalContext } : {}),
 		});
 		if (decision.additionalContext) {
 			contexts.push(decision.additionalContext);
@@ -194,6 +197,7 @@ export async function runHooksUntilBlock(hooks: readonly IHook[], input: IHookIn
 			decision: decision.decision,
 			...(decision.note !== undefined ? { note: decision.note } : {}),
 			...(decision.data !== undefined ? { data: decision.data } : {}),
+			...(decision.additionalContext !== undefined ? { additionalContext: decision.additionalContext } : {}),
 		});
 		if (decision.additionalContext) {
 			contexts.push(decision.additionalContext);

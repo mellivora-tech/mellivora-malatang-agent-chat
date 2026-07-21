@@ -222,3 +222,52 @@ test('W4 live-system hook: does not touch non-matching tools (toolMatcher)', asy
 	const results = await drainWithHooks([use('t1', 'echo', { x: 1 })], [echoTool], [hook]);
 	assert.doesNotMatch(results[0]!.content, /concurrent writer/, 'echo is not query_data_source — the matcher filters the hook out');
 });
+
+// --- hook observability (§9): PreToolUse hooks emit `hook` events ----------------
+
+async function hookEventsOf(
+	toolUses: readonly IToolUseBlock[],
+	tools: Parameters<typeof executeToolUses>[1],
+	preToolHooks: readonly IHook[],
+): Promise<Extract<IAgentEvent, { type: 'hook' }>[]> {
+	const generator = executeToolUses(toolUses, tools, allowAllPermissionGate, new AbortController().signal, undefined, preToolHooks);
+	const events: IAgentEvent[] = [];
+	let step = await generator.next();
+	while (!step.done) {
+		events.push(step.value);
+		step = await generator.next();
+	}
+	return events.filter((event): event is Extract<IAgentEvent, { type: 'hook' }> => event.type === 'hook');
+}
+
+test('hook event: a blocking PreToolUse hook emits a hook event (after the tool_result, order intact)', async () => {
+	const blocker: IHook = { id: 'user:deny', event: 'PreToolUse', run: () => ({ decision: 'block', reason: 'no' }) };
+	// tool_result must precede the hook event (existing order preserved).
+	const generator = executeToolUses([use('t1', 'echo', { x: 1 })], [echoTool], allowAllPermissionGate, new AbortController().signal, undefined, [blocker]);
+	const types: string[] = [];
+	for (let step = await generator.next(); !step.done; step = await generator.next()) {
+		types.push(step.value.type);
+	}
+	assert.deepEqual(types, ['tool_use', 'tool_result', 'hook'], 'tool_use → tool_result → hook, order untouched');
+
+	const events = await hookEventsOf([use('t1', 'echo', { x: 1 })], [echoTool], [blocker]);
+	assert.equal(events.length, 1);
+	assert.deepEqual(events[0], { type: 'hook', event: 'PreToolUse', hookId: 'user:deny', decision: 'block' });
+});
+
+test('hook event: an injecting PreToolUse hook (W4) emits a hook event with injected=true, once', async () => {
+	const qds = defineTool({
+		name: 'query_data_source',
+		description: 'query',
+		inputSchema: { type: 'object' },
+		isReadOnly: () => true,
+		isConcurrencySafe: () => false,
+		validateInput: input => ({ ok: true, value: input }),
+		call: async () => ({ content: 'rows: 1' }),
+	});
+	const events = await hookEventsOf([use('q1', 'query_data_source', {}), use('q2', 'query_data_source', {})], [qds], [createLiveSystemNudgeHook()]);
+	assert.equal(events.length, 1, 'only the first query injects → one hook event');
+	assert.equal(events[0]!.hookId, 'builtin:live-system-nudge');
+	assert.equal(events[0]!.injected, true);
+	assert.equal(events[0]!.decision, 'allow');
+});

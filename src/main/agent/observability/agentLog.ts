@@ -70,6 +70,8 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'stale_claim_nudge' })
 	/** A zero-tool-call reply claimed completed actions and was forced to do-or-retract. Watch the family's rates together. */
 	| (IBaseEvent & { readonly type: 'action_claim_nudge' })
+	/** A hook fired with a consequence (§9): user hooks + any block/inject. Names + decision are export-safe telemetry; watch to see what the harness enforced and when. */
+	| (IBaseEvent & { readonly type: 'hook'; readonly event: string; readonly hookId: string; readonly decision: 'allow' | 'block' | 'modify'; readonly injected?: boolean })
 	/** A spawn_agent child loop started. The task text (user-adjacent content) stays in detail. */
 	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly detail?: { readonly task: string } })
 	/** One child tool call — the child's whole activity trace, since its loop events never reach the log directly. The summary (paths/patterns) stays in detail. */

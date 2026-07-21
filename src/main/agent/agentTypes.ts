@@ -13,7 +13,7 @@
  * injected dependencies so the provider (Claude / GLM / …) plugs in at one seam.
  */
 
-import type { IHook } from './hooks/hooks.js';
+import type { HookEvent, IHook } from './hooks/hooks.js';
 
 // ---------------------------------------------------------------------------
 // Message model — provider-agnostic, shaped like Anthropic content blocks.
@@ -262,7 +262,15 @@ export type IAgentEvent =
 			readonly messagesChars: number;
 			readonly compactedChars: number;
 			readonly prunedChars: number;
-	  };
+	  }
+	/**
+	 * A hook fired with a consequence (design docs/design/hooks §9). Built-in
+	 * hooks that already have their own event (reply_verifier, *_nudge) are not
+	 * double-reported; this covers USER hooks and any hook that blocked or
+	 * injected context, so the log shows what the harness enforced and when.
+	 * `injected` = the hook added additionalContext to the run.
+	 */
+	| { readonly type: 'hook'; readonly event: HookEvent; readonly hookId: string; readonly decision: 'allow' | 'block' | 'modify'; readonly injected?: boolean };
 
 /**
  * A compaction summary persisted across runs. `covered` counts the prefix of

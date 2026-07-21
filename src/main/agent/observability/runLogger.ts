@@ -251,6 +251,9 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 				case 'stream_retry':
 					agentLog.emit({ ts: now(), ...base, type: 'stream_retry', attempt: event.attempt, maxAttempts: event.maxAttempts, delayMs: event.delayMs });
 					break;
+				case 'hook':
+					agentLog.emit({ ts: now(), ...base, type: 'hook', event: event.event, hookId: event.hookId, decision: event.decision, ...(event.injected ? { injected: true } : {}) });
+					break;
 				default:
 					break;
 			}

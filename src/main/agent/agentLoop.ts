@@ -533,9 +533,10 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 							default:
 								// A user hook: guard on block so it fires at most once per run (a
 								// re-blocking hook must not spin the loop). Its reason rides the
-								// pushed retry message below.
+								// pushed retry message below; the hook event records it in the log.
 								if (result.decision === 'block') {
 									firedStopHooks.add(result.hookId);
+									yield { type: 'hook', event: 'Stop', hookId: result.hookId, decision: 'block' };
 								}
 								break;
 						}
