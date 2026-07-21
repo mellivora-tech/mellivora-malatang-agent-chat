@@ -30,7 +30,7 @@ import { getCredential } from './credentialStorage.js';
 import { createSafeStorageCipher } from './secretCipher.js';
 import { readWorkspaceConfig } from './workspaceConfigStorage.js';
 import { ensureRemotesCloned, getProject, projectCodeRoots } from './projectsStorage.js';
-import { resolveModelConfig } from './modelConfigStorage.js';
+import { resolveModelConfig, resolveSmallFastConfig } from './modelConfigStorage.js';
 import { formatSkillBlock, getSkill } from './skillsStorage.js';
 
 const DEFAULT_SYSTEM = 'You are a helpful coding agent.';
@@ -237,8 +237,6 @@ export function registerAgentIpc(dataRoot: string): void {
 				? createSshTools({ servers: sshServers, roots, getSecret: id => getCredential(dataRoot, id, cipher), report: event => reportToolProgress(event) })
 				: [];
 
-		// One client instance serves the run AND any sub-agent loops it spawns.
-		const rawModelClient = createModelClient(config);
 		// Quota fast-stop (#19): a 403 means EVERY further request this run —
 		// parent or any parallel child — hits the same wall. The wrapper aborts
 		// the shared signal at the first one, so the whole run collapses now
@@ -246,10 +244,10 @@ export function registerAgentIpc(dataRoot: string): void {
 		// tells the loop this abort means PAUSE — it settles as a resumable
 		// 'paused' terminal carrying the frozen transcript, not a user-stop.
 		let quotaError: Error | undefined;
-		const modelClient: typeof rawModelClient = {
+		const withQuotaFastStop = (raw: ReturnType<typeof createModelClient>): ReturnType<typeof createModelClient> => ({
 			async *stream(request) {
 				try {
-					yield* rawModelClient.stream(request);
+					yield* raw.stream(request);
 				} catch (error) {
 					if (quotaError === undefined && isQuotaExhaustedError(error)) {
 						quotaError = error instanceof Error ? error : new Error(String(error));
@@ -258,7 +256,15 @@ export function registerAgentIpc(dataRoot: string): void {
 					throw error;
 				}
 			},
-		};
+		});
+		// The main (thinking) client serves the parent loop.
+		const modelClient = withQuotaFastStop(createModelClient(config));
+		// Small-fast tier (#21 W1): delegated sub-agents run on the provider's
+		// cheap NON-thinking model so exploration doesn't burn the main model.
+		// Same quota fast-stop; falls back to the main client when the provider
+		// has no designated small-fast tier.
+		const smallFastConfig = resolveSmallFastConfig(config);
+		const spawnModelClient = smallFastConfig ? withQuotaFastStop(createModelClient(smallFastConfig)) : modelClient;
 
 		// render_data: the agent pushes tabular results into the data panel; the
 		// csv lands beside the transcript so the chip replays after restarts.
@@ -357,7 +363,7 @@ export function registerAgentIpc(dataRoot: string): void {
 			? [
 					createSpawnAgentTool({
 						roots,
-						modelClient,
+						modelClient: spawnModelClient,
 						...(languageServers ? { languageServers } : {}),
 						record: event => {
 							runLogger.record(event);
@@ -487,7 +493,10 @@ export function registerAgentIpc(dataRoot: string): void {
 			return undefined;
 		}
 
-		const client = createModelClient({ ...config, params: { maxTokens: TITLE_MAX_TOKENS } });
+		// Title generation is auxiliary — run it on the small-fast tier when the
+		// provider has one (#21 W1), the main model otherwise.
+		const titleConfig = resolveSmallFastConfig(config) ?? config;
+		const client = createModelClient({ ...titleConfig, params: { maxTokens: TITLE_MAX_TOKENS } });
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), TITLE_TIMEOUT_MS);
 		try {

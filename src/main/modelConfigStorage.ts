@@ -17,6 +17,7 @@ import {
 	type ModelEffort,
 	type ModelProvider,
 } from '../sessions/services/models/common/models.js';
+import { PROVIDER_PRESETS } from '../sessions/services/models/common/providerPresets.js';
 
 /**
  * On-disk config. A provider holds the raw `apiKey` (plaintext for now; a future
@@ -405,6 +406,34 @@ export async function resolveModelConfig(root: string, modelId: string | undefin
 		...(target.model.contextLength ? { contextLength: target.model.contextLength } : {}),
 		...(target.model.params ? { params: target.model.params } : {}),
 		...(target.provider.apiKey ? { apiKey: target.provider.apiKey } : {}),
+	};
+}
+
+/**
+ * The cheap/fast sibling of a resolved model config (#21 W1): the same provider
+ * connection (baseURL + apiKey) pointed at the provider preset's `smallFast`
+ * model — a non-thinking tier for delegated sub-agents and title generation, so
+ * exploration and housekeeping do not burn the main thinking model. Matched by
+ * baseURL (the config carries no presetId). Returns undefined when the provider
+ * has no designated small-fast model, or the main config already IS it — the
+ * caller then just reuses the main client (graceful no-tiering).
+ */
+export function resolveSmallFastConfig(config: IStoredModelConfig): IStoredModelConfig | undefined {
+	const normalize = (url: string): string => url.replace(/\/+$/, '');
+	const preset = PROVIDER_PRESETS.find(candidate => normalize(candidate.baseURL) === normalize(config.baseURL));
+	const small = preset?.models.find(model => model.smallFast);
+	if (!small || small.model === config.model) {
+		return undefined;
+	}
+	// Drop the main model's params (effort/thinking budget); the small-fast tier
+	// is non-thinking and takes provider defaults. Keep the connection + apiKey.
+	const { params: _mainParams, contextLength: _mainCtx, ...connection } = config;
+	const contextLength = small.contextLength ?? config.contextLength;
+	return {
+		...connection,
+		model: small.model,
+		label: small.label,
+		...(contextLength !== undefined ? { contextLength } : {}),
 	};
 }
 

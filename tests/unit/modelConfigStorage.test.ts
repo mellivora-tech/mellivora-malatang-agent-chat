@@ -15,6 +15,7 @@ import {
 	removeModel,
 	removeProvider,
 	resolveModelConfig,
+	resolveSmallFastConfig,
 	setModelEffort,
 	setModelEnabled,
 	upsertModel,
@@ -141,4 +142,38 @@ test('a corrupt registry file degrades to an empty provider list', async () => {
 	const { writeFile } = await import('node:fs/promises');
 	await writeFile(join(root, 'models.json'), 'not json', 'utf8');
 	assert.deepEqual((await listModels(root)).providers, []);
+});
+
+// --- resolveSmallFastConfig (#21 W1): the cheap sibling of a resolved config ---
+
+test('resolveSmallFastConfig: maps a kimi-code (k3) config to the smallFast kimi-k2.7-code, same connection, params dropped', () => {
+	const main = {
+		id: 'm1',
+		label: 'Kimi K3',
+		provider: 'anthropic' as const,
+		baseURL: 'https://api.kimi.com/coding',
+		model: 'k3',
+		contextLength: 262144,
+		params: { effort: 'max' as const },
+		apiKey: 'secret-key',
+	};
+	const small = resolveSmallFastConfig(main);
+	assert.ok(small, 'kimi-code has a designated small-fast model');
+	assert.equal(small.model, 'kimi-k2.7-code');
+	assert.equal(small.baseURL, main.baseURL, 'same connection');
+	assert.equal(small.apiKey, 'secret-key', 'same key');
+	assert.equal(small.contextLength, 256000, 'the small-fast model context window');
+	assert.equal(small.params, undefined, 'the main model thinking params are dropped');
+});
+
+test('resolveSmallFastConfig: baseURL trailing slash still matches the preset', () => {
+	const small = resolveSmallFastConfig({ id: 'm', label: 'K3', provider: 'anthropic', baseURL: 'https://api.kimi.com/coding/', model: 'k3', apiKey: 'k' });
+	assert.equal(small?.model, 'kimi-k2.7-code');
+});
+
+test('resolveSmallFastConfig: undefined when already on the small-fast model, or the provider has none', () => {
+	// Already the small-fast model → no further downgrade.
+	assert.equal(resolveSmallFastConfig({ id: 'm', label: 'x', provider: 'anthropic', baseURL: 'https://api.kimi.com/coding', model: 'kimi-k2.7-code', apiKey: 'k' }), undefined);
+	// A provider whose baseURL matches no preset → no cheap tier known.
+	assert.equal(resolveSmallFastConfig({ id: 'm', label: 'x', provider: 'openai-compatible', baseURL: 'https://example.test/v1', model: 'whatever', apiKey: 'k' }), undefined);
 });

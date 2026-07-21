@@ -18,6 +18,13 @@ export interface IProviderPresetModel {
 	readonly contextLength?: number;
 	/** Reasoning-effort levels the model's API accepts; omitted = no effort knob. */
 	readonly efforts?: readonly ModelEffort[];
+	/**
+	 * The provider's designated cheap/fast tier — used for delegated sub-agents
+	 * and auxiliary calls (title generation) so exploration and housekeeping do
+	 * not burn the main thinking model (design docs/design/hooks & #21 W1).
+	 * At most one model per provider should set this.
+	 */
+	readonly smallFast?: boolean;
 }
 
 export interface IProviderPreset {
@@ -44,7 +51,7 @@ export const PROVIDER_PRESETS: readonly IProviderPreset[] = [
 			// Allegretto+ 1M. Seed the conservative size; Allegretto users
 			// raise contextLength to 1048576 in settings.
 			{ model: 'k3', label: 'Kimi K3', contextLength: 262144, efforts: ['none', 'max'] },
-			{ model: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextLength: 256000 },
+			{ model: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextLength: 256000, smallFast: true },
 			{ model: 'kimi-k2.6', label: 'Kimi K2.6', contextLength: 256000 },
 		],
 	},
@@ -55,7 +62,7 @@ export const PROVIDER_PRESETS: readonly IProviderPreset[] = [
 		baseURL: 'https://api.moonshot.cn/v1',
 		description: 'Pay-as-you-go API',
 		models: [
-			{ model: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextLength: 256000 },
+			{ model: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextLength: 256000, smallFast: true },
 			{ model: 'kimi-k2.6', label: 'Kimi K2.6', contextLength: 256000 },
 		],
 	},
@@ -99,7 +106,7 @@ export const PROVIDER_PRESETS: readonly IProviderPreset[] = [
 		models: [
 			{ model: 'claude-opus-4-8', label: 'Claude Opus 4.8', contextLength: 1000000, efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
 			{ model: 'claude-sonnet-5', label: 'Claude Sonnet 5', contextLength: 1000000, efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
-			{ model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', contextLength: 200000 },
+			{ model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', contextLength: 200000, smallFast: true },
 		],
 	},
 ];
