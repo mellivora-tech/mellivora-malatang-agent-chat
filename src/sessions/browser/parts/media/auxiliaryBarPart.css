@@ -533,6 +533,56 @@
 	white-space: pre;
 }
 
+/* field_mapping mechanism (design §8.1): the drag-line canvas. xyflow's own
+   theme CSS-vars are remapped to our tokens so it inherits every theme. */
+.fm-canvas {
+	position: relative;
+	width: 100%;
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+	border-radius: var(--vscode-agents-radius-control);
+	overflow: hidden;
+}
+
+.fm-canvas .react-flow {
+	--xy-background-color-default: var(--vscode-agents-color-input-background);
+	--xy-edge-stroke-default: var(--vscode-agents-color-accent);
+	--xy-edge-stroke-width-default: 2;
+	--xy-edge-stroke-selected-default: var(--vscode-agents-color-danger);
+	--xy-handle-background-color-default: var(--vscode-agents-color-accent);
+	--xy-handle-border-color-default: var(--vscode-agents-color-input-background);
+	--xy-connectionline-stroke-default: var(--vscode-agents-color-accent);
+	background: var(--vscode-agents-color-input-background);
+}
+
+.fm-labels {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline: 0;
+	z-index: var(--vscode-agents-z-float);
+	display: flex;
+	justify-content: space-between;
+	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-8);
+	font-size: var(--vscode-agents-fontSize-label2);
+	color: var(--vscode-agents-color-text-secondary);
+	pointer-events: none;
+}
+
+.fm-node {
+	display: flex;
+	align-items: center;
+	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-8);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-control-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-control-background);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	white-space: nowrap;
+}
+
+.fm-node-target {
+	justify-content: flex-end;
+}
+
 .surface-field {
 	display: flex;
 	align-items: center;

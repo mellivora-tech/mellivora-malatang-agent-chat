@@ -8,6 +8,7 @@ import test from 'node:test';
 
 import { SMOKE_CATALOG, generateDslPrompt } from '../../src/sessions/common/uiDsl/catalog.js';
 import { formatErrors, parseProgram, splitStatements, statementYield } from '../../src/sessions/common/uiDsl/parser.js';
+import { connectFieldLink, disconnectFieldLink, parseFieldLinks, serializeFieldLinks, unmappedSources } from '../../src/sessions/common/uiDsl/fieldMapping.js';
 
 const parse = (source: string) => parseProgram(source, SMOKE_CATALOG);
 
@@ -204,6 +205,46 @@ test('artifact_review composes from atoms alone — Code + Text stats + Button A
 	);
 	assert.deepEqual(program.errors, []);
 	assert.equal(statementYield(program).valid, 4);
+});
+
+test('field_mapping parses as a mechanism component and is documented same-source (M5)', () => {
+	const program = parse(
+		['root = Stack([fm])', 'fm = field_mapping("staging.orders", ["order_no", "amt"], "orders", ["order_id", "amount"], [["order_no", "order_id"]])'].join('\n'),
+	);
+	assert.deepEqual(program.errors, []);
+	assert.equal(statementYield(program).valid, 2);
+	// mappings is optional.
+	const bare = parse(['root = Stack([fm])', 'fm = field_mapping("s", ["a"], "t", ["b"])'].join('\n'));
+	assert.deepEqual(bare.errors, []);
+	// arity is enforced by the same catalog machinery.
+	const short = parse(['root = Stack([fm])', 'fm = field_mapping("s", ["a"])'].join('\n'));
+	assert.match(short.errors[0]!.message, /field_mapping takes 4-5 argument\(s\), got 2/);
+	assert.match(generateDslPrompt(), /field_mapping\(source, sourceFields, target, targetFields, mappings\?\)/);
+});
+
+test('field_mapping link model: parse, 1:1 connect eviction, disconnect, serialize (M5)', () => {
+	const initial = parseFieldLinks([
+		['order_no', 'order_id'],
+		['amt', 'amount'],
+		['bad'], // junk row (no target) drops
+	]);
+	assert.deepEqual(initial, [
+		{ source: 'order_no', target: 'order_id' },
+		{ source: 'amt', target: 'amount' },
+	]);
+
+	// 1:1: re-pointing amt to order_id evicts BOTH the old amt→amount and the
+	// old order_no→order_id (order_id already taken), leaving one link.
+	const reconnected = connectFieldLink(initial, 'amt', 'order_id');
+	assert.deepEqual(reconnected, [{ source: 'amt', target: 'order_id' }]);
+
+	// A source with no link is an orphan (design: 孤立节点即未映射).
+	assert.deepEqual(unmappedSources(['order_no', 'amt', 'status'], reconnected), ['order_no', 'status']);
+
+	const dropped = disconnectFieldLink(reconnected, 'amt', 'order_id');
+	assert.deepEqual(dropped, []);
+	assert.equal(serializeFieldLinks(reconnected), 'amt→order_id');
+	assert.equal(serializeFieldLinks(dropped), '∅');
 });
 
 // --- M3: Autocloser / incremental / fold ----------------------------------------

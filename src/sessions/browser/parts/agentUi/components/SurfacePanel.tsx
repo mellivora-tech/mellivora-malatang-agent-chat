@@ -7,6 +7,8 @@ import React, { useMemo, useState } from 'react';
 import { localize } from '../../../../common/i18n/i18n.js';
 import { SMOKE_CATALOG } from '../../../../common/uiDsl/catalog.js';
 import { foldSurface, type ISurfaceNode, type SurfaceValue } from '../../../../common/uiDsl/fold.js';
+import { parseFieldLinks, serializeFieldLinks, type IFieldMappingLink } from '../../../../common/uiDsl/fieldMapping.js';
+import { FieldMappingView } from './FieldMappingView.js';
 
 /**
  * The workbench surface renderer (#12 M4): folds the session's statement
@@ -70,29 +72,39 @@ const readTableCaps = (node: ISurfaceNode): ITableCaps => {
 	return { colNames: columns.map(cellText), editable, validators };
 };
 
-/** Visit every Table node in a resolved surface tree (for the snapshot's validity pass). */
-const eachTable = (node: ISurfaceNode, visit: (node: ISurfaceNode) => void): void => {
-	if (node.component === 'Table') {
+/** Visit every node of a given component type in a resolved surface tree (snapshot passes). */
+const eachNode = (node: ISurfaceNode, component: string, visit: (node: ISurfaceNode) => void): void => {
+	if (node.component === component) {
 		visit(node);
 	}
 	for (const arg of node.args) {
-		eachTableInValue(arg, visit);
+		eachNodeInValue(arg, component, visit);
 	}
 };
 
-const eachTableInValue = (value: SurfaceValue, visit: (node: ISurfaceNode) => void): void => {
+const eachNodeInValue = (value: SurfaceValue, component: string, visit: (node: ISurfaceNode) => void): void => {
 	if (value.kind === 'node') {
-		eachTable(value.node, visit);
+		eachNode(value.node, component, visit);
 	} else if (value.kind === 'array') {
 		for (const item of value.items) {
-			eachTableInValue(item, visit);
+			eachNodeInValue(item, component, visit);
 		}
 	}
 };
 
+/** Row-major literal cells off an array SurfaceValue (used by Table + field_mapping mappings). */
+const surfaceRows = (value: SurfaceValue | undefined): (string | number | boolean | null)[][] =>
+	value?.kind === 'array' ? value.items.map(row => (row.kind === 'array' ? row.items.map(item => (item.kind === 'literal' ? item.value : null)) : [])) : [];
+
+/** A field_mapping node's declared source-endpoint fields (arg 1) as strings. */
+const surfaceStrings = (value: SurfaceValue | undefined): string[] => (value?.kind === 'array' ? value.items.map(cellText) : []);
+
 export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): React.ReactElement {
 	const folded = useMemo(() => foldSurface(batches, SMOKE_CATALOG), [batches]);
 	const [edits, setEdits] = useState<Record<string, FormValue>>({});
+	// field_mapping links are arrays, not scalars — a parallel edit map keyed by
+	// `${node.name}.mappings`. Absent an entry, the node's declared pairings win.
+	const [mappingEdits, setMappingEdits] = useState<Record<string, readonly IFieldMappingLink[]>>({});
 
 	const read = (key: string): FormValue => edits[key] ?? folded.states.get(key) ?? '';
 
@@ -110,7 +122,7 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 		// model must be able to SEE which cells fail — including original cells the
 		// user never touched.
 		if (folded.root) {
-			eachTable(folded.root, node => {
+			eachNode(folded.root, 'Table', node => {
 				const { colNames, validators } = readTableCaps(node);
 				if (validators.size === 0) {
 					return;
@@ -133,6 +145,16 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 						}
 					});
 				});
+			});
+		}
+		// field_mapping pairings ride the snapshot in readable arrow form —
+		// EFFECTIVE links (dragged edits, else the declared pairing), so a
+		// reviewed-but-untouched mapping still reaches the model on confirm.
+		if (folded.root) {
+			eachNode(folded.root, 'field_mapping', node => {
+				const key = `${node.name}.mappings`;
+				const links = mappingEdits[key] ?? parseFieldLinks(surfaceRows(node.args[4]));
+				entries.push(`${key} = ${serializeFieldLinks(links)}`);
 			});
 		}
 		return entries.join('\n');
@@ -279,6 +301,20 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 					<button type="button" className="surface-button" onClick={() => action?.kind === 'action' && runAction(action.steps)}>
 						{asText(literal(node.args[0]))}
 					</button>
+				);
+			}
+			case 'field_mapping': {
+				const key = `${node.name}.mappings`;
+				const links = mappingEdits[key] ?? parseFieldLinks(surfaceRows(node.args[4]));
+				return (
+					<FieldMappingView
+						sourceLabel={asText(literal(node.args[0]))}
+						sourceFields={surfaceStrings(node.args[1])}
+						targetLabel={asText(literal(node.args[2]))}
+						targetFields={surfaceStrings(node.args[3])}
+						links={links}
+						onChange={next => setMappingEdits(previous => ({ ...previous, [key]: next }))}
+					/>
 				);
 			}
 			default:

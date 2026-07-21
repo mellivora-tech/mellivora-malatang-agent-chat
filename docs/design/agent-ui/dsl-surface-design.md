@@ -207,4 +207,7 @@ Q-D 能力属性层已按 §8.1–8.7 实现，`npm run verify` 除既有环境�
 
 **（2026-07-21 续）`Code` 原子 + artifact_review 第二验证场景达成**：`Code(content, language?)` 进目录（同源，renderer `.surface-code` 只读等宽块 + 语言标签）；artifact_review = `Stack([Text 统计, Code, Button(Action([@Run 导出, @ToAssistant 授权执行]))])` 纯原子组合复现，**零专用组件**（单测锁定 + e2e 渲染断言）。至此**组合性双向证毕**：data_preview 靠"增强"（能力属性）、artifact_review 靠"组合"（原子+Action），§8.1 判定线两侧各有实证。
 
-**M5 未竟**：`field_mapping` 机制组件（@xyflow 拖线画布，M5 主体量）、`migration_preview` 报废、smoke harness 换真实词表复测——见 §6 M5 行。
+**（2026-07-21 续）`field_mapping` 机制组件达成**：`field_mapping(source, sourceFields, target, targetFields, mappings?)` 进目录（同源），renderer `@xyflow/react` 拖线画布（左源右目标、拖 handle 成对、删边解对），xyflow 主题 CSS-var 全量重映射到 `--vscode-agents-*` token（含 danger/accent/input）。**机制逻辑纯函数化**（`common/uiDsl/fieldMapping.ts`：解析/1:1 连接淘汰/断开/序列化/孤立节点）——拖线交互本身脆，机制**逻辑走单测**、画布**渲染+快照走 e2e**（渲染源/目标节点 + 声明边、未拖动也把有效配对写进 @ToAssistant 快照）。三迁移场景（表→表/文件→表/表→文件）共用同一画布，靠端点 label 区分，零场景专属组件。
+> 用户拍板用 @xyflow/react（设计原定，非手写 SVG）。落地代价：新增依赖（bundle 1.8→2.19MB）+ `tsconfig` 开 `skipLibCheck`（xyflow d.ts 不满足本仓 `exactOptionalPropertyTypes`，标准做法，只跳过 lib 声明内部检查、自有代码仍全检）。
+
+**M5 未竟**：`migration_preview` 报废（移除 legacy 场景组件）、smoke harness 换真实词表（画布/能力属性）复测良率——见 §6 M5 行。

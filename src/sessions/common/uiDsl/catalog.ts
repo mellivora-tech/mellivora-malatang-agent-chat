@@ -137,6 +137,17 @@ export const SMOKE_CATALOG: readonly IComponentSpec[] = [
 			{ name: 'action', type: { kind: 'action' }, optional: true, doc: 'e.g. Action([@Set($days, "30")]) or Action([@ToAssistant("按当前配置执行")])' },
 		],
 	},
+	{
+		name: 'field_mapping',
+		doc: 'Drag-line canvas pairing a source field set to a target field set — the ONE mechanism component (direct manipulation atoms cannot compose). Same canvas serves table→table / file→table / table→file via the endpoint labels. Drag edits stay local (Tier 0); the pairing rides the @ToAssistant snapshot.',
+		args: [
+			{ name: 'source', type: { kind: 'string' }, doc: 'source endpoint label, e.g. "staging.orders (file)"' },
+			{ name: 'sourceFields', type: { kind: 'strings' }, doc: 'source field names (left column)' },
+			{ name: 'target', type: { kind: 'string' }, doc: 'target endpoint label' },
+			{ name: 'targetFields', type: { kind: 'strings' }, doc: 'target field names (right column)' },
+			{ name: 'mappings', type: { kind: 'cells' }, optional: true, doc: 'initial pairings [[sourceField, targetField], ...]; drag edits them (1:1)' },
+		],
+	},
 ];
 
 /** Action steps the runtime understands. @Set/@Reset stay local; @ToAssistant returns to the model with the form snapshot. */

@@ -128,6 +128,67 @@ test('surface caps: @Editable renders cell inputs, @Validate highlights invalid 
 	}
 });
 
+// M5 field_mapping: the ONE mechanism component (drag-line canvas). Endpoint
+// abstraction serves table→table / file→table / table→file uniformly.
+const FM_BATCH = [
+	'root = Stack([fm, apply])',
+	'fm = field_mapping("staging.orders", ["order_no", "amt"], "orders", ["order_id", "amount"], [["order_no", "order_id"]])',
+	'apply = Button("确认映射", Action([@ToAssistant("按当前映射生成 SQL")]))',
+].join('\n');
+
+async function seedFmSession(dataDir: string): Promise<void> {
+	const now = new Date().toISOString();
+	await mkdir(join(dataDir, 'sessions'), { recursive: true });
+	const lines = [
+		JSON.stringify({ type: 'session', version: 1, sessionId: 'fm-sess', sessionType: 'agent-chat', icon: 'codicon-new-session', createdAt: now, interactivity: 'full' }),
+		JSON.stringify({ type: 'message', timestamp: now, id: 'u1', role: 'user', text: '做个字段映射台' }),
+		JSON.stringify({
+			type: 'message',
+			timestamp: now,
+			id: 'm-f1',
+			role: 'ui',
+			text: '## 工作台\n\n字段映射画布。',
+			ui: { id: 'fp-1', component: 'surface_patch', title: '字段映射台', props: { surface: 'main', statements: FM_BATCH } },
+		}),
+		JSON.stringify({ type: 'state', timestamp: now, status: 2, title: 'fm session' }),
+	];
+	await writeFile(join(dataDir, 'sessions', 'fm-sess.jsonl'), `${lines.join('\n')}\n`, 'utf8');
+}
+
+test('field_mapping: the drag-line canvas renders source/target nodes + the declared edge, and the pairing rides the @ToAssistant snapshot', async () => {
+	const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-fm-'));
+	await seedFmSession(dataDir);
+
+	let app: ElectronApplication | undefined;
+	const errors: string[] = [];
+	try {
+		app = await electron.launch({ args: ['dist/main/main.js'], env: { ...process.env, MELLIVORA_DATA_DIR: dataDir, MELLIVORA_LOCALE: 'zh-CN' } });
+		const page = await app.firstWindow();
+		page.on('pageerror', error => errors.push(error.message));
+		await page.setViewportSize({ width: 1400, height: 1000 });
+		await page.waitForSelector('.sessions-sidebar');
+		await page.locator('.sessions-project-task-row').filter({ hasText: 'fm session' }).click();
+
+		await page.locator('.surface-patch-card button').first().click();
+		await page.waitForSelector('.surface-view');
+
+		// The xyflow canvas mounts with the source + target field nodes.
+		await page.waitForSelector('.fm-canvas .react-flow');
+		await expect(page.locator('.fm-node')).toContainText(['order_no', 'amt', 'order_id', 'amount']);
+		// The declared pairing renders as one edge.
+		await expect(page.locator('.react-flow__edge')).toHaveCount(1);
+
+		// @ToAssistant: even without dragging, the effective pairing rides the snapshot.
+		await page.locator('.surface-view .surface-button', { hasText: '确认映射' }).click();
+		await expect(page.locator('.conversation-transcript')).toContainText('按当前映射生成 SQL');
+		await expect(page.locator('.conversation-transcript')).toContainText('fm.mappings = order_no→order_id');
+
+		expect(errors, errors.join('\n')).toEqual([]);
+	} finally {
+		await app?.close();
+	}
+});
+
 test('surface_patch: projection cards in the stream, cross-batch fold in the workbench tab, @ToAssistant carries the form snapshot', async () => {
 	const dataDir = await mkdtemp(join(tmpdir(), 'agent-chat-surface-'));
 	await seedSession(dataDir);
