@@ -27,7 +27,9 @@ import {
 	serializeForSummary,
 } from './compaction.js';
 import { createLoopGuard } from './loopGuard.js';
-import { buildRetryFeedback, isReplyVerifierEnabled, verifyReply } from './replyVerifier.js';
+import { isReplyVerifierEnabled } from './replyVerifier.js';
+import { HookRegistry, runHooks } from './hooks/hooks.js';
+import { createReplyVerifierHook, type IReplyVerifierData } from './hooks/builtinHooks.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
 import { buildWorkDigestEvent, createWorkDigest, isWorkDigestEnabled, recordWorkDigest, seedWorkDigestFromMessages, seedWorkDigestFromText } from './workDigest.js';
 import { executeToolUses } from './toolRunner.js';
@@ -178,6 +180,13 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	const question = extractLatestUserText(initialMessages);
 	const verifierEnabled = !config.disableReplyVerifier && isReplyVerifierEnabled(process.env);
 	let verifierFired = false;
+	// Stop-event hooks (design docs/design/hooks): the reply verifier is the first
+	// interception migrated onto the hook subsystem. Its verdict rides the hook's
+	// `data` so this loop still emits the exact `reply_verifier` event.
+	const stopHooks = new HookRegistry();
+	if (verifierEnabled) {
+		stopHooks.register(createReplyVerifierHook({ client: config.modelClient, signal: () => signal }));
+	}
 	// Walkthrough nudge: if a run actually changed files but never wrote a
 	// walkthrough, force ONE hidden turn asking for it (the prompt's soft
 	// request is unreliable — models often just stop). Only when the tool is in
@@ -502,14 +511,17 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 			// their own handling and are never verified.
 			if (reason === 'completed' && verifierEnabled && !verifierFired && question !== undefined && assistantText.trim() !== '') {
 				verifierFired = true;
-				const verification = await verifyReply({ client: config.modelClient, question, answer: assistantText, signal });
+				const stopOutcome = await runHooks(stopHooks.forEvent('Stop'), { event: 'Stop', question, answer: assistantText });
 				if (signal.aborted) {
 					return settleAbort();
 				}
-				const retried = verification.verdict === 'fail';
-				yield { type: 'reply_verifier', verdict: verification.verdict, retried, ...(verification.reason ? { reason: verification.reason } : {}) };
-				if (retried) {
-					messages.push({ role: 'user', content: [{ type: 'text', text: buildRetryFeedback(question, verification.reason) }] });
+				const verifierResult = stopOutcome.results.find(result => result.hookId === 'builtin:reply-verifier');
+				if (verifierResult?.data) {
+					const { verdict, reason: judgeReason } = verifierResult.data as IReplyVerifierData;
+					yield { type: 'reply_verifier', verdict, retried: verdict === 'fail', ...(judgeReason ? { reason: judgeReason } : {}) };
+				}
+				if (stopOutcome.decision === 'block' && stopOutcome.reason !== undefined) {
+					messages.push({ role: 'user', content: [{ type: 'text', text: stopOutcome.reason }] });
 					continue;
 				}
 			}

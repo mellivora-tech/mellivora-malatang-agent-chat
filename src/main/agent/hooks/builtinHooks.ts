@@ -4,8 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { IModelClient } from '../agentTypes.js';
-import { buildRetryFeedback, verifyReply } from '../replyVerifier.js';
+import { buildRetryFeedback, verifyReply, type ReplyVerdict } from '../replyVerifier.js';
 import type { IHook, IHookDecision, IHookInput } from './hooks.js';
+
+/** Structured payload the reply-verifier hook rides on `decision.data`, so the loop can emit its `reply_verifier` event faithfully. */
+export interface IReplyVerifierData {
+	readonly verdict: ReplyVerdict;
+	readonly reason: string;
+}
 
 /**
  * Built-in hooks: the hardcoded interceptions of agentLoop, re-expressed as
@@ -33,15 +39,12 @@ export function createReplyVerifierHook(deps: IReplyVerifierHookDeps): IHook {
 				return { decision: 'allow' };
 			}
 			const verification = await verifyReply({ client: deps.client, question: input.question, answer: input.answer, signal: deps.signal() });
+			const data: IReplyVerifierData = { verdict: verification.verdict, reason: verification.reason };
 			if (verification.verdict === 'fail') {
-				return {
-					decision: 'block',
-					reason: buildRetryFeedback(input.question, verification.reason),
-					note: `verdict=fail${verification.reason ? ` reason=${verification.reason}` : ''}`,
-				};
+				return { decision: 'block', reason: buildRetryFeedback(input.question, verification.reason), data };
 			}
 			// pass, or error (fail-open — a broken judge never harms a normal reply).
-			return { decision: 'allow', note: `verdict=${verification.verdict}` };
+			return { decision: 'allow', data };
 		},
 	};
 }

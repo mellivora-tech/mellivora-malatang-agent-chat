@@ -51,6 +51,16 @@ export interface IHookDecision {
 	readonly modifiedInput?: unknown;
 	/** Optional label surfaced to observability (e.g. the reply-verifier verdict). */
 	readonly note?: string;
+	/** Opaque hook-specific payload the loop reads to emit that hook's own observability event (e.g. the reply-verifier verdict + reason). */
+	readonly data?: unknown;
+}
+
+/** One hook's outcome, preserved per-hook so the loop can emit each hook's own event. */
+export interface IHookResult {
+	readonly hookId: string;
+	readonly decision: 'allow' | 'block' | 'modify';
+	readonly note?: string;
+	readonly data?: unknown;
 }
 
 export interface IHook {
@@ -72,6 +82,8 @@ export interface IHookOutcome {
 	readonly modifiedInput?: unknown;
 	/** ids of the hooks that blocked — for observability. */
 	readonly blockedBy?: readonly string[];
+	/** Per-hook results in dispatch order — the loop reads these to emit each hook's own observability event. */
+	readonly results: readonly IHookResult[];
 }
 
 /**
@@ -105,6 +117,7 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 	const reasons: string[] = [];
 	const contexts: string[] = [];
 	const blockedBy: string[] = [];
+	const results: IHookResult[] = [];
 	let currentInput = input.toolInput;
 	let modified = false;
 
@@ -115,6 +128,12 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 		} catch {
 			continue; // fail-open — a broken hook must never harm the run.
 		}
+		results.push({
+			hookId: hook.id,
+			decision: decision.decision,
+			...(decision.note !== undefined ? { note: decision.note } : {}),
+			...(decision.data !== undefined ? { data: decision.data } : {}),
+		});
 		if (decision.additionalContext) {
 			contexts.push(decision.additionalContext);
 		}
@@ -135,12 +154,14 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 		return {
 			decision: 'block',
 			blockedBy,
+			results,
 			...(reasons.length > 0 ? { reason: reasons.join('\n') } : {}),
 			...(context !== undefined ? { additionalContext: context } : {}),
 		};
 	}
 	return {
 		decision: modified ? 'modify' : 'allow',
+		results,
 		...(context !== undefined ? { additionalContext: context } : {}),
 		...(modified ? { modifiedInput: currentInput } : {}),
 	};

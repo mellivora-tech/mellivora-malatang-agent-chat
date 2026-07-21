@@ -15,9 +15,15 @@ function fixed(id: string, decision: IHookDecision): IHook {
 	return { id, event: 'Stop', run: () => decision };
 }
 
-test('runHooks: all-allow yields allow with no reason/context', async () => {
+test('runHooks: all-allow yields allow; per-hook results are preserved in order', async () => {
 	const outcome = await runHooks([fixed('a', { decision: 'allow' }), fixed('b', { decision: 'allow' })], { event: 'Stop' });
-	assert.deepEqual(outcome, { decision: 'allow' });
+	assert.equal(outcome.decision, 'allow');
+	assert.equal(outcome.reason, undefined);
+	assert.equal(outcome.additionalContext, undefined);
+	assert.deepEqual(outcome.results, [
+		{ hookId: 'a', decision: 'allow' },
+		{ hookId: 'b', decision: 'allow' },
+	]);
 });
 
 test('runHooks: any block wins; reasons and blockedBy aggregate', async () => {
@@ -110,13 +116,13 @@ test('reply-verifier hook: judge NO → block with retry feedback', async () => 
 	assert.equal(decision.decision, 'block');
 	assert.match(decision.reason ?? '', /did not address the user's actual message/);
 	assert.match(decision.reason ?? '', /把订单表迁到新库/);
-	assert.match(decision.note ?? '', /verdict=fail/);
+	assert.deepEqual(decision.data, { verdict: 'fail', reason: 'talks about a different topic' });
 });
 
 test('reply-verifier hook: judge YES → allow; judge error → allow (fail-open); empty answer → allow', async () => {
 	const yes = await createReplyVerifierHook({ client: stubClient('YES\naddresses it'), signal }).run({ event: 'Stop', question: 'q', answer: 'a' });
 	assert.equal(yes.decision, 'allow');
-	assert.match(yes.note ?? '', /verdict=pass/);
+	assert.deepEqual(yes.data, { verdict: 'pass', reason: 'addresses it' });
 
 	const errored = await createReplyVerifierHook({ client: stubClient(new Error('judge down')), signal }).run({ event: 'Stop', question: 'q', answer: 'a' });
 	assert.equal(errored.decision, 'allow', 'a broken judge never blocks a normal reply');
