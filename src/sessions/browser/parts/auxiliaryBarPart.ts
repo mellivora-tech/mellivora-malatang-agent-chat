@@ -9,6 +9,8 @@ import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
 import { SurfaceView } from './surfaceView.js';
 import { ArtifactsView } from './artifactsView.js';
+import { RunLogView } from './runLogView.js';
+import type { ILogsBridge } from '../../services/logs/common/logs.js';
 import { DataBrowserView } from '../../contrib/data/browser/dataBrowserView.js';
 import type { IArtifactsBridge } from '../../services/artifacts/common/artifacts.js';
 import type { IDataFilesBridge } from '../../services/dataFiles/common/dataFiles.js';
@@ -23,9 +25,10 @@ export interface IAuxiliaryBarPartOptions {
 	readonly environmentsService?: IEnvironmentsService;
 	readonly dataFiles?: IDataFilesBridge;
 	readonly artifacts?: IArtifactsBridge;
+	readonly logs?: ILogsBridge;
 }
 
-type AuxiliaryTabKind = 'review' | 'data' | 'surface' | 'artifacts' | 'terminal' | 'browser';
+type AuxiliaryTabKind = 'review' | 'data' | 'surface' | 'artifacts' | 'terminal' | 'browser' | 'runlog';
 
 const tabKinds: readonly {
 	readonly kind: AuxiliaryTabKind;
@@ -64,6 +67,11 @@ const tabKinds: readonly {
 		label: localize('aux.tab.browser'),
 		icon: 'codicon-globe',
 		body: localize('aux.browser.empty'),
+	},
+	{
+		kind: 'runlog',
+		label: localize('aux.tab.runlog'),
+		icon: 'codicon-pulse',
 	},
 ];
 
@@ -246,6 +254,13 @@ export class AuxiliaryBarPart extends Part {
 					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
 					...(this.options.sessionsPartService ? { sessionsPartService: this.options.sessionsPartService } : {}),
 					...(this.options.artifacts ? { artifacts: this.options.artifacts } : {}),
+				}),
+			);
+		} else if (kind === 'runlog') {
+			disposables.add(
+				new RunLogView(body, {
+					...(this.options.sessionsService ? { sessionsService: this.options.sessionsService } : {}),
+					...(this.options.logs ? { logs: this.options.logs } : {}),
 				}),
 			);
 		} else if (kind === 'data') {

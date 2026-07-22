@@ -1596,7 +1596,11 @@ async function assertSidebarFooterAndSettings(page: Page): Promise<void> {
 	await expect(dialog.locator('[data-settings-nav-id="general"]')).toHaveClass(/active/);
 	await expect(dialog.locator('.sessions-settings-page-title')).toHaveText('通用');
 	await expect(dialog.locator('.sessions-settings-row-title').first()).toHaveText('减少动效');
-	await expect(dialog.locator('.sessions-settings-toggle')).toBeVisible();
+	// 设置→诊断: the full-logging toggle joins General below Behavior; its control
+	// is created async once logs:getConfig answers, so wait on the count.
+	await expect(dialog.locator('.sessions-settings-row-title').nth(1)).toHaveText('完整运行日志');
+	await expect(dialog.locator('.sessions-settings-toggle')).toHaveCount(2);
+	await expect(dialog.locator('.sessions-settings-toggle').first()).toBeVisible();
 	// The main pane scrolls when content overflows.
 	await expect(dialog.locator('.sessions-settings-main')).toHaveCSS('overflow-y', 'auto');
 
@@ -2023,7 +2027,7 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await expect(toggle).toHaveClass(/active/);
 	await expect(page.locator('.auxiliary-empty-title')).toHaveText('打开标签页');
 	await expect(page.locator('.auxiliary-empty-description')).toHaveText('选择要在侧栏打开的标签页。');
-	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['评审', '数据', '工作台', '产出物', '终端', '浏览器']);
+	await expect(page.locator('.auxiliary-empty-card')).toHaveText(['评审', '数据', '工作台', '产出物', '终端', '浏览器', '运行日志']);
 	await expect(page.locator('.auxiliary-tabs')).toBeHidden();
 
 	// Opening from the picker creates ONE tab — instances, not fixed destinations.
@@ -2042,7 +2046,7 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 
 	// "+" menu opens further tabs; a review tab stays open (and alive) behind it.
 	await page.locator('.auxiliary-tab-add').click();
-	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '工作台', '产出物', '终端', '浏览器']);
+	await expect(page.locator('.auxiliary-add-menu-item')).toHaveText(['评审', '数据', '工作台', '产出物', '终端', '浏览器', '运行日志']);
 	await page.locator('.auxiliary-add-menu-item[data-tab-id="terminal"]').click();
 	await assertSidePaneTab(page, 'terminal', ['评审', '终端'], '终端会话尚未启动');
 
@@ -2050,6 +2054,13 @@ async function assertRightSidePaneInteraction(page: Page): Promise<void> {
 	await page.locator('.auxiliary-tab[data-tab-id="review"]').click();
 	await assertSidePaneTab(page, 'review', ['评审', '终端']);
 	await expect(changesView).toBeVisible();
+
+	// 运行日志 tab: the run-log viewer constructs against the real logs bridge and
+	// shows its empty state (a fresh e2e data dir has no recorded runs).
+	await page.locator('.auxiliary-tab-add').click();
+	await page.locator('.auxiliary-add-menu-item[data-tab-id="runlog"]').click();
+	await expect(page.locator('.auxiliary-view[data-tab-id="runlog"] .runlog-empty')).toHaveText('暂无运行记录');
+	await page.locator('.auxiliary-tab[data-tab-id="runlog"] .auxiliary-tab-close').click();
 
 	// Closing the active tab falls back to a neighbor; closing the last one
 	// returns to the picker.

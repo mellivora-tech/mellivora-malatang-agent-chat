@@ -8,18 +8,25 @@ import { join } from 'node:path';
 import type { AgentLogEvent, IAgentLogSink } from './agentLog.js';
 import { createBufferedWriter } from './bufferedWriter.js';
 
+/** The daily-file key (`YYYY-MM-DD`) — also the format the run index stores. */
+export function logDateKey(date: Date): string {
+	return date.toISOString().slice(0, 10);
+}
+
 /**
  * Local JSONL sink: one dated file per day plus a `latest.jsonl` symlink so a
  * developer can `tail -f <logsDir>/latest.jsonl`. Being on the user's own
  * machine, it keeps full `detail` (inputs, outputs, paths). Off-machine sinks
  * added later must use {@link import('./agentLog.js').toExportable} instead.
  */
-export function createJsonlFileSink(logsDir: string, options?: { readonly immediate?: boolean }): IAgentLogSink {
-	const file = join(logsDir, `${new Date().toISOString().slice(0, 10)}.jsonl`);
-	let ensured = false;
+export function createJsonlFileSink(logsDir: string, options?: { readonly immediate?: boolean; readonly now?: () => Date }): IAgentLogSink {
+	const now = options?.now ?? ((): Date => new Date());
+	// The target is re-resolved at every flush so a long-lived app rolls over to
+	// the new day's file at midnight instead of appending to yesterday's forever.
+	let linkedDate: string | undefined;
 
-	const ensureReady = (): void => {
-		if (ensured) {
+	const ensureReady = (date: string, file: string): void => {
+		if (linkedDate === date) {
 			return;
 		}
 		mkdirSync(logsDir, { recursive: true });
@@ -34,13 +41,15 @@ export function createJsonlFileSink(logsDir: string, options?: { readonly immedi
 		} catch {
 			// Symlinks may be unavailable (e.g. some Windows setups) — not fatal.
 		}
-		ensured = true;
+		linkedDate = date;
 	};
 
 	const writer = createBufferedWriter({
 		...(options?.immediate !== undefined ? { immediate: options.immediate } : {}),
 		writeFn: content => {
-			ensureReady();
+			const date = logDateKey(now());
+			const file = join(logsDir, `${date}.jsonl`);
+			ensureReady(date, file);
 			appendFileSync(file, content);
 		},
 	});
@@ -53,18 +62,23 @@ export function createJsonlFileSink(logsDir: string, options?: { readonly immedi
 }
 
 /**
- * Attach the local file sink when logging is enabled. Off by default; enable
- * with MELLIVORA_DEBUG (or point MELLIVORA_LOG_DIR somewhere). Returns the log
- * file path when attached so startup can print where to tail.
+ * Where the log files live. This no longer gates WHETHER logging happens — the
+ * sink is always attached (errors-only by default; see logFilter.ts) — it only
+ * resolves the directory: MELLIVORA_LOG_DIR wins, else `<dataRoot>/logs`.
  */
-export function resolveAgentLogsDir(dataRoot: string, env: NodeJS.ProcessEnv): string | undefined {
-	const explicit = env['MELLIVORA_LOG_DIR'];
-	if (explicit) {
-		return explicit;
+export function resolveAgentLogsDir(dataRoot: string, env: NodeJS.ProcessEnv): string {
+	return env['MELLIVORA_LOG_DIR'] || join(dataRoot, 'logs');
+}
+
+/**
+ * Dev override: MELLIVORA_DEBUG (or an explicit MELLIVORA_LOG_DIR) forces full
+ * logging regardless of the persisted user setting, so `npm run dev:debug`
+ * keeps meaning "everything on disk" and the settings toggle shows as forced.
+ */
+export function isFullModeForced(env: NodeJS.ProcessEnv): boolean {
+	if (env['MELLIVORA_LOG_DIR']) {
+		return true;
 	}
 	const enabled = env['MELLIVORA_DEBUG'];
-	if (enabled && enabled !== '0' && enabled.toLowerCase() !== 'false') {
-		return join(dataRoot, 'logs');
-	}
-	return undefined;
+	return Boolean(enabled && enabled !== '0' && enabled.toLowerCase() !== 'false');
 }

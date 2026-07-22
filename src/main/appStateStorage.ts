@@ -33,6 +33,7 @@ export async function readAppState(root: string): Promise<IAppState> {
 	const candidate = parsed as Record<string, unknown>;
 	return {
 		...(typeof candidate['activeProjectId'] === 'string' ? { activeProjectId: candidate['activeProjectId'] } : {}),
+		...(candidate['loggingMode'] === 'full' || candidate['loggingMode'] === 'errors' ? { loggingMode: candidate['loggingMode'] } : {}),
 	};
 }
 

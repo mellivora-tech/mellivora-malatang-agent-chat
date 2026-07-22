@@ -11,7 +11,7 @@ import test from 'node:test';
 
 import { createBufferedWriter } from '../../src/main/agent/observability/bufferedWriter.js';
 import { agentLog, toExportable, type AgentLogEvent, type IAgentLogSink } from '../../src/main/agent/observability/agentLog.js';
-import { createJsonlFileSink } from '../../src/main/agent/observability/jsonlFileSink.js';
+import { createJsonlFileSink, isFullModeForced, resolveAgentLogsDir } from '../../src/main/agent/observability/jsonlFileSink.js';
 import { createRunLogger } from '../../src/main/agent/observability/runLogger.js';
 
 function collectingSink(): { sink: IAgentLogSink; events: AgentLogEvent[] } {
@@ -336,4 +336,33 @@ test('jsonl file sink appends events and links latest.jsonl', () => {
 	const link = join(dir, 'latest.jsonl');
 	assert.ok(lstatSync(link).isSymbolicLink(), 'latest.jsonl is a symlink');
 	assert.equal(readlinkSync(link), file);
+});
+
+test('jsonl file sink rolls over at midnight and re-points latest.jsonl', () => {
+	const dir = mkdtempSync(join(tmpdir(), 'mmac-log-roll-'));
+	let now = new Date('2026-07-21T23:59:59.000Z');
+	const sink = createJsonlFileSink(dir, { immediate: true, now: () => now });
+
+	sink.write(runStart);
+	now = new Date('2026-07-22T00:00:01.000Z');
+	sink.write({ ...runStart, type: 'run_end', reason: 'completed', turns: 1, durationMs: 2000 } as AgentLogEvent);
+	sink.dispose?.();
+
+	const before = readFileSync(join(dir, '2026-07-21.jsonl'), 'utf8').trim().split('\n');
+	const after = readFileSync(join(dir, '2026-07-22.jsonl'), 'utf8').trim().split('\n');
+	assert.equal(JSON.parse(before[0]!).type, 'run_start', 'pre-midnight write landed in the old day');
+	assert.equal(JSON.parse(after[0]!).type, 'run_end', 'post-midnight write rolled to the new day');
+	assert.equal(readlinkSync(join(dir, 'latest.jsonl')), join(dir, '2026-07-22.jsonl'), 'symlink follows the rollover');
+});
+
+test('resolveAgentLogsDir always yields a directory; env vars force full mode', () => {
+	// The dir no longer gates logging — errors-only is the floor, not "off".
+	assert.equal(resolveAgentLogsDir('/data', {}), join('/data', 'logs'));
+	assert.equal(resolveAgentLogsDir('/data', { MELLIVORA_LOG_DIR: '/elsewhere' }), '/elsewhere');
+
+	assert.equal(isFullModeForced({}), false);
+	assert.equal(isFullModeForced({ MELLIVORA_DEBUG: '0' }), false);
+	assert.equal(isFullModeForced({ MELLIVORA_DEBUG: 'false' }), false);
+	assert.equal(isFullModeForced({ MELLIVORA_DEBUG: '1' }), true);
+	assert.equal(isFullModeForced({ MELLIVORA_LOG_DIR: '/elsewhere' }), true);
 });

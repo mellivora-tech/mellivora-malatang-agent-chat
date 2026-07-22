@@ -21,6 +21,7 @@ import type { ISkillInput, ISkillsBridge } from '../sessions/services/skills/com
 import type { IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IEnvironmentInput, IEnvironmentsBridge } from '../sessions/services/environments/common/environments.js';
 import type { IDataFilesBridge, IExportTextMeta } from '../sessions/services/dataFiles/common/dataFiles.js';
 import type { IArtifactEntryData, IArtifactFilter, IArtifactsBridge } from '../sessions/services/artifacts/common/artifacts.js';
+import type { ILogsBridge, LoggingMode } from '../sessions/services/logs/common/logs.js';
 
 const mockResponseDelayMs = Number.parseInt(process.env['MELLIVORA_MOCK_DELAY_MS'] ?? '', 10);
 
@@ -153,6 +154,13 @@ const diagnostics = {
 	report: (payload: { scope: string; message?: string; errorClass?: string; sessionId?: string }) => ipcRenderer.send('diagnostics:report', payload),
 };
 
+const logs: ILogsBridge = {
+	getConfig: () => ipcRenderer.invoke('logs:getConfig'),
+	setMode: (mode: LoggingMode) => ipcRenderer.invoke('logs:setMode', mode),
+	listRuns: (opts?: { readonly sessionId?: string; readonly limit?: number }) => ipcRenderer.invoke('logs:listRuns', opts),
+	readRun: (runId: string) => ipcRenderer.invoke('logs:readRun', runId),
+};
+
 contextBridge.exposeInMainWorld('agentWindow', {
 	platform: process.platform,
 	projects,
@@ -166,6 +174,7 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	dataFiles,
 	artifacts,
 	diagnostics,
+	logs,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 	...(pinnedLocale === 'zh-CN' || pinnedLocale === 'en-US' ? { locale: pinnedLocale } : {}),
 });

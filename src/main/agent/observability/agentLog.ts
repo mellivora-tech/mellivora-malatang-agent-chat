@@ -46,6 +46,8 @@ export type AgentLogEvent =
 				readonly cwd?: string;
 				readonly projectId?: string;
 				readonly instructions?: { readonly file: string; readonly chars: number; readonly truncated: boolean };
+				/** Truncated user prompt that started the run — the replay header's "why". */
+				readonly prompt?: string;
 			};
 	  })
 	| (IBaseEvent & { readonly type: 'turn_start'; readonly turn: number })
@@ -110,6 +112,19 @@ export type AgentLogEvent =
 	 */
 	| (IAuxBaseEvent & {
 			readonly type: 'renderer_error';
+			readonly scope: string;
+			readonly sessionId?: string;
+			readonly errorClass?: string;
+			readonly detail?: { readonly message: string };
+	  })
+	/**
+	 * A failure the MAIN process caught outside any run (best-effort side work —
+	 * artifact capture, cleanup). Previously these ended at a bare `console.error`,
+	 * which reaches dev stdout but never the log file — the exact pattern the
+	 * renderer_error channel was built to kill, one process over.
+	 */
+	| (IAuxBaseEvent & {
+			readonly type: 'main_error';
 			readonly scope: string;
 			readonly sessionId?: string;
 			readonly errorClass?: string;

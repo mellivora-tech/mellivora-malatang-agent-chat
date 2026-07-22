@@ -18,6 +18,7 @@ import type {
 } from '../sessions/services/sessions/common/sessionsBridge.js';
 import { appendArtifact } from './artifactsStorage.js';
 import { reportStorageDegraded } from './storageDiagnostics.js';
+import { reportMainFailure } from './mainDiagnostics.js';
 
 const DEFAULT_STATUS_NEEDS_INPUT = 2;
 
@@ -99,7 +100,7 @@ export async function storeSessionTableCsv(root: string, ref: ISessionRef, title
 			payload: { type: 'media', path: file },
 		});
 	} catch (error) {
-		console.error('[artifacts] capture on table store failed', error);
+		reportMainFailure('artifacts.captureOnTableStore', error, { sessionId: ref.sessionId });
 	}
 	return { path: file, name };
 }
@@ -137,7 +138,7 @@ export async function storeSessionDocument(root: string, ref: ISessionRef, title
 			payload: { type: 'media', path: file },
 		});
 	} catch (error) {
-		console.error('[artifacts] capture on document store failed', error);
+		reportMainFailure('artifacts.captureOnDocumentStore', error, { sessionId: ref.sessionId });
 	}
 	return { path: `media/${ref.sessionId}/${name}`, name };
 }

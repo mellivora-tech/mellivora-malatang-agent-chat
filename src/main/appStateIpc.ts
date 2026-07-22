@@ -9,5 +9,9 @@ import { readAppState, writeAppState } from './appStateStorage.js';
 
 export function registerAppStateIpc(dataRoot: string): void {
 	registerHandler('appState:get', () => readAppState(dataRoot));
-	registerHandler('appState:set', (_event, state: IAppState) => writeAppState(dataRoot, state));
+	// Shallow merge, not replace: callers set the one field they own (the project
+	// list sets activeProjectId, settings set loggingMode) and must not clobber
+	// each other. Consequence: a field can be overwritten but never cleared via
+	// this channel — nothing needs clearing today.
+	registerHandler('appState:set', async (_event, state: IAppState) => writeAppState(dataRoot, { ...(await readAppState(dataRoot)), ...state }));
 }

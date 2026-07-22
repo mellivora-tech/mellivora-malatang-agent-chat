@@ -18,6 +18,8 @@ export interface IRunLoggerContext {
 	readonly projectId?: string;
 	/** Project instructions injected into the system prompt (AGENTS.md/CLAUDE.md), when present. */
 	readonly instructions?: { readonly file: string; readonly chars: number; readonly truncated: boolean };
+	/** Truncated user prompt that started the run — without it a replay has no "why". User content, so it rides detail. */
+	readonly promptPreview?: string;
 	/** Model context window in tokens; absent means auto-compaction is disabled for the run. */
 	readonly contextWindow?: number;
 }
@@ -83,12 +85,13 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 		hasWorkspace: context.hasWorkspace,
 		toolCount: context.toolCount,
 		...(context.contextWindow !== undefined ? { contextWindow: context.contextWindow } : {}),
-		...(context.cwd
+		...(context.cwd || context.promptPreview
 			? {
 					detail: {
-						cwd: context.cwd,
+						...(context.cwd ? { cwd: context.cwd } : {}),
 						...(context.projectId ? { projectId: context.projectId } : {}),
 						...(context.instructions ? { instructions: context.instructions } : {}),
+						...(context.promptPreview ? { prompt: context.promptPreview } : {}),
 					},
 				}
 			: {}),

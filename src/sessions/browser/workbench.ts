@@ -34,6 +34,7 @@ import { EnvironmentsService } from '../services/environments/browser/environmen
 import type { IEnvironmentsBridge } from '../services/environments/common/environments.js';
 import type { IDataFilesBridge } from '../services/dataFiles/common/dataFiles.js';
 import type { IArtifactsBridge } from '../services/artifacts/common/artifacts.js';
+import type { ILogsBridge } from '../services/logs/common/logs.js';
 
 type AgentWindowGlobals = typeof globalThis & {
 	readonly agentWindow?: {
@@ -49,6 +50,8 @@ type AgentWindowGlobals = typeof globalThis & {
 		readonly dataFiles?: IDataFilesBridge;
 		/** #13: the artifacts index — the auxiliary bar's 产出物 tab lists/rebuilds/reveals through it. */
 		readonly artifacts?: IArtifactsBridge;
+		/** Observability: run-log read-back + logging-mode setting (运行日志 tab, 设置→诊断). */
+		readonly logs?: ILogsBridge;
 	};
 };
 
@@ -91,6 +94,7 @@ export class Workbench {
 		environmentsService: this.environmentsService,
 		...((globalThis as AgentWindowGlobals).agentWindow?.dataFiles ? { dataFiles: (globalThis as AgentWindowGlobals).agentWindow!.dataFiles! } : {}),
 		...((globalThis as AgentWindowGlobals).agentWindow?.artifacts ? { artifacts: (globalThis as AgentWindowGlobals).agentWindow!.artifacts! } : {}),
+		...((globalThis as AgentWindowGlobals).agentWindow?.logs ? { logs: (globalThis as AgentWindowGlobals).agentWindow!.logs! } : {}),
 	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();

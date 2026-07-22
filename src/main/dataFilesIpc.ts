@@ -11,6 +11,7 @@ import { basename, extname, resolve, sep } from 'node:path';
 import type { FileTableResult, IExportTextMeta, IPickedDataFile } from '../sessions/services/dataFiles/common/dataFiles.js';
 import { appendArtifact } from './artifactsStorage.js';
 import { parseCsv, toTable } from './dataFiles.js';
+import { reportMainFailure } from './mainDiagnostics.js';
 
 /** csv single-sheet placeholder name. */
 const CSV_SHEET = '数据';
@@ -120,7 +121,7 @@ async function recordExportArtifact(dataRoot: string, path: string, meta: IExpor
 			payload: { type: 'export', path },
 		});
 	} catch (error) {
-		console.error('[artifacts] capture on export failed', error);
+		reportMainFailure('artifacts.captureOnExport', error, { sessionId: meta.sessionId });
 	}
 }
 

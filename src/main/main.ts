@@ -18,6 +18,7 @@ import { registerEnvironmentsIpc } from './environmentsIpc.js';
 import { registerDataFilesIpc } from './dataFilesIpc.js';
 import { handleActivate, handleWindowAllClosed } from './appLifecycle.js';
 import { registerAppStateIpc } from './appStateIpc.js';
+import { registerLogsIpc } from './logsIpc.js';
 import { registerModelConfigIpc } from './modelConfigIpc.js';
 import { registerProjectsIpc } from './projectsIpc.js';
 import { ensureProjectsRoot, resolveDataRoot } from './projectsStorage.js';
@@ -84,6 +85,9 @@ const dataRoot = resolveDataRoot(process.env, homedir());
 
 app.whenReady().then(async () => {
 	applyDevDockIcon();
+	// Sinks first: anything the other registrations log (storage_degraded from
+	// early store reads, ipc failures) must not depend on the pre-attach queue.
+	await registerLogsIpc(dataRoot);
 	await ensureProjectsRoot(dataRoot);
 	registerProjectsIpc(dataRoot);
 	registerSessionsIpc(dataRoot);

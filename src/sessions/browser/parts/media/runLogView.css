@@ -1,0 +1,227 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) 2026 Wang Chao. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.runlog-view {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-8);
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+}
+
+.runlog-toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	min-width: 0;
+}
+
+.runlog-run-picker {
+	flex: 1;
+	min-width: 0;
+}
+
+.runlog-refresh,
+.runlog-step-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-secondary);
+	cursor: default;
+}
+
+.runlog-refresh:hover,
+.runlog-step-btn:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.runlog-notice {
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6);
+	border-radius: var(--vscode-agents-radius-control);
+	background: color-mix(in srgb, var(--vscode-agents-color-warning) 12%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.runlog-header {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control);
+}
+
+.runlog-header-meta {
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+.runlog-header-has-errors {
+	color: var(--vscode-agents-color-danger);
+}
+
+.runlog-header-prompt {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.runlog-playback {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+}
+
+.runlog-scrubber {
+	flex: 1;
+	min-width: 0;
+	accent-color: var(--vscode-agents-color-accent);
+}
+
+.runlog-position {
+	flex: none;
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-variant-numeric: tabular-nums;
+}
+
+.runlog-list {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-1);
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.runlog-empty {
+	padding: var(--vscode-agents-space-4) 0;
+	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 62%, transparent);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.runlog-row {
+	display: grid;
+	grid-template-columns: auto auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	min-height: 24px;
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-6);
+	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-label2);
+	text-align: left;
+	cursor: default;
+}
+
+.runlog-row:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+}
+
+.runlog-row:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-1);
+}
+
+.runlog-row.selected {
+	background: color-mix(in srgb, var(--vscode-agents-color-accent) 16%, transparent);
+}
+
+.runlog-row.runlog-future {
+	opacity: 0.35;
+}
+
+.runlog-row-boundary {
+	border-top: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
+	border-radius: 0;
+}
+
+.runlog-row-time {
+	color: var(--vscode-agents-color-text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.runlog-row-badge {
+	padding: 0 var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-radius-control);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+	white-space: nowrap;
+}
+
+.runlog-row-error .runlog-row-badge {
+	background: color-mix(in srgb, var(--vscode-agents-color-danger) 16%, transparent);
+	color: var(--vscode-agents-color-danger);
+}
+
+.runlog-row-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.runlog-row-error .runlog-row-text {
+	color: var(--vscode-agents-color-danger);
+}
+
+.runlog-row-meta {
+	color: var(--vscode-agents-color-text-muted);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.runlog-detail {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-4);
+	max-height: 40%;
+	padding: var(--vscode-agents-space-6);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control);
+	overflow-y: auto;
+}
+
+.runlog-detail-heading {
+	color: var(--vscode-agents-color-text-primary);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.runlog-detail-label {
+	margin-bottom: var(--vscode-agents-space-2);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.runlog-detail-pre {
+	margin: 0;
+	padding: var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-radius-control);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 5%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label2);
+	white-space: pre-wrap;
+	word-break: break-word;
+}

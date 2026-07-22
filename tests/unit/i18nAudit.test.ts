@@ -55,6 +55,9 @@ const SWEPT_FILES: readonly string[] = [
 	'src/sessions/services/environments/common/environments.ts',
 	'src/sessions/contrib/data/common/dataProvider.ts',
 	'src/sessions/browser/workbench.ts',
+	// --- 运行日志 (observability) ---
+	'src/sessions/browser/parts/runLogView.ts',
+	'src/sessions/browser/parts/runLogTimeline.ts',
 ];
 
 // Universal terms that are not translatable content (SQL NULL, a keycap glyph)

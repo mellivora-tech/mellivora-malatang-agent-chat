@@ -24,6 +24,14 @@ import type { ISessionsPartService, WorkbenchMode } from '../../../services/sess
 import type { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import type { ISkillsService } from '../../../services/skills/browser/skillsService.js';
 import type { IEnvironmentsService } from '../../../services/environments/browser/environmentsService.js';
+import type { ILogsBridge } from '../../../services/logs/common/logs.js';
+import { reportFailure } from '../../../common/diagnostics.js';
+
+type LogsGlobals = typeof globalThis & {
+	readonly agentWindow?: {
+		readonly logs?: ILogsBridge;
+	};
+};
 
 export interface ISessionsListOptions {
 	readonly sessionsService?: ISessionsService;
@@ -1036,7 +1044,38 @@ export class SessionsList extends Disposable {
 		const motion = settingsRow(card, { title: localize('settings.reduceMotion'), description: localize('settings.reduceMotion.desc') });
 		settingsToggle(motion, prefs.reduceMotion, value => updatePreferences({ reduceMotion: value }));
 
+		this.renderLoggingSection(page);
+
 		return page;
+	}
+
+	/** 设置→诊断: the full-logging toggle. Lives in main (state.json), not the
+	 *  renderer prefs — the sink that obeys it runs in the main process. */
+	private renderLoggingSection(page: HTMLElement): void {
+		const logs = (globalThis as LogsGlobals).agentWindow?.logs;
+		if (!logs) {
+			return;
+		}
+		const card = settingsSection(page, localize('settings.diagnostics'));
+		const row = settingsRow(card, { title: localize('settings.logging'), description: localize('settings.logging.desc') });
+		// The initial state is async: the toggle is only created once the config
+		// answers, so its internal state starts from the real mode (settingsToggle
+		// owns its own checked state — seeding it wrong would invert the first click).
+		logs
+			.getConfig()
+			.then(config => {
+				const toggle = settingsToggle(row, config.mode === 'full', value => {
+					logs.setMode(value ? 'full' : 'errors').catch(error => reportFailure('settings.setLoggingMode', error));
+				});
+				if (config.forcedFull) {
+					toggle.disabled = true;
+					const description = row.parentElement?.querySelector('.sessions-settings-row-desc');
+					if (description) {
+						description.textContent = localize('settings.logging.forced');
+					}
+				}
+			})
+			.catch(error => reportFailure('settings.getLoggingConfig', error));
 	}
 
 	private renderAppearanceSettings(): HTMLElement {

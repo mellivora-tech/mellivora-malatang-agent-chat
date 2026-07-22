@@ -37,6 +37,22 @@ test('readAppState tolerates corrupt json and wrong field types', async () => {
 	}
 });
 
+test('loggingMode round-trips; invalid values are dropped by the whitelist', async () => {
+	const root = await createTempRoot();
+	try {
+		await writeAppState(root, { loggingMode: 'full' });
+		assert.deepEqual(await readAppState(root), { loggingMode: 'full' });
+
+		await writeAppState(root, { loggingMode: 'errors' });
+		assert.deepEqual(await readAppState(root), { loggingMode: 'errors' });
+
+		await writeFile(join(root, 'state.json'), JSON.stringify({ loggingMode: 'verbose' }), 'utf8');
+		assert.deepEqual(await readAppState(root), {}, 'unknown mode value is not a mode');
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('writeAppState round-trips activeProjectId', async () => {
 	const root = await createTempRoot();
 	try {

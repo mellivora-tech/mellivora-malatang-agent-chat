@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { registerHandler } from './ipcObservability.js';
+import { reportMainFailure } from './mainDiagnostics.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef } from '../sessions/services/sessions/common/sessionsBridge.js';
 import { appendArtifact, extractArtifactsFromEntries, removeSessionArtifacts } from './artifactsStorage.js';
 import {
@@ -29,7 +30,7 @@ export function registerSessionsIpc(dataRoot: string): void {
 				await appendArtifact(dataRoot, line);
 			}
 		} catch (error) {
-			console.error('[artifacts] capture on append failed', error);
+			reportMainFailure('artifacts.captureOnAppend', error, { sessionId: ref.sessionId });
 		}
 	});
 	registerHandler('sessions:delete', async (_event, ref: ISessionRef) => {
@@ -37,7 +38,7 @@ export function registerSessionsIpc(dataRoot: string): void {
 		try {
 			await removeSessionArtifacts(dataRoot, ref);
 		} catch (error) {
-			console.error('[artifacts] cleanup on delete failed', error);
+			reportMainFailure('artifacts.cleanupOnDelete', error, { sessionId: ref.sessionId });
 		}
 	});
 	registerHandler('sessions:storeMedia', (_event, ref: ISessionRef, base64: string, mediaType: string) => storeSessionMedia(dataRoot, ref, base64, mediaType));

@@ -10,7 +10,6 @@ import { addProjectAllowPatterns, isPersistablePattern, readProjectAllowlist } f
 import type { IAgentMessage, IAgentTerminal, IAgentTool, ICompactionAnchor } from './agent/agentTypes.js';
 import { restoreAnchor } from './agent/compaction.js';
 import { agentLog } from './agent/observability/agentLog.js';
-import { createJsonlFileSink, resolveAgentLogsDir } from './agent/observability/jsonlFileSink.js';
 import { createRunLogger } from './agent/observability/runLogger.js';
 import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
@@ -37,6 +36,27 @@ import { resolveModelConfig, resolveSmallFastConfig } from './modelConfigStorage
 import { formatSkillBlock, getSkill } from './skillsStorage.js';
 
 const DEFAULT_SYSTEM = 'You are a helpful coding agent.';
+
+/** Truncated text of the run's triggering user turn, for run_start.detail.prompt. */
+const PROMPT_PREVIEW_CHARS = 2000;
+function extractPromptPreview(messages: readonly IAgentMessage[]): string | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i];
+		if (message?.role !== 'user') {
+			continue;
+		}
+		const text = message.content
+			.flatMap(block => (block.type === 'text' ? [block.text] : []))
+			.join('\n')
+			.trim();
+		// A user turn holding only tool_results is the loop's plumbing, not the
+		// prompt — keep walking back to the turn a human actually typed.
+		if (text !== '') {
+			return text.slice(0, PROMPT_PREVIEW_CHARS);
+		}
+	}
+	return undefined;
+}
 
 /** System prompt for a run bound to a workspace, reflecting the permission mode. */
 function workspaceSystemPrompt(roots: readonly string[], mode: PermissionMode): string {
@@ -144,13 +164,6 @@ export function registerAgentIpc(dataRoot: string): void {
 	// keyed by sessionId like the pending/abort maps, so it survives across runs
 	// of a session but dies with the process — the "会话级、不落盘" contract.
 	const sessionAllowlists = new Map<string, Set<string>>();
-
-	// Agent observability (P1): attach the local JSONL sink when enabled.
-	const logsDir = resolveAgentLogsDir(dataRoot, process.env);
-	if (logsDir) {
-		agentLog.attach(createJsonlFileSink(logsDir));
-		console.error(`[agent] observability log: ${logsDir}/latest.jsonl`);
-	}
 
 	const settleApprovals = (sessionId: string): void => {
 		for (const [requestId, pending] of [...pendingApprovals]) {
@@ -353,9 +366,11 @@ export function registerAgentIpc(dataRoot: string): void {
 				});
 			});
 
+		const promptPreview = extractPromptPreview(payload.messages);
 		const runLogger = createRunLogger({
 			runId: `${payload.sessionId}-${Date.now()}`,
 			sessionId: payload.sessionId,
+			...(promptPreview ? { promptPreview } : {}),
 			model: config.model,
 			mode,
 			hasWorkspace: cwd !== undefined,
