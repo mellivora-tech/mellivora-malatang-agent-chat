@@ -883,12 +883,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// with NEITHER deltas nor a redacted block is just latency (k3 skips
 		// thinking on quick tool-continuation turns) and gets no row at all.
 		let thinkingRedacted = false;
-		// Visible text streamed within the CURRENT turn. If the turn goes on to
-		// call tools, this was narration ("我来梳理一下…"), not the answer — it
-		// relocates into the work block so it neither squats in the answer
-		// bubble for the whole run nor gets concatenated with the real reply.
-		// Only a terminal turn's text (no tools after it) stays as the answer.
-		let turnText = '';
 		// Cross-run anchor capture: the transcript as sent (for the integrity
 		// measure) and the newest ok compaction of this run.
 		let sentTranscript: readonly IAgentMessage[] = [];
@@ -915,8 +909,8 @@ export class FileSessionsProvider implements ISessionsProvider {
 		): void => {
 			// Tool steps carry their own clock (parallel calls overlap); a batch
 			// result's measured runtime wins outright — ordered emission means
-			// arrival time ≠ runtime. Thinking/narration still measure from the
-			// shared step boundary.
+			// arrival time ≠ runtime. Thinking still measures from the shared step
+			// boundary.
 			const durationMs = extra?.durationMs ?? Date.now() - (extra?.startedAt ?? stepStart);
 			const stepDetail = kind === 'thinking' ? (thinkingBuffer.trim() === '' ? undefined : truncateStepDetail(thinkingBuffer, false)) : detail;
 			const redacted = kind === 'thinking' && thinkingRedacted;
@@ -1015,38 +1009,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		};
 
-		// A turn that streamed text and THEN called tools was narrating, not
-		// answering — move that text out of the answer bubble into a work step.
-		// Runs at the turn's first tool_use; the loop's event order (deltas,
-		// then tool_use blocks at stream end) makes that the earliest moment
-		// the disposition is knowable, so the text still streams live until
-		// then and simply relocates the instant the turn declares itself.
-		const relocateTurnNarration = (): void => {
-			if (turnText === '') {
-				return;
-			}
-			const narration = turnText.trim();
-			text = text.slice(0, text.length - turnText.length);
-			turnText = '';
-			if (narration !== '') {
-				steps.push({
-					kind: 'narration',
-					label: narration.length > 200 ? `${narration.slice(0, 200)}…` : narration,
-					durationMs: 0,
-					...(narration.length > 200 ? { detail: narration } : {}),
-				});
-			}
-			if (created && text === '') {
-				// The bubble held nothing but narration — remove it entirely
-				// (same replace-not-append discipline as the reply verifier).
-				created = false;
-				session.messages.set(session.messages.get().filter(message => message.id !== assistantId));
-				this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-			} else if (created) {
-				updateAssistant();
-			}
-		};
-
 		// Torn down when the run settles, whatever ends it (done event, error,
 		// window unload).
 		const runCleanups: (() => void)[] = [];
@@ -1062,7 +1024,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// a whole deploy investigation from the next run's memory — the model then
 		// honestly denied ever reporting the failure the user had watched live.
 		const abortSummary = (cause: string): string => {
-			const lastThought = [...steps].reverse().find(step => (step.kind === 'narration' || step.kind === 'thinking') && (step.detail ?? step.label).trim() !== '');
+			// Only reachable when `text` is still empty (the caller's guard) — the
+			// model never spoke a word this run, thinking/tool activity is all
+			// there is to summarize. Text the model DID emit is never relocated
+			// away anymore, so it stands on its own instead of needing this digest.
+			const lastThought = [...steps].reverse().find(step => step.kind === 'thinking' && (step.detail ?? step.label).trim() !== '');
 			const lastTool = [...steps].reverse().find(step => step.kind === 'tool');
 			const parts: string[] = [];
 			if (lastThought) {
@@ -1375,19 +1341,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// Any other event means the stream recovered.
 				session.reconnect.set(undefined);
 			}
-			if (event?.type === 'turn_start') {
-				// Stale turn text must never leak into a later turn's narration —
-				// e.g. the reply verifier's rejected answer (its bubble is cleared,
-				// but turnText would still hold the text) relocating as a step.
-				turnText = '';
-			} else if (event?.type === 'assistant_delta') {
+			if (event?.type === 'assistant_delta') {
 				// First text after thinking closes the stretch; text after a tool
 				// result belongs to the next thinking stretch, so only close once.
 				if (text === '' && openCalls.size === 0) {
 					closeStep('thinking', 'Thought');
 					updateWork();
 				}
-				turnText += event.text;
 				text += event.text;
 				updateAssistant();
 			} else if (event?.type === 'tool_use') {
@@ -1396,7 +1356,6 @@ export class FileSessionsProvider implements ISessionsProvider {
 				if (openCalls.size === 0) {
 					closeThinkingOrSkip();
 				}
-				relocateTurnNarration();
 				if (event.name === 'propose_plan') {
 					// Malformed input stays on the previous capture — the tool result
 					// already told the model what was wrong.

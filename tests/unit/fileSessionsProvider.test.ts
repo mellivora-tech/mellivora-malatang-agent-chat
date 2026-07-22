@@ -1662,14 +1662,15 @@ test("a restored total carries through the next run's first breakdown without de
 	assert.equal(usage.breakdown?.systemChars, 10, 'the live breakdown still updates');
 });
 
-test("pre-tool narration relocates into the work block; only the terminal turn's text is the answer", async () => {
+test('assistant text is never reclassified as narration — it stays in the answer across every turn, tool calls or not', async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
 	const agent: IAgentBridge = {
 		run: async sessionId => {
 			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
-			// The reported shape: turn 1 announces intent in visible text, then
-			// calls tools; the real answer only arrives in the terminal turn.
+			// Turn 1 speaks, then calls a tool; turn 2 speaks again. Neither
+			// segment is guessed at as "narration" and pulled out of the answer —
+			// there is no such classification anymore.
 			emit({ event: { type: 'turn_start', turn: 1 } });
 			emit({ event: { type: 'thinking_delta', text: 'planning the sweep' } });
 			emit({ event: { type: 'assistant_delta', text: '我来梳理一下这个项目。' } });
@@ -1697,36 +1698,26 @@ test("pre-tool narration relocates into the work block; only the terminal turn's
 	const session = await provider.startSession('梳理下项目');
 	await new Promise(resolve => setTimeout(resolve, 15));
 
-	// The answer bubble carries ONLY the terminal turn's text — no preamble,
-	// no concatenation.
+	// Both turns' text survive, concatenated in the order the model said them.
 	const assistant = session.messages.get().find(message => message.role === 'assistant');
 	assert.ok(assistant, 'assistant reply exists');
-	assert.equal(assistant.text, '项目结构如下：…');
+	assert.equal(assistant.text, '我来梳理一下这个项目。项目结构如下：…');
 
-	// The narration became a work step, positioned before the tool step.
+	// The work block holds the thinking stretch and the tool call — never a
+	// narration step, because the kind no longer exists.
 	const work = session.messages.get().find(message => message.role === 'work');
 	assert.ok(work, 'work block exists');
-	const kinds = (work.steps ?? []).map(step => step.kind);
-	const narrationIndex = kinds.indexOf('narration');
-	const toolIndex = kinds.indexOf('tool');
-	assert.ok(narrationIndex !== -1, `expected a narration step, got kinds=${JSON.stringify(kinds)}`);
-	assert.ok(toolIndex !== -1 && narrationIndex < toolIndex, 'narration precedes the tool it announced');
-	assert.equal((work.steps ?? [])[narrationIndex]!.label, '我来梳理一下这个项目。');
+	assert.deepEqual(
+		(work.steps ?? []).map(step => step.kind),
+		['thinking', 'tool']
+	);
 
-	// Persistence matches what the UI shows: the assistant entry is the final
-	// text only, and the work entry carries the narration step.
 	const persistedAssistant = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
 	assert.ok(persistedAssistant, 'assistant message persisted');
-	assert.equal((persistedAssistant.entry as { text: string }).text, '项目结构如下：…');
-	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
-	assert.ok(persistedWork, 'work entry persisted');
-	assert.ok(
-		((persistedWork.entry as { steps?: readonly { kind: string }[] }).steps ?? []).some(step => step.kind === 'narration'),
-		'narration step persisted',
-	);
+	assert.equal((persistedAssistant.entry as { text: string }).text, '我来梳理一下这个项目。项目结构如下：…');
 });
 
-test('a rejected reply never resurfaces as narration in the retry turn', async () => {
+test("a rejected reply's text never leaks into the work block or the retried answer", async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
 	const agent: IAgentBridge = {
@@ -1764,8 +1755,11 @@ test('a rejected reply never resurfaces as narration in the retry turn', async (
 	const assistant = session.messages.get().find(message => message.role === 'assistant');
 	assert.equal(assistant?.text, '正确的回复');
 	const work = session.messages.get().find(message => message.role === 'work');
-	const narrations = (work?.steps ?? []).filter(step => step.kind === 'narration');
-	assert.equal(narrations.length, 0, `the rejected reply must not reappear as narration: ${JSON.stringify(narrations)}`);
+	assert.deepEqual((work?.steps ?? []).map(step => step.kind), ['tool'], "only the retry turn's tool call is recorded");
+	assert.ok(
+		!(work?.steps ?? []).some(step => (step.label ?? '').includes('答非所问')),
+		'the rejected text must not resurface anywhere in the work block',
+	);
 });
 
 test('an aborted run persists a substantive summary and an INTERRUPTED digest note, not "Stopped."', async () => {

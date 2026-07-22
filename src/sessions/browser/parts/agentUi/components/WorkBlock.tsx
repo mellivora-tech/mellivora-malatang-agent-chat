@@ -20,10 +20,12 @@ export interface IWorkBlockProps {
  * with their evidence (outcome === 'error' blocks the tuck-away). A manual
  * expand/collapse always wins over the automatic behavior (expandOverride).
  *
- * Content renders through buildWorkSections: narration steps become section
- * headers ("说一段 → 做一组"), parallel children de-interleave into per-agent
- * sub-blocks, main-loop read sweeps fold into rollups — all pure functions of
- * persisted step facts, so replay matches the live run.
+ * Content renders through buildWorkSections: parallel children de-interleave
+ * into per-agent sub-blocks, main-loop read sweeps fold into rollups — all
+ * pure functions of persisted step facts, so replay matches the live run.
+ * Assistant text is never routed through here — it stays inline in the
+ * answer bubble regardless of what tool calls surround it (no "was this
+ * narration or the real answer" guess at the text level).
  */
 export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 	const { message, onOpenDataBrowser } = props;
@@ -78,38 +80,19 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 			<div className="conversation-work-steps" hidden={!expanded}>
 				{sections.map(section => (
 					<div key={`${message.id}:s${section.firstIndex}`} className="conversation-work-section">
-						{section.title !== undefined && <SectionHeader title={section.title} detail={section.titleDetail} />}
-						<div className={section.title !== undefined ? 'conversation-work-section-body' : undefined}>
-							{section.items.map(item =>
-								item.kind === 'agentGroup' ? (
-									<AgentGroupRow key={`${message.id}:a${item.firstIndex}`} group={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
-								) : item.kind === 'rollup' ? (
-									<RollupRow key={`${message.id}:r${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
-								) : (
-									<WorkStepRow key={`${message.id}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
-								),
-							)}
-						</div>
+						{section.items.map(item =>
+							item.kind === 'agentGroup' ? (
+								<AgentGroupRow key={`${message.id}:a${item.firstIndex}`} group={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
+							) : item.kind === 'rollup' ? (
+								<RollupRow key={`${message.id}:r${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
+							) : (
+								<WorkStepRow key={`${message.id}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
+							),
+						)}
 					</div>
 				))}
 			</div>
 		</section>
-	);
-}
-
-/** "▸ 环境齐全，开始搭建项目" — the narration promoted to a chapter heading; truncated narrations expand to the full text. */
-function SectionHeader(props: { readonly title: string; readonly detail?: string | undefined }): JSX.Element {
-	const [open, setOpen] = useState(false);
-	if (props.detail === undefined) {
-		return <div className="conversation-work-section-head">{props.title}</div>;
-	}
-	return (
-		<>
-			<button type="button" className="conversation-work-section-head expandable" aria-expanded={open} onClick={() => setOpen(!open)}>
-				{props.title}
-			</button>
-			{open && <pre className="conversation-work-step-detail">{props.detail}</pre>}
-		</>
 	);
 }
 
@@ -249,14 +232,7 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 		);
 	}
 
-	const icon =
-		step.kind === 'thinking'
-			? 'codicon-history'
-			: step.kind === 'narration'
-				? 'codicon-comment'
-				: presentation.error
-					? 'codicon-error'
-					: 'codicon-tools';
+	const icon = step.kind === 'thinking' ? 'codicon-history' : presentation.error ? 'codicon-error' : 'codicon-tools';
 
 	const rowContent = (
 		<>
@@ -270,7 +246,6 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 				<span className="conversation-work-step-label">{step.kind === 'thinking' ? localize('conv.thoughtFor', thinkingDurationText(step.durationMs)) : step.label}</span>
 			)}
 			{step.kind !== 'thinking' &&
-				step.kind !== 'narration' &&
 				(step.running ? (
 					<span className="codicon codicon-loading codicon-modifier-spin conversation-work-step-duration" aria-label={localize('conv.running')} />
 				) : (

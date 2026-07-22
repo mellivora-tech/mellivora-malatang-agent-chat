@@ -125,10 +125,10 @@ export type WorkRenderItem =
 
 /**
  * Fold consecutive successful read-class tool steps (Q2's converged industry
- * rule): any non-read event — narration, thinking, a write, an error, an
- * unknown tool — breaks the run; writes never aggregate; a lone read stays a
- * plain row. Counters are derived from an append-only array, so they are
- * monotonic within a run by construction.
+ * rule): any non-read tool call — a write, an error, an unknown tool — breaks
+ * the run; writes never aggregate; a lone read stays a plain row. Thinking
+ * does NOT break a run (see the 2a note below). Counters are derived from an
+ * append-only array, so they are monotonic within a run by construction.
  */
 export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRenderItem[] {
 	const items: WorkRenderItem[] = [];
@@ -232,36 +232,29 @@ export interface IWorkAgentGroup {
 
 export type WorkSectionItem = WorkRenderItem | IWorkAgentGroup;
 
-/** One "说一段 → 做一组" chapter: a narration header and everything until the next one. */
+/** The whole work block's render items, with parallel child loops de-interleaved into their own groups. */
 export interface IWorkSection {
-	/** The narration text (undefined for the untitled preamble before the first narration). */
-	readonly title?: string;
-	/** Full narration when the title was truncated at assembly time. */
-	readonly titleDetail?: string;
 	readonly items: readonly WorkSectionItem[];
 	readonly firstIndex: number;
 }
 
 /**
- * The #14 P1 render model: narration steps become section headers; within a
- * section, each child loop's steps collapse into ONE agent group anchored at
- * the child's first appearance (de-interleaving parallel children); the
- * remaining main-loop stretches run through the rollup fold. Pure function of
- * persisted facts — replay renders identically to the live run.
+ * The #14 P1 render model: each child loop's steps collapse into ONE agent
+ * group anchored at the child's first appearance (de-interleaving parallel
+ * children); the remaining main-loop stretches run through the rollup fold.
+ * Pure function of persisted facts — replay renders identically to the live run.
  */
 export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSection[] {
 	const sections: IWorkSection[] = [];
-	let title: string | undefined;
-	let titleDetail: string | undefined;
-	let sectionFirst = 0;
-	// Per-section accumulation: an ordered token list of main-loop stretches and
-	// agent buckets, buckets keyed by agent and anchored at first appearance.
+	const sectionFirst = 0;
+	// An ordered token list of main-loop stretches and agent buckets, buckets
+	// keyed by agent and anchored at first appearance.
 	type Token = { kind: 'main'; steps: { step: ISessionWorkStep; index: number }[] } | { kind: 'bucket'; agent: string; firstIndex: number };
-	let tokens: Token[] = [];
-	let buckets = new Map<string, { firstIndex: number; label?: string; durationMs?: number; running: boolean; error: boolean; endDetail?: string; members: ISessionWorkStep[] }>();
+	const tokens: Token[] = [];
+	const buckets = new Map<string, { firstIndex: number; label?: string; durationMs?: number; running: boolean; error: boolean; endDetail?: string; members: ISessionWorkStep[] }>();
 
 	const flushSection = (): void => {
-		if (tokens.length === 0 && title === undefined) {
+		if (tokens.length === 0) {
 			return;
 		}
 		const items: WorkSectionItem[] = [];
@@ -285,20 +278,11 @@ export function buildWorkSections(steps: readonly ISessionWorkStep[]): IWorkSect
 			}
 		}
 		shortenSiblingAgentLabels(items);
-		sections.push({ ...(title === undefined ? {} : { title }), ...(titleDetail === undefined ? {} : { titleDetail }), items, firstIndex: sectionFirst });
-		tokens = [];
-		buckets = new Map();
+		sections.push({ items, firstIndex: sectionFirst });
 	};
 
 	for (let index = 0; index < steps.length; index++) {
 		const step = steps[index]!;
-		if (step.kind === 'narration') {
-			flushSection();
-			title = step.label;
-			titleDetail = step.detail;
-			sectionFirst = index;
-			continue;
-		}
 		const agent = step.kind === 'tool' ? step.agent : undefined;
 		if (agent !== undefined) {
 			let bucket = buckets.get(agent);

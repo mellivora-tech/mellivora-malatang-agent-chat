@@ -72,8 +72,7 @@ export const SUBAGENT_END_ARG_PREFIX = '结束';
 
 /** One step inside a work block: a thinking stretch or a tool call. */
 export interface ISessionWorkStep {
-	/** 'narration': pre-tool announce text the model emitted in a WORK turn ("我来梳理一下…") — shown as a step, never as the answer bubble. */
-	readonly kind: 'thinking' | 'tool' | 'narration';
+	readonly kind: 'thinking' | 'tool';
 	readonly label: string;
 	readonly durationMs: number;
 	/** Expandable detail — for tool steps, the (truncated) output. */

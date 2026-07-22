@@ -21,7 +21,6 @@ function tool(name: string, arg: string | undefined, extra: Partial<ISessionWork
 	} as ISessionWorkStep;
 }
 
-const narration: ISessionWorkStep = { kind: 'narration', label: '先看下代码。', durationMs: 0 };
 const thinking: ISessionWorkStep = { kind: 'thinking', label: 'Thought', durationMs: 2000 };
 
 test('consecutive reads fold into one rollup with class-bucketed counts', () => {
@@ -62,22 +61,13 @@ test('a lone read stays a plain step — no single-member rollup', () => {
 	);
 });
 
-test('writes and narration break a read run; thinking does NOT (2a) — it re-emits after the fold', () => {
-	const items = buildWorkRenderItems([
-		tool('read_file', 'a'),
-		tool('read_file', 'b'),
-		thinking,
-		tool('read_file', 'c'),
-		tool('edit_file', 'a'),
-		tool('read_file', 'd'),
-		narration,
-		tool('read_file', 'e'),
-	]);
+test('writes break a read run; thinking does NOT (2a) — it re-emits after the fold', () => {
+	const items = buildWorkRenderItems([tool('read_file', 'a'), tool('read_file', 'b'), thinking, tool('read_file', 'c'), tool('edit_file', 'a'), tool('read_file', 'd')]);
 	// a+b+c fold as ONE rollup despite the thinking between b and c; the
-	// thinking row lands right after the fold; edit and narration still break.
+	// thinking row lands right after the fold; the edit still breaks.
 	assert.deepEqual(
 		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : (item as { step: ISessionWorkStep }).step?.kind ?? item.kind)),
-		['rollup:3', 'thinking', 'tool', 'tool', 'narration', 'tool']
+		['rollup:3', 'thinking', 'tool', 'tool']
 	);
 });
 
@@ -140,7 +130,7 @@ test('unknown tools and progress-overwritten labels render as legacy label rows'
 
 test('replayability: rendering is a pure function of persisted facts — same input, same items', () => {
 	const steps: ISessionWorkStep[] = [
-		narration,
+		thinking,
 		tool('read_file', 'a'),
 		tool('read_file', 'b'),
 		tool('query_data_source', 'SELECT 1', { outcome: 'ok' }),
@@ -193,33 +183,20 @@ test('parallel children never fold into one rollup — groups break on agent cha
 	);
 });
 
-test('sections: narration becomes the chapter header; steps before the first narration form an untitled preamble', () => {
-	const sections = buildWorkSections([
-		thinking,
-		tool('read_file', 'a.ts'),
-		{ kind: 'narration', label: '先看代码。', durationMs: 0 },
-		tool('read_file', 'b.ts'),
-		tool('read_file', 'c.ts'),
-		{ kind: 'narration', label: '开始修复。', durationMs: 0, detail: '开始修复。完整的长文本…' },
-		tool('edit_file', 'b.ts'),
-	]);
+test('sections: with no narration concept, the whole work block is one untitled section', () => {
+	const sections = buildWorkSections([thinking, tool('read_file', 'a.ts'), tool('read_file', 'b.ts'), tool('read_file', 'c.ts'), tool('edit_file', 'b.ts')]);
+	assert.equal(sections.length, 1);
 	assert.deepEqual(
-		sections.map(section => ({ title: section.title, items: section.items.length })),
-		[
-			{ title: undefined, items: 2 },
-			{ title: '先看代码。', items: 1 },
-			{ title: '开始修复。', items: 1 },
-		]
+		sections[0]!.items.map(item => item.kind),
+		['step', 'rollup', 'step']
 	);
-	assert.equal(sections[2]!.titleDetail, '开始修复。完整的长文本…');
-	// The two reads inside 第二节 folded into one rollup.
-	assert.equal(sections[1]!.items[0]!.kind, 'rollup');
+	// The three reads folded into one rollup.
+	assert.equal((sections[0]!.items[1] as { steps: readonly unknown[] }).steps.length, 3);
 });
 
 test('agent groups de-interleave parallel children: one group per agent, anchored at first appearance, sweeps fold whole again', () => {
 	const child = (agent: string, arg: string): ISessionWorkStep => ({ kind: 'tool', label: `⑃ read_file ${arg}`, durationMs: 50, tool: 'read_file', arg, via: 'subagent', agent });
 	const sections = buildWorkSections([
-		{ kind: 'narration', label: '分片探索。', durationMs: 0 },
 		{ kind: 'tool', label: '子代理 ⑃ 探索主进程', durationMs: 10, tool: 'spawn_agent', arg: '探索主进程', agent: 'a1' },
 		{ kind: 'tool', label: '子代理 ⑃ 探索渲染端', durationMs: 10, tool: 'spawn_agent', arg: '探索渲染端', agent: 'a2' },
 		child('a1', 'x.ts'),
@@ -262,7 +239,7 @@ test('a running spawn synthetic keeps its group live; a failed spawn marks the g
 
 test('sections and groups are pure functions of the steps — replay equals live', () => {
 	const steps: ISessionWorkStep[] = [
-		{ kind: 'narration', label: '第一节。', durationMs: 0 },
+		thinking,
 		tool('read_file', 'a'),
 		{ kind: 'tool', label: '子代理 ⑃ t', durationMs: 5, tool: 'spawn_agent', arg: 't', agent: 'x' },
 		{ kind: 'tool', label: '⑃ list_dir d/', durationMs: 40, tool: 'list_dir', arg: 'd/', via: 'subagent', agent: 'x' },
