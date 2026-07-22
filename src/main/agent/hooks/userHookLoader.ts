@@ -40,16 +40,24 @@ async function readRaw(path: string): Promise<string | undefined> {
 	}
 }
 
-/** Parse a hooks file's raw content into validated configs; malformed entries are dropped. */
-function parseHooksFile(raw: string): IUserHookConfig[] {
+/**
+ * Parse a hooks file's raw content into validated configs.
+ *
+ * Degrading silently here is how a misconfigured hook becomes undebuggable: a
+ * single typo (`PreToolUSe`) drops the entry, the app starts clean, the hook
+ * never fires, and nothing anywhere says why. So the counts come back with the
+ * configs and the caller reports them.
+ */
+function parseHooksFile(raw: string): { readonly configs: IUserHookConfig[]; readonly dropped: number; readonly corrupt: boolean } {
 	let value: unknown;
 	try {
 		value = JSON.parse(raw);
 	} catch {
-		return []; // corrupt file → no hooks (degrade, never crash).
+		return { configs: [], dropped: 0, corrupt: true }; // degrade, never crash — but say so.
 	}
 	const entries = typeof value === 'object' && value !== null && Array.isArray((value as { hooks?: unknown }).hooks) ? ((value as { hooks: unknown[] }).hooks as unknown[]) : [];
-	return entries.map((entry, index) => parseUserHookConfig(entry, index)).filter((config): config is IUserHookConfig => config !== undefined);
+	const configs = entries.map((entry, index) => parseUserHookConfig(entry, index)).filter((config): config is IUserHookConfig => config !== undefined);
+	return { configs, dropped: entries.length - configs.length, corrupt: false };
 }
 
 // --- trust store (in the global dir; keyed by project path → approved hash) ------
@@ -99,6 +107,18 @@ export interface ILoadedUserHooks {
 	readonly hooks: readonly IHook[];
 	/** Set when a project hooks file exists but is NOT approved (or changed since) — the caller prompts. */
 	readonly pending?: { readonly projectPath: string; readonly hash: string; readonly count: number };
+	/** What the load actually did — reported so a hook that never runs is explainable. */
+	readonly diagnostics: IUserHooksDiagnostics;
+}
+
+/** The outcome of reading the hook config files, for the log. */
+export interface IUserHooksDiagnostics {
+	/** Hooks that loaded and will run this run. */
+	readonly loaded: number;
+	/** Entries present in a file but rejected as malformed (unknown event, bad regex, empty command). */
+	readonly dropped: number;
+	/** A hooks.json existed but its JSON could not be parsed at all — every hook in it is gone. */
+	readonly corrupt: boolean;
 }
 
 export interface ILoadUserHooksOptions {
@@ -110,16 +130,21 @@ export interface ILoadUserHooksOptions {
 	readonly projectPath?: string;
 }
 
-async function readHooks(dir: string): Promise<IUserHookConfig[]> {
+async function readHooks(dir: string): Promise<{ readonly configs: IUserHookConfig[]; readonly dropped: number; readonly corrupt: boolean }> {
 	const raw = await readRaw(join(dir, HOOKS_FILE));
-	return raw === undefined ? [] : parseHooksFile(raw);
+	return raw === undefined ? { configs: [], dropped: 0, corrupt: false } : parseHooksFile(raw);
 }
 
 export async function loadUserHooks(options: ILoadUserHooksOptions): Promise<ILoadedUserHooks> {
 	const hooks: IHook[] = [];
+	let dropped = 0;
+	let corrupt = false;
 
 	// Global — always trusted.
-	for (const config of await readHooks(options.globalDir)) {
+	const global = await readHooks(options.globalDir);
+	dropped += global.dropped;
+	corrupt = corrupt || global.corrupt;
+	for (const config of global.configs) {
 		hooks.push(createCommandHook(config));
 	}
 
@@ -128,7 +153,10 @@ export async function loadUserHooks(options: ILoadUserHooksOptions): Promise<ILo
 	if (options.projectDir !== undefined && options.projectPath !== undefined) {
 		const raw = await readRaw(join(options.projectDir, HOOKS_FILE));
 		if (raw !== undefined) {
-			const configs = parseHooksFile(raw);
+			const parsed = parseHooksFile(raw);
+			const configs = parsed.configs;
+			dropped += parsed.dropped;
+			corrupt = corrupt || parsed.corrupt;
 			if (configs.length > 0) {
 				const hash = hashConfig(raw);
 				if (await isProjectHooksTrusted(options.globalDir, options.projectPath, hash)) {
@@ -142,5 +170,6 @@ export async function loadUserHooks(options: ILoadUserHooksOptions): Promise<ILo
 		}
 	}
 
-	return pending !== undefined ? { hooks, pending } : { hooks };
+	const diagnostics: IUserHooksDiagnostics = { loaded: hooks.length, dropped, corrupt };
+	return pending !== undefined ? { hooks, pending, diagnostics } : { hooks, diagnostics };
 }

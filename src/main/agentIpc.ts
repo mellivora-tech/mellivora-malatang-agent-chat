@@ -438,7 +438,14 @@ export function registerAgentIpc(dataRoot: string): void {
 			// (~/.mellivora/hooks.json — always trusted). Project hooks and their
 			// approval prompt arrive with the settings UI; loadUserHooks already
 			// gates them, so wiring a projectDir later is additive.
-			const { hooks: userHooks } = await loadUserHooks({ globalDir: dataRoot });
+			const { hooks: userHooks, diagnostics: hookDiagnostics } = await loadUserHooks({ globalDir: dataRoot });
+			// Report the load whenever a hooks file had anything in it. A dropped
+			// entry (misspelled event, bad matcher regex) or an unparseable file
+			// otherwise presents identically to "no hooks configured" — the hook
+			// simply never fires and nothing on disk explains it.
+			if (hookDiagnostics.loaded > 0 || hookDiagnostics.dropped > 0 || hookDiagnostics.corrupt) {
+				runLogger.record({ type: 'hooks_loaded', ...hookDiagnostics });
+			}
 
 			const loop = runAgentLoop(messages, {
 				system,

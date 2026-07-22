@@ -106,3 +106,25 @@ test('loadUserHooks: missing and corrupt files yield no hooks, never throw; malf
 		'only the valid entry survives',
 	);
 });
+
+test('loadUserHooks: diagnostics explain a hook that will never fire', async () => {
+	const globalDir = await tmp();
+
+	// A misspelled event and a bad matcher are dropped — the classic "I configured
+	// a hook and nothing happens" case. Without counts this is indistinguishable
+	// from having configured nothing at all.
+	await writeHooks(globalDir, [
+		{ id: 'ok', event: 'Stop', command: 'echo hi' },
+		{ event: 'PreToolUSe', command: 'echo typo' },
+		{ event: 'Stop', command: 'echo x', toolMatcher: '([' },
+	]);
+	const loaded = await loadUserHooks({ globalDir });
+	assert.deepEqual(loaded.diagnostics, { loaded: 1, dropped: 2, corrupt: false });
+
+	// An unparseable file loses every hook in it — that must be stated, not implied.
+	await writeFile(join(globalDir, 'hooks.json'), 'not json at all', 'utf8');
+	assert.deepEqual((await loadUserHooks({ globalDir })).diagnostics, { loaded: 0, dropped: 0, corrupt: true });
+
+	// No file at all is the quiet, legitimate case.
+	assert.deepEqual((await loadUserHooks({ globalDir: await tmp() })).diagnostics, { loaded: 0, dropped: 0, corrupt: false });
+});

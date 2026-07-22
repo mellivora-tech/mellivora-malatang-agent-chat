@@ -7,12 +7,23 @@ import type { IAgentEvent, IAgentTool, IPermissionGate, IToolResultBlock, IToolU
 import type { ILoopGuard } from './loopGuard.js';
 import { runHooksUntilBlock, type IHook, type IHookResult } from './hooks/hooks.js';
 
-/** Observability (§9): a PreToolUse hook that blocked or injected context becomes a `hook` event the loop yields (after the tool_result, so tool_use/tool_result order is untouched). */
+/**
+ * Observability (§9): a PreToolUse hook that blocked, FAILED OPEN, or injected
+ * context becomes a `hook` event the loop yields (after the tool_result, so
+ * tool_use/tool_result order is untouched).
+ *
+ * fail-open is reported even though it has no effect on the call — that is the
+ * whole point. A hook whose command is misspelled, times out, or crashes still
+ * returns `allow`, so judging by consequence alone it is invisible; "this hook
+ * silently stopped working" is exactly the failure this event exists to expose.
+ */
 function preToolHookEvents(results: readonly IHookResult[]): IAgentEvent[] {
 	const events: IAgentEvent[] = [];
 	for (const result of results) {
 		if (result.decision === 'block') {
 			events.push({ type: 'hook', event: 'PreToolUse', hookId: result.hookId, decision: 'block' });
+		} else if (result.failOpen !== undefined) {
+			events.push({ type: 'hook', event: 'PreToolUse', hookId: result.hookId, decision: result.decision, failOpen: true });
 		} else if (result.additionalContext !== undefined) {
 			events.push({ type: 'hook', event: 'PreToolUse', hookId: result.hookId, decision: result.decision, injected: true });
 		}

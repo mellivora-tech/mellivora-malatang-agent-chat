@@ -270,7 +270,21 @@ export type IAgentEvent =
 	 * injected context, so the log shows what the harness enforced and when.
 	 * `injected` = the hook added additionalContext to the run.
 	 */
-	| { readonly type: 'hook'; readonly event: HookEvent; readonly hookId: string; readonly decision: 'allow' | 'block' | 'modify'; readonly injected?: boolean };
+	| {
+			/** What the user-hook load produced this run — so a hook that never fires is explainable. */
+			readonly type: 'hooks_loaded';
+			readonly loaded: number;
+			readonly dropped: number;
+			readonly corrupt: boolean;
+	  }
+	| {
+			readonly type: 'hook';
+			readonly event: HookEvent;
+			readonly hookId: string;
+			readonly decision: 'allow' | 'block' | 'modify';
+			readonly injected?: boolean;
+			readonly failOpen?: boolean;
+	  };
 
 /**
  * A compaction summary persisted across runs. `covered` counts the prefix of

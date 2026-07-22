@@ -186,3 +186,29 @@ test('W2 fan-out hook: never nudges when spawn_agent is unavailable', () => {
 	const hook = createFanOutNudgeHook({ streak: () => 99, spawnAvailable: false, threshold: 3 });
 	assert.equal((hook.run({ event: 'PreToolUse', toolName: 'grep' }) as IHookDecision).additionalContext, undefined);
 });
+
+test('a hook that THROWS still allows, but leaves a fail-open record (it must not vanish)', async () => {
+	const boom: IHook = {
+		id: 'broken',
+		event: 'PreToolUse',
+		run: () => {
+			throw new Error('hook is broken');
+		},
+	};
+	const fine: IHook = { id: 'fine', event: 'PreToolUse', run: () => ({ decision: 'allow' }) };
+
+	for (const dispatch of [runHooks, runHooksUntilBlock]) {
+		const outcome = await dispatch([boom, fine], { event: 'PreToolUse', toolName: 'bash' });
+		assert.equal(outcome.decision, 'allow', 'fail-open: a broken hook never harms the run');
+		assert.equal(outcome.results.length, 2, `${dispatch.name}: the broken hook is still accounted for`);
+		assert.equal(outcome.results[0]?.hookId, 'broken');
+		assert.equal(outcome.results[0]?.failOpen, 'hook is broken', 'the reason it did not really decide is preserved');
+		assert.equal(outcome.results[1]?.failOpen, undefined, 'a healthy hook carries no fail-open marker');
+	}
+});
+
+test('a hook self-reporting failOpen has it carried into the result (command hooks use this)', async () => {
+	const degraded: IHook = { id: 'degraded', event: 'Stop', run: () => ({ decision: 'allow', failOpen: 'command timed out' }) };
+	const outcome = await runHooks([degraded], { event: 'Stop' });
+	assert.equal(outcome.results[0]?.failOpen, 'command timed out');
+});

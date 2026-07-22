@@ -84,7 +84,21 @@ export type AgentLogEvent =
 	/** A zero-tool-call reply claimed completed actions and was forced to do-or-retract. Watch the family's rates together. */
 	| (IBaseEvent & { readonly type: 'action_claim_nudge' })
 	/** A hook fired with a consequence (§9): user hooks + any block/inject. Names + decision are export-safe telemetry; watch to see what the harness enforced and when. */
-	| (IBaseEvent & { readonly type: 'hook'; readonly event: string; readonly hookId: string; readonly decision: 'allow' | 'block' | 'modify'; readonly injected?: boolean })
+	/**
+	 * The user-hook load result. Emitted only when a hooks file had content, so a
+	 * dropped entry (typo'd event name) or an unparseable file is visible instead
+	 * of presenting as "the hook just never fires".
+	 */
+	| (IBaseEvent & { readonly type: 'hooks_loaded'; readonly loaded: number; readonly dropped: number; readonly corrupt: boolean })
+	/** `failOpen` marks a hook that did not really run (spawn/timeout/crash) yet still allowed — a silently broken hook. */
+	| (IBaseEvent & {
+			readonly type: 'hook';
+			readonly event: string;
+			readonly hookId: string;
+			readonly decision: 'allow' | 'block' | 'modify';
+			readonly injected?: boolean;
+			readonly failOpen?: boolean;
+	  })
 	/** A spawn_agent child loop started. The task text (user-adjacent content) stays in detail. */
 	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly detail?: { readonly task: string } })
 	/** One child tool call — the child's whole activity trace, since its loop events never reach the log directly. The summary (paths/patterns) stays in detail. */

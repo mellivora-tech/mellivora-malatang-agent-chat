@@ -105,8 +105,8 @@ function runCommand(command: string, input: IHookInput, timeoutMs: number): Prom
 		let child;
 		try {
 			child = spawn(command, { shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
-		} catch {
-			resolve({ decision: 'allow' }); // spawn threw synchronously → fail-open.
+		} catch (error) {
+			resolve({ decision: 'allow', failOpen: `hook command could not be spawned: ${describeSpawnError(error)}` }); // fail-open, but recorded.
 			return;
 		}
 
@@ -116,14 +116,14 @@ function runCommand(command: string, input: IHookInput, timeoutMs: number): Prom
 			} catch {
 				// already gone.
 			}
-			finish({ decision: 'allow' }); // timeout → fail-open.
+			finish({ decision: 'allow', failOpen: `hook command exceeded its ${timeoutMs}ms timeout` }); // fail-open, but recorded.
 		}, timeoutMs);
 
 		let stdout = '';
 		let stderr = '';
 		child.stdout?.on('data', chunk => (stdout += String(chunk)));
 		child.stderr?.on('data', chunk => (stderr += String(chunk)));
-		child.on('error', () => finish({ decision: 'allow' })); // failed to launch → fail-open.
+		child.on('error', error => finish({ decision: 'allow', failOpen: `hook command failed to launch: ${describeSpawnError(error)}` })); // fail-open, but recorded.
 		child.on('close', code => finish(interpret(code, stdout, stderr)));
 
 		try {
@@ -133,6 +133,11 @@ function runCommand(command: string, input: IHookInput, timeoutMs: number): Prom
 			// the command may not read stdin; ignore write failures.
 		}
 	});
+}
+
+/** Describe a spawn/launch failure for the fail-open record. */
+function describeSpawnError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 /** Map a finished command to a decision. block only on exit 2 or explicit JSON; everything else is allow. */
@@ -147,7 +152,10 @@ function interpret(code: number | null, stdout: string, stderr: string): IHookDe
 		}
 		return parseDecision(trimmed) ?? { decision: 'allow', additionalContext: trimmed };
 	}
-	return { decision: 'allow' }; // any other exit code → fail-open.
+	// A non-zero, non-block exit means the script itself broke (bad path, syntax
+	// error). Allowing is right; silently allowing is not — that is exactly how a
+	// misconfigured hook masquerades as a working one.
+	return { decision: 'allow', failOpen: `hook command exited ${String(code)}${stderr.trim() ? `: ${stderr.trim().slice(0, 200)}` : ''}` };
 }
 
 /** Parse structured stdout `{decision, reason?, additionalContext?, modifiedInput?}`; undefined if not that shape. */

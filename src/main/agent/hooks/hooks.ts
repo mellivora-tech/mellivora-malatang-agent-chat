@@ -54,6 +54,14 @@ export interface IHookDecision {
 	readonly note?: string;
 	/** Opaque hook-specific payload the loop reads to emit that hook's own observability event (e.g. the reply-verifier verdict + reason). */
 	readonly data?: unknown;
+	/**
+	 * Set when this `allow` is a FAIL-OPEN fallback rather than a real verdict —
+	 * the command could not spawn, timed out, or exited unexpectedly. A hook that
+	 * never actually ran MUST stay distinguishable from one that ran and allowed:
+	 * "no consequence" is precisely the symptom of a broken hook, so an allow that
+	 * carries this is the thing worth logging.
+	 */
+	readonly failOpen?: string;
 }
 
 /** One hook's outcome, preserved per-hook so the loop can emit each hook's own event. */
@@ -64,6 +72,8 @@ export interface IHookResult {
 	readonly data?: unknown;
 	/** Set when this hook injected context — lets the dispatch point attribute an injection to its hook (observability §9). */
 	readonly additionalContext?: string;
+	/** Set when the hook threw, or self-reported a fail-open allow — the reason it did not really decide. */
+	readonly failOpen?: string;
 }
 
 export interface IHook {
@@ -107,6 +117,11 @@ export class HookRegistry {
 	}
 }
 
+/** A thrown hook's reason, for the fail-open record. */
+function describeHookError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Fire an event's hooks and compose their decisions.
  *
@@ -114,7 +129,8 @@ export class HookRegistry {
  *  - any BLOCK wins → the outcome is block; every blocking hook's reason is aggregated.
  *  - additionalContext ACCUMULATES across all hooks, even under a block.
  *  - MODIFY chains: each hook sees the previous hook's modifiedInput.
- *  - fail-open: a hook that throws is skipped, never crashing the loop.
+ *  - fail-open: a hook that throws still ALLOWS, but is recorded (failOpen) so a
+ *    broken hook cannot masquerade as one that ran and allowed.
  */
 export async function runHooks(hooks: readonly IHook[], input: IHookInput): Promise<IHookOutcome> {
 	const reasons: string[] = [];
@@ -128,8 +144,12 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 		let decision: IHookDecision;
 		try {
 			decision = await hook.run({ ...input, toolInput: currentInput });
-		} catch {
-			continue; // fail-open — a broken hook must never harm the run.
+		} catch (error) {
+			// fail-open — a broken hook must never harm the run — but it must not
+			// vanish either: without this the hook leaves NO trace at all and is
+			// indistinguishable from one that ran and allowed.
+			results.push({ hookId: hook.id, decision: 'allow', failOpen: describeHookError(error) });
+			continue;
 		}
 		results.push({
 			hookId: hook.id,
@@ -137,6 +157,7 @@ export async function runHooks(hooks: readonly IHook[], input: IHookInput): Prom
 			...(decision.note !== undefined ? { note: decision.note } : {}),
 			...(decision.data !== undefined ? { data: decision.data } : {}),
 			...(decision.additionalContext !== undefined ? { additionalContext: decision.additionalContext } : {}),
+			...(decision.failOpen !== undefined ? { failOpen: decision.failOpen } : {}),
 		});
 		if (decision.additionalContext) {
 			contexts.push(decision.additionalContext);
@@ -189,8 +210,9 @@ export async function runHooksUntilBlock(hooks: readonly IHook[], input: IHookIn
 		let decision: IHookDecision;
 		try {
 			decision = await hook.run({ ...input, toolInput: currentInput });
-		} catch {
-			continue; // fail-open.
+		} catch (error) {
+			results.push({ hookId: hook.id, decision: 'allow', failOpen: describeHookError(error) }); // fail-open, but recorded.
+			continue;
 		}
 		results.push({
 			hookId: hook.id,
@@ -198,6 +220,7 @@ export async function runHooksUntilBlock(hooks: readonly IHook[], input: IHookIn
 			...(decision.note !== undefined ? { note: decision.note } : {}),
 			...(decision.data !== undefined ? { data: decision.data } : {}),
 			...(decision.additionalContext !== undefined ? { additionalContext: decision.additionalContext } : {}),
+			...(decision.failOpen !== undefined ? { failOpen: decision.failOpen } : {}),
 		});
 		if (decision.additionalContext) {
 			contexts.push(decision.additionalContext);

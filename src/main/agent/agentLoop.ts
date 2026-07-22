@@ -537,6 +537,11 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 								if (result.decision === 'block') {
 									firedStopHooks.add(result.hookId);
 									yield { type: 'hook', event: 'Stop', hookId: result.hookId, decision: 'block' };
+								} else if (result.failOpen !== undefined) {
+									// It allowed, but only because it broke (bad command, timeout,
+									// crash). Recorded precisely BECAUSE it had no effect — otherwise
+									// a hook that silently stopped working looks like one that ran.
+									yield { type: 'hook', event: 'Stop', hookId: result.hookId, decision: result.decision, failOpen: true };
 								}
 								break;
 						}

@@ -71,13 +71,25 @@ test('command hook: the input is delivered as JSON on stdin', async () => {
 	assert.equal(decision.additionalContext, 'tool=bash', 'the hook input reached the command via stdin');
 });
 
-test('command hook: fail-open — timeout, a crash, and a missing command all resolve to allow', async () => {
+test('command hook: fail-open — timeout, a crash, and a missing command all resolve to allow, and SAY SO', async () => {
+	// Each of these still allows (a broken hook must never harm the run), but must
+	// carry `failOpen`: an allow that is really a malfunction has to stay
+	// distinguishable from a genuine one, or a hook that silently stopped working
+	// is indistinguishable from a hook that ran and permitted the call.
 	const timedOut = await fire(nodeCmd('setTimeout(()=>console.log("late"),10000)'), { event: 'PreToolUse' }, 200);
-	assert.deepEqual(timedOut, { decision: 'allow' }, 'a hook that overruns its timeout never blocks');
+	assert.equal(timedOut.decision, 'allow', 'a hook that overruns its timeout never blocks');
+	assert.match(timedOut.failOpen ?? '', /timeout/, 'the timeout is recorded as a fail-open');
 
 	const crashed = await fire(nodeCmd('process.exit(7)'));
 	assert.equal(crashed.decision, 'allow', 'an unexpected non-zero exit is fail-open, not a block');
+	assert.match(crashed.failOpen ?? '', /exited 7/, 'the exit code is recorded');
 
 	const missing = await fire('this_command_definitely_does_not_exist_xyz_123');
 	assert.equal(missing.decision, 'allow', 'a command that cannot run never harms the run');
+	assert.ok(missing.failOpen, 'a command that cannot run is recorded as a fail-open, not a silent allow');
+});
+
+test('command hook: a REAL allow carries no failOpen (the two must never blur)', async () => {
+	const allowed = await fire(nodeCmd('process.exit(0)'));
+	assert.deepEqual(allowed, { decision: 'allow' }, 'a hook that ran and allowed is clean — nothing to report');
 });
