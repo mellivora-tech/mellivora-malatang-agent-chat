@@ -449,8 +449,19 @@ function parseEntry(line: string): ISessionEntry | undefined {
 	return undefined;
 }
 
-function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'ui' {
-	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work' || value === 'plan' || value === 'ui';
+/**
+ * The read-side role whitelist. It MUST stay in step with the role union in
+ * sessions/services/sessions/common/session.ts — a role that is written but not
+ * listed here is silently dropped on load, and the message simply disappears
+ * from the transcript.
+ *
+ * That is not hypothetical: 'digest' shipped missing from this list, so every
+ * hidden per-run work summary was written to disk and then discarded on every
+ * reload — the cross-run work memory could never survive a restart, with nothing
+ * anywhere reporting a loss. Adding a role means updating this list too.
+ */
+function isRole(value: unknown): value is 'user' | 'assistant' | 'tool' | 'work' | 'plan' | 'digest' | 'ui' {
+	return value === 'user' || value === 'assistant' || value === 'tool' || value === 'work' || value === 'plan' || value === 'digest' || value === 'ui';
 }
 
 async function listJsonlFiles(dir: string): Promise<readonly string[]> {

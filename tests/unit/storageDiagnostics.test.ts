@@ -62,3 +62,38 @@ test('a corrupt config still degrades to empty — reporting must not change beh
 	const config = await readWorkspaceConfig(dir);
 	assert.deepEqual(config.environments, [], 'the app still boots on a broken config');
 });
+
+/**
+ * Regression guard for the role whitelist.
+ *
+ * The read side (`isRole` in sessionsStorage) is a hand-maintained copy of the
+ * role union in session.ts. When they drift, messages of the missing role are
+ * written to disk and then silently dropped on every load — which is exactly how
+ * `role: 'digest'` (the hidden cross-run work summary) was being lost. Round-trip
+ * every role so a future addition fails here instead of quietly deleting data.
+ */
+test('every message role survives a write → read round-trip (no role is silently dropped)', async () => {
+	const { appendSessionEntry, createSessionFile, loadSession } = await import('../../src/main/sessionsStorage.js');
+	const root = await tmp();
+	const ref = { sessionId: 'round-trip-session' };
+	const roles = ['user', 'assistant', 'tool', 'work', 'plan', 'digest', 'ui'] as const;
+
+	await createSessionFile(root, {
+		type: 'session',
+		version: 1,
+		sessionId: ref.sessionId,
+		sessionType: 'agent-chat',
+		icon: 'codicon-new-session',
+		createdAt: '2026-07-22T00:00:00.000Z',
+		interactivity: 'full',
+	} as const);
+	for (const role of roles) {
+		await appendSessionEntry(root, ref, { type: 'message', id: `m-${role}`, role, text: `text for ${role}`, timestamp: '2026-07-22T00:00:01.000Z' });
+	}
+
+	const snapshot = await loadSession(root, ref);
+	const survived = new Set((snapshot?.messages ?? []).map(message => message.role));
+	for (const role of roles) {
+		assert.ok(survived.has(role), `role '${role}' was written but did not survive the read — it is missing from the isRole whitelist`);
+	}
+});
