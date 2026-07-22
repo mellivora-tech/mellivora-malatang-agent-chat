@@ -1350,36 +1350,66 @@ button.conversation-plan-header {
 	font-weight: var(--vscode-agents-fontWeight-semiBold);
 }
 
+/* Full card: a plain numbered LIST (Antigravity's read) — one full-width row
+   per option, hover/focus washing the whole row instead of a floating pill.
+   Compact restores the original dense pill row further below. */
 .conversation-approval-actions {
 	display: flex;
-	gap: var(--vscode-agents-space-8);
+	flex-direction: column;
+	gap: var(--vscode-agents-space-2);
+	/* Default text color for the row buttons — set here (inherited), not on
+	   `button` itself, so it carries ZERO specificity: an inherited value
+	   always loses to ANY explicit same-property rule on the element, so
+	   .conversation-approval-allow's `color: success` below wins cleanly
+	   instead of losing a class-vs-class+type specificity fight. */
+	color: var(--vscode-agents-color-text-secondary);
 }
 
 .conversation-approval-actions button {
 	-webkit-appearance: none;
 	appearance: none;
-	display: inline-flex;
+	display: flex;
 	align-items: center;
-	gap: var(--vscode-agents-space-8);
-	height: var(--vscode-agents-space-28);
-	padding: 0 var(--vscode-agents-space-12);
+	gap: var(--vscode-agents-space-10);
+	width: 100%;
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
 	border: var(--vscode-agents-space-1) solid transparent;
 	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: inherit;
 	font: inherit;
 	font-size: var(--vscode-agents-fontSize-body2);
-	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	font-weight: var(--vscode-agents-fontWeight-medium);
+	text-align: left;
 	cursor: default;
-	transition:
-		background var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing),
-		border-color var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing);
+	transition: background var(--vscode-agents-motion-duration-fast) var(--vscode-agents-motion-easing);
 }
 
 .conversation-approval-actions button:focus-visible {
 	outline: var(--vscode-agents-space-2) solid var(--vscode-agents-color-focusBorder);
-	outline-offset: var(--vscode-agents-space-2);
+	outline-offset: calc(-1 * var(--vscode-agents-space-1));
 }
 
-/* Inline key hint — a subtle keycap that reads as a hint, not a control. */
+/* The whole ROW washes — the row IS the click target, same affordance as the
+   step list's hover, not a smaller pill floating inside it. */
+.conversation-approval-actions button:hover,
+.conversation-approval-actions button:focus-visible {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
+}
+
+/* Leading row number: plain muted text, not a boxed chip — the row's identity
+   is its position (Antigravity's "1  2  3" list column), so it stays quiet. */
+.conversation-approval-action-index {
+	flex: 0 0 auto;
+	min-width: var(--vscode-agents-space-14);
+	color: var(--vscode-agents-color-text-subtle);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+/* Trailing hint (⏎/Esc) — the alternate way to fire the row, pinned to its
+   far right; a subtle keycap that reads as a hint, not a control. Full cards
+   only — compact never appends one. */
 .conversation-approval-key {
 	display: inline-flex;
 	align-items: center;
@@ -1387,6 +1417,7 @@ button.conversation-plan-header {
 	height: var(--vscode-agents-space-16);
 	padding: 0 var(--vscode-agents-space-4);
 	justify-content: center;
+	margin-left: auto;
 	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, currentColor 18%, transparent);
 	color: inherit;
@@ -1396,43 +1427,30 @@ button.conversation-plan-header {
 	line-height: 1;
 }
 
-/* Primary, but calm: a tinted green surface (symmetric with the neutral deny
-   button) instead of a saturated solid CTA — green still marks the affirmative,
-   without shouting over the transcript. */
-.conversation-approval-allow {
-	background: color-mix(in srgb, var(--vscode-agents-color-success) 18%, transparent);
-	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 40%, transparent);
+/* Text-only color coding survives the reskin — green still marks the
+   affirmative, just as a label tint instead of a filled surface. Selectors
+   are prefixed with the container class (not just `.conversation-approval-
+   allow` alone) so they out-specify the generic `button`/`button:hover`
+   rules above — a bare class-only selector loses that fight on class-count
+   ties (button's extra type selector breaks the tie in its favor). */
+.conversation-approval-actions .conversation-approval-allow {
 	color: var(--vscode-agents-color-success);
 }
 
-.conversation-approval-allow:hover {
-	background: color-mix(in srgb, var(--vscode-agents-color-success) 28%, transparent);
-	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 55%, transparent);
+.conversation-approval-actions .conversation-approval-allow:hover,
+.conversation-approval-actions .conversation-approval-allow:focus-visible {
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 12%, transparent);
 }
 
-/* Secondary: a real filled surface so it reads as a button, not text. */
-.conversation-approval-deny {
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
-	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
-	color: var(--vscode-agents-color-text-secondary);
-}
-
-.conversation-approval-deny:hover {
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+.conversation-approval-actions .conversation-approval-deny:hover,
+.conversation-approval-actions .conversation-approval-deny:focus-visible {
 	color: var(--vscode-agents-color-text-primary);
 }
 
-/* "Always allow [pattern]": a quiet outline action — a bigger commitment than a
-   one-off allow, so it stays understated. The granted pattern rides inside as a
-   mono chip so the scope is unmistakable. */
-.conversation-approval-always {
-	background: transparent;
-	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 16%, transparent);
-	color: var(--vscode-agents-color-text-secondary);
-}
-
-.conversation-approval-always:hover {
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+/* "Always allow [pattern]" — the granted pattern rides inside as a mono chip
+   so the scope is unmistakable regardless of the row's now-plain chrome. */
+.conversation-approval-actions .conversation-approval-always:hover,
+.conversation-approval-actions .conversation-approval-always:focus-visible {
 	color: var(--vscode-agents-color-text-primary);
 }
 
@@ -1491,15 +1509,51 @@ button.conversation-plan-header {
 	flex: 0 0 auto;
 }
 
+/* Compact keeps the ORIGINAL dense pill row — a one-line card has no room for
+   the full list's spacious rows, so it opts back into inline pills with a
+   filled surface per action (unlike the full card's plain-list text tint). */
 .conversation-approval-compact .conversation-approval-actions {
+	flex-direction: row;
 	flex: 0 0 auto;
 	gap: var(--vscode-agents-space-6);
 }
 
 .conversation-approval-compact .conversation-approval-actions button {
+	width: auto;
 	height: var(--vscode-agents-space-24);
 	padding: 0 var(--vscode-agents-space-10);
 	font-size: var(--vscode-agents-fontSize-label1);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-approval-compact .conversation-approval-allow {
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 18%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 40%, transparent);
+}
+
+.conversation-approval-compact .conversation-approval-allow:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 28%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 55%, transparent);
+}
+
+.conversation-approval-compact .conversation-approval-deny {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+}
+
+.conversation-approval-compact .conversation-approval-deny:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	color: var(--vscode-agents-color-text-primary);
+}
+
+.conversation-approval-compact .conversation-approval-always {
+	background: transparent;
+	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 16%, transparent);
+}
+
+.conversation-approval-compact .conversation-approval-always:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	color: var(--vscode-agents-color-text-primary);
 }
 
 /* The grant pattern still shows, but never wide enough to crowd the command out. */

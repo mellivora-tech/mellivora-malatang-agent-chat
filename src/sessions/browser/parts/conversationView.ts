@@ -1467,24 +1467,47 @@ function readDenyReason(card: HTMLElement): string | undefined {
 	return value === undefined || value === '' ? undefined : value;
 }
 
-/** Small numbered kbd hint (the digit-key affordance); full cards only. */
+/** Trailing kbd hint (⏎ / Esc) — the ALTERNATE way to fire a row, not its
+ *  identity, so it stays a quiet chip pinned to the row's far right. */
 function appendKeyHint(button: HTMLElement, text: string): void {
 	const key = append(button, document.createElement('kbd'));
 	key.className = 'conversation-approval-key';
 	key.textContent = text;
 }
 
-/** Allow / always-allow / deny row. Compact drops the key hints, not the keys. */
+/** Leading row number (Antigravity's plain "1  2  3" list column) — the row's
+ *  PRIMARY identity, so it renders as plain muted text, not a boxed chip. */
+function appendActionIndex(button: HTMLElement, digit: string): void {
+	const index = append(button, document.createElement('span'));
+	index.className = 'conversation-approval-action-index';
+	index.textContent = digit;
+}
+
+/**
+ * Allow / always-allow / deny row. Full cards render as a plain numbered
+ * list — one full-width row per option, the leading digit its identity,
+ * hover/focus painting the whole row (a lighter, less "button toolbar" read
+ * than the compact card's pills). Compact keeps the pill row unchanged: a
+ * dense single line has no room for a spacious list.
+ *
+ * Digit hints number whatever ACTUALLY renders (1..N in DOM order) — a tool
+ * with no grant (execute_data_source, run_on_server) only gets Allow + Deny,
+ * so those must read "1 / 2", never "1 / 4" with two phantom slots in between.
+ */
 function appendApprovalActions(card: HTMLElement, approval: ISessionPendingApproval, compact: boolean): void {
 	const actions = append(card, document.createElement('div'));
 	actions.className = 'conversation-approval-actions';
+	let nextDigit = 1;
+	const digitHint = (): string => String(nextDigit++);
 
 	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
 	allow.className = 'conversation-approval-allow';
 	allow.type = 'button';
+	if (!compact) {
+		appendActionIndex(allow, digitHint());
+	}
 	append(allow, document.createElement('span')).textContent = localize('appr.allow');
 	if (!compact) {
-		appendKeyHint(allow, '1');
 		appendKeyHint(allow, '⏎');
 	}
 	allow.addEventListener('click', () => approval.respond(true));
@@ -1497,13 +1520,13 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 		always.className = 'conversation-approval-always';
 		always.type = 'button';
 		always.title = localize('appr.alwaysTitle', approval.alwaysAllow);
+		if (!compact) {
+			appendActionIndex(always, digitHint());
+		}
 		append(always, document.createElement('span')).textContent = localize('appr.always');
 		const pattern = append(always, document.createElement('code'));
 		pattern.className = 'conversation-approval-pattern';
 		pattern.textContent = approval.alwaysAllow;
-		if (!compact) {
-			appendKeyHint(always, '2');
-		}
 		always.addEventListener('click', () => approval.respond(true, true, 'session'));
 
 		// The PERMANENT variant (persisted per project, personal & per-machine) —
@@ -1514,8 +1537,8 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 			forever.className = 'conversation-approval-always conversation-approval-always-project';
 			forever.type = 'button';
 			forever.title = localize('appr.projectTitle', approval.alwaysAllow);
+			appendActionIndex(forever, digitHint());
 			append(forever, document.createElement('span')).textContent = localize('appr.project');
-			appendKeyHint(forever, '3');
 			forever.addEventListener('click', () => approval.respond(true, true, 'project'));
 		}
 	}
@@ -1523,9 +1546,11 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
 	deny.className = 'conversation-approval-deny';
 	deny.type = 'button';
+	if (!compact) {
+		appendActionIndex(deny, digitHint());
+	}
 	append(deny, document.createElement('span')).textContent = localize('appr.deny');
 	if (!compact) {
-		appendKeyHint(deny, '4');
 		appendKeyHint(deny, 'Esc');
 	}
 	// A deny picks up whatever redirect the user typed in the reason field.
@@ -1563,9 +1588,11 @@ function createApprovalCard(approval: ISessionPendingApproval, compact = false):
 			}
 			return;
 		}
-		const target = { '1': '.conversation-approval-allow', '2': '.conversation-approval-always:not(.conversation-approval-always-project)', '3': '.conversation-approval-always-project', '4': '.conversation-approval-deny' }[event.key];
-		if (target !== undefined) {
-			const button = card.querySelector<HTMLButtonElement>(target);
+		// Digit N = the Nth actual button, in DOM order — same order the visible
+		// kbd hints were numbered in, so "2" always fires whatever button reads "2".
+		const digit = Number(event.key);
+		if (Number.isInteger(digit) && digit >= 1) {
+			const button = card.querySelectorAll<HTMLButtonElement>('.conversation-approval-actions button')[digit - 1];
 			if (button) {
 				event.preventDefault();
 				button.click();
