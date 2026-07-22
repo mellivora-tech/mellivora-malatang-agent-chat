@@ -142,8 +142,8 @@ const agent: IAgentBridge = {
 		ipcRenderer.on('agent:approval-request', handler);
 		return () => ipcRenderer.removeListener('agent:approval-request', handler);
 	},
-	respondApproval: (requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project') =>
-		ipcRenderer.invoke('agent:approval-response', { requestId, approved, always, scope }),
+	respondApproval: (requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project', reason?: string) =>
+		ipcRenderer.invoke('agent:approval-response', { requestId, approved, always, scope, reason }),
 };
 
 /**

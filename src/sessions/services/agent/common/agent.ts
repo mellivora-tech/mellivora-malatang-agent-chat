@@ -48,6 +48,8 @@ export interface IAgentBridge {
 	onEvent(listener: (payload: IAgentEventPayload) => void): () => void;
 	/** Subscribe to approval requests from the permission gate; returns an unsubscribe function. */
 	onApprovalRequest(listener: (payload: IApprovalRequestPayload) => void): () => void;
-	/** Answer an approval request. `always` adds this call's pattern to the session allowlist (allow-only). Unanswered requests are denied when the run ends. */
-	respondApproval(requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project'): Promise<void>;
+	/** Answer an approval request. `always` adds this call's pattern to the session allowlist (allow-only);
+	 *  `reason` (deny only) is the user's "do this instead", forwarded to the model inside the deny message.
+	 *  Unanswered requests are denied when the run ends. */
+	respondApproval(requestId: string, approved: boolean, always?: boolean, scope?: 'session' | 'project', reason?: string): Promise<void>;
 }

@@ -68,8 +68,8 @@ class ActiveSession implements IActiveSession {
 	get interactivity() {
 		return this.session.interactivity;
 	}
-	get pendingApproval() {
-		return this.session.pendingApproval;
+	get pendingApprovals() {
+		return this.session.pendingApprovals;
 	}
 	get reconnect() {
 		return this.session.reconnect;

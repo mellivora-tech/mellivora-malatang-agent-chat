@@ -147,6 +147,8 @@ export const enUS: Record<MessageKey, string> = {
 	'plan.approve.message': 'Proceed with the approved implementation plan.',
 	'ui.title.fallback': 'Interactive card',
 	'appr.aria': 'Approval required',
+	'appr.dockAria': 'Pending approval requests',
+	'appr.reasonPlaceholder': 'Deny and tell it what to do instead… (Enter to send)',
 	'appr.runCommand': 'Run command',
 	'appr.writeFile': 'Write file',
 	'appr.editFile': 'Edit file',

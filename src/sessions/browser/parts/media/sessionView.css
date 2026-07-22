@@ -1487,6 +1487,47 @@ button.conversation-plan-header {
 	white-space: nowrap;
 }
 
+/* Docked approval strip: pending decisions sit above the input in a FIXED spot
+   — the transcript is the record of what happened; this zone is what needs the
+   user now. Parallel batches stack cards; each resolves independently. */
+.conversation-approval-dock {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-8);
+	margin-bottom: var(--vscode-agents-space-10);
+}
+
+/* Inside the dock the composer's padding already sets the width — the card's
+   transcript-era centering margin would double it up. */
+.conversation-approval-dock .conversation-approval {
+	max-width: none;
+	margin: 0;
+}
+
+/* Deny-with-redirect field: quiet single line under the actions — an optional
+   escape hatch, not a second composer. */
+.conversation-approval-reason {
+	-webkit-appearance: none;
+	appearance: none;
+	height: var(--vscode-agents-space-28);
+	padding: 0 var(--vscode-agents-space-10);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	border-radius: var(--vscode-agents-radius-control);
+	background: transparent;
+	color: var(--vscode-agents-color-text-primary);
+	font: inherit;
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.conversation-approval-reason::placeholder {
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-approval-reason:focus-visible {
+	outline: var(--vscode-agents-space-2) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: calc(-1 * var(--vscode-agents-space-1));
+}
+
 .conversation-message.user .conversation-message-avatar {
 	background: color-mix(in srgb, var(--vscode-agents-color-badge-background) 22%, transparent);
 	color: var(--vscode-agents-color-badge-foreground);

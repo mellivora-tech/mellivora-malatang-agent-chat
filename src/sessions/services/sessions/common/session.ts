@@ -287,8 +287,9 @@ export interface ISessionPendingApproval {
 	/** True when the grant can also be persisted to the project (bash: only). */
 	readonly alwaysAllowProject?: boolean;
 	/** `always` records the pattern so future matching calls skip the prompt;
-	 *  scope 'project' persists it beyond the process (personal, per-machine). */
-	respond(approved: boolean, always?: boolean, scope?: 'session' | 'project'): void;
+	 *  scope 'project' persists it beyond the process (personal, per-machine);
+	 *  `reason` (deny only) is the user's "do this instead", forwarded to the model. */
+	respond(approved: boolean, always?: boolean, scope?: 'session' | 'project', reason?: string): void;
 }
 
 export interface ISession {
@@ -311,7 +312,9 @@ export interface ISession {
 	/** Review comments on plan artifacts, upserted by id (resolve = same id, resolved:true). */
 	readonly planComments: IObservable<readonly IPlanComment[]>;
 	readonly interactivity: IObservable<SessionInteractivity>;
-	readonly pendingApproval: IObservable<ISessionPendingApproval | undefined>;
+	/** Every tool call currently paused on the user, in arrival order — parallel
+	 *  batches produce several at once, each resolved independently. */
+	readonly pendingApprovals: IObservable<readonly ISessionPendingApproval[]>;
 	readonly reconnect: IObservable<ISessionReconnect | undefined>;
 	readonly permissionMode: IObservable<PermissionMode>;
 	/** Undefined until the first real usage reading arrives; the UI falls back to an estimate until then. */

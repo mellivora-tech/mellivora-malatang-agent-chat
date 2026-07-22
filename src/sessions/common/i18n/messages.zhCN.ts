@@ -162,6 +162,8 @@ export const zhCN = {
 
 	// --- approval card --------------------------------------------------------------
 	'appr.aria': '需要批准',
+	'appr.dockAria': '待处理的授权请求',
+	'appr.reasonPlaceholder': '拒绝并告诉它改做什么…（回车发送）',
 	'appr.runCommand': '运行命令',
 	'appr.writeFile': '写入文件',
 	'appr.editFile': '修改文件',

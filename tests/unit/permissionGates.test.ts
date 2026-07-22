@@ -27,13 +27,13 @@ const writeTool = stubTool('write_file', false);
 const bashTool = stubTool('bash', false);
 const context = { toolUseId: 't1' };
 
-function approvals(result: boolean): { handler: (tool: IAgentTool) => Promise<boolean>; calls: string[] } {
+function approvals(result: boolean, reason?: string): { handler: (tool: IAgentTool) => Promise<{ approved: boolean; reason?: string }>; calls: string[] } {
 	const calls: string[] = [];
 	return {
 		calls,
 		handler: async tool => {
 			calls.push(tool.name);
-			return result;
+			return { approved: result, ...(reason !== undefined ? { reason } : {}) };
 		},
 	};
 }
@@ -105,6 +105,20 @@ test('full mode still asks for a bash sandbox escape — and only for that', asy
 	const strictGate = createGateForMode('full', declined.handler);
 	const denied = await strictGate.check(bashTool, { command: 'rm -rf /', disable_sandbox: true }, context);
 	assert.equal(denied.behavior, 'deny');
+});
+
+test('a deny reason rides the deny message so the model can change course', async () => {
+	const { handler } = approvals(false, '用 pnpm，别用 npm');
+	const gate = createGateForMode('ask', handler);
+	const denied = await gate.check(bashTool, { command: 'npm install' }, context);
+	assert.equal(denied.behavior, 'deny');
+	assert.ok(denied.behavior === 'deny' && denied.message.includes('用 pnpm，别用 npm'), 'the redirect must reach the model');
+
+	// A bare deny (no reason) keeps the plain message — no dangling "Instead" tail.
+	const bare = approvals(false);
+	const bareGate = createGateForMode('ask', bare.handler);
+	const bareDenied = await bareGate.check(bashTool, { command: 'npm install' }, context);
+	assert.ok(bareDenied.behavior === 'deny' && !bareDenied.message.includes('Instead'), 'no reason → no redirect clause');
 });
 
 test('describeToolCall marks a sandbox escape so the approval card reads differently', () => {

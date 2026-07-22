@@ -40,14 +40,14 @@ test('execute_data_source is mutation-class: not read-only, denied by the plan g
 	const tool = createExecuteDataSourceTool({ sources: SOURCES, getSecret: async () => undefined, runWrite });
 	assert.equal(tool.isReadOnly({}), false, 'must never claim read-only — approval hinges on this');
 
-	const planGate = createGateForMode('plan', async () => true);
+	const planGate = createGateForMode('plan', async () => ({ approved: true }));
 	const denied = await planGate.check(tool, { source: 'orders', sql: 'DELETE FROM t' }, context);
 	assert.equal(denied.behavior, 'deny', 'plan gate denies even if approval would say yes');
 
 	let asked = 0;
 	const askGate = createGateForMode('ask', async () => {
 		asked += 1;
-		return true;
+		return { approved: true };
 	});
 	const allowed = await askGate.check(tool, { source: 'orders', sql: 'DELETE FROM t' }, context);
 	assert.equal(allowed.behavior, 'allow');
@@ -55,7 +55,7 @@ test('execute_data_source is mutation-class: not read-only, denied by the plan g
 
 	const autoEditGate = createGateForMode('auto-edit', async () => {
 		asked += 1;
-		return true;
+		return { approved: true };
 	});
 	await autoEditGate.check(tool, { source: 'orders', sql: 'DELETE FROM t' }, context);
 	assert.equal(asked, 2, 'auto-edit still asks — writes are not in AUTO_EDIT_TOOLS');

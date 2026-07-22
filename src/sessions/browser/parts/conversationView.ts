@@ -78,6 +78,7 @@ export class ConversationView extends Disposable {
 	private previewTick: HTMLElement | undefined;
 	private readonly tickTurns = new Map<HTMLElement, { user?: ISessionMessage; work?: ISessionMessage; assistant?: ISessionMessage }>();
 	private readonly composer: HTMLFormElement;
+	private readonly approvalDock: HTMLElement;
 	private readonly input: HTMLTextAreaElement;
 	private readonly sendButton: HTMLButtonElement;
 	private readonly stopButton: HTMLButtonElement;
@@ -101,6 +102,9 @@ export class ConversationView extends Disposable {
 	private queuedFollowUp: string | undefined;
 	/** The approval request whose Allow button already got initial focus (re-render guard). */
 	private focusedApprovalId: string | undefined;
+	/** requestIds currently materialized in the dock — the DOM (typed reason text,
+	 *  focus) survives renders whose approval set is unchanged. */
+	private renderedApprovalKey = '';
 	/** Approval request ids seen per session — drives the compact-density switch. */
 	private readonly approvalsSeen = new Map<string, Set<string>>();
 	private scrollToBottomOnRender = false;
@@ -149,6 +153,17 @@ export class ConversationView extends Disposable {
 
 		this.composer = append(this.element, document.createElement('form'));
 		this.composer.className = 'conversation-composer';
+
+		// Docked approval strip: pending decisions live here, above the input,
+		// in a FIXED spot — the transcript is the record of what happened, the
+		// composer zone is what needs the user NOW. Parallel tool batches stack
+		// several cards; each resolves independently.
+		this.approvalDock = append(this.composer, document.createElement('div'));
+		this.approvalDock.className = 'conversation-approval-dock';
+		this.approvalDock.setAttribute('role', 'region');
+		this.approvalDock.setAttribute('aria-label', localize('appr.dockAria'));
+		this.approvalDock.hidden = true;
+
 		this.composer.appendChild(this.header.element);
 		this.header.element.hidden = true;
 
@@ -473,7 +488,7 @@ export class ConversationView extends Disposable {
 					}
 				}),
 			);
-			this.sessionDisposables.add(session.pendingApproval.subscribe(() => this.render()));
+			this.sessionDisposables.add(session.pendingApprovals.subscribe(() => this.render()));
 			this.sessionDisposables.add(session.reconnect.subscribe(() => this.updateReconnectStatus()));
 			this.sessionDisposables.add(session.permissionMode.subscribe(() => this.notifyPermissionListeners()));
 			this.sessionDisposables.add(session.contextUsage.subscribe(() => this.updateContextRing()));
@@ -635,33 +650,21 @@ export class ConversationView extends Disposable {
 		this.reconcileTranscript(messages);
 
 		const hasLiveWork = messages.some(message => message.role === 'work' && message.durationMs === undefined);
-		const approval = this.session?.pendingApproval.get();
+		const approvals = this.session?.pendingApprovals.get() ?? [];
 		// These trailing rows aren't part of the keyed reconciliation above (they
 		// aren't backed by a message id) — always re-evaluate them.
-		this.transcript.querySelector('.conversation-approval')?.remove();
 		this.transcript.querySelector('.conversation-working-row')?.remove();
 		this.transcript.querySelector('.conversation-thinking-row')?.remove();
-		if (approval) {
-			const card = createApprovalCard(approval, this.useCompactApproval(approval));
-			this.transcript.appendChild(card);
-			// The card is re-created on every render (incl. the 1s live ticker), so
-			// focus the Allow button ONCE per request — not every second — and never
-			// steal focus the user has already moved into the card.
-			if (approval.requestId !== this.focusedApprovalId && !card.contains(document.activeElement)) {
-				card.querySelector<HTMLButtonElement>('.conversation-approval-allow')?.focus();
-			}
-			this.focusedApprovalId = approval.requestId;
-		} else {
-			this.focusedApprovalId = undefined;
-		}
-		if (!approval && this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
+		this.renderApprovalDock(approvals);
+		if (approvals.length === 0 && this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
 			// Mock/legacy runs without a work block keep the plain progress rows.
 			this.transcript.appendChild(this.createWorkingRow());
 			this.transcript.appendChild(this.createThinkingRow());
 		}
 
-		// An approval question always comes into view; otherwise honor stickiness.
-		if (approval || stickToBottom) {
+		// The approval dock lives OUTSIDE the transcript (above the composer), so
+		// a pending question never needs a forced scroll — just honor stickiness.
+		if (stickToBottom) {
 			this.transcript.scrollTop = this.transcript.scrollHeight;
 		} else {
 			this.transcript.scrollTop = previousScrollTop;
@@ -1321,6 +1324,75 @@ export class ConversationView extends Disposable {
 		this.sendError.hidden = !message;
 	}
 
+	/**
+	 * Rebuild the docked approval strip — but ONLY when the set of pending
+	 * requests actually changed: render() also fires for the 1s work ticker,
+	 * and rebuilding then would wipe a half-typed deny reason and the focus.
+	 */
+	private renderApprovalDock(approvals: readonly ISessionPendingApproval[]): void {
+		const key = approvals.map(approval => approval.requestId).join('\n');
+		if (key === this.renderedApprovalKey) {
+			return;
+		}
+		this.renderedApprovalKey = key;
+
+		// A staggered parallel batch rebuilds the dock while the user may be
+		// typing a deny reason in an earlier card — carry text and focus over.
+		const previousReasons = new Map<string, string>();
+		let refocusReasonId: string | undefined;
+		for (const card of this.approvalDock.querySelectorAll<HTMLElement>('.conversation-approval')) {
+			const requestId = card.dataset['requestId'];
+			const reasonInput = card.querySelector<HTMLInputElement>('.conversation-approval-reason');
+			if (requestId !== undefined && reasonInput) {
+				if (reasonInput.value !== '') {
+					previousReasons.set(requestId, reasonInput.value);
+				}
+				if (reasonInput === document.activeElement) {
+					refocusReasonId = requestId;
+				}
+			}
+		}
+		const hadFocus = this.approvalDock.contains(document.activeElement);
+
+		clearNode(this.approvalDock);
+		this.approvalDock.hidden = approvals.length === 0;
+		if (approvals.length === 0) {
+			this.focusedApprovalId = undefined;
+			// A decision emptied the dock from under the keyboard — hand focus back.
+			if (hadFocus) {
+				this.focus();
+			}
+			return;
+		}
+
+		approvals.forEach((approval, index) => {
+			// The first card follows the session's density rule; stacked followers
+			// are always compact — but only for tools ALLOWED to compact
+			// (run_on_server et al. keep the full ceremony even in a stack).
+			const compact = this.useCompactApproval(approval) || (index > 0 && shouldRenderCompactApproval(COMPACT_APPROVAL_AFTER, approval.toolName));
+			const card = createApprovalCard(approval, compact);
+			this.approvalDock.appendChild(card);
+			const carriedReason = previousReasons.get(approval.requestId);
+			const reasonInput = card.querySelector<HTMLInputElement>('.conversation-approval-reason');
+			if (carriedReason !== undefined && reasonInput) {
+				reasonInput.value = carriedReason;
+			}
+			if (approval.requestId === refocusReasonId) {
+				reasonInput?.focus();
+			}
+		});
+
+		// Focus the first card's Allow when the request is new — and also when the
+		// rebuild itself wiped a focus that lived in the dock (a staggered batch
+		// member arriving mid-decision would otherwise strand the keyboard on
+		// <body>). Never steal from a mid-sentence composer draft.
+		const first = approvals[0]!;
+		if ((first.requestId !== this.focusedApprovalId || hadFocus) && refocusReasonId === undefined && !(document.activeElement === this.input && this.input.value !== '')) {
+			this.approvalDock.querySelector<HTMLButtonElement>('.conversation-approval-allow')?.focus();
+		}
+		this.focusedApprovalId = first.requestId;
+	}
+
 	/** Count this request against its session and decide the card's density. */
 	private useCompactApproval(approval: ISessionPendingApproval): boolean {
 		const sessionId = this.session?.sessionId;
@@ -1389,6 +1461,19 @@ function appendApprovalPath(row: HTMLElement, path: string): void {
 	base.textContent = slash >= 0 ? path.slice(slash + 1) : path;
 }
 
+/** The card's typed-but-not-sent deny reason, if any. */
+function readDenyReason(card: HTMLElement): string | undefined {
+	const value = card.querySelector<HTMLInputElement>('.conversation-approval-reason')?.value.trim();
+	return value === undefined || value === '' ? undefined : value;
+}
+
+/** Small numbered kbd hint (the digit-key affordance); full cards only. */
+function appendKeyHint(button: HTMLElement, text: string): void {
+	const key = append(button, document.createElement('kbd'));
+	key.className = 'conversation-approval-key';
+	key.textContent = text;
+}
+
 /** Allow / always-allow / deny row. Compact drops the key hints, not the keys. */
 function appendApprovalActions(card: HTMLElement, approval: ISessionPendingApproval, compact: boolean): void {
 	const actions = append(card, document.createElement('div'));
@@ -1399,9 +1484,8 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 	allow.type = 'button';
 	append(allow, document.createElement('span')).textContent = localize('appr.allow');
 	if (!compact) {
-		const allowKey = append(allow, document.createElement('kbd'));
-		allowKey.className = 'conversation-approval-key';
-		allowKey.textContent = '⏎';
+		appendKeyHint(allow, '1');
+		appendKeyHint(allow, '⏎');
 	}
 	allow.addEventListener('click', () => approval.respond(true));
 
@@ -1417,6 +1501,9 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 		const pattern = append(always, document.createElement('code'));
 		pattern.className = 'conversation-approval-pattern';
 		pattern.textContent = approval.alwaysAllow;
+		if (!compact) {
+			appendKeyHint(always, '2');
+		}
 		always.addEventListener('click', () => approval.respond(true, true, 'session'));
 
 		// The PERMANENT variant (persisted per project, personal & per-machine) —
@@ -1428,6 +1515,7 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 			forever.type = 'button';
 			forever.title = localize('appr.projectTitle', approval.alwaysAllow);
 			append(forever, document.createElement('span')).textContent = localize('appr.project');
+			appendKeyHint(forever, '3');
 			forever.addEventListener('click', () => approval.respond(true, true, 'project'));
 		}
 	}
@@ -1437,24 +1525,51 @@ function appendApprovalActions(card: HTMLElement, approval: ISessionPendingAppro
 	deny.type = 'button';
 	append(deny, document.createElement('span')).textContent = localize('appr.deny');
 	if (!compact) {
-		const denyKey = append(deny, document.createElement('kbd'));
-		denyKey.className = 'conversation-approval-key';
-		denyKey.textContent = 'Esc';
+		appendKeyHint(deny, '4');
+		appendKeyHint(deny, 'Esc');
 	}
-	deny.addEventListener('click', () => approval.respond(false));
+	// A deny picks up whatever redirect the user typed in the reason field.
+	deny.addEventListener('click', () => approval.respond(false, undefined, undefined, readDenyReason(card)));
 }
 
 function createApprovalCard(approval: ISessionPendingApproval, compact = false): HTMLElement {
 	const card = document.createElement('div');
 	card.className = compact ? 'conversation-approval conversation-approval-compact' : 'conversation-approval';
+	card.dataset['requestId'] = approval.requestId;
 	card.setAttribute('role', 'alertdialog');
 	card.setAttribute('aria-label', localize('appr.aria'));
-	// Esc denies. The focused Allow button (a child) bubbles the keydown up here,
-	// and the listener dies with the card — no document-level leak.
+	// Keyboard, scoped to the focused card (listeners die with it — no
+	// document-level leak): Esc = bare deny; digits 1–4 pick a button (compact
+	// keeps the keys, just not the hints); Enter inside the reason field denies
+	// WITH the typed redirect. Digits typed into the reason field stay text.
 	card.addEventListener('keydown', event => {
+		if (event.isComposing) {
+			return;
+		}
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			approval.respond(false);
+			return;
+		}
+		const inReason = event.target instanceof HTMLInputElement && event.target.classList.contains('conversation-approval-reason');
+		if (inReason) {
+			if (event.key === 'Enter') {
+				// Also blocks the surrounding composer <form>'s implicit submit.
+				event.preventDefault();
+				const reason = readDenyReason(card);
+				if (reason !== undefined) {
+					approval.respond(false, undefined, undefined, reason);
+				}
+			}
+			return;
+		}
+		const target = { '1': '.conversation-approval-allow', '2': '.conversation-approval-always:not(.conversation-approval-always-project)', '3': '.conversation-approval-always-project', '4': '.conversation-approval-deny' }[event.key];
+		if (target !== undefined) {
+			const button = card.querySelector<HTMLButtonElement>(target);
+			if (button) {
+				event.preventDefault();
+				button.click();
+			}
 		}
 	});
 
@@ -1519,6 +1634,17 @@ function createApprovalCard(approval: ISessionPendingApproval, compact = false):
 	}
 
 	appendApprovalActions(card, approval, false);
+
+	// Deny-with-redirect (Antigravity's "tell the agent what to do instead"):
+	// a denial that says WHY reaches the model inside the deny message, so it
+	// changes course instead of retrying the same call. Optional — the Deny
+	// button and Esc still work bare. Full card only; compact keeps density.
+	const reason = append(card, document.createElement('input')) as HTMLInputElement;
+	reason.className = 'conversation-approval-reason';
+	reason.type = 'text';
+	reason.placeholder = localize('appr.reasonPlaceholder');
+	reason.setAttribute('aria-label', localize('appr.reasonPlaceholder'));
+
 	return card;
 }
 

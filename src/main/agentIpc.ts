@@ -11,7 +11,7 @@ import type { IAgentMessage, IAgentTerminal, IAgentTool, ICompactionAnchor } fro
 import { restoreAnchor } from './agent/compaction.js';
 import { agentLog } from './agent/observability/agentLog.js';
 import { createRunLogger } from './agent/observability/runLogger.js';
-import { asPermissionMode, createGateForMode, describeToolCall, type PermissionMode } from './agent/permission.js';
+import { asPermissionMode, createGateForMode, describeToolCall, type IApprovalDecision, type PermissionMode } from './agent/permission.js';
 import { formatInstructionsBlock, isProjectInstructionsEnabled, loadProjectInstructions } from './agent/projectInstructions.js';
 import { createWorkspaceTools } from './agent/tools/index.js';
 import { createLanguageServerManager } from './agent/lsp/languageServerManager.js';
@@ -129,6 +129,8 @@ interface IApprovalResponsePayload {
 	readonly always?: boolean;
 	/** 'project' persists the grant to the project's approvals.json too (bash: only). */
 	readonly scope?: 'session' | 'project';
+	/** Deny only: the user's "do this instead", forwarded to the model inside the deny message. */
+	readonly reason?: string;
 }
 
 interface IAgentTitlePayload {
@@ -159,7 +161,7 @@ export function registerAgentIpc(dataRoot: string): void {
 	// The grant rides the pending entry because the response only carries a
 	// requestId — the tool input (and the pattern derived from it) is long gone
 	// by the time "always" comes back.
-	const pendingApprovals = new Map<string, { readonly sessionId: string; readonly projectId?: string; readonly grant?: IAllowlistGrant; resolve(approved: boolean): void }>();
+	const pendingApprovals = new Map<string, { readonly sessionId: string; readonly projectId?: string; readonly grant?: IAllowlistGrant; resolve(decision: IApprovalDecision): void }>();
 	// Session-level "always allow" patterns. In-memory only (never persisted),
 	// keyed by sessionId like the pending/abort maps, so it survives across runs
 	// of a session but dies with the process — the "会话级、不落盘" contract.
@@ -169,7 +171,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		for (const [requestId, pending] of [...pendingApprovals]) {
 			if (pending.sessionId === sessionId) {
 				pendingApprovals.delete(requestId);
-				pending.resolve(false);
+				pending.resolve({ approved: false });
 			}
 		}
 	};
@@ -321,10 +323,10 @@ export function registerAgentIpc(dataRoot: string): void {
 
 		// A mutation the gate cannot auto-decide becomes a question to the renderer;
 		// the reply (or an abort / run end) resolves it. Denied by default.
-		const requestApproval = (tool: IAgentTool, input: unknown, context: { toolUseId: string }): Promise<boolean> =>
-			new Promise<boolean>(resolve => {
+		const requestApproval = (tool: IAgentTool, input: unknown, context: { toolUseId: string }): Promise<IApprovalDecision> =>
+			new Promise<IApprovalDecision>(resolve => {
 				if (controller.signal.aborted || sender.isDestroyed()) {
-					resolve(false);
+					resolve({ approved: false });
 					return;
 				}
 				// "Always allow": session grants ∪ the project's persisted grants —
@@ -333,7 +335,7 @@ export function registerAgentIpc(dataRoot: string): void {
 				const sessionAllowlist = sessionAllowlists.get(payload.sessionId);
 				const allowlist = sessionAllowlist ? new Set([...sessionAllowlist, ...projectAllowlist]) : projectAllowlist;
 				if (allowlist.size > 0 && matchesAllowlist(tool.name, input, allowlist)) {
-					resolve(true);
+					resolve({ approved: true });
 					return;
 				}
 				// Only offer the third button for tools that are safe to always-allow
@@ -349,7 +351,7 @@ export function registerAgentIpc(dataRoot: string): void {
 					'abort',
 					() => {
 						if (pendingApprovals.delete(context.toolUseId)) {
-							resolve(false);
+							resolve({ approved: false });
 						}
 					},
 					{ once: true },
@@ -569,7 +571,8 @@ export function registerAgentIpc(dataRoot: string): void {
 					void addProjectAllowPatterns(dataRoot, pending.projectId, pending.grant.patterns).catch(() => {});
 				}
 			}
-			pending.resolve(payload.approved === true);
+			// The reason only rides a denial — an approval has nothing to redirect.
+			pending.resolve({ approved: payload.approved === true, ...(payload.approved !== true && typeof payload.reason === 'string' && payload.reason.trim() !== '' ? { reason: payload.reason } : {}) });
 		}
 	});
 

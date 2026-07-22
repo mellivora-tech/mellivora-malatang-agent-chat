@@ -78,7 +78,7 @@ interface IMutableSession extends ISession {
 	readonly messages: ObservableValue<readonly ISessionMessage[]>;
 	readonly planComments: ObservableValue<readonly IPlanComment[]>;
 	readonly interactivity: ObservableValue<SessionInteractivity>;
-	readonly pendingApproval: ObservableValue<ISessionPendingApproval | undefined>;
+	readonly pendingApprovals: ObservableValue<readonly ISessionPendingApproval[]>;
 	readonly reconnect: ObservableValue<ISessionReconnect | undefined>;
 	readonly permissionMode: ObservableValue<PermissionMode>;
 	readonly contextUsage: ObservableValue<ISessionContextUsage | undefined>;
@@ -131,7 +131,7 @@ function createSession(options: {
 		messages: observableValue(options.messages),
 		planComments: observableValue<readonly IPlanComment[]>(options.planComments ?? []),
 		interactivity: observableValue(options.interactivity),
-		pendingApproval: observableValue<ISessionPendingApproval | undefined>(undefined),
+		pendingApprovals: observableValue<readonly ISessionPendingApproval[]>([]),
 		reconnect: observableValue<ISessionReconnect | undefined>(undefined),
 		permissionMode: observableValue<PermissionMode>(options.permissionMode ?? 'ask'),
 		contextUsage: observableValue<ISessionContextUsage | undefined>(options.contextUsage),
@@ -1085,7 +1085,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 			dispose();
 			disposeApprovals();
-			session.pendingApproval.set(undefined);
+			session.pendingApprovals.set([]);
 			session.reconnect.set(undefined);
 			if (openCalls.size > 0 || subagentSlots.size > 0) {
 				// A run ending with calls still open (abort, error) — each closes
@@ -1610,8 +1610,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 			}
 		});
 
-		// A gate approval pauses the run: surface it on the session (the
-		// conversation view renders Allow / Deny) and flag NeedsInput.
+		// A gate approval pauses that tool call: surface it on the session (the
+		// conversation view renders the approval dock) and flag NeedsInput. A
+		// parallel batch raises several at once — each is appended in arrival
+		// order and resolved independently; the run resumes visual InProgress
+		// only when the last one is answered.
 		const disposeApprovals = agent.onApprovalRequest(payload => {
 			if (payload.sessionId !== sessionId) {
 				return;
@@ -1622,17 +1625,21 @@ export class FileSessionsProvider implements ISessionsProvider {
 				detail: payload.detail,
 				...(payload.alwaysAllow ? { alwaysAllow: payload.alwaysAllow } : {}),
 				...(payload.alwaysAllowProject ? { alwaysAllowProject: true } : {}),
-				respond: (approved, always, scope) => {
-					if (session.pendingApproval.get()?.requestId !== payload.requestId) {
+				respond: (approved, always, scope, reason) => {
+					const pending = session.pendingApprovals.get();
+					if (!pending.some(entry => entry.requestId === payload.requestId)) {
 						return;
 					}
-					session.pendingApproval.set(undefined);
-					session.status.set(SessionStatus.InProgress);
+					const remaining = pending.filter(entry => entry.requestId !== payload.requestId);
+					session.pendingApprovals.set(remaining);
+					if (remaining.length === 0) {
+						session.status.set(SessionStatus.InProgress);
+					}
 					this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
-					void agent.respondApproval(payload.requestId, approved, always, scope);
+					void agent.respondApproval(payload.requestId, approved, always, scope, reason);
 				},
 			};
-			session.pendingApproval.set(approval);
+			session.pendingApprovals.set([...session.pendingApprovals.get(), approval]);
 			session.status.set(SessionStatus.NeedsInput);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		});

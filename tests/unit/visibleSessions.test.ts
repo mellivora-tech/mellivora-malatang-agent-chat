@@ -25,7 +25,7 @@ function createSession(sessionId: string): ISession {
 		messages: observableValue<readonly ISessionMessage[]>([]),
 		planComments: observableValue([]),
 		interactivity: observableValue(SessionInteractivity.Full),
-		pendingApproval: observableValue(undefined),
+		pendingApprovals: observableValue([]),
 		reconnect: observableValue(undefined),
 		permissionMode: observableValue('ask' as const),
 		contextUsage: observableValue(undefined),

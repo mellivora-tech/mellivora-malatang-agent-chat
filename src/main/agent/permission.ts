@@ -26,7 +26,19 @@ export function asPermissionMode(value: unknown): PermissionMode {
 /** File-editing tools 'auto-edit' runs unattended; bash is deliberately excluded. */
 const AUTO_EDIT_TOOLS: ReadonlySet<string> = new Set(['write_file', 'edit_file']);
 
-export type ApprovalHandler = (tool: IAgentTool, input: unknown, context: IPermissionContext) => Promise<boolean>;
+/** The user's answer to an approval prompt. `reason` (deny only) is the user's
+ *  "do this instead" — it rides the deny message so the model can change course
+ *  instead of retrying the same call. */
+export interface IApprovalDecision {
+	readonly approved: boolean;
+	readonly reason?: string;
+}
+
+export type ApprovalHandler = (tool: IAgentTool, input: unknown, context: IPermissionContext) => Promise<IApprovalDecision>;
+
+function denyMessage(base: string, reason: string | undefined): string {
+	return reason === undefined || reason.trim() === '' ? base : `${base} Instead, the user says: ${reason.trim()}`;
+}
 
 /** Build the permission gate for a session's mode. */
 export function createGateForMode(mode: PermissionMode, requestApproval: ApprovalHandler): IPermissionGate {
@@ -40,8 +52,8 @@ export function createGateForMode(mode: PermissionMode, requestApproval: Approva
 					if (!isSandboxEscape(tool.name, input)) {
 						return { behavior: 'allow' };
 					}
-					const approved = await requestApproval(tool, input, context);
-					return approved ? { behavior: 'allow' } : { behavior: 'deny', message: `The user declined running ${tool.name} outside the sandbox.` };
+					const decision = await requestApproval(tool, input, context);
+					return decision.approved ? { behavior: 'allow' } : { behavior: 'deny', message: denyMessage(`The user declined running ${tool.name} outside the sandbox.`, decision.reason) };
 				},
 			};
 		case 'plan':
@@ -56,8 +68,8 @@ export function createGateForMode(mode: PermissionMode, requestApproval: Approva
 					if (tool.isReadOnly(input) || AUTO_EDIT_TOOLS.has(tool.name)) {
 						return { behavior: 'allow' };
 					}
-					const approved = await requestApproval(tool, input, context);
-					return approved ? { behavior: 'allow' } : { behavior: 'deny', message: `The user declined ${tool.name}.` };
+					const decision = await requestApproval(tool, input, context);
+					return decision.approved ? { behavior: 'allow' } : { behavior: 'deny', message: denyMessage(`The user declined ${tool.name}.`, decision.reason) };
 				},
 			};
 		case 'ask':
@@ -67,8 +79,8 @@ export function createGateForMode(mode: PermissionMode, requestApproval: Approva
 					if (tool.isReadOnly(input)) {
 						return { behavior: 'allow' };
 					}
-					const approved = await requestApproval(tool, input, context);
-					return approved ? { behavior: 'allow' } : { behavior: 'deny', message: `The user declined ${tool.name}.` };
+					const decision = await requestApproval(tool, input, context);
+					return decision.approved ? { behavior: 'allow' } : { behavior: 'deny', message: denyMessage(`The user declined ${tool.name}.`, decision.reason) };
 				},
 			};
 	}
