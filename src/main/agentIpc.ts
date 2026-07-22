@@ -295,6 +295,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		// has no designated small-fast tier.
 		const smallFastConfig = resolveSmallFastConfig(config);
 		const spawnModelClient = smallFastConfig ? withQuotaFastStop(createModelClient(smallFastConfig)) : modelClient;
+		const spawnModel = smallFastConfig?.model ?? config.model;
 
 		// render_data: the agent pushes tabular results into the data panel; the
 		// csv lands beside the transcript so the chip replays after restarts.
@@ -396,6 +397,7 @@ export function registerAgentIpc(dataRoot: string): void {
 					createSpawnAgentTool({
 						roots,
 						modelClient: spawnModelClient,
+						model: spawnModel,
 						...(languageServers ? { languageServers } : {}),
 						record: event => {
 							runLogger.record(event);

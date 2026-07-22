@@ -170,7 +170,7 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 					agentLog.emit({ ts: now(), ...base, type: 'tool_progress', toolUseId: event.toolUseId, name: event.name, detail: { note: event.note } });
 					break;
 				case 'subagent_start':
-					agentLog.emit({ ts: now(), ...base, type: 'subagent_start', agentId: event.agentId, detail: { task: event.task } });
+					agentLog.emit({ ts: now(), ...base, type: 'subagent_start', agentId: event.agentId, model: event.model, detail: { task: event.task } });
 					break;
 				case 'subagent_tool':
 					agentLog.emit({ ts: now(), ...base, type: 'subagent_tool', agentId: event.agentId, name: event.name, turn: event.turn, detail: { summary: event.summary } });

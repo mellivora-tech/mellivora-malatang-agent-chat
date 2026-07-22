@@ -204,8 +204,8 @@ export type IAgentEvent =
 	| { readonly type: 'reply_verifier'; readonly verdict: 'pass' | 'fail' | 'error'; readonly retried: boolean; readonly reason?: string }
 	/** A zero-tool-call run quoted code with only digest memory to go on; one forced re-grounded turn follows. The renderer may ignore it. */
 	| { readonly type: 'grounding_nudge' }
-	/** A spawn_agent child loop started. NEVER yielded by a loop — the tool reports it via a side channel that agentIpc fans out to the run logger AND the renderer. */
-	| { readonly type: 'subagent_start'; readonly agentId: string; readonly task: string }
+	/** A spawn_agent child loop started. NEVER yielded by a loop — the tool reports it via a side channel that agentIpc fans out to the run logger AND the renderer. `model` is the wire model string the child actually runs on (may differ from the parent's — see resolveSmallFastConfig). */
+	| { readonly type: 'subagent_start'; readonly agentId: string; readonly model: string; readonly task: string }
 	/** One child tool call — lets the work panel narrate the sub-agent live. Same side channel as subagent_start. */
 	| { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly summary: string; readonly turn: number }
 	/** The child model is streaming (thinking or writing its conclusion) — the liveness signal for a long single request, where tool events go quiet for minutes (#19 缺陷 1). `chars` is cumulative for the current phase within the turn. Same side channel as subagent_start. */

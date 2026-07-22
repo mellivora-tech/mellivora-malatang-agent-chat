@@ -145,8 +145,8 @@ export type AgentLogEvent =
 			readonly injected?: boolean;
 			readonly failOpen?: boolean;
 	  })
-	/** A spawn_agent child loop started. The task text (user-adjacent content) stays in detail. */
-	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly detail?: { readonly task: string } })
+	/** A spawn_agent child loop started. `model` is the wire model string the child actually runs on (may differ from the parent's — see resolveSmallFastConfig). The task text (user-adjacent content) stays in detail. */
+	| (IBaseEvent & { readonly type: 'subagent_start'; readonly agentId: string; readonly model: string; readonly detail?: { readonly task: string } })
 	/** One child tool call — the child's whole activity trace, since its loop events never reach the log directly. The summary (paths/patterns) stays in detail. */
 	| (IBaseEvent & { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly turn: number; readonly detail?: { readonly summary: string } })
 	/** The child model is mid-stream (throttled) — the liveness trace for a multi-minute single request, which previously logged nothing between subagent_tool and subagent_end. Counts only; no content. */

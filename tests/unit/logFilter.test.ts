@@ -66,7 +66,7 @@ const cases: readonly { readonly event: AgentLogEvent; readonly kept: boolean }[
 	{ event: { ...base, type: 'grounding_nudge' }, kept: false },
 	{ event: { ...base, type: 'stale_claim_nudge' }, kept: false },
 	{ event: { ...base, type: 'action_claim_nudge' }, kept: false },
-	{ event: { ...base, type: 'subagent_start', agentId: 'a' }, kept: false },
+	{ event: { ...base, type: 'subagent_start', agentId: 'a', model: 'test-model' }, kept: false },
 	{ event: { ...base, type: 'subagent_tool', agentId: 'a', name: 'grep', turn: 1 }, kept: false },
 	{ event: { ...base, type: 'subagent_progress', agentId: 'a', phase: 'thinking', chars: 5 }, kept: false },
 	{ event: { ...base, type: 'subagent_end', agentId: 'a', reason: 'completed', turns: 1, toolCalls: 2, tokens: 10, outputChars: 5 }, kept: false },

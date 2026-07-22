@@ -34,6 +34,7 @@ test('spawn_agent: child conclusion comes back with usage trailer and the child 
 			{ emit: [{ type: 'tool_use', id: 'c1', name: 'read_file', input: { path: 'src/a.ts' } }] },
 			{ emit: [{ type: 'text', text: 'Found: A is defined at src/a.ts:1.' }] },
 		]),
+		model: 'test-model',
 		record: event => events.push(event),
 	});
 
@@ -49,6 +50,8 @@ test('spawn_agent: child conclusion comes back with usage trailer and the child 
 		// The conclusion turn streams text → one liveness report (#19 缺陷 1).
 		['subagent_start', 'subagent_tool', 'subagent_progress', 'subagent_end'],
 	);
+	const start = events[0] as { model: string };
+	assert.equal(start.model, 'test-model', 'subagent_start records the wire model the child actually ran on');
 	const progress = events[1] as { agentId: string; name: string; summary: string; turn: number };
 	assert.equal(progress.name, 'read_file');
 	assert.match(progress.summary, /read_file src\/a\.ts/);
@@ -72,6 +75,7 @@ test('spawn_agent: streaming folds into subagent_progress — one report per pha
 			// reports immediately; the second lands inside the throttle window.
 			{ emit: [{ type: 'text', text: 'Report part one. ' }, { type: 'text', text: 'Part two.' }] },
 		]),
+		model: 'test-model',
 		record: event => events.push(event as { type: string; phase?: string; chars?: number }),
 	});
 
@@ -99,6 +103,7 @@ test('spawn_agent: anti-recursion is structural — a child calling spawn_agent 
 			{ emit: [{ type: 'tool_use', id: 'c1', name: 'spawn_agent', input: { task: 'delegate again' } }] },
 			{ emit: [{ type: 'text', text: 'Done without delegation.' }] },
 		]),
+		model: 'test-model',
 	});
 
 	const result = await tool.call({ task: 'anything' }, CALL_CONTEXT);
@@ -114,6 +119,7 @@ test('spawn_agent: an empty child conclusion is an error result, and abort maps 
 	const silent = createSpawnAgentTool({
 		roots: [root],
 		modelClient: createScriptedModelClient([{ emit: [] }]),
+		model: 'test-model',
 	});
 	const empty = await silent.call({ task: 'anything' }, CALL_CONTEXT);
 	assert.ok(empty.isError);
@@ -124,6 +130,7 @@ test('spawn_agent: an empty child conclusion is an error result, and abort maps 
 	const aborted = await createSpawnAgentTool({
 		roots: [root],
 		modelClient: createScriptedModelClient([{ emit: [{ type: 'text', text: 'never delivered' }] }]),
+		model: 'test-model',
 	}).call({ task: 'anything' }, { toolUseId: 'tu', signal: controller.signal });
 	assert.ok(aborted.isError);
 	assert.match(aborted.content, /aborted/i);
@@ -137,6 +144,7 @@ test('parent loop folds a sub-agent digest block from the tool_result into its o
 			{ emit: [{ type: 'tool_use', id: 'c1', name: 'read_file', input: { path: 'src/b.ts' } }] },
 			{ emit: [{ type: 'text', text: 'B lives at src/b.ts:1.' }] },
 		]),
+		model: 'test-model',
 	});
 	// Parent: delegates, then concludes. The parent itself reads nothing.
 	const parentClient = createScriptedModelClient([

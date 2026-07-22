@@ -59,7 +59,7 @@ function childSystemPrompt(roots: readonly string[]): string {
  */
 export type SubagentRecord = (
 	event:
-		| { readonly type: 'subagent_start'; readonly agentId: string; readonly task: string }
+		| { readonly type: 'subagent_start'; readonly agentId: string; readonly model: string; readonly task: string }
 		| { readonly type: 'subagent_tool'; readonly agentId: string; readonly name: string; readonly summary: string; readonly turn: number }
 		| { readonly type: 'subagent_progress'; readonly agentId: string; readonly phase: 'thinking' | 'replying'; readonly chars: number }
 		| {
@@ -87,6 +87,8 @@ function describeChildCall(name: string, input: unknown): string {
 export interface ISpawnAgentDeps {
 	readonly roots: readonly string[];
 	readonly modelClient: IModelClient;
+	/** The wire model string `modelClient` actually streams to — for observability only, never sent to the model. */
+	readonly model: string;
 	readonly record?: SubagentRecord;
 	/** Shared with the parent so a child's read_symbol reuses the same running servers. */
 	readonly languageServers?: ILanguageServerManager;
@@ -146,7 +148,7 @@ export function createSpawnAgentTool(deps: ISpawnAgentDeps): IAgentTool {
 			// The spawning tool_use id doubles as the agent id — unique per call and
 			// lets the UI tie the child's narration to its spawn card.
 			const agentId = context.toolUseId;
-			deps.record?.({ type: 'subagent_start', agentId, task: task.slice(0, 200) });
+			deps.record?.({ type: 'subagent_start', agentId, model: deps.model, task: task.slice(0, 200) });
 
 			// The child is a plain nested loop: same abort signal (user stop stops
 			// everything), reply verifier off (the parent consumes the conclusion —
