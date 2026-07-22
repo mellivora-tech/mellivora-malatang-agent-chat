@@ -628,8 +628,11 @@
 	align-items: center;
 	gap: var(--vscode-agents-space-8);
 	min-width: 0;
-	padding: 0;
+	/* All rows (plain divs included) share the padding so the icon/duration
+	   columns stay aligned whether or not a row is expandable. */
+	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-6);
 	border: 0;
+	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-muted);
 	font: inherit;
@@ -638,7 +641,10 @@
 	cursor: default;
 }
 
+/* The WHOLE row is the click target — the full-width wash says so, instead of
+   leaving the tiny trailing chevron as the only affordance. */
 button.conversation-work-step-row:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
 
@@ -648,11 +654,15 @@ button.conversation-work-step-row:hover {
 }
 
 .conversation-work-step-chevron {
+	/* Rows without a duration still park their chevron on the right rail. */
+	margin-left: auto;
 	opacity: 0.7;
 }
 
 .conversation-work-step-detail {
-	margin: 0 0 var(--vscode-agents-space-4) var(--vscode-agents-space-24);
+	/* Indent = row padding (6) + icon (16) + gap (8): the block hangs under the
+	   row's label, not under its icon. */
+	margin: 0 0 var(--vscode-agents-space-4) calc(var(--vscode-agents-space-24) + var(--vscode-agents-space-6));
 	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-10);
 	overflow-x: auto;
 	max-height: 260px;
@@ -680,7 +690,9 @@ button.conversation-work-step-row:hover {
 
 .conversation-work-step-duration {
 	flex: 0 0 auto;
-	margin-left: var(--vscode-agents-space-6);
+	/* Durations form a flush-right COLUMN (subagent rows already showed why:
+	   aligned times are instantly comparable; ragged ones are noise). */
+	margin-left: auto;
 	color: var(--vscode-agents-color-text-subtle);
 	font-variant-numeric: tabular-nums;
 }
@@ -692,10 +704,13 @@ button.conversation-work-step-row:hover {
 	margin-left: var(--vscode-agents-space-4);
 }
 
-/* Intent verb + argument chip (#14 P0) — the verb reads as prose, the argument as code. */
+/* Intent verb + argument chip (#14 P0) — the verb reads as prose, the argument
+   as code. The VERB recedes and the OBJECT stands forward: rows differ by what
+   they touched, not by their verb, so the eye should land on the argument
+   (Antigravity's "Explored **7 files**" weighting, inverted from our v1). */
 .conversation-work-step-verb {
 	flex: 0 0 auto;
-	color: var(--vscode-agents-color-text-primary);
+	color: inherit;
 }
 
 .conversation-work-step-chip {
@@ -703,6 +718,7 @@ button.conversation-work-step-row:hover {
 	padding: 0 var(--vscode-agents-space-4);
 	border-radius: var(--vscode-agents-radius-control);
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
+	color: var(--vscode-agents-color-text-primary);
 	font-family: var(--vscode-agents-font-mono);
 	font-size: var(--vscode-agents-fontSize-label1);
 	/* Long args (spawn task briefs) must not become wrapping gray walls —
@@ -735,9 +751,16 @@ button.conversation-work-step-row:hover {
 
 /* ── #14 P1: sections, agent groups, failure state, status line ── */
 
-/* "▸ 环境齐全，开始搭建项目" — narration promoted to a chapter heading. */
+/* "▸ 环境齐全，开始搭建项目" — narration promoted to a chapter heading. The
+   rhythm lives HERE, not in the row height: step rows stay dense (a 27-minute
+   run needs the density), but each narration paragraph earns air around it so
+   the outline reads as chapters instead of one uniform log. */
 .conversation-work-section {
-	margin-top: var(--vscode-agents-space-6);
+	margin-top: var(--vscode-agents-space-14);
+}
+
+.conversation-work-section:first-child {
+	margin-top: 0;
 }
 
 .conversation-work-section-head {
@@ -746,7 +769,7 @@ button.conversation-work-step-row:hover {
 	text-align: left;
 	border: none;
 	background: transparent;
-	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6) var(--vscode-agents-space-2);
+	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-6) var(--vscode-agents-space-4);
 	color: var(--vscode-agents-color-text-primary);
 	font-weight: 600;
 	font-size: var(--vscode-agents-fontSize-body2);
@@ -811,7 +834,7 @@ button.conversation-work-step-row:hover {
 
 /* 思考直播: the running thinking stretch streams its tail in a clamped, top-faded window. */
 .conversation-work-thinking-stream {
-	margin: var(--vscode-agents-space-2) 0 var(--vscode-agents-space-4) var(--vscode-agents-space-20);
+	margin: var(--vscode-agents-space-2) 0 var(--vscode-agents-space-4) calc(var(--vscode-agents-space-20) + var(--vscode-agents-space-6));
 	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
 	max-height: calc(3 * 1.6em);
 	overflow: hidden;
