@@ -18,6 +18,7 @@ import {
 	type ModelProvider,
 } from '../sessions/services/models/common/models.js';
 import { PROVIDER_PRESETS } from '../sessions/services/models/common/providerPresets.js';
+import { reportStorageDegraded } from './storageDiagnostics.js';
 
 /**
  * On-disk config. A provider holds the raw `apiKey` (plaintext for now; a future
@@ -77,7 +78,11 @@ async function readRegistry(root: string): Promise<IStoredRegistry> {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
-	} catch {
+	} catch (error) {
+		// The UI renders this as "No model is configured" — indistinguishable from a
+		// fresh install, which is exactly the wrong thing to tell someone whose
+		// models.json just got truncated.
+		reportStorageDegraded('modelConfig', 'unparseable', { path: registryFilePath(root), message: error instanceof Error ? error.message : String(error) });
 		return { providers: [] };
 	}
 
@@ -86,7 +91,13 @@ async function readRegistry(root: string): Promise<IStoredRegistry> {
 	}
 
 	const candidate = parsed as Record<string, unknown>;
-	const providers = Array.isArray(candidate['providers']) ? candidate['providers'].map(parseProvider).filter((entry): entry is IStoredProvider => entry !== undefined) : [];
+	const rawProviders = Array.isArray(candidate['providers']) ? candidate['providers'] : [];
+	const providers = rawProviders.map(parseProvider).filter((entry): entry is IStoredProvider => entry !== undefined);
+	if (providers.length < rawProviders.length) {
+		// A provider with one bad field disappears entirely; without this the user
+		// just finds a model missing from the picker and nothing explains it.
+		reportStorageDegraded('modelConfig', 'entries-dropped', { path: registryFilePath(root), dropped: rawProviders.length - providers.length });
+	}
 	return { providers };
 }
 

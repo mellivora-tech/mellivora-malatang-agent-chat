@@ -17,6 +17,7 @@ import {
 	type IEnvironmentInput,
 	type IWorkspaceConfig,
 } from '../sessions/services/environments/common/environments.js';
+import { reportStorageDegraded } from './storageDiagnostics.js';
 
 /**
  * The non-secret project config lives IN the workspace so it's inspectable,
@@ -40,7 +41,13 @@ export async function readWorkspaceConfig(workspacePath: string): Promise<IWorks
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
-	} catch {
+	} catch (error) {
+		// Degrading to empty here removes every environment and data source — the
+		// agent then silently loses its query tools and the UI shows nothing configured.
+		reportStorageDegraded('workspaceConfig', 'unparseable', {
+			path: workspaceConfigPath(workspacePath),
+			message: error instanceof Error ? error.message : String(error),
+		});
 		return EMPTY_WORKSPACE_CONFIG;
 	}
 	return normalizeConfig(parsed);
@@ -75,7 +82,9 @@ export function normalizeConfig(value: unknown): IWorkspaceConfig {
 		return EMPTY_WORKSPACE_CONFIG;
 	}
 	const candidate = value as Record<string, unknown>;
-	const environments = Array.isArray(candidate['environments']) ? candidate['environments'].map(parseEnvironment).filter((entry): entry is IEnvironment => entry !== undefined) : [];
+	const environments = Array.isArray(candidate['environments'])
+		? candidate['environments'].map(parseEnvironment).filter((entry): entry is IEnvironment => entry !== undefined)
+		: [];
 	const envIds = new Set(environments.map(environment => environment.id));
 	const dataSources = Array.isArray(candidate['dataSources'])
 		? candidate['dataSources'].map(parseDataSource).filter((entry): entry is IDataSource => entry !== undefined && envIds.has(entry.environmentId))

@@ -6,6 +6,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { IDataSourceSecret } from '../sessions/services/environments/common/environments.js';
+import { reportStorageDegraded } from './storageDiagnostics.js';
 
 /**
  * Data-source credentials — the SECRET half, kept out of the workspace (which
@@ -60,7 +61,9 @@ async function readAll(root: string, cipher: ISecretCipher): Promise<Credentials
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
-	} catch {
+	} catch (error) {
+		// The file exists but is not JSON — every stored secret is now invisible.
+		reportStorageDegraded('credentials', 'unparseable', { message: error instanceof Error ? error.message : String(error) });
 		return {};
 	}
 	if (!isRecord(parsed)) {
@@ -72,8 +75,11 @@ async function readAll(root: string, cipher: ISecretCipher): Promise<Credentials
 			const json = parsed['enc'] === true ? cipher.decrypt(parsed['secrets']) : parsed['secrets'];
 			const record = JSON.parse(json);
 			return isRecord(record) ? (record as Credentials) : {};
-		} catch {
-			// Wrong cipher / corrupt blob — fail safe to empty rather than throwing.
+		} catch (error) {
+			// Wrong cipher / corrupt blob (a new machine, a reset keychain) — fail safe
+			// to empty rather than throwing, but say so: otherwise every configured API
+			// key silently presents as "never entered" and the user hunts the wrong bug.
+			reportStorageDegraded('credentials', 'undecryptable', { message: error instanceof Error ? error.message : String(error) });
 			return {};
 		}
 	}

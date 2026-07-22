@@ -17,6 +17,7 @@ import type {
 	ISessionStateEntry,
 } from '../sessions/services/sessions/common/sessionsBridge.js';
 import { appendArtifact } from './artifactsStorage.js';
+import { reportStorageDegraded } from './storageDiagnostics.js';
 
 const DEFAULT_STATUS_NEEDS_INPUT = 2;
 
@@ -213,6 +214,10 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	const lines = raw.split('\n').filter(line => line.trim().length > 0);
 	const header = parseHeader(lines[0]);
 	if (!header || header.sessionId !== basename(file, '.jsonl')) {
+		// The file is on disk but its header is unusable, so the entire conversation
+		// silently vanishes from the session list — the most alarming possible
+		// outcome to present with no explanation anywhere.
+		reportStorageDegraded('session', 'unparseable', { path: file });
 		return undefined;
 	}
 
@@ -233,9 +238,13 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 	const planStates = new Map<string, 'draft' | 'approved' | 'superseded'>();
 	const planComments = new Map<string, IPlanCommentData>();
 
+	let droppedEntries = 0;
 	for (const line of lines.slice(1)) {
 		const entry = parseEntry(line);
 		if (!entry) {
+			// A truncated or corrupt line removes that message/tool result from the
+			// transcript, leaving a gap with no marker — count them and report once.
+			droppedEntries += 1;
 			continue;
 		}
 
@@ -313,6 +322,10 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 			// null is the explicit clear (resume started / user moved on).
 			pausedRun = entry.pausedRun ?? undefined;
 		}
+	}
+
+	if (droppedEntries > 0) {
+		reportStorageDegraded('session', 'entries-dropped', { path: file, dropped: droppedEntries });
 	}
 
 	return {

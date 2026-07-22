@@ -85,6 +85,24 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'action_claim_nudge' })
 	/** A hook fired with a consequence (§9): user hooks + any block/inject. Names + decision are export-safe telemetry; watch to see what the harness enforced and when. */
 	/**
+	 * A store that EXISTED but could not be used, so it degraded to empty/partial.
+	 *
+	 * This is the difference between "you never configured this" and "your config
+	 * is unreadable" — states the app otherwise renders identically. A corrupt
+	 * models.json shows "No model is configured"; an undecryptable credential file
+	 * makes every API key look like it was never entered; a bad session header makes
+	 * a whole conversation disappear from the list. An absent file is NOT reported:
+	 * that one really is the legitimate empty case.
+	 */
+	| (IAuxBaseEvent & {
+			readonly type: 'storage_degraded';
+			readonly store: string;
+			readonly reason: 'unparseable' | 'undecryptable' | 'entries-dropped';
+			/** How many records were discarded, for 'entries-dropped'. */
+			readonly dropped?: number;
+			readonly detail?: { readonly path?: string; readonly message?: string };
+	  })
+	/**
 	 * A failure the RENDERER caught. Its `console.warn` reaches only DevTools, so
 	 * without this the whole `src/sessions/**` half of the app could fail silently
 	 * with nothing on disk. `sessionId` is optional because much of the renderer
