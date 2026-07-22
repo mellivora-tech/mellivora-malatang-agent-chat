@@ -426,7 +426,8 @@ test('reply append failures are logged without breaking the session', async t =>
 	const bridge = createFakeBridge();
 	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 });
 	await provider.initialize();
-	const errorSpy = t.mock.method(console, 'error', () => undefined);
+	// reportFailure routes renderer failures to console.warn AND the log bridge.
+	const errorSpy = t.mock.method(console, 'warn', () => undefined);
 
 	const session = await provider.startSession('hello');
 	bridge.failAppends = true;
@@ -641,7 +642,8 @@ test('a failed document store keeps the full text in the bubble instead of losin
 	});
 	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, ENABLED_MODELS_SERVICE);
 	await provider.initialize();
-	const errorSpy = t.mock.method(console, 'error', () => undefined);
+	// reportFailure routes renderer failures to console.warn AND the log bridge.
+	const errorSpy = t.mock.method(console, 'warn', () => undefined);
 
 	const session = await provider.startSession('梳理部署链路');
 	await new Promise(resolve => setTimeout(resolve, 20));

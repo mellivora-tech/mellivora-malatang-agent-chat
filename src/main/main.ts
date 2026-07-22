@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAgentIpc } from './agentIpc.js';
+import { registerDiagnosticsIpc } from './diagnosticsIpc.js';
 import { registerArtifactsIpc } from './artifactsIpc.js';
 import { agentLog } from './agent/observability/agentLog.js';
 import { registerGitIpc } from './gitIpc.js';
@@ -89,6 +90,7 @@ app.whenReady().then(async () => {
 	registerAppStateIpc(dataRoot);
 	registerModelConfigIpc(dataRoot);
 	registerAgentIpc(dataRoot);
+	registerDiagnosticsIpc();
 	registerGitIpc(dataRoot);
 	registerSkillsIpc(dataRoot);
 	registerEnvironmentsIpc(dataRoot);

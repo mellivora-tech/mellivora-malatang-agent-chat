@@ -16,6 +16,7 @@ export interface ISkillsService {
 	deleteSkill(id: string): Promise<void>;
 }
 
+import { reportFailure } from '../../../common/diagnostics.js';
 export class SkillsService implements ISkillsService {
 	private readonly skillsValue = observableValue<readonly ISkill[]>([]);
 	readonly skills: IObservable<readonly ISkill[]> = this.skillsValue;
@@ -47,7 +48,7 @@ export class SkillsService implements ISkillsService {
 		try {
 			this.skillsValue.set(await this.bridge.list());
 		} catch (error) {
-			console.warn('Listing skills failed:', error);
+			reportFailure('skills.list', error);
 		}
 	}
 }

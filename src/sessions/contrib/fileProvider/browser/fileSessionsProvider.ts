@@ -25,11 +25,25 @@ import type {
 	ISessionWorkStep,
 	ISessionWorkspace,
 } from '../../../services/sessions/common/session.js';
-import { DOCUMENT_SPLIT_MARKER_PREFIX, RENDERED_TABLE_MARKER, SUBAGENT_END_ARG_PREFIX, SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../../services/sessions/common/session.js';
+import {
+	DOCUMENT_SPLIT_MARKER_PREFIX,
+	RENDERED_TABLE_MARKER,
+	SUBAGENT_END_ARG_PREFIX,
+	SessionInteractivity,
+	SessionStatus,
+	estimateSessionTokens,
+} from '../../../services/sessions/common/session.js';
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { materializeUi, parseUiInput, uiToMarkdown, type IRenderUiInput } from '../../../services/sessions/common/uiArtifact.js';
 import { permissionMode } from '../../../services/agent/browser/permissionModeService.js';
-import type { ISessionCompactionAnchorData, ISessionPausedRunData, ISessionsBridge, ISessionRef, ISessionSnapshot, ISessionStateEntry } from '../../../services/sessions/common/sessionsBridge.js';
+import type {
+	ISessionCompactionAnchorData,
+	ISessionPausedRunData,
+	ISessionsBridge,
+	ISessionRef,
+	ISessionSnapshot,
+	ISessionStateEntry,
+} from '../../../services/sessions/common/sessionsBridge.js';
 import type { IPendingImage, ISendMessageOptions, ISessionChangeEvent, ISessionsProvider, IStartSessionOptions } from '../../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
 
@@ -48,6 +62,7 @@ const DEFAULT_RESPONSE_DELAY_MS = 3000;
 // clock and the reset edge need a little daylight (#19 缺陷 2).
 const RESUME_BUFFER_MS = 30_000;
 
+import { reportFailure } from '../../../common/diagnostics.js';
 type BridgeGlobals = typeof globalThis & { readonly agentWindow?: { readonly git?: IGitBridge; readonly artifacts?: IArtifactsBridge } };
 
 interface IMutableSession extends ISession {
@@ -221,7 +236,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		try {
 			await this.artifactsBridge.record(entry);
 		} catch (error) {
-			console.warn(`Recording the change-set artifact failed for ${session.sessionId}:`, error);
+			reportFailure('sessions.captureChangeSet', error, session.sessionId);
 		}
 	}
 
@@ -334,7 +349,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 			await this.enqueueWrite(() => this.bridge.append(this.getRef(session.sessionId), { type: 'state', timestamp: new Date().toISOString(), title }));
 		} catch (error) {
-			console.warn(`Title generation failed for ${session.sessionId}:`, error);
+			reportFailure('sessions.generateTitle', error, session.sessionId);
 		}
 	}
 
@@ -400,7 +415,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 		delete session.pausedTranscript;
 		if (persist) {
 			this.enqueueWrite(() => this.bridge.append(this.getRef(session.sessionId), { type: 'state', timestamp: new Date().toISOString(), pausedRun: null })).catch(error =>
-				console.error(`Failed to clear paused run for ${session.sessionId}:`, error),
+				reportFailure('sessions.clearPausedRun', error, session.sessionId),
 			);
 		}
 	}
@@ -730,7 +745,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				attachments.push({ kind: 'image', path, mediaType: image.mediaType });
 				this.mediaCache.set(`${ref.sessionId}:${path}`, image.data);
 			} catch (error) {
-				console.warn(`Storing an attached image failed for ${ref.sessionId}:`, error);
+				reportFailure('sessions.storeImage', error, ref.sessionId);
 			}
 		}
 		return attachments;
@@ -975,7 +990,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(call.name === 'spawn_agent' ? { agent: callId } : {}),
 				});
 			}
-			const workMessage: ISessionMessage = { id: workId, role: 'work', text: '', steps: liveSteps, ...(durationMs === undefined ? {} : { durationMs }), ...(outcome === undefined ? {} : { outcome }) };
+			const workMessage: ISessionMessage = {
+				id: workId,
+				role: 'work',
+				text: '',
+				steps: liveSteps,
+				...(durationMs === undefined ? {} : { durationMs }),
+				...(outcome === undefined ? {} : { outcome }),
+			};
 			const messages = session.messages.get();
 			session.messages.set(messages.some(message => message.id === workId) ? messages.map(message => (message.id === workId ? workMessage : message)) : [...messages, workMessage]);
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
@@ -1071,7 +1093,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// child actions close first (they belong inside their spawn).
 				for (const [agentId, slot] of subagentSlots) {
 					if (slot.action !== undefined) {
-						closeStep('tool', slot.action, undefined, { ...(slot.facts ?? { tool: 'subagent', via: 'subagent', agent: agentId }), outcome: 'error' }, { startedAt: slot.actionStart });
+						closeStep(
+							'tool',
+							slot.action,
+							undefined,
+							{ ...(slot.facts ?? { tool: 'subagent', via: 'subagent', agent: agentId }), outcome: 'error' },
+							{ startedAt: slot.actionStart },
+						);
 					}
 				}
 				subagentSlots.clear();
@@ -1262,7 +1290,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 							assistantText = `${documentSplit.summary}\n\n${localize('conv.docSplitNote')}\n[${DOCUMENT_SPLIT_MARKER_PREFIX}: ${documentSplit.title}]`;
 							assistantAttachments = [{ kind: 'document', path: stored.path, label: documentSplit.title }];
 						} catch (splitError) {
-							console.error(`Storing the split document failed for ${sessionId}:`, splitError);
+							reportFailure('sessions.storeSplitDocument', splitError, sessionId);
 						}
 					}
 					await this.bridge.append(ref, {
@@ -1294,7 +1322,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(usageToPersist ? { contextUsage: usageToPersist } : {}),
 					...(pausedRunToPersist ? { pausedRun: pausedRunToPersist } : {}),
 				});
-			}).catch(persistError => console.error(`Failed to persist assistant reply for ${sessionId}:`, persistError));
+			}).catch(persistError => reportFailure('sessions.persistAssistantReply', persistError, sessionId));
 
 			session.status.set(SessionStatus.NeedsInput);
 			session.updatedAt.set(now);
@@ -1418,7 +1446,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 							// per-child duration the section header displays.
 							...(call.name === 'spawn_agent' ? { agent: event.toolUseId } : {}),
 						},
-						{ startedAt: call.startedAt, ...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }), ...(call.browse === undefined ? {} : { browse: call.browse }) },
+						{
+							startedAt: call.startedAt,
+							...(event.durationMs === undefined ? {} : { durationMs: event.durationMs }),
+							...(call.browse === undefined ? {} : { browse: call.browse }),
+						},
 					);
 					openCalls.delete(event.toolUseId);
 					updateWork();
@@ -1440,7 +1472,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// each own a slot — events route by agentId and never cross.
 				const spawnCall = openCalls.get(event.agentId);
 				subagentSlots.set(event.agentId, { spawnLabel: spawnCall?.label, actionStart: Date.now() });
-				closeStep('tool', localize('run.subagentSpawn', firstLine(event.task)), undefined, { tool: 'spawn_agent', arg: firstLine(event.task), agent: event.agentId }, { startedAt: Date.now() });
+				closeStep(
+					'tool',
+					localize('run.subagentSpawn', firstLine(event.task)),
+					undefined,
+					{ tool: 'spawn_agent', arg: firstLine(event.task), agent: event.agentId },
+					{ startedAt: Date.now() },
+				);
 				if (spawnCall !== undefined) {
 					spawnCall.label = localize('run.subagentStarting');
 				}
@@ -1645,7 +1683,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				const ref = this.getRef(session.sessionId);
 				await this.bridge.append(ref, { type: 'message', id: message.id, role: 'assistant', text: message.text, timestamp: now.toISOString() });
 				await this.bridge.append(ref, { type: 'state', timestamp: now.toISOString(), status: SessionStatus.NeedsInput, isRead: false } satisfies ISessionStateEntry);
-			}).catch(error => console.error(`Failed to persist assistant reply for ${session.sessionId}:`, error));
+			}).catch(error => reportFailure('sessions.persistAssistantReply', error, session.sessionId));
 			session.messages.set([...session.messages.get(), message]);
 			session.status.set(SessionStatus.NeedsInput);
 			session.updatedAt.set(now);
@@ -1758,7 +1796,7 @@ function formatQuotaResetNote(iso: string | undefined): string | undefined {
 export function workToolArg(input: unknown): string | undefined {
 	const record = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
 	const arg = [record['command'], record['path'], record['pattern'], record['task'], record['component'], record['sql'], record['source']].find(
-		value => typeof value === 'string' && value !== ''
+		value => typeof value === 'string' && value !== '',
 	);
 	return typeof arg === 'string' ? firstLine(arg) : undefined;
 }

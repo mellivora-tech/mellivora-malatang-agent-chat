@@ -23,6 +23,7 @@ export interface IArtifactsViewOptions {
  * it" jumps. Mounting rebuilds the visible scopes from the transcripts — that
  * lazy backfill is what makes pre-P0 sessions show up without any migration.
  */
+import { reportFailure } from '../../common/diagnostics.js';
 export class ArtifactsView extends Disposable {
 	private readonly root: HTMLElement;
 	// Once per view lifetime per scope — rebuild rescans every transcript, so
@@ -38,9 +39,11 @@ export class ArtifactsView extends Disposable {
 		private readonly options: IArtifactsViewOptions,
 	) {
 		super();
-		this._register(toDisposable(() => {
-			this.disposed = true;
-		}));
+		this._register(
+			toDisposable(() => {
+				this.disposed = true;
+			}),
+		);
 		this.root = container.appendChild(document.createElement('div'));
 		this.root.className = 'artifacts-view';
 
@@ -78,16 +81,20 @@ export class ArtifactsView extends Disposable {
 				this.rebuiltScopes.add(key);
 				try {
 					await bridge.rebuild(scope);
-				} catch {
-					// A failed rebuild leaves the previous index — still listable.
+				} catch (error) {
+					// A failed rebuild leaves the previous index — still listable, but
+					// silently stale, so the failure has to be reported.
+					reportFailure('artifacts.rebuild', error);
 				}
 			}
 		}
 		let entries: readonly IArtifactEntryData[] = [];
 		try {
 			entries = await bridge.list();
-		} catch {
-			// Listing failure degrades to the empty state.
+		} catch (error) {
+			// Degrading to the empty state is indistinguishable from having no
+			// artifacts at all — the user sees "nothing here" and never reports it.
+			reportFailure('artifacts.list', error);
 		}
 		if (this.disposed || token !== this.loadToken) {
 			return;

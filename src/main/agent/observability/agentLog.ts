@@ -85,6 +85,19 @@ export type AgentLogEvent =
 	| (IBaseEvent & { readonly type: 'action_claim_nudge' })
 	/** A hook fired with a consequence (§9): user hooks + any block/inject. Names + decision are export-safe telemetry; watch to see what the harness enforced and when. */
 	/**
+	 * A failure the RENDERER caught. Its `console.warn` reaches only DevTools, so
+	 * without this the whole `src/sessions/**` half of the app could fail silently
+	 * with nothing on disk. `sessionId` is optional because much of the renderer
+	 * (project list, skills, artifacts) fails outside any session.
+	 */
+	| (IAuxBaseEvent & {
+			readonly type: 'renderer_error';
+			readonly scope: string;
+			readonly sessionId?: string;
+			readonly errorClass?: string;
+			readonly detail?: { readonly message: string };
+	  })
+	/**
 	 * The user-hook load result. Emitted only when a hooks file had content, so a
 	 * dropped entry (typo'd event name) or an unparseable file is visible instead
 	 * of presenting as "the hook just never fires".

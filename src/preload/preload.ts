@@ -145,6 +145,14 @@ const agent: IAgentBridge = {
 		ipcRenderer.invoke('agent:approval-response', { requestId, approved, always, scope }),
 };
 
+/**
+ * Fire-and-forget failure reporting. A renderer console.warn never reaches disk,
+ * so this is the only way a caught renderer failure becomes auditable.
+ */
+const diagnostics = {
+	report: (payload: { scope: string; message?: string; errorClass?: string; sessionId?: string }) => ipcRenderer.send('diagnostics:report', payload),
+};
+
 contextBridge.exposeInMainWorld('agentWindow', {
 	platform: process.platform,
 	projects,
@@ -157,6 +165,7 @@ contextBridge.exposeInMainWorld('agentWindow', {
 	environments,
 	dataFiles,
 	artifacts,
+	diagnostics,
 	...(Number.isFinite(mockResponseDelayMs) && mockResponseDelayMs >= 0 ? { mockResponseDelayMs } : {}),
 	...(pinnedLocale === 'zh-CN' || pinnedLocale === 'en-US' ? { locale: pinnedLocale } : {}),
 });

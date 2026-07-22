@@ -38,6 +38,7 @@ export interface IProjectsService {
 	cloneRemote(projectId: string, remoteId: string): Promise<readonly IRemoteRepoView[]>;
 }
 
+import { reportFailure } from '../../../common/diagnostics.js';
 export class ProjectsService implements IProjectsService {
 	private readonly projectsValue = observableValue<readonly IProject[]>([]);
 	private readonly activeProjectValue = observableValue<IProject | undefined>(undefined);
@@ -64,7 +65,7 @@ export class ProjectsService implements IProjectsService {
 		const project = this.projectsValue.get().find(candidate => candidate.id === projectId);
 		if (project) {
 			this.activeProjectValue.set(project);
-			void this.appState?.set({ activeProjectId: project.id }).catch(error => console.error('Failed to persist the active project:', error));
+			void this.appState?.set({ activeProjectId: project.id }).catch(error => reportFailure('projects.persistActiveProject', error));
 		}
 	}
 
@@ -75,7 +76,7 @@ export class ProjectsService implements IProjectsService {
 		try {
 			return await this.bridge.listFiles(projectId);
 		} catch (error) {
-			console.warn(`Listing files failed for project ${projectId}:`, error);
+			reportFailure('projects.listFiles', error);
 			return [];
 		}
 	}
