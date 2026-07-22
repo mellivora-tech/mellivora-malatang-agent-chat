@@ -24,6 +24,7 @@ const runStart: AgentLogEvent = {
 	runId: 'r',
 	sessionId: 's',
 	type: 'run_start',
+	build: 'dev',
 	model: 'm',
 	mode: 'ask',
 	hasWorkspace: true,

@@ -23,6 +23,8 @@ interface IBaseEvent {
 export type AgentLogEvent =
 	| (IBaseEvent & {
 			readonly type: 'run_start';
+			/** Git sha of the build that produced this run ('dev' un-bundled) — catches stale-binary runs. */
+			readonly build: string;
 			readonly model: string;
 			readonly mode: string;
 			readonly hasWorkspace: boolean;

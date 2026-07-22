@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { IAgentEvent, IAgentTerminal } from '../agentTypes.js';
+import { BUILD_SHA } from '../../buildInfo.js';
 import { agentLog } from './agentLog.js';
 
 export interface IRunLoggerContext {
@@ -76,6 +77,7 @@ export function createRunLogger(context: IRunLoggerContext): IRunLogger {
 		ts: now(),
 		...base,
 		type: 'run_start',
+		build: BUILD_SHA,
 		model: context.model,
 		mode: context.mode,
 		hasWorkspace: context.hasWorkspace,
