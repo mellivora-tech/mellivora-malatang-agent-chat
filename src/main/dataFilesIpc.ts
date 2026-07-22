@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { dialog, ipcMain } from 'electron';
+import { registerHandler } from './ipcObservability.js';
+import { dialog } from 'electron';
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve, sep } from 'node:path';
@@ -36,7 +37,7 @@ export function registerDataFilesIpc(dataRoot: string): void {
 		return resolved === base || resolved.startsWith(base + sep);
 	};
 
-	ipcMain.handle('dataFiles:pick', async (): Promise<IPickedDataFile | undefined> => {
+	registerHandler('dataFiles:pick', async (): Promise<IPickedDataFile | undefined> => {
 		// E2E seam: dialogs can't be driven headlessly — the env var IS the pick.
 		const seeded = process.env['MELLIVORA_PICK_FILE'];
 		if (seeded) {
@@ -55,7 +56,7 @@ export function registerDataFilesIpc(dataRoot: string): void {
 		return { path, name: basename(path) };
 	});
 
-	ipcMain.handle('dataFiles:readTable', async (_event, path: string, sheet?: string): Promise<FileTableResult> => {
+	registerHandler('dataFiles:readTable', async (_event, path: string, sheet?: string): Promise<FileTableResult> => {
 		if (typeof path !== 'string' || (!pickedPaths.has(path) && !insideDataRoot(path))) {
 			return { ok: false, message: '[i18n:dferr.notPicked]' };
 		}
@@ -69,7 +70,7 @@ export function registerDataFilesIpc(dataRoot: string): void {
 	// Save a renderer-produced text artifact (compiled migration .sql etc.) to a
 	// user-chosen location. The destination always comes from the save dialog —
 	// the renderer supplies content and a suggested NAME, never a path.
-	ipcMain.handle('dataFiles:exportText', async (_event, defaultName: string, content: string, meta?: IExportTextMeta): Promise<string | undefined> => {
+	registerHandler('dataFiles:exportText', async (_event, defaultName: string, content: string, meta?: IExportTextMeta): Promise<string | undefined> => {
 		if (typeof defaultName !== 'string' || typeof content !== 'string') {
 			return undefined;
 		}

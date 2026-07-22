@@ -3,15 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ipcMain } from 'electron';
+import { registerHandler } from './ipcObservability.js';
 import type { ISessionEntry, ISessionHeader, ISessionRef } from '../sessions/services/sessions/common/sessionsBridge.js';
 import { appendArtifact, extractArtifactsFromEntries, removeSessionArtifacts } from './artifactsStorage.js';
-import { appendSessionEntry, createSessionFile, deleteSessionFile, loadAllSessions, readSessionMedia, readSessionMediaText, storeSessionDocument, storeSessionMedia } from './sessionsStorage.js';
+import {
+	appendSessionEntry,
+	createSessionFile,
+	deleteSessionFile,
+	loadAllSessions,
+	readSessionMedia,
+	readSessionMediaText,
+	storeSessionDocument,
+	storeSessionMedia,
+} from './sessionsStorage.js';
 
 export function registerSessionsIpc(dataRoot: string): void {
-	ipcMain.handle('sessions:list', () => loadAllSessions(dataRoot));
-	ipcMain.handle('sessions:create', (_event, header: ISessionHeader) => createSessionFile(dataRoot, header));
-	ipcMain.handle('sessions:append', async (_event, ref: ISessionRef, entry: ISessionEntry) => {
+	registerHandler('sessions:list', () => loadAllSessions(dataRoot));
+	registerHandler('sessions:create', (_event, header: ISessionHeader) => createSessionFile(dataRoot, header));
+	registerHandler('sessions:append', async (_event, ref: ISessionRef, entry: ISessionEntry) => {
 		await appendSessionEntry(dataRoot, ref, entry);
 		// Artifact capture (#13 P0) is best-effort: the index is a rebuildable
 		// mirror, so its failures must never surface into the transcript write.
@@ -23,7 +32,7 @@ export function registerSessionsIpc(dataRoot: string): void {
 			console.error('[artifacts] capture on append failed', error);
 		}
 	});
-	ipcMain.handle('sessions:delete', async (_event, ref: ISessionRef) => {
+	registerHandler('sessions:delete', async (_event, ref: ISessionRef) => {
 		await deleteSessionFile(dataRoot, ref);
 		try {
 			await removeSessionArtifacts(dataRoot, ref);
@@ -31,8 +40,8 @@ export function registerSessionsIpc(dataRoot: string): void {
 			console.error('[artifacts] cleanup on delete failed', error);
 		}
 	});
-	ipcMain.handle('sessions:storeMedia', (_event, ref: ISessionRef, base64: string, mediaType: string) => storeSessionMedia(dataRoot, ref, base64, mediaType));
-	ipcMain.handle('sessions:readMedia', (_event, ref: ISessionRef, entryPath: string) => readSessionMedia(dataRoot, ref, entryPath));
-	ipcMain.handle('sessions:storeDocument', (_event, ref: ISessionRef, title: string, markdown: string) => storeSessionDocument(dataRoot, ref, title, markdown));
-	ipcMain.handle('sessions:readMediaText', (_event, ref: ISessionRef, entryPath: string) => readSessionMediaText(dataRoot, ref, entryPath));
+	registerHandler('sessions:storeMedia', (_event, ref: ISessionRef, base64: string, mediaType: string) => storeSessionMedia(dataRoot, ref, base64, mediaType));
+	registerHandler('sessions:readMedia', (_event, ref: ISessionRef, entryPath: string) => readSessionMedia(dataRoot, ref, entryPath));
+	registerHandler('sessions:storeDocument', (_event, ref: ISessionRef, title: string, markdown: string) => storeSessionDocument(dataRoot, ref, title, markdown));
+	registerHandler('sessions:readMediaText', (_event, ref: ISessionRef, entryPath: string) => readSessionMediaText(dataRoot, ref, entryPath));
 }

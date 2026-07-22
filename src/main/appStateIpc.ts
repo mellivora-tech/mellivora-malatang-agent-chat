@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ipcMain } from 'electron';
+import { registerHandler } from './ipcObservability.js';
 import type { IAppState } from '../sessions/services/appState/common/appState.js';
 import { readAppState, writeAppState } from './appStateStorage.js';
 
 export function registerAppStateIpc(dataRoot: string): void {
-	ipcMain.handle('appState:get', () => readAppState(dataRoot));
-	ipcMain.handle('appState:set', (_event, state: IAppState) => writeAppState(dataRoot, state));
+	registerHandler('appState:get', () => readAppState(dataRoot));
+	registerHandler('appState:set', (_event, state: IAppState) => writeAppState(dataRoot, state));
 }

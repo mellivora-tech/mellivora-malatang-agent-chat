@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ipcMain } from 'electron';
+import { registerHandler } from './ipcObservability.js';
 import { computeDiffStat, git, type IGitDiffStat } from './gitDiff.js';
 import { getProject } from './projectsStorage.js';
 
@@ -27,7 +27,7 @@ export type IGitCheckoutResult = { readonly ok: true; readonly current: string }
  * resolved from the stored project — never from a renderer-supplied path.
  */
 export function registerGitIpc(dataRoot: string): void {
-	ipcMain.handle('git:branches', async (_event, projectId: string): Promise<IGitBranchesResult | undefined> => {
+	registerHandler('git:branches', async (_event, projectId: string): Promise<IGitBranchesResult | undefined> => {
 		const project = await getProject(dataRoot, projectId);
 		if (!project) {
 			return undefined;
@@ -43,12 +43,12 @@ export function registerGitIpc(dataRoot: string): void {
 		}
 	});
 
-	ipcMain.handle('git:diffStat', async (_event, projectId: string): Promise<IGitDiffStat | undefined> => {
+	registerHandler('git:diffStat', async (_event, projectId: string): Promise<IGitDiffStat | undefined> => {
 		const project = await getProject(dataRoot, projectId);
 		return project ? computeDiffStat(project.path) : undefined;
 	});
 
-	ipcMain.handle('git:checkout', async (_event, projectId: string, branch: string): Promise<IGitCheckoutResult> => {
+	registerHandler('git:checkout', async (_event, projectId: string, branch: string): Promise<IGitCheckoutResult> => {
 		const project = await getProject(dataRoot, projectId);
 		if (!project) {
 			return { ok: false, error: 'Unknown project.' };

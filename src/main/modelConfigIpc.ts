@@ -3,28 +3,35 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ipcMain } from 'electron';
-import type { IModelEntryInput, IProviderInput, IProviderVerificationRequest, IQuotaSnapshot, IRemoteModelsRequest, ModelEffort } from '../sessions/services/models/common/models.js';
+import { registerHandler } from './ipcObservability.js';
+import type {
+	IModelEntryInput,
+	IProviderInput,
+	IProviderVerificationRequest,
+	IQuotaSnapshot,
+	IRemoteModelsRequest,
+	ModelEffort,
+} from '../sessions/services/models/common/models.js';
 import { fetchCodingQuota, supportsCodingQuota } from './codingQuota.js';
 import { findProviderConnection, listModels, moveModel, removeModel, removeProvider, setModelEffort, setModelEnabled, upsertModel, upsertProvider } from './modelConfigStorage.js';
 import { fetchRemoteModels, verifyProviderConnection, type IRemoteModelsConnection } from './remoteModels.js';
 
 export function registerModelConfigIpc(dataRoot: string): void {
-	ipcMain.handle('models:list', () => listModels(dataRoot));
-	ipcMain.handle('models:upsertProvider', (_event, input: IProviderInput) => upsertProvider(dataRoot, input));
-	ipcMain.handle('models:removeProvider', (_event, id: string) => removeProvider(dataRoot, id));
-	ipcMain.handle('models:upsertModel', (_event, providerId: string, input: IModelEntryInput) => upsertModel(dataRoot, providerId, input));
-	ipcMain.handle('models:removeModel', (_event, modelId: string) => removeModel(dataRoot, modelId));
-	ipcMain.handle('models:setModelEnabled', (_event, modelId: string, enabled: boolean) => setModelEnabled(dataRoot, modelId, enabled));
-	ipcMain.handle('models:setModelEffort', (_event, modelId: string, effort: ModelEffort | undefined) => setModelEffort(dataRoot, modelId, effort));
-	ipcMain.handle('models:moveModel', (_event, modelId: string, direction: 'up' | 'down') => moveModel(dataRoot, modelId, direction));
-	ipcMain.handle('models:listRemoteModels', async (_event, request: IRemoteModelsRequest) => {
+	registerHandler('models:list', () => listModels(dataRoot));
+	registerHandler('models:upsertProvider', (_event, input: IProviderInput) => upsertProvider(dataRoot, input));
+	registerHandler('models:removeProvider', (_event, id: string) => removeProvider(dataRoot, id));
+	registerHandler('models:upsertModel', (_event, providerId: string, input: IModelEntryInput) => upsertModel(dataRoot, providerId, input));
+	registerHandler('models:removeModel', (_event, modelId: string) => removeModel(dataRoot, modelId));
+	registerHandler('models:setModelEnabled', (_event, modelId: string, enabled: boolean) => setModelEnabled(dataRoot, modelId, enabled));
+	registerHandler('models:setModelEffort', (_event, modelId: string, effort: ModelEffort | undefined) => setModelEffort(dataRoot, modelId, effort));
+	registerHandler('models:moveModel', (_event, modelId: string, direction: 'up' | 'down') => moveModel(dataRoot, modelId, direction));
+	registerHandler('models:listRemoteModels', async (_event, request: IRemoteModelsRequest) => {
 		return fetchRemoteModels(await resolveConnection(dataRoot, request));
 	});
-	ipcMain.handle('models:verifyProvider', async (_event, request: IProviderVerificationRequest) => {
+	registerHandler('models:verifyProvider', async (_event, request: IProviderVerificationRequest) => {
 		await verifyProviderConnection(await resolveConnection(dataRoot, request), request.probeModel);
 	});
-	ipcMain.handle('models:codingQuota', () => readCodingQuota(dataRoot));
+	registerHandler('models:codingQuota', () => readCodingQuota(dataRoot));
 }
 
 /** First provider whose plan exposes a usage endpoint; undefined on any failure (best-effort contract). */

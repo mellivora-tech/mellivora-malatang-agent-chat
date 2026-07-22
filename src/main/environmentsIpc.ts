@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ipcMain } from 'electron';
+import { registerHandler } from './ipcObservability.js';
 import type {
 	IDataQueryResult,
 	IDataSourceInput,
@@ -23,7 +23,15 @@ import { fakeDbRunner } from './agent/fakeDbRunner.js';
 import { deleteCredential, getCredential, hasCredential, setCredential } from './credentialStorage.js';
 import { getProject } from './projectsStorage.js';
 import { createSafeStorageCipher } from './secretCipher.js';
-import { readOrSeedWorkspaceConfig, readWorkspaceConfig, removeDataSource, removeEnvironment, upsertDataSource, upsertEnvironment, writeWorkspaceConfig } from './workspaceConfigStorage.js';
+import {
+	readOrSeedWorkspaceConfig,
+	readWorkspaceConfig,
+	removeDataSource,
+	removeEnvironment,
+	upsertDataSource,
+	upsertEnvironment,
+	writeWorkspaceConfig,
+} from './workspaceConfigStorage.js';
 
 /**
  * Environment / data-source config, scoped by projectId. The main process
@@ -56,12 +64,12 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 
 	const emptyView: IWorkspaceConfigView = { environments: [], dataSources: [] };
 
-	ipcMain.handle('environments:get', async (_event, projectId: string): Promise<IWorkspaceConfigView> => {
+	registerHandler('environments:get', async (_event, projectId: string): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		return workspacePath ? toView(await readOrSeedWorkspaceConfig(workspacePath)) : emptyView;
 	});
 
-	ipcMain.handle('environments:upsertEnvironment', async (_event, projectId: string, input: IEnvironmentInput): Promise<IWorkspaceConfigView> => {
+	registerHandler('environments:upsertEnvironment', async (_event, projectId: string, input: IEnvironmentInput): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
 			return emptyView;
@@ -71,7 +79,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		return toView(config);
 	});
 
-	ipcMain.handle('environments:removeEnvironment', async (_event, projectId: string, environmentId: string): Promise<IWorkspaceConfigView> => {
+	registerHandler('environments:removeEnvironment', async (_event, projectId: string, environmentId: string): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
 			return emptyView;
@@ -88,7 +96,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		return toView(config);
 	});
 
-	ipcMain.handle('environments:upsertDataSource', async (_event, projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret): Promise<IWorkspaceConfigView> => {
+	registerHandler('environments:upsertDataSource', async (_event, projectId: string, input: IDataSourceInput, secret?: IDataSourceSecret): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
 			return emptyView;
@@ -104,7 +112,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		return toView(config);
 	});
 
-	ipcMain.handle('environments:removeDataSource', async (_event, projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView> => {
+	registerHandler('environments:removeDataSource', async (_event, projectId: string, dataSourceId: string): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
 			return emptyView;
@@ -115,7 +123,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		return toView(config);
 	});
 
-	ipcMain.handle('environments:setDataSourceCredential', async (_event, projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView> => {
+	registerHandler('environments:setDataSourceCredential', async (_event, projectId: string, dataSourceId: string, secret: IDataSourceSecret): Promise<IWorkspaceConfigView> => {
 		const workspacePath = await resolveWorkspace(projectId);
 		if (!workspacePath) {
 			return emptyView;
@@ -132,7 +140,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 	// drivers only (the query runner supports mysql/postgres); the credential is
 	// the form-typed one, falling back to the stored secret so "test" works on a
 	// saved source without retyping the password.
-	ipcMain.handle('environments:testDataSource', async (_event, _projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult> => {
+	registerHandler('environments:testDataSource', async (_event, _projectId: string, payload: IDataSourceTestPayload): Promise<IDataSourceTestResult> => {
 		const { coordinates, label } = payload;
 		if (coordinates.driver !== 'mysql' && coordinates.driver !== 'postgres') {
 			return { ok: false, message: `[i18n:envres.unsupportedDriver|${String(coordinates.driver)}]`, durationMs: 0 };
@@ -174,7 +182,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 	// The browse panel's query path: read-only SQL only, row-capped, per-query
 	// connection. Errors return as messages (explainQueryError) — the panel's
 	// status bar renders them; nothing throws across the IPC boundary.
-	ipcMain.handle('environments:runQuery', async (_event, projectId: string, dataSourceId: string, sql: string, options?: { rowLimit?: number }): Promise<IDataQueryResult> => {
+	registerHandler('environments:runQuery', async (_event, projectId: string, dataSourceId: string, sql: string, options?: { rowLimit?: number }): Promise<IDataQueryResult> => {
 		const started = Date.now();
 		if (typeof sql !== 'string' || !isReadOnlySql(sql)) {
 			return { ok: false, message: '[i18n:envres.readonlyOnly]', durationMs: 0 };
@@ -196,7 +204,7 @@ export function registerEnvironmentsIpc(dataRoot: string): void {
 		}
 	});
 
-	ipcMain.handle('environments:listTables', async (_event, projectId: string, dataSourceId: string): Promise<IDbTablesResult> => {
+	registerHandler('environments:listTables', async (_event, projectId: string, dataSourceId: string): Promise<IDbTablesResult> => {
 		const resolved = await resolveDbSource(projectId, dataSourceId);
 		if (typeof resolved === 'string') {
 			return { ok: false, message: resolved };

@@ -20,6 +20,17 @@ interface IBaseEvent {
 	readonly sessionId: string;
 }
 
+/**
+ * Base for events that belong to NO agent run. Every other event rides a run
+ * (runId + sessionId); auxiliary IPC work — title generation, provider probes,
+ * data-source tests — has neither, which is precisely why it could never be
+ * logged before: the type had no shape to express it, so 63 of the 64 IPC
+ * handlers left no trace on disk when they failed.
+ */
+interface IAuxBaseEvent {
+	readonly ts: string;
+}
+
 export type AgentLogEvent =
 	| (IBaseEvent & {
 			readonly type: 'run_start';
@@ -149,7 +160,23 @@ export type AgentLogEvent =
 	  })
 	| (IBaseEvent & { readonly type: 'stream_retry'; readonly attempt: number; readonly maxAttempts: number; readonly delayMs: number })
 	| (IBaseEvent & { readonly type: 'error'; readonly where: 'model' | 'tool' | 'run'; readonly detail?: { readonly message: string } })
-	| (IBaseEvent & { readonly type: 'run_end'; readonly reason: string; readonly turns: number; readonly durationMs: number });
+	| (IBaseEvent & { readonly type: 'run_end'; readonly reason: string; readonly turns: number; readonly durationMs: number })
+	/**
+	 * One IPC handler call that either FAILED or ran slowly. Emitted by the
+	 * `registerHandler` wrapper, so coverage is structural rather than per-handler
+	 * discipline. Successes below the slow threshold are not logged — the point is
+	 * failure forensics and latency outliers, not one line per keystroke.
+	 * `errorClass` is a constructor name (export-safe); the message may carry paths
+	 * or user content, so it stays under local-only `detail`.
+	 */
+	| (IAuxBaseEvent & {
+			readonly type: 'ipc';
+			readonly channel: string;
+			readonly ok: boolean;
+			readonly durationMs: number;
+			readonly errorClass?: string;
+			readonly detail?: { readonly message: string };
+	  });
 
 /** Strip local-only `detail` so an event is safe to send off the machine. */
 export function toExportable(event: AgentLogEvent): AgentLogEvent {

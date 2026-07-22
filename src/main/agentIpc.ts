@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ipcMain } from 'electron';
+import { registerHandler } from './ipcObservability.js';
 import { runAgentLoop } from './agent/agentLoop.js';
 import { deriveGrant, matchesAllowlist, type IAllowlistGrant } from './agent/approvalAllowlist.js';
 import { addProjectAllowPatterns, isPersistablePattern, readProjectAllowlist } from './agent/approvalStore.js';
@@ -161,7 +161,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		}
 	};
 
-	ipcMain.handle('agent:run', async (event, payload: IAgentRunPayload): Promise<IAgentTerminal> => {
+	registerHandler('agent:run', async (event, payload: IAgentRunPayload): Promise<IAgentTerminal> => {
 		const config = await resolveModelConfig(dataRoot, payload.modelId ?? '');
 		if (!config) {
 			throw new Error('No model is configured. Add one in Settings → Models.');
@@ -509,7 +509,7 @@ export function registerAgentIpc(dataRoot: string): void {
 
 	// One-shot title generation — a plain model call, not an agent run: no tools,
 	// thinking off, tiny budget. Failures reject; the renderer keeps its placeholder.
-	ipcMain.handle('agent:title', async (_event, payload: IAgentTitlePayload): Promise<string | undefined> => {
+	registerHandler('agent:title', async (_event, payload: IAgentTitlePayload): Promise<string | undefined> => {
 		const config = await resolveModelConfig(dataRoot, payload.modelId ?? '');
 		if (!config) {
 			return undefined;
@@ -528,7 +528,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		}
 	});
 
-	ipcMain.handle('agent:approval-response', (_event, payload: IApprovalResponsePayload) => {
+	registerHandler('agent:approval-response', (_event, payload: IApprovalResponsePayload) => {
 		const pending = pendingApprovals.get(payload.requestId);
 		if (pending) {
 			pendingApprovals.delete(payload.requestId);
@@ -551,7 +551,7 @@ export function registerAgentIpc(dataRoot: string): void {
 		}
 	});
 
-	ipcMain.handle('agent:stop', (_event, sessionId: string) => {
+	registerHandler('agent:stop', (_event, sessionId: string) => {
 		abortControllers.get(sessionId)?.abort();
 	});
 }
