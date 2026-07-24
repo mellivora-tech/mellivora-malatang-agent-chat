@@ -120,7 +120,14 @@ test('main-process [i18n:key] markers all resolve to catalog keys (#9 P1b)', () 
 	// resolve via localizeIpcMarker. A typo'd key would silently fall through
 	// to the raw marker text — this scan is what makes that impossible.
 	const grep = execSync("grep -rhoE '\\[i18n:[A-Za-z0-9_.]+' src/main --include='*.ts' || true", { cwd: repoRoot, encoding: 'utf8' });
-	const keys = [...new Set(grep.split('\n').filter(Boolean).map(line => line.replace('[i18n:', '')))];
+	const keys = [
+		...new Set(
+			grep
+				.split('\n')
+				.filter(Boolean)
+				.map(line => line.replace('[i18n:', '')),
+		),
+	];
 	assert.ok(keys.length >= 12, `expected the known marker set, found ${keys.length}`);
 	const unknown = keys.filter(key => zhCN[key as MessageKey] === undefined);
 	assert.deepEqual(unknown, []);

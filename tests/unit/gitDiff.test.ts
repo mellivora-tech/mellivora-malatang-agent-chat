@@ -58,8 +58,7 @@ test('parseNumstat: empty output yields no files and zero totals', () => {
 
 test('computeDiffStat: real repo — tracked numstat plus whole-content untracked, same totals as the count-only era', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'agent-chat-gitdiff-'));
-	const git = (...args: string[]): Promise<unknown> =>
-		execFileAsync('git', ['-C', dir, '-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args]);
+	const git = (...args: string[]): Promise<unknown> => execFileAsync('git', ['-C', dir, '-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args]);
 	try {
 		await git('init', '-q');
 		await writeFile(join(dir, 'a.txt'), 'one\ntwo\n', 'utf8');

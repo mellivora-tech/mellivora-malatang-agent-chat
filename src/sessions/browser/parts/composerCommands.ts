@@ -47,7 +47,9 @@ export function filterCommands(commands: readonly IComposerCommand[], query: str
 		return [...commands];
 	}
 	const prefixed = commands.filter(command => command.name.toLowerCase().startsWith(needle));
-	const contained = commands.filter(command => !command.name.toLowerCase().startsWith(needle) && (command.name.toLowerCase().includes(needle) || command.description.toLowerCase().includes(needle)));
+	const contained = commands.filter(
+		command => !command.name.toLowerCase().startsWith(needle) && (command.name.toLowerCase().includes(needle) || command.description.toLowerCase().includes(needle)),
+	);
 	return [...prefixed, ...contained];
 }
 
@@ -207,7 +209,17 @@ export function installSlashCommands(options: ICommandInstallOptions): IDisposab
 
 /** Prompt scaffolds shared by both composers. */
 export const TEMPLATE_COMMANDS: readonly IComposerCommand[] = [
-	{ name: 'review', kind: 'template', description: 'Review the working-tree changes', template: 'Review the current working-tree changes for bugs first, then suggest simplifications.' },
-	{ name: 'explain', kind: 'template', description: 'Explain how this project works', template: 'Explain how this project works: entry points, main modules, and how they fit together.' },
+	{
+		name: 'review',
+		kind: 'template',
+		description: 'Review the working-tree changes',
+		template: 'Review the current working-tree changes for bugs first, then suggest simplifications.',
+	},
+	{
+		name: 'explain',
+		kind: 'template',
+		description: 'Explain how this project works',
+		template: 'Explain how this project works: entry points, main modules, and how they fit together.',
+	},
 	{ name: 'fix', kind: 'template', description: 'Run checks and fix failures', template: 'Run the checks (typecheck, lint, tests) and fix any failures you find.' },
 ];

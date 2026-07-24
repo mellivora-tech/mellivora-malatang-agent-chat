@@ -247,9 +247,7 @@ export type IDataQueryResult =
 	| { readonly ok: true; readonly columns: readonly IDataColumn[]; readonly rows: readonly (readonly unknown[])[]; readonly truncated: boolean; readonly durationMs: number }
 	| { readonly ok: false; readonly message: string; readonly durationMs: number };
 
-export type IDbTablesResult =
-	| { readonly ok: true; readonly tables: readonly IDbTable[] }
-	| { readonly ok: false; readonly message: string };
+export type IDbTablesResult = { readonly ok: true; readonly tables: readonly IDbTable[] } | { readonly ok: false; readonly message: string };
 
 /**
  * The shape exposed on `agentWindow.environments` by the preload script. All

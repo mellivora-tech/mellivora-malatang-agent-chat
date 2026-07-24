@@ -34,7 +34,14 @@ const SAMPLE: IWorkspaceConfig = {
 	],
 	dataSources: [
 		{ id: 'd1', environmentId: 'e-dev', kind: 'database', label: '订单库', access: 'read-write', coordinates: { driver: 'mysql', host: 'dev.db', port: 3306, database: 'orders' } },
-		{ id: 'd2', environmentId: 'e-prod', kind: 'database', label: '订单库', access: 'read-only', coordinates: { driver: 'mysql', host: 'prod.db', port: 3306, database: 'orders' } },
+		{
+			id: 'd2',
+			environmentId: 'e-prod',
+			kind: 'database',
+			label: '订单库',
+			access: 'read-only',
+			coordinates: { driver: 'mysql', host: 'prod.db', port: 3306, database: 'orders' },
+		},
 	],
 };
 
@@ -151,7 +158,11 @@ test('readOrSeedWorkspaceConfig seeds dev/test/prod on first touch, then respect
 			seeded.environments.map(e => e.name),
 			['dev', 'test', 'prod'],
 		);
-		assert.deepEqual(SEED_ENVIRONMENTS.map(e => e.writable), [true, true, false], 'prod ships protected');
+		assert.deepEqual(
+			SEED_ENVIRONMENTS.map(e => e.writable),
+			[true, true, false],
+			'prod ships protected',
+		);
 		// The seed is persisted, so deleting all environments is NOT re-seeded.
 		await writeWorkspaceConfig(ws, { version: 1, environments: [], dataSources: [] });
 		assert.deepEqual((await readOrSeedWorkspaceConfig(ws)).environments, [], 'an existing empty file is left alone');
@@ -178,7 +189,11 @@ test('upsertEnvironment creates then updates by id', () => {
 
 test('upsertDataSource rejects an unknown environment', () => {
 	assert.throws(
-		() => upsertDataSource({ version: 1, environments: [], dataSources: [] }, { kind: 'database', environmentId: 'nope', label: 'x', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } }),
+		() =>
+			upsertDataSource(
+				{ version: 1, environments: [], dataSources: [] },
+				{ kind: 'database', environmentId: 'nope', label: 'x', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } },
+			),
 		/Unknown environment/,
 	);
 });
@@ -186,7 +201,13 @@ test('upsertDataSource rejects an unknown environment', () => {
 test('removeEnvironment cascades to its data sources', () => {
 	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true });
 	const envId = cfg.id;
-	const ds = upsertDataSource(cfg.config, { kind: 'database', environmentId: envId, label: '库', access: 'read-only', coordinates: { driver: 'postgres', host: 'h', port: 5432, database: 'd' } });
+	const ds = upsertDataSource(cfg.config, {
+		kind: 'database',
+		environmentId: envId,
+		label: '库',
+		access: 'read-only',
+		coordinates: { driver: 'postgres', host: 'h', port: 5432, database: 'd' },
+	});
 	assert.equal(ds.config.dataSources.length, 1);
 	const after = removeEnvironment(ds.config, envId);
 	assert.equal(after.environments.length, 0);
@@ -195,8 +216,23 @@ test('removeEnvironment cascades to its data sources', () => {
 
 test('removeDataSource removes only the target', () => {
 	const cfg = upsertEnvironment({ version: 1, environments: [], dataSources: [] }, { name: 'dev', writable: true });
-	const a = upsertDataSource(cfg.config, { kind: 'database', environmentId: cfg.id, label: 'a', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
-	const b = upsertDataSource(a.config, { kind: 'database', environmentId: cfg.id, label: 'b', access: 'read-only', coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' } });
+	const a = upsertDataSource(cfg.config, {
+		kind: 'database',
+		environmentId: cfg.id,
+		label: 'a',
+		access: 'read-only',
+		coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' },
+	});
+	const b = upsertDataSource(a.config, {
+		kind: 'database',
+		environmentId: cfg.id,
+		label: 'b',
+		access: 'read-only',
+		coordinates: { driver: 'mysql', host: 'h', port: 3306, database: 'd' },
+	});
 	const after = removeDataSource(b.config, a.id);
-	assert.deepEqual(after.dataSources.map(d => d.id), [b.id]);
+	assert.deepEqual(
+		after.dataSources.map(d => d.id),
+		[b.id],
+	);
 });

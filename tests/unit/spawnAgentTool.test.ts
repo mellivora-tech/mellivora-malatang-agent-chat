@@ -70,10 +70,20 @@ test('spawn_agent: streaming folds into subagent_progress — one report per pha
 		modelClient: createScriptedModelClient([
 			// Turn 1: narrates, then calls a tool — the narration gets ONE report,
 			// and the tool call hands the live label back to the tool row.
-			{ emit: [{ type: 'text', text: 'scanning…' }, { type: 'tool_use', id: 'c1', name: 'read_file', input: { path: 'src/a.ts' } }] },
+			{
+				emit: [
+					{ type: 'text', text: 'scanning…' },
+					{ type: 'tool_use', id: 'c1', name: 'read_file', input: { path: 'src/a.ts' } },
+				],
+			},
 			// Turn 2: the long-report shape — two deltas back to back. Entry
 			// reports immediately; the second lands inside the throttle window.
-			{ emit: [{ type: 'text', text: 'Report part one. ' }, { type: 'text', text: 'Part two.' }] },
+			{
+				emit: [
+					{ type: 'text', text: 'Report part one. ' },
+					{ type: 'text', text: 'Part two.' },
+				],
+			},
 		]),
 		model: 'test-model',
 		record: event => events.push(event as { type: string; phase?: string; chars?: number }),

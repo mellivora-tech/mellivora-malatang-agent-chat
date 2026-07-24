@@ -325,5 +325,3 @@ export class NewSessionView extends Disposable {
 		this._register(toDisposable(closeMenu));
 	}
 }
-
-

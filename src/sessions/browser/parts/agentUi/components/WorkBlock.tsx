@@ -62,7 +62,12 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 		wasLiveRef.current = live;
 	}, [live, failed, expandOverride]);
 
-	const title = failed && !live ? localize('conv.workInterrupted') : live ? localize('conv.workingFor', formatDurationMs(Date.now() - (firstSeenRef.current ?? Date.now()))) : localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
+	const title =
+		failed && !live
+			? localize('conv.workInterrupted')
+			: live
+				? localize('conv.workingFor', formatDurationMs(Date.now() - (firstSeenRef.current ?? Date.now())))
+				: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
 
 	const sections = buildWorkSections(message.steps ?? []);
 	const stepCount = (message.steps ?? []).length;

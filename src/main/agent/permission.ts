@@ -53,7 +53,9 @@ export function createGateForMode(mode: PermissionMode, requestApproval: Approva
 						return { behavior: 'allow' };
 					}
 					const decision = await requestApproval(tool, input, context);
-					return decision.approved ? { behavior: 'allow' } : { behavior: 'deny', message: denyMessage(`The user declined running ${tool.name} outside the sandbox.`, decision.reason) };
+					return decision.approved
+						? { behavior: 'allow' }
+						: { behavior: 'deny', message: denyMessage(`The user declined running ${tool.name} outside the sandbox.`, decision.reason) };
 				},
 			};
 		case 'plan':

@@ -1709,7 +1709,7 @@ test('assistant text is never reclassified as narration — it stays in the answ
 	assert.ok(work, 'work block exists');
 	assert.deepEqual(
 		(work.steps ?? []).map(step => step.kind),
-		['thinking', 'tool']
+		['thinking', 'tool'],
 	);
 
 	const persistedAssistant = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
@@ -1755,11 +1755,12 @@ test("a rejected reply's text never leaks into the work block or the retried ans
 	const assistant = session.messages.get().find(message => message.role === 'assistant');
 	assert.equal(assistant?.text, '正确的回复');
 	const work = session.messages.get().find(message => message.role === 'work');
-	assert.deepEqual((work?.steps ?? []).map(step => step.kind), ['tool'], "only the retry turn's tool call is recorded");
-	assert.ok(
-		!(work?.steps ?? []).some(step => (step.label ?? '').includes('答非所问')),
-		'the rejected text must not resurface anywhere in the work block',
+	assert.deepEqual(
+		(work?.steps ?? []).map(step => step.kind),
+		['tool'],
+		"only the retry turn's tool call is recorded",
 	);
+	assert.ok(!(work?.steps ?? []).some(step => (step.label ?? '').includes('答非所问')), 'the rejected text must not resurface anywhere in the work block');
 });
 
 test('an aborted run persists a substantive summary and an INTERRUPTED digest note, not "Stopped."', async () => {

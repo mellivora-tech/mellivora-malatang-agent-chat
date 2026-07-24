@@ -55,10 +55,7 @@ export function filterMentionPaths(files: readonly string[], query: string, limi
 		}
 	}
 
-	const entries: IMentionEntry[] = [
-		...files.map(path => ({ kind: 'file' as const, path })),
-		...[...folders].sort().map(path => ({ kind: 'folder' as const, path })),
-	];
+	const entries: IMentionEntry[] = [...files.map(path => ({ kind: 'file' as const, path })), ...[...folders].sort().map(path => ({ kind: 'folder' as const, path }))];
 
 	const needle = query.toLowerCase();
 	if (needle === '') {
@@ -291,7 +288,9 @@ function installEntityMentions(options: IEntityMentionConfig): IMentionControlle
 		}
 		tokenStart = token.start;
 		const needle = token.query.toLowerCase();
-		items = options.getEntries().filter(entry => needle === '' || entry.id.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(needle) || entry.description.toLowerCase().includes(needle));
+		items = options
+			.getEntries()
+			.filter(entry => needle === '' || entry.id.toLowerCase().includes(needle) || entry.name.toLowerCase().includes(needle) || entry.description.toLowerCase().includes(needle));
 		activeIndex = Math.min(activeIndex, Math.max(0, items.length - 1));
 		renderMenu();
 	};

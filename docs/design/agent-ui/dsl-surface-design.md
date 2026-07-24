@@ -8,16 +8,16 @@
 
 ## 1. 决议清单
 
-| 问题 | 决议 | 性质 |
-|---|---|---|
-| Q-A 组合表示 | **行式 DSL**（OpenUI Lang 形态：一行一句、标识符引用、前向引用） | 用户拍板 |
-| Q-G 承载面 | **A2UI 式持久 surface**（右侧面板工作台，跨 turn patch 同一面） | 用户拍板 |
-| Q-E 流式编码 | 行级解析 + Autocloser（截断行补齐照常渲染）+ 语句级增量缓存；L1/L2/L3 一次到位 | 随 Q-A 定 |
-| Q-F 校验-提示词同源 | **Zod 式目录 → 同源生成校验器 + 系统提示词**，从"值得抄"升格为承重墙（API 层 JSON schema 校验被 DSL 绕开，防线在 parser 层重建且更强——schema/guidance 漂移结构性不可能） | 随 Q-A 定 |
-| Q-C 绑定与编辑态 | 响应式 `$variables`（声明即默认值、$binding 双向、依赖自动重算）；编辑态归 renderer，模型只在事件时刻拿 formState 快照 | 随 Q-A 定 |
-| Q-B 事件分档 | OpenUI Action 步骤模型：`@Set/@Run` 本地消化不上抛；`@ToAssistant` 回模型（自然语言 + formState 快照）——既有"原样执行"结构化确认 turn 即其载荷形态，平移 | 随 Q-A 定 |
-| Q-D 能力属性层 | 仍为原创设计；表达位置已定：机制归组件内建 + 原语上的能力属性声明。**词表/约束语法草案见 §8，决议点待拍板（§8.7）** | 部分开放 → §8 提案 |
-| Q-H 迁移路径 | 信封留作语句流持久化载体；旧 props-JSON 卡走 legacy 渲染路径永不迁移；migration_preview 按 P1c 原计划报废 | 随 Q-A/Q-G 定 |
+| 问题                | 决议                                                                                                                                                                     | 性质               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| Q-A 组合表示        | **行式 DSL**（OpenUI Lang 形态：一行一句、标识符引用、前向引用）                                                                                                         | 用户拍板           |
+| Q-G 承载面          | **A2UI 式持久 surface**（右侧面板工作台，跨 turn patch 同一面）                                                                                                          | 用户拍板           |
+| Q-E 流式编码        | 行级解析 + Autocloser（截断行补齐照常渲染）+ 语句级增量缓存；L1/L2/L3 一次到位                                                                                           | 随 Q-A 定          |
+| Q-F 校验-提示词同源 | **Zod 式目录 → 同源生成校验器 + 系统提示词**，从"值得抄"升格为承重墙（API 层 JSON schema 校验被 DSL 绕开，防线在 parser 层重建且更强——schema/guidance 漂移结构性不可能） | 随 Q-A 定          |
+| Q-C 绑定与编辑态    | 响应式 `$variables`（声明即默认值、$binding 双向、依赖自动重算）；编辑态归 renderer，模型只在事件时刻拿 formState 快照                                                   | 随 Q-A 定          |
+| Q-B 事件分档        | OpenUI Action 步骤模型：`@Set/@Run` 本地消化不上抛；`@ToAssistant` 回模型（自然语言 + formState 快照）——既有"原样执行"结构化确认 turn 即其载荷形态，平移                 | 随 Q-A 定          |
+| Q-D 能力属性层      | 仍为原创设计；表达位置已定：机制归组件内建 + 原语上的能力属性声明。**词表/约束语法草案见 §8，决议点待拍板（§8.7）**                                                      | 部分开放 → §8 提案 |
+| Q-H 迁移路径        | 信封留作语句流持久化载体；旧 props-JSON 卡走 legacy 渲染路径永不迁移；migration_preview 按 P1c 原计划报废                                                                | 随 Q-A/Q-G 定      |
 
 **为什么这对组合互相成就**：行式 DSL 的增量编辑（改 20 条语句中的 2 条，token -85%）只有在持久 surface 上才有意义；反之 surface 需要 patch 协议——**DSL 语句本身就是 patch 协议**。
 
@@ -83,13 +83,13 @@ schema ──┬──▶ parser 的参数校验器（位置参数按键序解�
 
 ## 6. 分期与验收
 
-| 期 | 内容 | 验收 |
-|---|---|---|
-| M1 | 本决议文档 | 评审通过（本文件） |
-| **M2 真模冒烟（先于全面开工）** | 最小 parser + 3–5 原语目录 + 同源提示词，k2.7/k3 实测 | **DSL 良率 ≥90%（语句级）且自纠一轮后 ≥98%，否则回头评审杂交路线（JSON 扁平表），此时沉没成本最小**。✅ **2026-07-20 已过闸**：k2.7 与 k3 均为语句级 100%、8/8 程序首发零错、零围栏违规（6 原语目录、8 个域内任务、同源提示词为唯一教学来源；harness=`scripts/ui-dsl-smoke.mjs`）。注记：冒烟验证的是文法+同源闭环的可行性，M5 真实词表（画布/能力属性）复杂度更高，届时复测 |
-| M3 | parser/Autocloser/增量合并 + 同源目录管线 + fold 运行时 | 解析测试成体系（截断/乱序/非法行/覆盖）；老会话零迁移 |
-| M4 | surface 面板 + 投影卡 + 事件通道（@Set/@Run/@ToAssistant） | 重开会话逐像素一致；确认 turn 平移"原样执行" |
-| M5（2026-07-20 重塑，见 §2.5） | ① 原子补全（`Code` 等）② Q-D 能力属性层设计+实现（editable/validation 标记先行，拖线其次）③ field_mapping 作为首个机制组件进目录 ④ migration_preview 报废 | data_preview/artifact_review 两场景用**原子+能力属性**组合复现（不新增组件）；三迁移场景共用 field_mapping+组合；smoke harness 换真实词表复测良率 |
+| 期                              | 内容                                                                                                                                                      | 验收                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1                              | 本决议文档                                                                                                                                                | 评审通过（本文件）                                                                                                                                                                                                                                                                                                                                                           |
+| **M2 真模冒烟（先于全面开工）** | 最小 parser + 3–5 原语目录 + 同源提示词，k2.7/k3 实测                                                                                                     | **DSL 良率 ≥90%（语句级）且自纠一轮后 ≥98%，否则回头评审杂交路线（JSON 扁平表），此时沉没成本最小**。✅ **2026-07-20 已过闸**：k2.7 与 k3 均为语句级 100%、8/8 程序首发零错、零围栏违规（6 原语目录、8 个域内任务、同源提示词为唯一教学来源；harness=`scripts/ui-dsl-smoke.mjs`）。注记：冒烟验证的是文法+同源闭环的可行性，M5 真实词表（画布/能力属性）复杂度更高，届时复测 |
+| M3                              | parser/Autocloser/增量合并 + 同源目录管线 + fold 运行时                                                                                                   | 解析测试成体系（截断/乱序/非法行/覆盖）；老会话零迁移                                                                                                                                                                                                                                                                                                                        |
+| M4                              | surface 面板 + 投影卡 + 事件通道（@Set/@Run/@ToAssistant）                                                                                                | 重开会话逐像素一致；确认 turn 平移"原样执行"                                                                                                                                                                                                                                                                                                                                 |
+| M5（2026-07-20 重塑，见 §2.5）  | ① 原子补全（`Code` 等）② Q-D 能力属性层设计+实现（editable/validation 标记先行，拖线其次）③ field_mapping 作为首个机制组件进目录 ④ migration_preview 报废 | data_preview/artifact_review 两场景用**原子+能力属性**组合复现（不新增组件）；三迁移场景共用 field_mapping+组合；smoke harness 换真实词表复测良率                                                                                                                                                                                                                            |
 
 ## 7. 风险登记
 
@@ -112,11 +112,11 @@ schema ──┬──▶ parser 的参数校验器（位置参数按键序解�
 
 > **交互产出的值能不能塞进原子的既有数据形状？** 能 → **能力属性**；产出的是一个原子结构里没有的**新结构** → **机制组件**。
 
-| 交互 | 产出 | 落点 |
-|---|---|---|
-| 单元格就地编辑 | 一个 cell 值（Table 既有形状内） | 能力属性 `@Editable` |
-| 校验高亮 | 一个 valid/invalid 标记（附着于既有 target） | 能力属性 `@Validate` |
-| 拖线把源字段连到目标字段 | 一对 mapping（**任何原子结构里都没有**） | 机制组件 `field_mapping`（内建） |
+| 交互                     | 产出                                         | 落点                             |
+| ------------------------ | -------------------------------------------- | -------------------------------- |
+| 单元格就地编辑           | 一个 cell 值（Table 既有形状内）             | 能力属性 `@Editable`             |
+| 校验高亮                 | 一个 valid/invalid 标记（附着于既有 target） | 能力属性 `@Validate`             |
+| 拖线把源字段连到目标字段 | 一对 mapping（**任何原子结构里都没有**）     | 机制组件 `field_mapping`（内建） |
 
 这条线同时解释了为什么 `field_mapping` 必须是机制组件而非属性：配对关系是新结构，原子拼不出（轴 3 结论），机制只能内建。**能力属性只做"增强"，绝不"造结构"。**
 
@@ -124,10 +124,10 @@ schema ──┬──▶ parser 的参数校验器（位置参数按键序解�
 
 严格照 §92 M5 排序（editable/validation 先，拖线其次）。开局只上两条，均有业界实证或明确旁路：
 
-| 能力 | 签名（位置参数 ABI） | 语义 | 实证 |
-|---|---|---|---|
-| `@Editable(target, placeholder?)` | target: 列头字符串；placeholder?: string | target 列单元格就地变输入框；**无 action，值进 formState**（Tier 0） | ChatKit `Text.editable`（轴 3 唯一实证）；砍掉 `autoFocus/autoSelect`（UX 抛光，later） |
-| `@Validate(target, pattern, hint)` | pattern: JS 正则源；hint: 违约文案 | target 列按正则校验；不匹配→**高亮 + hint，非阻断**；invalid target 进 formState 快照 | ChatKit 客户端原生校验（实证仅 `required?/pattern?`），我们加**自定义 hint**（ChatKit 没有）|
+| 能力                               | 签名（位置参数 ABI）                     | 语义                                                                                  | 实证                                                                                         |
+| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `@Editable(target, placeholder?)`  | target: 列头字符串；placeholder?: string | target 列单元格就地变输入框；**无 action，值进 formState**（Tier 0）                  | ChatKit `Text.editable`（轴 3 唯一实证）；砍掉 `autoFocus/autoSelect`（UX 抛光，later）      |
+| `@Validate(target, pattern, hint)` | pattern: JS 正则源；hint: 违约文案       | target 列按正则校验；不匹配→**高亮 + hint，非阻断**；invalid target 进 formState 快照 | ChatKit 客户端原生校验（实证仅 `required?/pattern?`），我们加**自定义 hint**（ChatKit 没有） |
 
 > **落地细化（2026-07-21，草案 §8.2 的 `rule` 集收敛）**：草案给 `@Validate` 列的 `rule ∈ {pattern/range/oneOf/notNull}` 落地为**单一正则谓词**——理由：① ChatKit 唯一校验实证就是 `required?/pattern?`；② 正则是单 target 内自足的通用谓词（`required` = `.+`、枚举 = `a|b|c`），range 这类数值判等留 later 或用正则近似；③ 最关键——**避免引入嵌套 rule 构造器**（`range(0,999)` 会污染 parser 的 `ident(` = 组件调用假设），死守"处处位置参数 ABI"。`@Editable` 的 `required` 也并入校验轴（用 `@Validate(target, ".+", ...)`），使 `@Editable` 只管"可编辑"这一件事。
 
@@ -208,6 +208,7 @@ Q-D 能力属性层已按 §8.1–8.7 实现，`npm run verify` 除既有环境�
 **（2026-07-21 续）`Code` 原子 + artifact_review 第二验证场景达成**：`Code(content, language?)` 进目录（同源，renderer `.surface-code` 只读等宽块 + 语言标签）；artifact_review = `Stack([Text 统计, Code, Button(Action([@Run 导出, @ToAssistant 授权执行]))])` 纯原子组合复现，**零专用组件**（单测锁定 + e2e 渲染断言）。至此**组合性双向证毕**：data_preview 靠"增强"（能力属性）、artifact_review 靠"组合"（原子+Action），§8.1 判定线两侧各有实证。
 
 **（2026-07-21 续）`field_mapping` 机制组件达成**：`field_mapping(source, sourceFields, target, targetFields, mappings?)` 进目录（同源），renderer `@xyflow/react` 拖线画布（左源右目标、拖 handle 成对、删边解对），xyflow 主题 CSS-var 全量重映射到 `--vscode-agents-*` token（含 danger/accent/input）。**机制逻辑纯函数化**（`common/uiDsl/fieldMapping.ts`：解析/1:1 连接淘汰/断开/序列化/孤立节点）——拖线交互本身脆，机制**逻辑走单测**、画布**渲染+快照走 e2e**（渲染源/目标节点 + 声明边、未拖动也把有效配对写进 @ToAssistant 快照）。三迁移场景（表→表/文件→表/表→文件）共用同一画布，靠端点 label 区分，零场景专属组件。
+
 > 用户拍板用 @xyflow/react（设计原定，非手写 SVG）。落地代价：新增依赖（bundle 1.8→2.19MB）+ `tsconfig` 开 `skipLibCheck`（xyflow d.ts 不满足本仓 `exactOptionalPropertyTypes`，标准做法，只跳过 lib 声明内部检查、自有代码仍全检）。
 
 **（2026-07-21 续）`migration_preview` 报废完成**：整组场景卡移除——`migrationPreview.ts` / `MigrationPreviewCard.tsx` / `MigrationGrid.tsx` / 其单测 / 218 行 CSS / 32 条 `ui.migration.*` i18n / 两处注册表条目 / render_ui guidance / agentIpc 提示（重指向 surface_patch+field_mapping）。**旧会话零崩**：`UiCard.tsx` 对未注册组件天然降级为 markdown fallback（Q-H「legacy 渲染永不迁移」的兑现物），退役 migration_preview 卡回落为可读摘要——`ui-card.spec` 重写为此 fallback 契约的专测。`surface_patch` 成为唯一注册组件；共享 SQL 闸（`isReadOnlySql`/`isSingleStatement` 在 dbQuery，非迁移私有）原样保留。live 管线 spec 与 uiArtifact 信封测平移到 surface_patch。

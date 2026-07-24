@@ -101,13 +101,22 @@ interface IRgb {
 
 export function hexToRgb(hex: string): IRgb {
 	const raw = hex.replace('#', '');
-	const full = raw.length === 3 ? raw.split('').map(char => char + char).join('') : raw;
+	const full =
+		raw.length === 3
+			? raw
+					.split('')
+					.map(char => char + char)
+					.join('')
+			: raw;
 	const value = Number.parseInt(full, 16);
 	return { r: (value >> 16) & 0xff, g: (value >> 8) & 0xff, b: value & 0xff };
 }
 
 function toHex(rgb: IRgb): string {
-	const channel = (value: number): string => Math.round(Math.max(0, Math.min(255, value))).toString(16).padStart(2, '0');
+	const channel = (value: number): string =>
+		Math.round(Math.max(0, Math.min(255, value)))
+			.toString(16)
+			.padStart(2, '0');
 	return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`;
 }
 

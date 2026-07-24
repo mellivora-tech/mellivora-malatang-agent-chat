@@ -40,7 +40,17 @@ test('render_data validates shape and caps, stores csv, and tails the marker', a
 	assert.equal(tool.validateInput({ columns: ['a'], rows: [[1]], title: ' 汇总 ' }).ok, true);
 	assert.equal(tool.validateInput({ columns: ['a'], rows: Array.from({ length: 5001 }, () => [1]) }).ok, false);
 
-	const result = await tool.call({ title: '汇总', columns: ['id', 'name'], rows: [[1, 'x'], [2, 'y']] }, { toolUseId: 't1', signal: new AbortController().signal } as never);
+	const result = await tool.call(
+		{
+			title: '汇总',
+			columns: ['id', 'name'],
+			rows: [
+				[1, 'x'],
+				[2, 'y'],
+			],
+		},
+		{ toolUseId: 't1', signal: new AbortController().signal } as never,
+	);
 	assert.match(result.content, /已渲染 2 行 × 2 列/);
 	assert.match(result.content, /不要在回复中重复/);
 	const marker = RENDERED_TABLE_MARKER.exec(result.content);

@@ -24,13 +24,7 @@ function tool(name: string, arg: string | undefined, extra: Partial<ISessionWork
 const thinking: ISessionWorkStep = { kind: 'thinking', label: 'Thought', durationMs: 2000 };
 
 test('consecutive reads fold into one rollup with class-bucketed counts', () => {
-	const items = buildWorkRenderItems([
-		tool('read_file', 'src/a.ts'),
-		tool('read_file', 'src/b.ts'),
-		tool('list_dir', 'src/'),
-		tool('grep', 'deduct'),
-		tool('glob', '**/*.ts'),
-	]);
+	const items = buildWorkRenderItems([tool('read_file', 'src/a.ts'), tool('read_file', 'src/b.ts'), tool('list_dir', 'src/'), tool('grep', 'deduct'), tool('glob', '**/*.ts')]);
 	assert.equal(items.length, 1);
 	const rollup = items[0]!;
 	assert.equal(rollup.kind, 'rollup');
@@ -57,7 +51,7 @@ test('a lone read stays a plain step — no single-member rollup', () => {
 	const items = buildWorkRenderItems([tool('read_file', 'src/a.ts'), tool('edit_file', 'src/a.ts')]);
 	assert.deepEqual(
 		items.map(item => item.kind),
-		['step', 'step']
+		['step', 'step'],
 	);
 });
 
@@ -66,8 +60,8 @@ test('writes break a read run; thinking does NOT (2a) — it re-emits after the 
 	// a+b+c fold as ONE rollup despite the thinking between b and c; the
 	// thinking row lands right after the fold; the edit still breaks.
 	assert.deepEqual(
-		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : (item as { step: ISessionWorkStep }).step?.kind ?? item.kind)),
-		['rollup:3', 'thinking', 'tool', 'tool']
+		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : ((item as { step: ISessionWorkStep }).step?.kind ?? item.kind))),
+		['rollup:3', 'thinking', 'tool', 'tool'],
 	);
 });
 
@@ -75,7 +69,7 @@ test('an errored read breaks out of the rollup and renders standalone', () => {
 	const items = buildWorkRenderItems([tool('read_file', 'a'), tool('read_file', 'missing.ts', { outcome: 'error' }), tool('read_file', 'b'), tool('read_file', 'c')]);
 	assert.deepEqual(
 		items.map(item => item.kind),
-		['step', 'step', 'rollup']
+		['step', 'step', 'rollup'],
 	);
 	assert.equal(stepError((items[1] as { step: ISessionWorkStep }).step), true);
 });
@@ -113,7 +107,7 @@ test('legacy error detection falls back to the [error] detail marker', () => {
 	const items = buildWorkRenderItems([{ kind: 'tool', label: 'read_file a', durationMs: 10 }, legacy, { kind: 'tool', label: 'read_file b', durationMs: 10 }]);
 	assert.deepEqual(
 		items.map(item => item.kind),
-		['step', 'step', 'step']
+		['step', 'step', 'step'],
 	);
 });
 
@@ -124,7 +118,7 @@ test('unknown tools and progress-overwritten labels render as legacy label rows'
 	const items = buildWorkRenderItems([unknown]);
 	assert.deepEqual(
 		items.map(item => item.kind),
-		['step']
+		['step'],
 	);
 });
 
@@ -158,7 +152,7 @@ test('child-loop read sweeps fold into rollups; spawn and end steps break the gr
 	]);
 	assert.deepEqual(
 		items.map(item => item.kind),
-		['step', 'rollup', 'step', 'rollup', 'step']
+		['step', 'rollup', 'step', 'rollup', 'step'],
 	);
 	const presentation = presentStep(child('read_file', 'a.ts'));
 	assert.equal(presentation.sub, true);
@@ -179,7 +173,7 @@ test('parallel children never fold into one rollup — groups break on agent cha
 	// a1 run, a2 run, lone a1 step, then the main loop's own pair — no cross-agent merges.
 	assert.deepEqual(
 		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : 'step')),
-		['rollup:2', 'rollup:2', 'step', 'rollup:2']
+		['rollup:2', 'rollup:2', 'step', 'rollup:2'],
 	);
 });
 
@@ -188,7 +182,7 @@ test('sections: with no narration concept, the whole work block is one untitled 
 	assert.equal(sections.length, 1);
 	assert.deepEqual(
 		sections[0]!.items.map(item => item.kind),
-		['step', 'rollup', 'step']
+		['step', 'rollup', 'step'],
 	);
 	// The three reads folded into one rollup.
 	assert.equal((sections[0]!.items[1] as { steps: readonly unknown[] }).steps.length, 3);
@@ -219,7 +213,10 @@ test('agent groups de-interleave parallel children: one group per agent, anchore
 	assert.equal(g1.durationMs, 208_000);
 	assert.equal(g1.endDetail, '12 turns · 47 tool calls');
 	// De-interleaved: a1's three reads fold into ONE rollup despite a2 interleaving.
-	assert.deepEqual(g1.items.map(item => item.kind), ['rollup']);
+	assert.deepEqual(
+		g1.items.map(item => item.kind),
+		['rollup'],
+	);
 	assert.equal(g2.durationMs, 283_000);
 	assert.equal(g1.running, false);
 });

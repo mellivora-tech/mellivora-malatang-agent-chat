@@ -152,14 +152,17 @@ export function serializeForSummary(messages: readonly IAgentMessage[]): string 
 			} else if (block.type === 'image') {
 				// base64 → ~3/4 raw bytes; enough for the summarizer to know an
 				// image existed and was handled in-conversation.
-				lines.push(`[User attached an image (${block.mediaType}, ~${Math.max(1, Math.round((block.data.length * 3) / 4 / 1024))}KB) — it was shown to the assistant in this conversation]`);
+				lines.push(
+					`[User attached an image (${block.mediaType}, ~${Math.max(1, Math.round((block.data.length * 3) / 4 / 1024))}KB) — it was shown to the assistant in this conversation]`,
+				);
 			}
 		}
 	}
 	return lines.join('\n\n');
 }
 
-export const SUMMARY_SYSTEM = 'You maintain a compact anchored summary of an ongoing coding-agent session. Respond with ONLY the summary in the requested Markdown structure — no preamble, no tool calls.';
+export const SUMMARY_SYSTEM =
+	'You maintain a compact anchored summary of an ongoing coding-agent session. Respond with ONLY the summary in the requested Markdown structure — no preamble, no tool calls.';
 
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure below and keep the section order unchanged.
 

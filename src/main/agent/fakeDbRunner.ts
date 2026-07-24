@@ -15,12 +15,10 @@ import type { DbQueryRunner, IQueryResult } from './dbQuery.js';
 
 const TOTAL_ROWS = 120;
 
-const DATASET = Array.from({ length: TOTAL_ROWS }, (_, index) => [
-	index + 1,
-	`item-${String(index + 1).padStart(3, '0')}`,
-	index % 3 === 0 ? null : (index + 1) * 10,
-	new Date(Date.UTC(2026, 0, 1 + (index % 28), 12)),
-] as const);
+const DATASET = Array.from(
+	{ length: TOTAL_ROWS },
+	(_, index) => [index + 1, `item-${String(index + 1).padStart(3, '0')}`, index % 3 === 0 ? null : (index + 1) * 10, new Date(Date.UTC(2026, 0, 1 + (index % 28), 12))] as const,
+);
 
 const COLUMN_INDEX: Record<string, number> = { id: 0, name: 1, amount: 2, created_at: 3 };
 
@@ -55,13 +53,20 @@ function applyWhere(sql: string, source: readonly (readonly unknown[])[]): reado
 			const operand: string | number = clause[8] !== undefined ? Number(clause[8]) : (clause[7] ?? '');
 			const left = typeof operand === 'number' ? Number(cell) : String(cell);
 			switch (clause[6]) {
-				case '=': return left === operand;
-				case '<>': return left !== operand;
-				case '>': return left > operand;
-				case '>=': return left >= operand;
-				case '<': return left < operand;
-				case '<=': return left <= operand;
-				default: return false;
+				case '=':
+					return left === operand;
+				case '<>':
+					return left !== operand;
+				case '>':
+					return left > operand;
+				case '>=':
+					return left >= operand;
+				case '<':
+					return left < operand;
+				case '<=':
+					return left <= operand;
+				default:
+					return false;
 			}
 		});
 	}

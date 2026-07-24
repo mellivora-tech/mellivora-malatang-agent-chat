@@ -38,7 +38,14 @@ function createFakeView(minimumWidth: number, minimumHeight: number, priority: L
 			calls.push({ width, height, top, left });
 		},
 	};
-	return { view, calls, element, setMaximumWidth: value => { maximumWidth = value; } };
+	return {
+		view,
+		calls,
+		element,
+		setMaximumWidth: value => {
+			maximumWidth = value;
+		},
+	};
 }
 
 function createGrid() {

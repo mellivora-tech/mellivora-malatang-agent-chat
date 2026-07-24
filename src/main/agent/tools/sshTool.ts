@@ -212,7 +212,12 @@ export function createSshTools(deps: ISshToolDeps): readonly IAgentTool[] {
 				lastPercent = percent;
 				lastEmit = now;
 				const rate = now > started ? (transferred / 1_048_576 / ((now - started) / 1000)).toFixed(1) : '0.0';
-				deps.report?.({ type: 'tool_progress', toolUseId: context.toolUseId, name: 'upload_to_server', note: `上传 ${local_path} → ${match.label} · ${percent}% (${formatMb(transferred)}/${formatMb(total)}) · ${rate} MB/s` });
+				deps.report?.({
+					type: 'tool_progress',
+					toolUseId: context.toolUseId,
+					name: 'upload_to_server',
+					note: `上传 ${local_path} → ${match.label} · ${percent}% (${formatMb(transferred)}/${formatMb(total)}) · ${rate} MB/s`,
+				});
 			};
 			const result = await uploader(match.coordinates, secret, localAbsolute, remote_path, { signal: context.signal, timeoutMs: UPLOAD_TIMEOUT_MS, onProgress });
 			if (!result.ok) {

@@ -29,13 +29,7 @@ const GREETING_BUCKETS: readonly { readonly maxHour: number; readonly label: str
 	{
 		maxHour: 11,
 		label: '早上好',
-		tails: [
-			'打卡机不认人，只认牛马',
-			'又是替老板圆梦的一天',
-			'通勤两小时，上班如上坟，说吧',
-			'晨会画的饼，够你饿一天',
-			'太阳照常升起，工资照常不涨',
-		],
+		tails: ['打卡机不认人，只认牛马', '又是替老板圆梦的一天', '通勤两小时，上班如上坟，说吧', '晨会画的饼，够你饿一天', '太阳照常升起，工资照常不涨'],
 	},
 	{
 		maxHour: 13,
@@ -50,7 +44,13 @@ const GREETING_BUCKETS: readonly { readonly maxHour: number; readonly label: str
 	{
 		maxHour: 23,
 		label: '晚上好',
-		tails: ['下班是违章行为，加班是企业文化', '你加的每一个班，都是老板游艇的一块板', '晚上十点，灯火通明，全是不敢走的', '工资是月抛的，健康是一次性的', '这个点还在干，明天老板夸你两句，就两句'],
+		tails: [
+			'下班是违章行为，加班是企业文化',
+			'你加的每一个班，都是老板游艇的一块板',
+			'晚上十点，灯火通明，全是不敢走的',
+			'工资是月抛的，健康是一次性的',
+			'这个点还在干，明天老板夸你两句，就两句',
+		],
 	},
 	{ maxHour: 24, label: '凌晨好', tails: LATE_NIGHT_TAILS },
 ];

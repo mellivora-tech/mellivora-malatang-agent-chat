@@ -35,9 +35,7 @@ export function quoteIdentifier(driver: DatabaseDriver, name: string): string {
  * `rowLimit: pageSize` and read the runner's `truncated` flag as "has a next page".
  */
 export function compileBrowseSql(driver: DatabaseDriver, table: IDbTable, state: IBrowseState): string {
-	const target = table.schema
-		? `${quoteIdentifier(driver, table.schema)}.${quoteIdentifier(driver, table.name)}`
-		: quoteIdentifier(driver, table.name);
+	const target = table.schema ? `${quoteIdentifier(driver, table.schema)}.${quoteIdentifier(driver, table.name)}` : quoteIdentifier(driver, table.name);
 	return `SELECT * FROM ${target}${compilePageClauses(driver, state)}`;
 }
 

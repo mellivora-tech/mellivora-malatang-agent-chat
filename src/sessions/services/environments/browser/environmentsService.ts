@@ -4,7 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../platform/instantiation/instantiation.js';
-import type { IDataQueryResult, IDataSourceInput, IDataSourceSecret, IDataSourceTestPayload, IDataSourceTestResult, IDbTablesResult, IEnvironmentInput, IEnvironmentsBridge, IWorkspaceConfigView } from '../common/environments.js';
+import type {
+	IDataQueryResult,
+	IDataSourceInput,
+	IDataSourceSecret,
+	IDataSourceTestPayload,
+	IDataSourceTestResult,
+	IDbTablesResult,
+	IEnvironmentInput,
+	IEnvironmentsBridge,
+	IWorkspaceConfigView,
+} from '../common/environments.js';
 
 export const IEnvironmentsService = createDecorator<IEnvironmentsService>('environmentsService');
 

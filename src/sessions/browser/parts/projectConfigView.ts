@@ -5,9 +5,17 @@
 
 import { append, clearNode } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
-import { localizeIpcMarker,localize } from '../../common/i18n/i18n.js';
+import { localizeIpcMarker, localize } from '../../common/i18n/i18n.js';
 import type { IEnvironmentsService } from '../../services/environments/browser/environmentsService.js';
-import { defaultPort, formatCoordinates, type IDataSource, type IDataSourceInput, type IDataSourceView, type IEnvironment, type IWorkspaceConfigView } from '../../services/environments/common/environments.js';
+import {
+	defaultPort,
+	formatCoordinates,
+	type IDataSource,
+	type IDataSourceInput,
+	type IDataSourceView,
+	type IEnvironment,
+	type IWorkspaceConfigView,
+} from '../../services/environments/common/environments.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
 import type { ICodeRootView, IRemoteRepoView } from '../../services/projects/common/projects.js';
 import { Dropdown } from './dropdown.js';
@@ -82,7 +90,15 @@ interface ISectionDef {
 
 const SECTIONS: readonly ISectionDef[] = [
 	{ id: 'code', icon: 'codicon-file-code', label: localize('projcfg.section.code'), group: 1, env: false, description: localize('projcfg.section.code.desc') },
-	{ id: 'knowledge', icon: 'codicon-book', label: localize('projcfg.section.knowledge'), group: 1, env: false, placeholder: true, description: localize('projcfg.section.knowledge.desc') },
+	{
+		id: 'knowledge',
+		icon: 'codicon-book',
+		label: localize('projcfg.section.knowledge'),
+		group: 1,
+		env: false,
+		placeholder: true,
+		description: localize('projcfg.section.knowledge.desc'),
+	},
 	{ id: 'approvals', icon: 'codicon-shield', label: localize('projcfg.section.approvals'), group: 1, env: false, description: localize('projcfg.section.approvals.desc') },
 	{ id: 'database', icon: 'codicon-database', label: localize('projcfg.section.database'), group: 2, env: true, description: localize('projcfg.section.database.desc') },
 	{ id: 'redis', icon: 'codicon-server', label: 'Redis', group: 2, env: true, description: localize('projcfg.section.redis.desc') },
@@ -93,9 +109,7 @@ const SECTIONS: readonly ISectionDef[] = [
 ];
 
 type EditState =
-	| { readonly kind: 'none' }
-	| { readonly kind: 'ds'; readonly ds?: IDataSourceView; readonly driver?: string }
-	| { readonly kind: 'cred'; readonly ds: IDataSourceView };
+	{ readonly kind: 'none' } | { readonly kind: 'ds'; readonly ds?: IDataSourceView; readonly driver?: string } | { readonly kind: 'cred'; readonly ds: IDataSourceView };
 
 const EMPTY_VIEW: IWorkspaceConfigView = { environments: [], dataSources: [] };
 
@@ -321,7 +335,9 @@ export class ProjectConfigView extends Disposable {
 			hint: localize('projcfg.code.paths.hint'),
 			items: paths,
 			emptyText: localize('projcfg.code.paths.empty'),
-			...(this.projects ? { action: { label: localize('projcfg.code.addPath'), onClick: (): void => void this.reloadCodeRoots(() => this.projects!.pickCodeRoot(this.projectId)) } } : {}),
+			...(this.projects
+				? { action: { label: localize('projcfg.code.addPath'), onClick: (): void => void this.reloadCodeRoots(() => this.projects!.pickCodeRoot(this.projectId)) } }
+				: {}),
 		});
 		this.renderRemoteCategory(page);
 	}
@@ -475,7 +491,10 @@ export class ProjectConfigView extends Disposable {
 		urlInput.focus();
 	}
 
-	private renderCodeCategory(page: HTMLElement, opts: { title: string; hint: string; items: readonly ICodeRootView[]; emptyText: string; action?: { label: string; onClick: () => void } }): void {
+	private renderCodeCategory(
+		page: HTMLElement,
+		opts: { title: string; hint: string; items: readonly ICodeRootView[]; emptyText: string; action?: { label: string; onClick: () => void } },
+	): void {
 		const category = append(page, document.createElement('div'));
 		category.className = 'sessions-code-cat';
 		const head = append(category, document.createElement('div'));
@@ -626,7 +645,12 @@ export class ProjectConfigView extends Disposable {
 		this.renderError(page);
 
 		if (this.config.environments.length === 0) {
-			settingsEmptyCard(page, { title: localize('projcfg.env.none'), description: localize('projcfg.env.none.desc'), actionLabel: localize('projcfg.env.new'), onAction: () => this.openEnvManager('new') });
+			settingsEmptyCard(page, {
+				title: localize('projcfg.env.none'),
+				description: localize('projcfg.env.none.desc'),
+				actionLabel: localize('projcfg.env.new'),
+				onAction: () => this.openEnvManager('new'),
+			});
 			return;
 		}
 
@@ -687,7 +711,11 @@ export class ProjectConfigView extends Disposable {
 		}
 		const sources = this.config.dataSources.filter(ds => ds.environmentId === environment.id && ds.kind === kind);
 		if (sources.length === 0) {
-			this.renderPanelEmpty(body, localize('projcfg.env.noneOfKind', environment.name, def.label), subtypes ? localize('projcfg.env.pickTypeHint') : localize('projcfg.env.addHint', def.label));
+			this.renderPanelEmpty(
+				body,
+				localize('projcfg.env.noneOfKind', environment.name, def.label),
+				subtypes ? localize('projcfg.env.pickTypeHint') : localize('projcfg.env.addHint', def.label),
+			);
 		} else {
 			for (const dataSource of sources) {
 				this.renderDataSourceRow(body, environment, dataSource);
@@ -874,8 +902,14 @@ export class ProjectConfigView extends Disposable {
 				{ full: true },
 				store,
 			);
-			const frontInput = formInput(form, localize('projcfg.envm.frontendUrl'), environment?.frontendUrl ?? '', { full: true, placeholder: localize('projcfg.envm.frontendUrlPlaceholder') });
-			const backInput = formInput(form, localize('projcfg.envm.backendUrl'), environment?.backendUrl ?? '', { full: true, placeholder: localize('projcfg.envm.backendUrlPlaceholder') });
+			const frontInput = formInput(form, localize('projcfg.envm.frontendUrl'), environment?.frontendUrl ?? '', {
+				full: true,
+				placeholder: localize('projcfg.envm.frontendUrlPlaceholder'),
+			});
+			const backInput = formInput(form, localize('projcfg.envm.backendUrl'), environment?.backendUrl ?? '', {
+				full: true,
+				placeholder: localize('projcfg.envm.backendUrlPlaceholder'),
+			});
 
 			const actions = append(formEl, document.createElement('div'));
 			actions.className = 'sessions-skills-actions';
@@ -938,23 +972,49 @@ export class ProjectConfigView extends Disposable {
 		portInput.type = 'number';
 
 		// Kind-specific extra fields.
-		const dbInput = kind === 'database' ? formInput(form, 'Database', dataSource?.kind === 'database' ? dataSource.coordinates.database : '', { full: true, placeholder: localize('projcfg.form.databasePlaceholder') }) : undefined;
+		const dbInput =
+			kind === 'database'
+				? formInput(form, 'Database', dataSource?.kind === 'database' ? dataSource.coordinates.database : '', {
+						full: true,
+						placeholder: localize('projcfg.form.databasePlaceholder'),
+					})
+				: undefined;
 		// Database credentials live in the SAME form as the connection (they still
 		// go to the credential store, never into the workspace config). An existing
 		// credential is kept when both fields are left blank.
-		const credUserInput = kind === 'database' ? formInput(form, localize('projcfg.form.username'), '', { placeholder: dataSource?.hasCredential ? localize('projcfg.form.keepUnchanged') : localize('projcfg.form.readOnlyAccountHint') }) : undefined;
-		const credPassInput = kind === 'database' ? formInput(form, localize('projcfg.form.password'), '', { placeholder: dataSource?.hasCredential ? localize('projcfg.form.keepUnchanged') : '' }) : undefined;
+		const credUserInput =
+			kind === 'database'
+				? formInput(form, localize('projcfg.form.username'), '', {
+						placeholder: dataSource?.hasCredential ? localize('projcfg.form.keepUnchanged') : localize('projcfg.form.readOnlyAccountHint'),
+					})
+				: undefined;
+		const credPassInput =
+			kind === 'database'
+				? formInput(form, localize('projcfg.form.password'), '', { placeholder: dataSource?.hasCredential ? localize('projcfg.form.keepUnchanged') : '' })
+				: undefined;
 		if (credPassInput) {
 			credPassInput.type = 'password';
 		}
-		const redisDbInput = kind === 'redis' ? formInput(form, localize('projcfg.form.redisDb'), dataSource?.kind === 'redis' ? String(dataSource.coordinates.db) : '0', { placeholder: '0' }) : undefined;
+		const redisDbInput =
+			kind === 'redis'
+				? formInput(form, localize('projcfg.form.redisDb'), dataSource?.kind === 'redis' ? String(dataSource.coordinates.db) : '0', { placeholder: '0' })
+				: undefined;
 		if (redisDbInput) {
 			redisDbInput.type = 'number';
 		}
 		const nsInput = kind === 'nacos' ? formInput(form, 'Namespace', dataSource?.kind === 'nacos' ? dataSource.coordinates.namespace : '', { placeholder: 'public' }) : undefined;
 		const groupInput = kind === 'nacos' ? formInput(form, 'Group', dataSource?.kind === 'nacos' ? dataSource.coordinates.group : '', { placeholder: 'DEFAULT_GROUP' }) : undefined;
-		const indexInput = kind === 'elasticsearch' ? formInput(form, localize('projcfg.form.indexOptional'), dataSource?.kind === 'elasticsearch' ? dataSource.coordinates.index : '', { full: true, placeholder: localize('projcfg.form.indexPlaceholder') }) : undefined;
-		const userInput = kind === 'server' ? formInput(form, localize('projcfg.form.username'), dataSource?.kind === 'server' ? dataSource.coordinates.user : 'root', { placeholder: 'root' }) : undefined;
+		const indexInput =
+			kind === 'elasticsearch'
+				? formInput(form, localize('projcfg.form.indexOptional'), dataSource?.kind === 'elasticsearch' ? dataSource.coordinates.index : '', {
+						full: true,
+						placeholder: localize('projcfg.form.indexPlaceholder'),
+					})
+				: undefined;
+		const userInput =
+			kind === 'server'
+				? formInput(form, localize('projcfg.form.username'), dataSource?.kind === 'server' ? dataSource.coordinates.user : 'root', { placeholder: 'root' })
+				: undefined;
 		const authSelect =
 			kind === 'server'
 				? this.formSelect(
@@ -1063,9 +1123,7 @@ export class ProjectConfigView extends Disposable {
 
 		const heading = append(editor, document.createElement('div'));
 		heading.className = 'sessions-env-cred-heading';
-		heading.textContent = isServer
-			? localize('projcfg.cred.sshHeading', dataSource.label)
-			: localize('projcfg.cred.heading', dataSource.label);
+		heading.textContent = isServer ? localize('projcfg.cred.sshHeading', dataSource.label) : localize('projcfg.cred.heading', dataSource.label);
 
 		const form = formGrid(editor);
 		// A server's username lives in its coordinates; DB-style sources take a username here.
@@ -1082,20 +1140,26 @@ export class ProjectConfigView extends Disposable {
 			keyInput.rows = 8;
 			keyInput.placeholder = dataSource.hasCredential ? localize('projcfg.form.keepUnchanged') : '-----BEGIN OPENSSH PRIVATE KEY-----';
 		} else {
-			passInput = formInput(form, localize('projcfg.form.password'), '', { full: true, ...(dataSource.hasCredential ? { placeholder: localize('projcfg.form.keepUnchanged') } : {}) });
+			passInput = formInput(form, localize('projcfg.form.password'), '', {
+				full: true,
+				...(dataSource.hasCredential ? { placeholder: localize('projcfg.form.keepUnchanged') } : {}),
+			});
 			passInput.type = 'password';
 		}
 
 		const actions = append(editor, document.createElement('div'));
 		actions.className = 'sessions-skills-actions';
-		settingsButton(actions, localize('projcfg.save'), () =>
-			void this.mutate(() =>
-				this.service.setDataSourceCredential(
-					this.projectId,
-					dataSource.id,
-					keyInput ? { privateKey: keyInput.value } : { ...(userInput ? { username: userInput.value.trim() } : {}), password: passInput?.value ?? '' },
+		settingsButton(
+			actions,
+			localize('projcfg.save'),
+			() =>
+				void this.mutate(() =>
+					this.service.setDataSourceCredential(
+						this.projectId,
+						dataSource.id,
+						keyInput ? { privateKey: keyInput.value } : { ...(userInput ? { username: userInput.value.trim() } : {}), password: passInput?.value ?? '' },
+					),
 				),
-			),
 		);
 		if (dataSource.hasCredential) {
 			settingsButton(actions, localize('projcfg.cred.clear'), () => void this.mutate(() => this.service.setDataSourceCredential(this.projectId, dataSource.id, {})));
@@ -1111,7 +1175,14 @@ export class ProjectConfigView extends Disposable {
 	}
 
 	/** A themed custom dropdown as a form field; owned by the render store. */
-	private formSelect(grid: HTMLElement, label: string, items: readonly { value: string; label: string }[], value: string, field: { full?: boolean; disabled?: boolean } = {}, store: DisposableStore = this.renderStore): Dropdown {
+	private formSelect(
+		grid: HTMLElement,
+		label: string,
+		items: readonly { value: string; label: string }[],
+		value: string,
+		field: { full?: boolean; disabled?: boolean } = {},
+		store: DisposableStore = this.renderStore,
+	): Dropdown {
 		const wrap = append(grid, document.createElement('div'));
 		wrap.className = field.full ? 'sessions-form-field sessions-form-field--full' : 'sessions-form-field';
 		const text = append(wrap, document.createElement('span'));
@@ -1160,4 +1231,3 @@ function formInput(grid: HTMLElement, label: string, value: string, options: IFi
 	}
 	return input;
 }
-

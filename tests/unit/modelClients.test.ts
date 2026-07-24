@@ -330,13 +330,29 @@ test('openai request enables parallel_tool_calls when tools are present (batchin
 });
 
 test('toAnthropicMessages maps image blocks to base64 sources', () => {
-	const wire = toAnthropicMessages([{ role: 'user', content: [{ type: 'image', mediaType: 'image/png', data: 'AAAA' }, { type: 'text', text: 'what is this?' }] }]);
+	const wire = toAnthropicMessages([
+		{
+			role: 'user',
+			content: [
+				{ type: 'image', mediaType: 'image/png', data: 'AAAA' },
+				{ type: 'text', text: 'what is this?' },
+			],
+		},
+	]);
 	assert.deepEqual(wire[0]!.content[0], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } });
 	assert.deepEqual(wire[0]!.content[1], { type: 'text', text: 'what is this?' });
 });
 
 test('toOpenAIMessages maps an image-bearing user turn to a content array with a data URL', () => {
-	const wire = toOpenAIMessages('SYS', [{ role: 'user', content: [{ type: 'image', mediaType: 'image/jpeg', data: 'BBBB' }, { type: 'text', text: 'describe' }] }]);
+	const wire = toOpenAIMessages('SYS', [
+		{
+			role: 'user',
+			content: [
+				{ type: 'image', mediaType: 'image/jpeg', data: 'BBBB' },
+				{ type: 'text', text: 'describe' },
+			],
+		},
+	]);
 	const user = wire.find(message => message.role === 'user');
 	assert.ok(Array.isArray(user?.content), 'images force the array content shape');
 	assert.deepEqual(user.content[0], { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,BBBB' } });
@@ -369,7 +385,13 @@ test('anthropic request carries exactly two prompt-cache breakpoints: system tai
 	const messages = [
 		{ role: 'user' as const, content: [{ type: 'text' as const, text: 'q1' }] },
 		{ role: 'assistant' as const, content: [{ type: 'text' as const, text: 'a1' }] },
-		{ role: 'user' as const, content: [{ type: 'text' as const, text: 'q2' }, { type: 'text' as const, text: 'q2-tail' }] },
+		{
+			role: 'user' as const,
+			content: [
+				{ type: 'text' as const, text: 'q2' },
+				{ type: 'text' as const, text: 'q2-tail' },
+			],
+		},
 	];
 	const body = buildAnthropicRequestBody({ baseURL: 'https://api.kimi.com/coding/', model: 'm' }, { system: 'sys', messages, tools: [], signal });
 

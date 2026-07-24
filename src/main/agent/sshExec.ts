@@ -13,7 +13,12 @@ export interface ISshResult {
 	readonly output: string;
 }
 
-export type SshRunner = (coordinates: IServerCoordinates, secret: IDataSourceSecret | undefined, command: string, options: { readonly signal: AbortSignal; readonly timeoutMs: number }) => Promise<ISshResult>;
+export type SshRunner = (
+	coordinates: IServerCoordinates,
+	secret: IDataSourceSecret | undefined,
+	command: string,
+	options: { readonly signal: AbortSignal; readonly timeoutMs: number },
+) => Promise<ISshResult>;
 
 /**
  * Open an SSH connection, run one command, and return its combined stdout/stderr

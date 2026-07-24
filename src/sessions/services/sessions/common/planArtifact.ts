@@ -111,11 +111,7 @@ export function buildReviseTurn(plan: IPlanArtifact, comments: readonly IPlanCom
 		return undefined;
 	}
 	const heading = (sectionId: string): string => plan.sections.find(section => section.id === sectionId)?.heading ?? localize('plan.revise.fallbackHeading');
-	const lines = [
-		localize('plan.revise.intro', plan.version),
-		...open.map(comment => `- [${heading(comment.sectionId)}] ${comment.body}`),
-		localize('plan.revise.outro'),
-	];
+	const lines = [localize('plan.revise.intro', plan.version), ...open.map(comment => `- [${heading(comment.sectionId)}] ${comment.body}`), localize('plan.revise.outro')];
 	return lines.join('\n');
 }
 

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localizeIpcMarker,localize } from '../../../common/i18n/i18n.js';
+import { localizeIpcMarker, localize } from '../../../common/i18n/i18n.js';
 import type { IEnvironmentsService } from '../../../services/environments/browser/environmentsService.js';
 import type { IDataColumn, IDatabaseSource, IDbTable } from '../../../services/environments/common/environments.js';
 import { compileBrowseSql, compileColumnFilter, compileQueryBrowseSql, type IBrowseState } from '../common/browseSql.js';
@@ -81,7 +81,13 @@ export class SqlDataProvider implements IDataProvider {
 		if (baseQuery !== undefined) {
 			lines.push(localize('data.ref.query', baseQuery));
 		} else if (table) {
-			lines.push(localize('data.ref.table', `${table.schema ? `${table.schema}.` : ''}${table.name}`, table.estimatedRows !== undefined ? localize('data.rowsApproxSuffix', table.estimatedRows) : ''));
+			lines.push(
+				localize(
+					'data.ref.table',
+					`${table.schema ? `${table.schema}.` : ''}${table.name}`,
+					table.estimatedRows !== undefined ? localize('data.rowsApproxSuffix', table.estimatedRows) : '',
+				),
+			);
 		}
 		const sql = this.describeQuery(state);
 		if (sql) {
@@ -115,8 +121,6 @@ export class SqlDataProvider implements IDataProvider {
 			...(state.sort ? { sort: state.sort } : {}),
 			...(filters.length > 0 ? { filters } : {}),
 		};
-		return baseQuery !== undefined
-			? compileQueryBrowseSql(source.coordinates.driver, baseQuery, browseState)
-			: compileBrowseSql(source.coordinates.driver, table!, browseState);
+		return baseQuery !== undefined ? compileQueryBrowseSql(source.coordinates.driver, baseQuery, browseState) : compileBrowseSql(source.coordinates.driver, table!, browseState);
 	}
 }

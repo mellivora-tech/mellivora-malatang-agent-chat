@@ -6,14 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-	BUILTIN_THEME_SEEDS,
-	contrastRatio,
-	deriveTheme,
-	hexToRgb,
-	semanticColorTokenIds,
-	type IThemeSeed,
-} from '../../src/sessions/common/themeSeed.js';
+import { BUILTIN_THEME_SEEDS, contrastRatio, deriveTheme, hexToRgb, semanticColorTokenIds, type IThemeSeed } from '../../src/sessions/common/themeSeed.js';
 
 test('every built-in seed derives a COMPLETE map — no token id resolves to undefined', () => {
 	for (const [name, seed] of Object.entries(BUILTIN_THEME_SEEDS)) {

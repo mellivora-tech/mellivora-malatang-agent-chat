@@ -115,8 +115,7 @@ export function updatePreferences(patch: Partial<IUiPreferences>): IUiPreference
 
 /** The slot the current mode selects (system → OS preference). */
 export function resolveActiveSlot(appearance: IAppearancePrefs): { readonly polarity: 'light' | 'dark'; readonly slot: IAppearanceSlotPrefs } {
-	const polarity =
-		appearance.mode === 'system' ? (typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : appearance.mode;
+	const polarity = appearance.mode === 'system' ? (typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : appearance.mode;
 	return { polarity, slot: appearance[polarity] };
 }
 

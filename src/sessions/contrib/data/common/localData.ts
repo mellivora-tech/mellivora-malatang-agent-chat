@@ -47,14 +47,21 @@ function compare(cell: unknown, operator: string, operand: string): boolean {
 		return false;
 	}
 	switch (operator) {
-		case '=': return left === right;
+		case '=':
+			return left === right;
 		case '!=':
-		case '<>': return left !== right;
-		case '>': return left > right;
-		case '>=': return left >= right;
-		case '<': return left < right;
-		case '<=': return left <= right;
-		default: return false;
+		case '<>':
+			return left !== right;
+		case '>':
+			return left > right;
+		case '>=':
+			return left >= right;
+		case '<':
+			return left < right;
+		case '<=':
+			return left <= right;
+		default:
+			return false;
 	}
 }
 

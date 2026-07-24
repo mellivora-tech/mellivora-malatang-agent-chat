@@ -101,7 +101,13 @@ test('serializeForSummary turns images into a placeholder instead of dropping th
 	// "no image was provided" (seen live, 2026-07-10 session cd63ef17).
 	const base64 = 'A'.repeat(80_000); // ~60KB raw
 	const messages: IAgentMessage[] = [
-		{ role: 'user', content: [{ type: 'text', text: '梳理下这个图片' }, { type: 'image', mediaType: 'image/png', data: base64 }] },
+		{
+			role: 'user',
+			content: [
+				{ type: 'text', text: '梳理下这个图片' },
+				{ type: 'image', mediaType: 'image/png', data: base64 },
+			],
+		},
 	];
 
 	const serialized = serializeForSummary(messages);
@@ -139,10 +145,7 @@ test('generateSummary streams text and rejects an empty reply', async () => {
 	});
 	assert.equal(summary, '## Objective\n- ship 3.1');
 
-	await assert.rejects(
-		() => generateSummary({ client: client([{ type: 'message_stop', stopReason: 'end_turn' }]), serializedHead: '[User]:\nhi', signal }),
-		/empty/,
-	);
+	await assert.rejects(() => generateSummary({ client: client([{ type: 'message_stop', stopReason: 'end_turn' }]), serializedHead: '[User]:\nhi', signal }), /empty/);
 });
 
 test('formatCompactedBlock wraps the summary for the request view', () => {

@@ -59,7 +59,11 @@ test('listDbTables maps catalog rows to tables with optional row estimates', asy
 		seenSql = sql;
 		return {
 			columns: [],
-			rows: [['public', 'orders', '1523'], ['public', 'users', null], ['sales', 'q1_view', 0]],
+			rows: [
+				['public', 'orders', '1523'],
+				['public', 'users', null],
+				['sales', 'q1_view', 0],
+			],
 			truncated: false,
 		};
 	};

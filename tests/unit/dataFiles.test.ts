@@ -10,8 +10,14 @@ import { inferCategory, parseCsv, toTable } from '../../src/main/dataFiles.js';
 import { compareCells, matchesColumnFilter, sliceLocalData } from '../../src/sessions/contrib/data/common/localData.js';
 
 test('parseCsv handles quotes, embedded commas/newlines, CRLF, and trailing newline', () => {
-	assert.deepEqual(parseCsv('a,b\n1,2\n'), [['a', 'b'], ['1', '2']]);
-	assert.deepEqual(parseCsv('a,b\r\n"x,y","he said ""hi"""\r\n'), [['a', 'b'], ['x,y', 'he said "hi"']]);
+	assert.deepEqual(parseCsv('a,b\n1,2\n'), [
+		['a', 'b'],
+		['1', '2'],
+	]);
+	assert.deepEqual(parseCsv('a,b\r\n"x,y","he said ""hi"""\r\n'), [
+		['a', 'b'],
+		['x,y', 'he said "hi"'],
+	]);
 	assert.deepEqual(parseCsv('a\n"line1\nline2"'), [['a'], ['line1\nline2']]);
 	assert.deepEqual(parseCsv(''), []);
 });
@@ -30,8 +36,14 @@ test('toTable names blank/duplicate headers positionally and types columns', () 
 		['1', 'x', '2026-01-01'],
 		['2', 'y', '2026-01-02'],
 	]);
-	assert.deepEqual(table.columns.map(column => column.name), ['id', '列2', 'id_3']);
-	assert.deepEqual(table.columns.map(column => column.category), ['number', 'text', 'date']);
+	assert.deepEqual(
+		table.columns.map(column => column.name),
+		['id', '列2', 'id_3'],
+	);
+	assert.deepEqual(
+		table.columns.map(column => column.category),
+		['number', 'text', 'date'],
+	);
 	assert.equal(table.rows.length, 2);
 	assert.equal(table.truncated, false);
 });
@@ -72,6 +84,9 @@ test('sliceLocalData: filter → sort → page with has-next', () => {
 	const result = sliceLocalData(columns, rows, state, () => 0);
 	// 20 match (6..25), sorted desc → page 1 (second page) = 20..16
 	assert.equal(result.totalMatched, 20);
-	assert.deepEqual(result.rows.map(row => row[0]), [20, 19, 18, 17, 16]);
+	assert.deepEqual(
+		result.rows.map(row => row[0]),
+		[20, 19, 18, 17, 16],
+	);
 	assert.equal(result.hasNext, true);
 });

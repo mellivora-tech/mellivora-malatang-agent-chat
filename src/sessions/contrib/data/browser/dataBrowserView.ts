@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localizeIpcMarker,localize } from '../../../common/i18n/i18n.js';
+import { localizeIpcMarker, localize } from '../../../common/i18n/i18n.js';
 import 'tabulator-tables/dist/css/tabulator.min.css';
 import { TabulatorFull, type CellComponent, type ColumnDefinition } from 'tabulator-tables';
 import { Disposable } from '../../../base/common/lifecycle.js';
@@ -88,7 +88,10 @@ export class DataBrowserView extends Disposable {
 	private gridSignature: string | undefined;
 	private filterDebounce: ReturnType<typeof setTimeout> | undefined;
 
-	constructor(container: HTMLElement, private readonly options: IDataBrowserViewOptions = {}) {
+	constructor(
+		container: HTMLElement,
+		private readonly options: IDataBrowserViewOptions = {},
+	) {
 		super();
 
 		const root = document.createElement('div');
@@ -249,13 +252,15 @@ export class DataBrowserView extends Disposable {
 		// The panel follows the active session's project; switching projects reloads sources.
 		const activeSession = this.options.sessionsService?.activeSession ?? this.options.sessionsPartService?.activeSession;
 		if (activeSession) {
-			this._register(activeSession.subscribe(() => {
-				const projectId = activeSession.get()?.projectId;
-				if (projectId !== this.projectId) {
-					this.projectId = projectId;
-					this.sourcesReady = this.loadSources();
-				}
-			}));
+			this._register(
+				activeSession.subscribe(() => {
+					const projectId = activeSession.get()?.projectId;
+					if (projectId !== this.projectId) {
+						this.projectId = projectId;
+						this.sourcesReady = this.loadSources();
+					}
+				}),
+			);
 			this.projectId = activeSession.get()?.projectId;
 		}
 		// The tab host keeps this view mounted but display:none while another tab

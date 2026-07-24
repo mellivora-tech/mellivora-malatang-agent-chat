@@ -96,7 +96,12 @@ async function exists(path: string): Promise<boolean> {
  * credential helper) — no credential handling here. Never throws: a failure is
  * returned as `{ ok: false }` with the last line of output.
  */
-export async function cloneOrUpdate(localPath: string, remote: { readonly url: string; readonly vcs: CodeRootVcs; readonly ref?: string }, signal: AbortSignal, run: CommandRunner = runCommand): Promise<ICloneResult> {
+export async function cloneOrUpdate(
+	localPath: string,
+	remote: { readonly url: string; readonly vcs: CodeRootVcs; readonly ref?: string },
+	signal: AbortSignal,
+	run: CommandRunner = runCommand,
+): Promise<ICloneResult> {
 	const marker = remote.vcs === 'svn' ? '.svn' : '.git';
 	const present = await exists(join(localPath, marker));
 

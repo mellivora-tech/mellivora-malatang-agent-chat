@@ -161,7 +161,10 @@ export function registerAgentIpc(dataRoot: string): void {
 	// The grant rides the pending entry because the response only carries a
 	// requestId — the tool input (and the pattern derived from it) is long gone
 	// by the time "always" comes back.
-	const pendingApprovals = new Map<string, { readonly sessionId: string; readonly projectId?: string; readonly grant?: IAllowlistGrant; resolve(decision: IApprovalDecision): void }>();
+	const pendingApprovals = new Map<
+		string,
+		{ readonly sessionId: string; readonly projectId?: string; readonly grant?: IAllowlistGrant; resolve(decision: IApprovalDecision): void }
+	>();
 	// Session-level "always allow" patterns. In-memory only (never persisted),
 	// keyed by sessionId like the pending/abort maps, so it survives across runs
 	// of a session but dies with the process — the "会话级、不落盘" contract.
@@ -574,7 +577,10 @@ export function registerAgentIpc(dataRoot: string): void {
 				}
 			}
 			// The reason only rides a denial — an approval has nothing to redirect.
-			pending.resolve({ approved: payload.approved === true, ...(payload.approved !== true && typeof payload.reason === 'string' && payload.reason.trim() !== '' ? { reason: payload.reason } : {}) });
+			pending.resolve({
+				approved: payload.approved === true,
+				...(payload.approved !== true && typeof payload.reason === 'string' && payload.reason.trim() !== '' ? { reason: payload.reason } : {}),
+			});
 		}
 	});
 

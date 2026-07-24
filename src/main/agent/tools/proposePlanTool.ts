@@ -47,7 +47,9 @@ export function createProposePlanTool(): IAgentTool {
 		isReadOnly: () => true,
 		validateInput: input => {
 			const parsed = parsePlanInput(input);
-			return parsed ? valid(parsed) : invalid(`input needs a non-empty "title" and a non-empty "sections" array; each section needs a "kind" (${PLAN_SECTION_KINDS.join('/')}) and a non-empty "heading"`);
+			return parsed
+				? valid(parsed)
+				: invalid(`input needs a non-empty "title" and a non-empty "sections" array; each section needs a "kind" (${PLAN_SECTION_KINDS.join('/')}) and a non-empty "heading"`);
 		},
 		call: async input => {
 			const plan = input as { readonly title: string; readonly sections: readonly unknown[] };

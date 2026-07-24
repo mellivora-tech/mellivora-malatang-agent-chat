@@ -214,9 +214,7 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 		this.dataLine.replaceChildren();
 		for (const window of snapshot.windows) {
 			const label =
-				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0
-					? localize('quota.lineHours', window.durationMinutes / 60)
-					: localize('quota.windowShort');
+				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0 ? localize('quota.lineHours', window.durationMinutes / 60) : localize('quota.windowShort');
 			this.dataLine.append(quotaSegment(label, window));
 		}
 		this.dataLine.append(quotaSegment(localize('quota.lineWeek'), snapshot.usage));
@@ -239,9 +237,7 @@ class QuotaIndicator extends Disposable implements IQuotaIndicator {
 		}
 		for (const window of snapshot.windows) {
 			const label =
-				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0
-					? localize('quota.windowHours', window.durationMinutes / 60)
-					: localize('quota.windowShort');
+				window.durationMinutes !== undefined && window.durationMinutes % 60 === 0 ? localize('quota.windowHours', window.durationMinutes / 60) : localize('quota.windowShort');
 			const windowLeft = Math.round((window.remaining / window.limit) * 100);
 			const windowReset = formatResetTime(window.resetTime);
 			rows.append(quotaRow(label, windowReset ? localize('quota.windowReset', windowLeft, windowReset) : localize('quota.windowLeft', windowLeft)));

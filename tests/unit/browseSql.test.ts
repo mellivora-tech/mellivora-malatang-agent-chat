@@ -46,10 +46,7 @@ test('hostile identifiers never slip past the gate as writes — they are reject
 
 test('compileQueryBrowseSql wraps an arbitrary read-only query as a paged derived table', () => {
 	const base = 'SELECT id, name FROM shop.orders WHERE amount > 100;';
-	assert.equal(
-		compileQueryBrowseSql('mysql', base, { pageSize: 100, page: 0 }),
-		'SELECT * FROM (SELECT id, name FROM shop.orders WHERE amount > 100) AS `_browse` LIMIT 101',
-	);
+	assert.equal(compileQueryBrowseSql('mysql', base, { pageSize: 100, page: 0 }), 'SELECT * FROM (SELECT id, name FROM shop.orders WHERE amount > 100) AS `_browse` LIMIT 101');
 	assert.equal(
 		compileQueryBrowseSql('postgres', 'SELECT 1 AS n', { pageSize: 50, page: 2, sort: { column: 'n', direction: 'desc' } }),
 		'SELECT * FROM (SELECT 1 AS n) AS "_browse" ORDER BY "n" DESC LIMIT 51 OFFSET 100',
@@ -77,7 +74,7 @@ test('compileColumnFilter: the DataGrip-style filter grammar', () => {
 	assert.equal(compileColumnFilter('postgres', active, 'true'), '"active" = TRUE');
 	// empty → no clause; quotes escape; mysql doubles backslashes
 	assert.equal(compileColumnFilter('mysql', name, '   '), undefined);
-	assert.equal(compileColumnFilter('postgres', name, "o'brien"), '"name" LIKE \'%o\'\'brien%\'');
+	assert.equal(compileColumnFilter('postgres', name, "o'brien"), "\"name\" LIKE '%o''brien%'");
 	assert.equal(compileColumnFilter('mysql', name, 'a\\b'), "`name` LIKE '%a\\\\b%'");
 });
 
@@ -87,6 +84,6 @@ test('filters land as ANDed WHERE clauses before ORDER BY/LIMIT', () => {
 		{ schema: 'shop', name: 'orders' },
 		{ pageSize: 100, page: 1, sort: { column: 'id', direction: 'asc' }, filters: ['`amount` >= 1000', "`name` LIKE '%item%'"] },
 	);
-	assert.equal(sql, 'SELECT * FROM `shop`.`orders` WHERE (`amount` >= 1000) AND (`name` LIKE \'%item%\') ORDER BY `id` ASC LIMIT 101 OFFSET 100');
+	assert.equal(sql, "SELECT * FROM `shop`.`orders` WHERE (`amount` >= 1000) AND (`name` LIKE '%item%') ORDER BY `id` ASC LIMIT 101 OFFSET 100");
 	assert.ok(isReadOnlySql(sql));
 });

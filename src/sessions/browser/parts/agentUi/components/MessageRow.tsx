@@ -114,7 +114,14 @@ function DocumentCard(props: IDocumentCardProps): JSX.Element {
 					{expanded ? localize('conv.docCollapse') : localize('conv.docExpand')}
 				</button>
 			</div>
-			{expanded && (missing ? <div className="conversation-document-missing">{localize('conv.docMissing')}</div> : content !== undefined ? <Markdown className="conversation-document-body" text={content} /> : <div className="conversation-document-loading">{localize('conv.docLoading')}</div>)}
+			{expanded &&
+				(missing ? (
+					<div className="conversation-document-missing">{localize('conv.docMissing')}</div>
+				) : content !== undefined ? (
+					<Markdown className="conversation-document-body" text={content} />
+				) : (
+					<div className="conversation-document-loading">{localize('conv.docLoading')}</div>
+				))}
 		</div>
 	);
 }

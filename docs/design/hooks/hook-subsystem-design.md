@@ -17,15 +17,15 @@
 
 Mellivora **早已在 agentLoop 里手写了大量生命周期拦截**——这正是「该有个统一机制」的实证。现状枚举:
 
-| 现有拦截 | 位置 | 本质是哪种 hook |
-|---|---|---|
-| `permissionGate`（审批闸） | `agentLoop.ts:539` → `executeToolUses(…, permissionGate, …)`；`permission.ts:createGateForMode` | PreToolUse（block/deny） |
-| `loopGuard`（循环守卫） | `agentLoop.ts:175` / `executeToolUses(…, loopGuard)` | PreToolUse（block） |
-| `replyVerifier`（答案校验→重试） | `replyVerifier.ts:verifyReply`；注释自称「Modeled on CC's Stop hook」 | Stop（block→retry） |
-| `workDigest`（探查摘要） | `workDigest.ts` seed/record | PostToolUse / context |
+| 现有拦截                           | 位置                                                                                                                   | 本质是哪种 hook                              |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `permissionGate`（审批闸）         | `agentLoop.ts:539` → `executeToolUses(…, permissionGate, …)`；`permission.ts:createGateForMode`                        | PreToolUse（block/deny）                     |
+| `loopGuard`（循环守卫）            | `agentLoop.ts:175` / `executeToolUses(…, loopGuard)`                                                                   | PreToolUse（block）                          |
+| `replyVerifier`（答案校验→重试）   | `replyVerifier.ts:verifyReply`；注释自称「Modeled on CC's Stop hook」                                                  | Stop（block→retry）                          |
+| `workDigest`（探查摘要）           | `workDigest.ts` seed/record                                                                                            | PostToolUse / context                        |
 | **6+ 处 `<system-reminder>` 注入** | `agentLoop.ts:41–89`（步数预算 / 引用代码却零工具 / 声称连接失败却没调数据源 / 声称执行却零工具 / 未记 walkthrough …） | PostToolUse / Stop 的**条件式 context 注入** |
-| 自动压缩 | `agentLoop.ts:260`（compaction） | PreCompact |
-| 步数预算收尾 | `agentLoop.ts:41/43` | 生命周期 context 注入 |
+| 自动压缩                           | `agentLoop.ts:260`（compaction）                                                                                       | PreCompact                                   |
+| 步数预算收尾                       | `agentLoop.ts:41/43`                                                                                                   | 生命周期 context 注入                        |
 
 **一句话**:上面 10+ 处拦截,现在每加一处就改一次 `agentLoop`。Hook 子系统 = 把它们收进一张注册表,新拦截 = 注册一条,而非再改主循环。
 
@@ -33,39 +33,40 @@ Mellivora **早已在 agentLoop 里手写了大量生命周期拦截**——这�
 
 对齐 CC(PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd),按 Mellivora 需要裁定:
 
-| 事件 | 时机 | 允许的决策 | 迁入的现有拦截 |
-|---|---|---|---|
-| `PreToolUse` | 每个工具执行前 | `block` / `modify`(改 input) / `allow` | permissionGate、loopGuard |
-| `PostToolUse` | 每个工具结果回来后 | `injectContext` / 观测 | workDigest、部分 system-reminder |
-| `UserPromptSubmit` | 用户消息进来 | `injectContext` / `block`(预检) | 新 |
-| `Stop` | 模型给出最终答案时 | `block`(逼重试) / `injectContext` | replyVerifier、多数 system-reminder |
-| `SubagentStop` | spawn_agent 子 agent 结束 | `injectContext` / 观测 | 新（子 agent 收尾） |
-| `PreCompact` | 触发压缩前 | 观测 / 保锚点 | compaction / compaction_anchor |
-| `SessionStart` / `SessionEnd` | 会话首尾 | `injectContext` / 落账 | 新 |
+| 事件                          | 时机                      | 允许的决策                             | 迁入的现有拦截                      |
+| ----------------------------- | ------------------------- | -------------------------------------- | ----------------------------------- |
+| `PreToolUse`                  | 每个工具执行前            | `block` / `modify`(改 input) / `allow` | permissionGate、loopGuard           |
+| `PostToolUse`                 | 每个工具结果回来后        | `injectContext` / 观测                 | workDigest、部分 system-reminder    |
+| `UserPromptSubmit`            | 用户消息进来              | `injectContext` / `block`(预检)        | 新                                  |
+| `Stop`                        | 模型给出最终答案时        | `block`(逼重试) / `injectContext`      | replyVerifier、多数 system-reminder |
+| `SubagentStop`                | spawn_agent 子 agent 结束 | `injectContext` / 观测                 | 新（子 agent 收尾）                 |
+| `PreCompact`                  | 触发压缩前                | 观测 / 保锚点                          | compaction / compaction_anchor      |
+| `SessionStart` / `SessionEnd` | 会话首尾                  | `injectContext` / 落账                 | 新                                  |
 
 ## 4. Hook 契约(输入 → 决策)
 
 ```ts
 interface IHookInput {
-  event: HookEvent;
-  toolName?: string;           // PreToolUse/PostToolUse
-  toolInput?: unknown;         // PreToolUse
-  toolResult?: unknown;        // PostToolUse
-  contextDigest: string;       // 当前进展摘要(不灌全上下文)
-  sessionId: string;
-  projectId?: string;
-  turn: number;
+	event: HookEvent;
+	toolName?: string; // PreToolUse/PostToolUse
+	toolInput?: unknown; // PreToolUse
+	toolResult?: unknown; // PostToolUse
+	contextDigest: string; // 当前进展摘要(不灌全上下文)
+	sessionId: string;
+	projectId?: string;
+	turn: number;
 }
 
 interface IHookDecision {
-  decision: 'allow' | 'block' | 'modify';
-  reason?: string;             // block 时回喂模型(像审批拒绝 / verifier 重试反馈)
-  additionalContext?: string;  // 注入上下文(像 system-reminder)
-  modifiedInput?: unknown;     // modify 时改写工具入参
+	decision: 'allow' | 'block' | 'modify';
+	reason?: string; // block 时回喂模型(像审批拒绝 / verifier 重试反馈)
+	additionalContext?: string; // 注入上下文(像 system-reminder)
+	modifiedInput?: unknown; // modify 时改写工具入参
 }
 ```
 
 **组合规则**(一个事件点多个 hook):
+
 - 任一 `block` → 整体 block,`reason` 聚合回喂;
 - `additionalContext` **累加**注入;
 - `modify` **串行链式**(前一个的 `modifiedInput` 进下一个);
@@ -80,12 +81,12 @@ interface IHookDecision {
 
 ## 6. 两类 hook（唯一的真岔路 → 分期,不二选一）
 
-| | 内建 hook | 用户可配 hook |
-|---|---|---|
-| 载体 | TS,进程内注册 | config 声明命令 / 脚本(CC settings.json 式) |
-| 优点 | 类型安全、零 shell 安全面、快 | 用户可扩展、对齐 CC 生态 |
-| 用途 | 迁移现有拦截 + 承载 W2/W4 纪律 | 用户自定义(项目专属检查) |
-| 安全 | 无额外面 | **重点,见 §8** |
+|      | 内建 hook                      | 用户可配 hook                               |
+| ---- | ------------------------------ | ------------------------------------------- |
+| 载体 | TS,进程内注册                  | config 声明命令 / 脚本(CC settings.json 式) |
+| 优点 | 类型安全、零 shell 安全面、快  | 用户可扩展、对齐 CC 生态                    |
+| 用途 | 迁移现有拦截 + 承载 W2/W4 纪律 | 用户自定义(项目专属检查)                    |
+| 安全 | 无额外面                       | **重点,见 §8**                              |
 
 > **推荐**:先内建注册层(§10 M1+M2),把现有拦截统一 + 落地 W2/W4;用户可配层(M3)随后,带完整安全模型。
 
@@ -118,11 +119,11 @@ M1 把 §2 的拦截逐一重写为**注册的内建 hook**,**行为等价**(回
 
 ## 10. 分期
 
-| 期 | 内容 | 验收 |
-|---|---|---|
-| **M1 · 内建注册核心** | Hook 注册表 + 契约类型 + 在各生命周期点埋 fire;**迁移 §7 全部现有拦截为内建 hook** | 行为等价——现有单测/e2e(审批、verifier、loopGuard、system-reminder、压缩)全绿,agentLoop 主体只剩 fire 调用 |
-| **M2 · 挂确定性纪律** | W4:`PreToolUse` 活系统「先探静默」检查(对 bulk diff / 对外查询类工具)；W2 强制半条:`PreToolUse` 诊断类第 N 次单 grep/bash 时 block/注入「该 spawn_agent 扇出」 | 复跑诊断型任务:活系统 diff 前有静默检查;串行探查被拦/被推向委派 |
-| **M3 · 用户可配层** | config schema + matcher + 外部命令执行 + §8 安全模型 + 配置 UI | 用户能声明一条 PreToolUse hook 并被 §8 信任模型正确门控 |
+| 期                    | 内容                                                                                                                                                           | 验收                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **M1 · 内建注册核心** | Hook 注册表 + 契约类型 + 在各生命周期点埋 fire;**迁移 §7 全部现有拦截为内建 hook**                                                                             | 行为等价——现有单测/e2e(审批、verifier、loopGuard、system-reminder、压缩)全绿,agentLoop 主体只剩 fire 调用 |
+| **M2 · 挂确定性纪律** | W4:`PreToolUse` 活系统「先探静默」检查(对 bulk diff / 对外查询类工具)；W2 强制半条:`PreToolUse` 诊断类第 N 次单 grep/bash 时 block/注入「该 spawn_agent 扇出」 | 复跑诊断型任务:活系统 diff 前有静默检查;串行探查被拦/被推向委派                                           |
+| **M3 · 用户可配层**   | config schema + matcher + 外部命令执行 + §8 安全模型 + 配置 UI                                                                                                 | 用户能声明一条 PreToolUse hook 并被 §8 信任模型正确门控                                                   |
 
 ## 11. 风险登记
 

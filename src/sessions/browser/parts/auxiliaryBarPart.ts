@@ -111,11 +111,13 @@ export class AuxiliaryBarPart extends Part {
 
 	constructor(private readonly options: IAuxiliaryBarPartOptions = {}) {
 		super('workbench.parts.auxiliarybar', 'auxiliarybar');
-		this._register(toDisposable(() => {
-			for (const tab of this.openTabs) {
-				tab.disposables.dispose();
-			}
-		}));
+		this._register(
+			toDisposable(() => {
+				for (const tab of this.openTabs) {
+					tab.disposables.dispose();
+				}
+			}),
+		);
 		// The maximize toggle lives in the tabs bar — its icon must flip with the state.
 		const maximizedState = this.options.sessionsPartService?.sidePaneMaximized;
 		if (maximizedState) {
@@ -126,35 +128,41 @@ export class AuxiliaryBarPart extends Part {
 		// Chat → workbench surface (#12 M4): open/focus the surface tab.
 		const surfaceRequest = this.options.sessionsPartService?.surfaceOpenRequest;
 		if (surfaceRequest) {
-			this._register(surfaceRequest.subscribe(() => {
-				if (surfaceRequest.get() !== undefined) {
-					surfaceRequest.set(undefined);
-					this.openTab('surface');
-				}
-			}));
+			this._register(
+				surfaceRequest.subscribe(() => {
+					if (surfaceRequest.get() !== undefined) {
+						surfaceRequest.set(undefined);
+						this.openTab('surface');
+					}
+				}),
+			);
 		}
 		// Artifacts panel → review tab (#13 P2): a change-set row opens its diff here.
 		const reviewRequest = this.options.sessionsPartService?.reviewOpenRequest;
 		if (reviewRequest) {
-			this._register(reviewRequest.subscribe(() => {
-				if (reviewRequest.get() !== undefined) {
-					reviewRequest.set(undefined);
-					this.openTab('review');
-				}
-			}));
+			this._register(
+				reviewRequest.subscribe(() => {
+					if (reviewRequest.get() !== undefined) {
+						reviewRequest.set(undefined);
+						this.openTab('review');
+					}
+				}),
+			);
 		}
 		const request = this.options.sessionsPartService?.dataBrowseRequest;
 		if (request) {
-			this._register(request.subscribe(() => {
-				const browse = request.get();
-				if (!browse) {
-					return;
-				}
-				request.set(undefined);
-				this.openTab('data');
-				const tab = this.openTabs.find(candidate => candidate.kind === 'data');
-				void tab?.dataView?.applyBrowseRequest(browse);
-			}));
+			this._register(
+				request.subscribe(() => {
+					const browse = request.get();
+					if (!browse) {
+						return;
+					}
+					request.set(undefined);
+					this.openTab('data');
+					const tab = this.openTabs.find(candidate => candidate.kind === 'data');
+					void tab?.dataView?.applyBrowseRequest(browse);
+				}),
+			);
 		}
 	}
 
@@ -461,10 +469,12 @@ export class AuxiliaryBarPart extends Part {
 		};
 		document.addEventListener('mousedown', onPress, true);
 		document.addEventListener('keydown', onKey, true);
-		this.menuCleanup.add(toDisposable(() => {
-			document.removeEventListener('mousedown', onPress, true);
-			document.removeEventListener('keydown', onKey, true);
-		}));
+		this.menuCleanup.add(
+			toDisposable(() => {
+				document.removeEventListener('mousedown', onPress, true);
+				document.removeEventListener('keydown', onKey, true);
+			}),
+		);
 	}
 
 	private closeAddMenu(): void {

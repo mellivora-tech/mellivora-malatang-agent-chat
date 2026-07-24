@@ -339,9 +339,7 @@ function buildWorkRenderItemsIndexed(members: readonly { step: ISessionWorkStep;
 	const items = buildWorkRenderItems(members.map(member => member.step));
 	// Remap local indices back to the original step positions.
 	return items.map(item =>
-		item.kind === 'step'
-			? { ...item, index: members[item.index]!.index }
-			: { ...item, steps: item.steps.map(entry => ({ step: entry.step, index: members[entry.index]!.index })) },
+		item.kind === 'step' ? { ...item, index: members[item.index]!.index } : { ...item, steps: item.steps.map(entry => ({ step: entry.step, index: members[entry.index]!.index })) },
 	);
 }
 

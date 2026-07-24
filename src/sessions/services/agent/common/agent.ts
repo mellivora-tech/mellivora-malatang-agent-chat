@@ -38,7 +38,15 @@ export interface IAgentBridge {
 	 *  `permissionMode` picks the gate for mutating tools (default 'ask');
 	 *  `skillIds` are $-attached skills whose bodies ride the system prompt;
 	 *  `anchor` is the session's persisted compaction summary — validated main-side, silently dropped on mismatch. */
-	run(sessionId: string, messages: readonly IAgentMessage[], modelId?: string, projectId?: string, permissionMode?: PermissionMode, skillIds?: readonly string[], anchor?: ICompactionAnchor): Promise<IAgentTerminal>;
+	run(
+		sessionId: string,
+		messages: readonly IAgentMessage[],
+		modelId?: string,
+		projectId?: string,
+		permissionMode?: PermissionMode,
+		skillIds?: readonly string[],
+		anchor?: ICompactionAnchor,
+	): Promise<IAgentTerminal>;
 	stop(sessionId: string): Promise<void>;
 	/** One-shot session title from the first user message — a plain model call, no agent loop.
 	 *  Resolves to undefined when no model is configured or the reply is unusable; rejects on model errors.
