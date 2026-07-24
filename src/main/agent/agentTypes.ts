@@ -341,6 +341,14 @@ export interface IAgentRunConfig {
 	 */
 	readonly disableReplyVerifier?: boolean;
 	/**
+	 * Client the reply-verifier judge call runs on. Defaults to `modelClient` —
+	 * but that's the main run's (possibly thinking-enabled) model, and the judge
+	 * only ever emits one YES/NO line, so paying the main model's full latency
+	 * for it is pure tax. Callers should pass the small-fast non-thinking tier
+	 * here (same one used for spawn_agent/title generation) when one exists.
+	 */
+	readonly verifierModelClient?: IModelClient;
+	/**
 	 * User-configured hooks (design docs/design/hooks §10 M3), already loaded and
 	 * trust-gated by the caller. They register AFTER the built-in hooks (§4 — the
 	 * built-ins are the safety/correctness floor). Only hooks for events with a

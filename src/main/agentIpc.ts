@@ -474,6 +474,11 @@ export function registerAgentIpc(dataRoot: string): void {
 				systemBreakdown,
 				tools,
 				modelClient,
+				// The judge call only ever emits one YES/NO line — route it off the
+				// (possibly thinking-enabled) main model onto the small-fast tier so
+				// verification stops taxing every reply with the main model's full
+				// latency. Falls back to `modelClient` when the provider has none.
+				verifierModelClient: spawnModelClient,
 				permissionGate: createGateForMode(mode, requestApproval),
 				signal: controller.signal,
 				...(userHooks.length > 0 ? { userHooks } : {}),

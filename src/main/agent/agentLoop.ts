@@ -203,7 +203,7 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		stopHooks.register(createActionClaimNudgeHook({ toolsAvailable: config.tools.length > 0, anyToolCall: () => anyToolCallThisRun }));
 	}
 	if (verifierEnabled) {
-		stopHooks.register(createReplyVerifierHook({ client: config.modelClient, signal: () => signal }));
+		stopHooks.register(createReplyVerifierHook({ client: config.verifierModelClient ?? config.modelClient, signal: () => signal }));
 	}
 	if (walkthroughToolAvailable) {
 		stopHooks.register(createWalkthroughNudgeHook({ walkthroughToolAvailable, filesChanged: () => filesChangedThisRun, walkthroughWritten: () => walkthroughWritten }));
