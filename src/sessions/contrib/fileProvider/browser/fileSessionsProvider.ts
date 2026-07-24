@@ -1616,6 +1616,22 @@ export class FileSessionsProvider implements ISessionsProvider {
 				sentTranscript = transcript;
 				return agent.run(sessionId, transcript, modelId, session.projectId, session.permissionMode.get(), collectSkillIds(session.messages.get()), session.compactionAnchor);
 			})
+			.then(terminal => {
+				// Fallback only: `payload.done` above is the normal finalize path — it
+				// rides the same ordered channel as the streamed events, so it always
+				// reflects a fully-drained transcript. This promise resolves with the
+				// identical terminal but can overtake trailing buffered events, so it
+				// jumps the queue by design (main process comment: "can never overtake
+				// a trailing event the way the handler's return value can"). Delay lets
+				// those events land first; finalize() is idempotent, so whichever path
+				// gets there first wins and this becomes a no-op. Exists so a dropped or
+				// mismatched `done` IPC message can't leave the run stuck "in progress"
+				// forever with no other path to recover.
+				if (terminal.reason === 'paused' && terminal.paused) {
+					pendingPause = terminal.paused;
+				}
+				setTimeout(() => finalize(terminal.reason), 300);
+			})
 			.catch(error => {
 				// A partially-streamed reply keeps its text with the error appended —
 				// silently keeping the truncated text used to hide quota failures
