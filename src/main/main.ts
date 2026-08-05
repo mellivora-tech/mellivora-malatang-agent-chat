@@ -68,7 +68,9 @@ async function createWindow(): Promise<void> {
 	});
 
 	if (rendererUrl) {
-		await win.loadURL(new URL('sessions.html', rendererUrl).toString());
+		// Renderer root is src/sessions, so the HTML is served from the
+		// electron-browser subpath in dev (matching the production dist layout).
+		await win.loadURL(new URL('electron-browser/sessions.html', rendererUrl).toString());
 	} else {
 		await win.loadFile(join(distRoot, 'sessions/electron-browser/sessions.html'));
 	}

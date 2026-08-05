@@ -53,7 +53,12 @@ export default defineConfig({
 		},
 	},
 	renderer: {
-		root: resolve(root, 'src/sessions/electron-browser'),
+		// Use src/sessions as the renderer root so that dev-server URL paths
+		// (e.g. /base/... /browser/...) map to the same source layout that
+		// the built bundle resolves. The HTML input stays at
+		// electron-browser/sessions.html, so in dev it is served from
+		// <rendererUrl>/electron-browser/sessions.html.
+		root: resolve(root, 'src/sessions'),
 		base: './',
 		publicDir: resolve(root, 'public'),
 		plugins: [react()],

@@ -520,10 +520,14 @@
 }
 
 .sessions-project-task-time {
+	margin-left: auto;
 	padding-left: var(--vscode-agents-space-8);
 	color: var(--vscode-agents-color-text-muted);
 	font-size: var(--vscode-agents-fontSize-label1);
 	font-variant-numeric: tabular-nums;
+	text-align: right;
+	white-space: nowrap;
+	flex-shrink: 0;
 	opacity: 1;
 }
 
