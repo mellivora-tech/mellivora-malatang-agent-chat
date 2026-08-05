@@ -45,6 +45,66 @@ const READ_CLASS: Readonly<Record<string, 'file' | 'dir' | 'search'>> = {
 	grep: 'search',
 };
 
+/**
+ * Shell commands that only READ. A bash step whose whole command (pipes
+ * included) consists of these folds into read-class rollups (2026-08-05 工具
+ * 合并渲染): the dedup-detour pattern (read_file rejected → `cat` via bash)
+ * is semantically exploration and should fold like one.
+ */
+const READONLY_SHELL_COMMANDS: Readonly<Record<string, 'file' | 'dir' | 'search'>> = {
+	cat: 'file',
+	head: 'file',
+	tail: 'file',
+	sed: 'file',
+	ls: 'dir',
+	grep: 'search',
+	egrep: 'search',
+	fgrep: 'search',
+	find: 'search',
+	wc: 'search',
+	echo: 'search',
+	pwd: 'search',
+	diff: 'search',
+	git: 'search',
+};
+
+/** git subcommands that never mutate. Anything else (push, checkout, clean…) disqualifies the whole command. */
+const READONLY_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set(['status', 'diff', 'log', 'show', 'blame', 'grep', 'ls-files', 'rev-parse', 'branch', 'remote']);
+
+/**
+ * Classify a shell command as read-only exploration — or refuse. Fail-closed:
+ * anything we can't PROVE read-only (`>`/`>>` redirects, `&&`/`;` chains,
+ * command substitution, `tee`, `sed -i`, non-whitelisted commands) returns
+ * undefined and the step stays an unfolded row. Writes must never hide in a
+ * fold. Pure function of the persisted arg, so replay classifies identically.
+ */
+export function classifyShellRead(command: string): 'file' | 'dir' | 'search' | undefined {
+	// Redirects, chains, substitutions: unprovable → out. (Pipes are fine —
+	// each segment is checked on its own below.)
+	if (/[>;`]|&&|\|\||\$\(|\btee\b/.test(command)) {
+		return undefined;
+	}
+	let result: 'file' | 'dir' | 'search' | undefined;
+	for (const segment of command.split('|')) {
+		const tokens = segment.trim().split(/\s+/);
+		const cmd = tokens[0] ?? '';
+		const cls = READONLY_SHELL_COMMANDS[cmd];
+		if (cls === undefined) {
+			return undefined;
+		}
+		if (cmd === 'sed' && tokens.includes('-i')) {
+			return undefined; // sed -i writes in place
+		}
+		if (cmd === 'git' && !READONLY_GIT_SUBCOMMANDS.has(tokens[1] ?? '')) {
+			return undefined;
+		}
+		// The FIRST segment sets the fold class (a `grep … | head` is a search
+		// that happens to be piped, not a file read).
+		result ??= cls;
+	}
+	return result;
+}
+
 /** How one step renders: structured verb+chip when facts exist, legacy label otherwise. */
 export interface IWorkStepPresentation {
 	/** i18n key for the intent verb; undefined → render the legacy `label` as-is. */
@@ -115,37 +175,92 @@ export type WorkRenderItem =
 			readonly files: number;
 			/** Distinct directories listed. */
 			readonly dirs: number;
-			/** Search invocations (glob + grep), occurrences not deduped. */
+			/** Search invocations (glob + grep + search-class shell), occurrences not deduped. */
 			readonly searches: number;
+			/** Edit-sweep rollups: total edit/write invocations (`files` then holds the deduped file count). 0 on read rollups. */
+			readonly edits: number;
 			/** Sum of member durations. */
 			readonly durationMs: number;
 			/** The trailing member is the run's open call — the rollup carries the spinner. */
 			readonly running: boolean;
 	  };
 
+/** update_plan's progress, parsed from its persisted detail ("Plan (5/7 done):\n[x] …\n[~] …"). */
+export interface IPlanProgress {
+	readonly done: number;
+	readonly total: number;
+	/** The step in flight (first `[~]`), else the next pending one (first `[ ]`). */
+	readonly current?: string;
+	/** The full checklist, in order — the expanded row renders these, not the raw text. */
+	readonly items: readonly { readonly state: 'done' | 'doing' | 'pending'; readonly text: string }[];
+}
+
 /**
- * Fold consecutive successful read-class tool steps (Q2's converged industry
- * rule): any non-read tool call — a write, an error, an unknown tool — breaks
- * the run; writes never aggregate; a lone read stays a plain row. Thinking
- * does NOT break a run (see the 2a note below). Counters are derived from an
- * append-only array, so they are monotonic within a run by construction.
+ * Plan rows render as PROGRESS, not a text dump (2026-08-05 思考流改版):
+ * "Plan 5/7 · <current step>" + a bar on the row, a styled checklist on
+ * expand. Parses the update_plan tool's own stable output format
+ * (locale-independent, never localized).
+ */
+export function parsePlanProgress(detail: string | undefined): IPlanProgress | undefined {
+	if (detail === undefined) {
+		return undefined;
+	}
+	const head = /^Plan \((\d+)\/(\d+) done\)/m.exec(detail);
+	if (head === null) {
+		return undefined;
+	}
+	const items: { state: 'done' | 'doing' | 'pending'; text: string }[] = [];
+	for (const match of detail.matchAll(/^\[(x|~| )\] (.+)$/gm)) {
+		items.push({ state: match[1] === 'x' ? 'done' : match[1] === '~' ? 'doing' : 'pending', text: match[2]! });
+	}
+	const doing = items.find(item => item.state === 'doing');
+	const pending = items.find(item => item.state === 'pending');
+	const current = doing?.text ?? pending?.text;
+	return { done: Number(head[1]), total: Number(head[2]), ...(current === undefined ? {} : { current }), items };
+}
+
+/**
+ * The fold a step joins, if any: a read-class bucket (read tools, plus
+ * read-only shell via {@link classifyShellRead}) or the edit sweep. Errors and
+ * unclassifiable calls fold nothing — they break the run and stay visible.
+ */
+function foldClassOf(step: ISessionWorkStep): { readonly kind: 'read' | 'edit'; readonly bucket?: 'file' | 'dir' | 'search' } | undefined {
+	if (step.kind !== 'tool' || stepError(step)) {
+		return undefined;
+	}
+	const tool = stepTool(step);
+	if (tool === 'edit_file' || tool === 'write_file') {
+		return { kind: 'edit' };
+	}
+	if (tool === 'bash') {
+		const arg = stepArg(step);
+		const bucket = arg === undefined ? undefined : classifyShellRead(arg);
+		return bucket === undefined ? undefined : { kind: 'read', bucket };
+	}
+	const bucket = READ_CLASS[tool ?? ''];
+	return bucket === undefined ? undefined : { kind: 'read', bucket };
+}
+
+/**
+ * Fold consecutive successful same-kind tool steps (Q2's converged industry
+ * rule, revised 2026-08-05): read-class steps fold into "Explored …" rollups
+ * (read-only bash included, via {@link classifyShellRead}); consecutive
+ * edit_file/write_file sweeps fold into "Edited …" rollups of their OWN kind —
+ * the revision is that writes aggregate with writes, never with reads, and an
+ * errored or unclassifiable call still breaks the run. A lone member stays a
+ * plain row. Thinking BREAKS a run (2a revised 2026-08-05 v2): thought
+ * content is now first-class prose rendered at its chronological position —
+ * deferring it past a fold would misplace the reasoning after the actions it
+ * motivated. Counters are derived from an append-only array, so they are
+ * monotonic within a run by construction.
  */
 export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRenderItem[] {
 	const items: WorkRenderItem[] = [];
-	let group: { step: ISessionWorkStep; index: number }[] = [];
-	// 2a: thinking never breaks a read run — k3 thinks between every turn and
-	// breaking on it shredded rollups back into an alternating wall. Thinking
-	// rows met inside an open group re-emit right after it closes.
-	let deferredThinking: { step: ISessionWorkStep; index: number }[] = [];
+	let group: { step: ISessionWorkStep; index: number; bucket?: 'file' | 'dir' | 'search' }[] = [];
+	let groupKind: 'read' | 'edit' | undefined;
 
 	const flush = (): void => {
 		if (group.length === 0) {
-			if (deferredThinking.length > 0) {
-				for (const entry of deferredThinking) {
-					items.push({ kind: 'step', step: entry.step, index: entry.index });
-				}
-				deferredThinking = [];
-			}
 			return;
 		}
 		if (group.length === 1) {
@@ -156,51 +271,67 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 			let files = 0;
 			let dirs = 0;
 			let searches = 0;
+			let edits = 0;
 			let durationMs = 0;
 			for (const member of group) {
 				durationMs += member.step.durationMs;
-				const cls = READ_CLASS[stepTool(member.step) ?? ''];
 				const arg = stepArg(member.step);
-				if (cls === 'file') {
+				if (groupKind === 'edit') {
+					edits += 1;
 					if (arg === undefined) {
 						files += 1;
 					} else if (!seenFiles.has(arg)) {
 						seenFiles.add(arg);
 						files += 1;
 					}
-				} else if (cls === 'dir') {
+					continue;
+				}
+				if (member.bucket === 'file') {
+					if (arg === undefined) {
+						files += 1;
+					} else if (!seenFiles.has(arg)) {
+						seenFiles.add(arg);
+						files += 1;
+					}
+				} else if (member.bucket === 'dir') {
 					if (arg === undefined) {
 						dirs += 1;
 					} else if (!seenDirs.has(arg)) {
 						seenDirs.add(arg);
 						dirs += 1;
 					}
-				} else if (cls === 'search') {
+				} else if (member.bucket === 'search') {
 					searches += 1;
 				}
 			}
-			items.push({ kind: 'rollup', steps: group, files, dirs, searches, durationMs, running: group[group.length - 1]!.step.running === true });
+			items.push({
+				kind: 'rollup',
+				steps: group.map(({ step, index }) => ({ step, index })),
+				files,
+				dirs,
+				searches,
+				edits,
+				durationMs,
+				running: group[group.length - 1]!.step.running === true,
+			});
 		}
 		group = [];
-		for (const entry of deferredThinking) {
-			items.push({ kind: 'step', step: entry.step, index: entry.index });
-		}
-		deferredThinking = [];
+		groupKind = undefined;
 	};
 
 	for (let index = 0; index < steps.length; index++) {
 		const step = steps[index]!;
-		const cls = step.kind === 'tool' ? READ_CLASS[stepTool(step) ?? ''] : undefined;
-		if (cls !== undefined && !stepError(step)) {
+		const fold = foldClassOf(step);
+		if (fold !== undefined) {
 			// Parallel children interleave chronologically — a group never spans
 			// agents (or mixes a child with the main loop), so each sweep stays
-			// attributable even when the fold hides the individual rows.
-			if (group.length > 0 && group[group.length - 1]!.step.agent !== step.agent) {
+			// attributable even when the fold hides the individual rows. Reads
+			// and edits never share a group either (Q2: kinds never mix).
+			if (group.length > 0 && (groupKind !== fold.kind || group[group.length - 1]!.step.agent !== step.agent)) {
 				flush();
 			}
-			group.push({ step, index });
-		} else if (step.kind === 'thinking' && group.length > 0) {
-			deferredThinking.push({ step, index });
+			groupKind = fold.kind;
+			group.push(fold.bucket === undefined ? { step, index } : { step, index, bucket: fold.bucket });
 		} else {
 			flush();
 			items.push({ kind: 'step', step, index });

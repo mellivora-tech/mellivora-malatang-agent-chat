@@ -96,6 +96,63 @@ export interface ISessionWorkStep {
 	readonly via?: 'subagent';
 	/** Which child loop (the spawn call's toolUseId) — parallel children's steps stay attributable and never fold across agents. */
 	readonly agent?: string;
+	/**
+	 * Coarse result semantics derived from the tool output at close time
+	 * (2026-08-05 思考流改版): outcome only says ok/error — THIS is what lets a
+	 * row answer "and what came back?" (→ 3 hits / ⊘ unchanged / 4.1 KB)
+	 * without the renderer re-parsing the detail text on every render.
+	 * Persisted like every other fact, so replay renders identically.
+	 */
+	readonly resultMeta?: IWorkStepResultMeta;
+}
+
+/** See {@link ISessionWorkStep.resultMeta}. All fields optional — derive only what the tool's output format supports. */
+export interface IWorkStepResultMeta {
+	/** grep/glob: how many hits (match lines, or paths in filesOnly mode). 0 is a real, renderable signal (low-yield probe). */
+	readonly hits?: number;
+	/** read_file: size of the content returned. */
+	readonly bytes?: number;
+	/** read_file: the dedup guard rejected a re-read ("unchanged since last read") — the row should say so, not pretend a read happened. */
+	readonly unchanged?: boolean;
+}
+
+/**
+ * Derive {@link IWorkStepResultMeta} from a closed tool call's raw output.
+ * Pure and locale-independent (it matches the tools' own stable English output
+ * formats, never localized text). Only called on success — an error IS
+ * information of another kind and needs no meta.
+ */
+export function deriveWorkStepMeta(tool: string, content: string): IWorkStepResultMeta | undefined {
+	switch (tool) {
+		case 'read_file': {
+			if (content.startsWith('File "') && content.includes('unchanged since last read')) {
+				return { unchanged: true };
+			}
+			return { bytes: content.length };
+		}
+		case 'grep': {
+			if (content.startsWith('No matches for')) {
+				return { hits: 0 };
+			}
+			// Match lines are "path:line: text"; context lines use "-line-", the
+			// truncation note and "--" separators match neither.
+			const hits = content.split('\n').filter(line => /^.+?:\d+: /.test(line)).length;
+			if (hits > 0) {
+				return { hits };
+			}
+			// filesOnly mode: one path per line.
+			const paths = content.split('\n').filter(line => line.trim() !== '').length;
+			return { hits: paths };
+		}
+		case 'glob': {
+			if (content.startsWith('No files match')) {
+				return { hits: 0 };
+			}
+			return { hits: content.split('\n').filter(line => line.trim() !== '').length };
+		}
+		default:
+			return undefined;
+	}
 }
 
 /**

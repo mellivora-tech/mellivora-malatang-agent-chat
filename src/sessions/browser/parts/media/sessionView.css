@@ -607,12 +607,184 @@
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
+/* 思考正文 (2026-08-05 v2 用户裁定): thinking renders as dimmed markdown
+   prose inside the work block — no row, no tiers, no threshold. Same
+   typography as the answer, one voice quieter. */
+.conversation-work-think {
+	margin: var(--vscode-agents-space-8) 0 var(--vscode-agents-space-10);
+	max-width: var(--vscode-agents-size-conversation-width);
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: 1.7;
+}
+
+.conversation-work-think > :first-child {
+	margin-top: 0;
+}
+
+.conversation-work-think > :last-child {
+	margin-bottom: 0;
+}
+
 .conversation-work-steps {
 	display: flex;
 	flex-direction: column;
 	gap: var(--vscode-agents-space-6);
 	margin-top: var(--vscode-agents-space-8);
-	padding-left: var(--vscode-agents-space-2);
+	/* The rail (2026-08-05 改版): one quiet vertical thread the key-row dots
+	   hang on — the eye can skim the run's spine without reading a word. */
+	margin-left: var(--vscode-agents-space-4);
+	border-left: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 12%, transparent);
+	padding-left: var(--vscode-agents-space-14);
+}
+
+/* Key-row dots on the rail: failure = filled danger; group headers
+   (rollup / agent) = small filled gray. */
+.conversation-work-rollup > .conversation-work-rollup-row,
+.conversation-work-agent > .conversation-work-agent-row,
+.conversation-work-step.error > .conversation-work-step-row {
+	position: relative;
+}
+
+.conversation-work-rollup > .conversation-work-rollup-row::before,
+.conversation-work-agent > .conversation-work-agent-row::before,
+.conversation-work-step.error > .conversation-work-step-row::before {
+	content: '';
+	position: absolute;
+	/* Rail x = row-left − padding-left(14) − border(1); center a 7px dot on it. */
+	left: calc(0px - var(--vscode-agents-space-14) - var(--vscode-agents-space-4));
+	top: 50%;
+	transform: translateY(-50%);
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	box-sizing: border-box;
+}
+
+.conversation-work-rollup > .conversation-work-rollup-row::before,
+.conversation-work-agent > .conversation-work-agent-row::before {
+	background: var(--vscode-agents-color-text-subtle);
+}
+
+.conversation-work-step.error > .conversation-work-step-row::before {
+	background: var(--vscode-agents-color-danger);
+}
+
+/* Result-meta tags (结果态上行): quiet pills — 0-hit probes wear warning. */
+.conversation-work-step-tag {
+	flex: 0 0 auto;
+	padding: 0 var(--vscode-agents-space-6);
+	border-radius: 99px;
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
+	color: var(--vscode-agents-color-text-secondary);
+	font-size: var(--vscode-agents-fontSize-label2);
+	font-variant-numeric: tabular-nums;
+}
+
+.conversation-work-step-tag.zero {
+	background: color-mix(in srgb, var(--vscode-agents-color-warning) 12%, transparent);
+	color: var(--vscode-agents-color-warning);
+}
+
+.conversation-work-step-bytes {
+	flex: 0 0 auto;
+	color: var(--vscode-agents-color-text-subtle);
+	font-family: var(--vscode-agents-font-mono);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+/* Plan row as progress: count + mini bar + current step, not a text dump. */
+.conversation-work-plan {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-6);
+	margin-left: var(--vscode-agents-space-6);
+	min-width: 0;
+}
+
+.conversation-work-plan-count {
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	font-variant-numeric: tabular-nums;
+}
+
+.conversation-work-plan-bar {
+	width: 64px;
+	height: 3px;
+	border-radius: 99px;
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+	overflow: hidden;
+}
+
+.conversation-work-plan-bar i {
+	display: block;
+	height: 100%;
+	border-radius: 99px;
+	background: var(--vscode-agents-color-accent);
+	transition: width var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
+}
+
+.conversation-work-plan-current {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--vscode-agents-color-text-subtle);
+	font-size: var(--vscode-agents-fontSize-label2);
+}
+
+/* The expanded plan checklist — a quiet card, not a mono dump. */
+.conversation-work-plan-detail {
+	margin: 0 0 var(--vscode-agents-space-4) calc(var(--vscode-agents-space-24) + var(--vscode-agents-space-6));
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-12);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
+	border-radius: var(--vscode-agents-radius-control);
+	background: var(--vscode-agents-color-panel-background);
+	font-size: var(--vscode-agents-fontSize-label1);
+	line-height: 1.9;
+}
+
+.conversation-work-plan-item {
+	display: flex;
+	align-items: baseline;
+	gap: var(--vscode-agents-space-8);
+	color: var(--vscode-agents-color-text-secondary);
+}
+
+.conversation-work-plan-box {
+	flex: 0 0 auto;
+	width: 13px;
+	height: 13px;
+	align-self: center;
+	border: 1.5px solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 25%, transparent);
+	border-radius: var(--vscode-agents-space-4);
+	box-sizing: border-box;
+	text-align: center;
+	line-height: 11px;
+	font-size: 9px;
+	color: var(--vscode-agents-color-accent-foreground);
+}
+
+.conversation-work-plan-item.done {
+	color: var(--vscode-agents-color-text-subtle);
+}
+
+.conversation-work-plan-item.done .conversation-work-plan-text {
+	text-decoration: line-through;
+	text-decoration-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 30%, transparent);
+}
+
+.conversation-work-plan-item.done .conversation-work-plan-box {
+	background: var(--vscode-agents-color-success);
+	border-color: var(--vscode-agents-color-success);
+}
+
+.conversation-work-plan-item.doing {
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-work-plan-item.doing .conversation-work-plan-box {
+	border-color: var(--vscode-agents-color-accent);
 }
 
 /* `hidden` loses to the author display above — restore it explicitly. */
@@ -832,19 +1004,18 @@ button.conversation-work-step-row:hover {
 	font-variant-numeric: tabular-nums;
 }
 
-/* 思考直播: the running thinking stretch streams its tail in a clamped, top-faded window. */
+/* 思考直播: the running thinking stretch IS the same dimmed prose, clamped
+   to a top-faded tail window while it streams. */
 .conversation-work-thinking-stream {
-	margin: var(--vscode-agents-space-2) 0 var(--vscode-agents-space-4) calc(var(--vscode-agents-space-20) + var(--vscode-agents-space-6));
-	padding: var(--vscode-agents-space-4) var(--vscode-agents-space-8);
-	max-height: calc(3 * 1.6em);
+	margin: var(--vscode-agents-space-8) 0 var(--vscode-agents-space-10);
+	max-height: calc(3 * 1.7em);
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 	justify-content: flex-end;
-	color: var(--vscode-agents-color-text-subtle);
+	color: var(--vscode-agents-color-text-muted);
 	font-size: var(--vscode-agents-fontSize-label1);
-	font-style: italic;
-	line-height: 1.6;
+	line-height: 1.7;
 	white-space: pre-wrap;
 	word-break: break-word;
 	-webkit-mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);

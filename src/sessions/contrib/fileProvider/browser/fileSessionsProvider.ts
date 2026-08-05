@@ -31,7 +31,9 @@ import {
 	SUBAGENT_END_ARG_PREFIX,
 	SessionInteractivity,
 	SessionStatus,
+	deriveWorkStepMeta,
 	estimateSessionTokens,
+	type IWorkStepResultMeta,
 } from '../../../services/sessions/common/session.js';
 import { materializePlan, nextPlanVersion, parsePlanInput, planToMarkdown, type IProposePlanInput } from '../../../services/sessions/common/planArtifact.js';
 import { materializeUi, parseUiInput, uiToMarkdown, type IRenderUiInput } from '../../../services/sessions/common/uiArtifact.js';
@@ -904,7 +906,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 			kind: ISessionWorkStep['kind'],
 			label: string,
 			detail?: string,
-			facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent'; agent?: string },
+			facts?: { tool?: string; arg?: string; outcome?: 'ok' | 'error'; via?: 'subagent'; agent?: string; meta?: IWorkStepResultMeta },
 			extra?: { startedAt?: number; durationMs?: number; browse?: ISessionDataBrowse },
 		): void => {
 			// Tool steps carry their own clock (parallel calls overlap); a batch
@@ -934,6 +936,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(facts?.outcome === undefined ? {} : { outcome: facts.outcome }),
 					...(facts?.via === undefined ? {} : { via: facts.via }),
 					...(facts?.agent === undefined ? {} : { agent: facts.agent }),
+					...(facts?.meta === undefined ? {} : { resultMeta: facts.meta }),
 				});
 			}
 			stepStart = Date.now();
@@ -1392,6 +1395,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 							content = content.replace(RENDERED_TABLE_MARKER, '');
 						}
 					}
+					// 结果态上行 (2026-08-05): coarse result semantics ride the step
+					// as a persisted fact — the row answers "and what came back?"
+					// without anyone re-parsing the detail text. An error needs no
+					// meta: it IS the information.
+					const meta = event.isError ? undefined : deriveWorkStepMeta(call.name, content);
 					closeStep(
 						'tool',
 						call.label,
@@ -1400,6 +1408,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 							tool: call.name,
 							...(call.arg === undefined ? {} : { arg: call.arg }),
 							outcome: event.isError ? 'error' : 'ok',
+							...(meta === undefined ? {} : { meta }),
 							// The spawn's own result row belongs to its child's group
 							// (agentId == the spawn's toolUseId) — it carries the real
 							// per-child duration the section header displays.

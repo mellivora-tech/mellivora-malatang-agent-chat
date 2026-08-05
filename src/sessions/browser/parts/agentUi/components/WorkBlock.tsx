@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { localize } from '../../../../common/i18n/i18n.js';
 import type { ISessionDataBrowse, ISessionMessage, ISessionWorkStep } from '../../../../services/sessions/common/session.js';
-import { buildWorkSections, presentStep, type IWorkAgentGroup, type WorkRenderItem } from './workRender.js';
+import { buildWorkSections, parsePlanProgress, presentStep, stepTool, type IPlanProgress, type IWorkAgentGroup, type WorkRenderItem } from './workRender.js';
+import { Markdown } from './Markdown.js';
 
 export interface IWorkBlockProps {
 	readonly message: ISessionMessage;
@@ -21,11 +22,13 @@ export interface IWorkBlockProps {
  * expand/collapse always wins over the automatic behavior (expandOverride).
  *
  * Content renders through buildWorkSections: parallel children de-interleave
- * into per-agent sub-blocks, main-loop read sweeps fold into rollups — all
- * pure functions of persisted step facts, so replay matches the live run.
- * Assistant text is never routed through here — it stays inline in the
- * answer bubble regardless of what tool calls surround it (no "was this
- * narration or the real answer" guess at the text level).
+ * into per-agent sub-blocks, main-loop read/edit sweeps fold into rollups —
+ * all pure functions of persisted step facts, so replay matches the live run.
+ * Thinking is not a row at all (2026-08-05 v2 用户裁定): its content renders
+ * as dimmed markdown prose at its chronological position between the tool
+ * rows — no tiers, no threshold, no "Thought for Xs" chrome. Assistant text
+ * is never routed through here — it stays inline in the answer bubble
+ * regardless of what tool calls surround it.
  */
 export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 	const { message, onOpenDataBrowser } = props;
@@ -90,6 +93,8 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 								<AgentGroupRow key={`${message.id}:a${item.firstIndex}`} group={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
 							) : item.kind === 'rollup' ? (
 								<RollupRow key={`${message.id}:r${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
+							) : item.step.kind === 'thinking' ? (
+								<ThoughtProse key={`${message.id}:${item.index}`} step={item.step} />
 							) : (
 								<WorkStepRow key={`${message.id}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
 							),
@@ -99,6 +104,24 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 			</div>
 		</section>
 	);
+}
+
+/**
+ * 思考正文 (2026-08-05 v2): a thinking stretch renders its content as dimmed
+ * markdown prose at its chronological position — no row, no duration chip,
+ * no expand interaction; the work block's own collapse is the only fold. A
+ * live stretch streams its clamped tail (same prose shape, faded window). A
+ * stretch without detail leaves no trace at all.
+ */
+function ThoughtProse(props: { readonly step: ISessionWorkStep }): JSX.Element | null {
+	const { step } = props;
+	if (step.detail === undefined) {
+		return null;
+	}
+	if (step.running === true) {
+		return <div className="conversation-work-thinking-stream">{step.detail}</div>;
+	}
+	return <Markdown className="conversation-work-think" text={step.detail} />;
 }
 
 interface IAgentGroupRowProps {
@@ -136,6 +159,8 @@ function AgentGroupRow(props: IAgentGroupRowProps): JSX.Element {
 					{group.items.map(item =>
 						item.kind === 'rollup' ? (
 							<RollupRow key={`${messageId}:${group.agent}:r${item.steps[0]!.index}`} item={item} messageId={`${messageId}:${group.agent}`} onOpenDataBrowser={onOpenDataBrowser} />
+						) : item.step.kind === 'thinking' ? (
+							<ThoughtProse key={`${messageId}:${group.agent}:${item.index}`} step={item.step} />
 						) : (
 							<WorkStepRow key={`${messageId}:${group.agent}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
 						),
@@ -153,33 +178,45 @@ interface IRollupRowProps {
 	readonly onOpenDataBrowser?: ((browse: ISessionDataBrowse) => void) | undefined;
 }
 
-/** "🔍 探索了 8 个文件、2 个目录 · 3 次检索 · 12s ⌄" — expands to the folded read steps. */
+/** "🔍 探索了 8 个文件、2 个目录 · 3 次检索 · 12s ⌄" / "✎ 编辑了 10 个文件 · 28 次编辑 ⌄" — the sweep's story IS its members, so the fold starts open (2026-08-05 改版); a manual toggle still wins. */
 function RollupRow(props: IRollupRowProps): JSX.Element {
 	const { item, messageId, onOpenDataBrowser } = props;
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState(true);
 
-	const parts: string[] = [];
-	if (item.files > 0) {
-		parts.push(localize('conv.rollup.files', String(item.files)));
+	// Edit sweeps fold under their own kind (writes with writes, never mixed
+	// into reads): "编辑了 10 个文件 · 28 次编辑", pencil icon.
+	const editRollup = item.edits > 0;
+	let label: string;
+	if (editRollup) {
+		label = localize('conv.rollup.edited', String(item.files));
+		if (item.edits > item.files) {
+			label += ` · ${localize('conv.rollup.editCount', String(item.edits))}`;
+		}
+	} else {
+		const parts: string[] = [];
+		if (item.files > 0) {
+			parts.push(localize('conv.rollup.files', String(item.files)));
+		}
+		if (item.dirs > 0) {
+			parts.push(localize('conv.rollup.dirs', String(item.dirs)));
+		}
+		const summary = localize('conv.rollup.explored', parts.join(localize('conv.rollup.sep')));
+		const searches = item.searches > 0 ? localize('conv.rollup.searches', String(item.searches)) : undefined;
+		label = parts.length > 0 ? summary : (searches ?? '');
+		if (parts.length > 0 && searches) {
+			label += ` · ${searches}`;
+		}
 	}
-	if (item.dirs > 0) {
-		parts.push(localize('conv.rollup.dirs', String(item.dirs)));
-	}
-	const summary = localize('conv.rollup.explored', parts.join(localize('conv.rollup.sep')));
-	const searches = item.searches > 0 ? localize('conv.rollup.searches', String(item.searches)) : undefined;
 
 	return (
 		<div className="conversation-work-rollup">
 			<button type="button" className="conversation-work-step-row conversation-work-rollup-row" aria-expanded={open} onClick={() => setOpen(!open)}>
-				<span className="codicon codicon-search" aria-hidden="true" />
-				<span className="conversation-work-step-label">
-					{parts.length > 0 ? summary : (searches ?? '')}
-					{parts.length > 0 && searches ? ` · ${searches}` : ''}
-				</span>
+				<span className={`codicon ${editRollup ? 'codicon-edit' : 'codicon-search'}`} aria-hidden="true" />
+				<span className="conversation-work-step-label">{label}</span>
 				{item.running ? (
 					<span className="codicon codicon-loading codicon-modifier-spin conversation-work-step-duration" aria-label={localize('conv.running')} />
 				) : (
-					<span className="conversation-work-step-duration">{formatDurationMs(item.durationMs)}</span>
+					item.durationMs >= MIN_SHOWN_DURATION_MS && <span className="conversation-work-step-duration">{formatDurationMs(item.durationMs)}</span>
 				)}
 				<span className={`codicon ${open ? 'codicon-chevron-down' : 'codicon-chevron-right'} conversation-work-step-chevron`} aria-hidden="true" />
 			</button>
@@ -208,20 +245,6 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 	const [open, setOpen] = useState(() => presentation.error && step.detail !== undefined);
 	const browse = step.browse;
 
-	// 思考直播: the CURRENT thinking stretch streams its tail in a clamped
-	// window; closeStep collapses it into the "思考了 Ns" summary row below.
-	if (step.kind === 'thinking' && step.running === true) {
-		return (
-			<div className="conversation-work-step thinking live">
-				<div className="conversation-work-step-row">
-					<span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />
-					<span className="conversation-work-step-label">{localize('conv.thinking')}</span>
-				</div>
-				{step.detail !== undefined && <div className="conversation-work-thinking-stream">{step.detail}</div>}
-			</div>
-		);
-	}
-
 	// 子代理直播行: the running spawn synthetic's LABEL carries the child's
 	// current activity (⑃ grep … / 撰写结论中 · 3.4k 字) — the facts path would
 	// flatten it to "Spawn <task>" and swallow the whole liveness signal
@@ -237,7 +260,15 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 		);
 	}
 
-	const icon = step.kind === 'thinking' ? 'codicon-history' : presentation.error ? 'codicon-error' : 'codicon-tools';
+	const icon = presentation.error ? 'codicon-error' : 'codicon-tools';
+
+	// 结果态上行: the persisted coarse semantics answer "and what came back?"
+	// on the row itself. Zero hits is a real signal (low-yield probe) and
+	// wears the warning tint.
+	const meta = step.resultMeta;
+	// Plan rows render as progress, not a text dump — the full checklist stays
+	// one click away in the detail.
+	const plan = step.kind === 'tool' && stepTool(step) === 'update_plan' ? parsePlanProgress(step.detail) : undefined;
 
 	const rowContent = (
 		<>
@@ -245,17 +276,31 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 			{step.kind === 'tool' && presentation.verbKey !== undefined ? (
 				<span className="conversation-work-step-label">
 					<span className="conversation-work-step-verb">{`${presentation.sub ? '⑃ ' : ''}${localize(presentation.verbKey)}`}</span>
-					{presentation.chip !== undefined && <span className="conversation-work-step-chip">{presentation.chip}</span>}
+					{/* A parsed plan row skips the chip — it would just echo the current step. */}
+					{presentation.chip !== undefined && plan === undefined && <span className="conversation-work-step-chip">{presentation.chip}</span>}
+					{plan !== undefined && (
+						<span className="conversation-work-plan">
+							<span className="conversation-work-plan-count">{`${plan.done}/${plan.total}`}</span>
+							<span className="conversation-work-plan-bar" aria-hidden="true">
+								<i style={{ width: `${plan.total === 0 ? 0 : Math.round((plan.done / plan.total) * 100)}%` }} />
+							</span>
+							{plan.current !== undefined && <span className="conversation-work-plan-current">{plan.current}</span>}
+						</span>
+					)}
 				</span>
 			) : (
-				<span className="conversation-work-step-label">{step.kind === 'thinking' ? localize('conv.thoughtFor', thinkingDurationText(step.durationMs)) : step.label}</span>
+				<span className="conversation-work-step-label">{step.label}</span>
 			)}
-			{step.kind !== 'thinking' &&
-				(step.running ? (
-					<span className="codicon codicon-loading codicon-modifier-spin conversation-work-step-duration" aria-label={localize('conv.running')} />
-				) : (
-					<span className="conversation-work-step-duration">{formatDurationMs(step.durationMs)}</span>
-				))}
+			{meta?.unchanged === true && <span className="conversation-work-step-tag">{localize('conv.step.unchanged')}</span>}
+			{meta?.hits !== undefined && <span className={`conversation-work-step-tag${meta.hits === 0 ? ' zero' : ''}`}>{localize('conv.step.hits', String(meta.hits))}</span>}
+			{meta?.bytes !== undefined && <span className="conversation-work-step-bytes">{formatBytes(meta.bytes)}</span>}
+			{step.running ? (
+				<span className="codicon codicon-loading codicon-modifier-spin conversation-work-step-duration" aria-label={localize('conv.running')} />
+			) : (
+				// 伪精度消除: sub-3s durations are all "instant" — the right rail
+				// only earns its column when the number says something.
+				step.durationMs >= MIN_SHOWN_DURATION_MS && <span className="conversation-work-step-duration">{formatDurationMs(step.durationMs)}</span>
+			)}
 			{/* "在数据浏览器打开" — the query jumps to the side pane's data tab where paging/sorting costs zero tokens. */}
 			{browse && onOpenDataBrowser && (
 				<button
@@ -285,7 +330,24 @@ function WorkStepRow(props: IWorkStepRowProps): JSX.Element {
 			) : (
 				<div className="conversation-work-step-row">{rowContent}</div>
 			)}
-			{step.detail && open && <pre className="conversation-work-step-detail">{step.detail}</pre>}
+			{step.detail && open && (plan !== undefined ? <PlanChecklist plan={plan} /> : <pre className="conversation-work-step-detail">{step.detail}</pre>)}
+		</div>
+	);
+}
+
+/** The expanded plan row: a real checklist — done struck through, the in-flight step bold — not the raw [x]/[~] text dump. */
+function PlanChecklist(props: { readonly plan: IPlanProgress }): JSX.Element {
+	const { plan } = props;
+	return (
+		<div className="conversation-work-plan-detail">
+			{plan.items.map((item, index) => (
+				<div key={index} className={`conversation-work-plan-item ${item.state}`}>
+					<span className="conversation-work-plan-box" aria-hidden="true">
+						{item.state === 'done' ? '✓' : ''}
+					</span>
+					<span className="conversation-work-plan-text">{item.text}</span>
+				</div>
+			))}
 		</div>
 	);
 }
@@ -297,6 +359,9 @@ function formatDurationMs(ms: number): string {
 	return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
-function thinkingDurationText(ms: number): string {
-	return ms < 10_000 ? 'a few seconds' : formatDurationMs(ms);
+/** Durations below this all read as "instant" — showing "1s" on every row is伪精度 noise that spends the right rail's attention for nothing. */
+const MIN_SHOWN_DURATION_MS = 3000;
+
+function formatBytes(bytes: number): string {
+	return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }

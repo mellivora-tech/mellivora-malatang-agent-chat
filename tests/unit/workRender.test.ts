@@ -6,7 +6,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildWorkRenderItems, buildWorkSections, presentStep, stepError, stepTool, TOOL_VERB_KEYS } from '../../src/sessions/browser/parts/agentUi/components/workRender.js';
+import {
+	buildWorkRenderItems,
+	buildWorkSections,
+	classifyShellRead,
+	parsePlanProgress,
+	presentStep,
+	stepError,
+	stepTool,
+	TOOL_VERB_KEYS,
+} from '../../src/sessions/browser/parts/agentUi/components/workRender.js';
 import type { ISessionWorkStep } from '../../src/sessions/services/sessions/common/session.js';
 
 function tool(name: string, arg: string | undefined, extra: Partial<ISessionWorkStep> = {}): ISessionWorkStep {
@@ -22,6 +31,10 @@ function tool(name: string, arg: string | undefined, extra: Partial<ISessionWork
 }
 
 const thinking: ISessionWorkStep = { kind: 'thinking', label: 'Thought', durationMs: 2000 };
+
+function think(durationMs: number, extra: Partial<ISessionWorkStep> = {}): ISessionWorkStep {
+	return { kind: 'thinking', label: 'Thought', durationMs, ...extra } as ISessionWorkStep;
+}
 
 test('consecutive reads fold into one rollup with class-bucketed counts', () => {
 	const items = buildWorkRenderItems([tool('read_file', 'src/a.ts'), tool('read_file', 'src/b.ts'), tool('list_dir', 'src/'), tool('grep', 'deduct'), tool('glob', '**/*.ts')]);
@@ -55,13 +68,14 @@ test('a lone read stays a plain step — no single-member rollup', () => {
 	);
 });
 
-test('writes break a read run; thinking does NOT (2a) — it re-emits after the fold', () => {
+test('writes break a read run; thinking also breaks it (2a revised v2) — thought prose keeps its chronological position', () => {
 	const items = buildWorkRenderItems([tool('read_file', 'a'), tool('read_file', 'b'), thinking, tool('read_file', 'c'), tool('edit_file', 'a'), tool('read_file', 'd')]);
-	// a+b+c fold as ONE rollup despite the thinking between b and c; the
-	// thinking row lands right after the fold; the edit still breaks.
+	// a+b fold, the thought renders between the two sweeps (its reasoning
+	// motivated c's read — deferring it past the fold would misplace it),
+	// c stays lone, the edit breaks, d stays lone.
 	assert.deepEqual(
 		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : ((item as { step: ISessionWorkStep }).step?.kind ?? item.kind))),
-		['rollup:3', 'thinking', 'tool', 'tool'],
+		['rollup:2', 'thinking', 'tool', 'tool', 'tool'],
 	);
 });
 
@@ -288,4 +302,147 @@ test('a single agent group keeps its task label; a running spawn synthetic echoi
 	] as never[]);
 	const liveGroup = live[0]!.items.find(item => item.kind === 'agentGroup') as { items: readonly { kind: string }[] };
 	assert.equal(liveGroup.items.length, 1, 'live activity rows stay');
+});
+
+// ── 思考正文 v2 (2026-08-05): thinking passes through as plain step items ──
+// (ThoughtProse renders them as prose; there is no batching, no threshold)
+
+test('thinking steps pass through in chronological order, each its own item', () => {
+	const items = buildWorkRenderItems([think(1500, { detail: 'a' }), think(2500, { detail: 'b' }), think(27_000, { detail: 'c' })]);
+	assert.deepEqual(
+		items.map(item => item.kind),
+		['step', 'step', 'step'],
+		'no batching, no key/minor split — every thought is a first-class prose item',
+	);
+	assert.ok(items.every(item => item.kind === 'step' && item.step.kind === 'thinking'));
+});
+
+test('a thought between sweep members splits the sweep at its position', () => {
+	const items = buildWorkRenderItems([tool('read_file', 'a'), think(2000, { detail: 'now the tests' }), tool('read_file', 'b')]);
+	assert.deepEqual(
+		items.map(item => (item.kind === 'rollup' ? 'rollup' : item.step.kind)),
+		['tool', 'thinking', 'tool'],
+		'lone reads stay steps and the thought sits between them',
+	);
+});
+
+test('agent-tagged thoughts render in the main stretch (current design)', () => {
+	// buildWorkSections attributes only TOOL steps to child buckets — thinking
+	// stays on the main timeline even when the provider tags it with an agent.
+	const sections = buildWorkSections([
+		{ kind: 'tool', label: '子代理 ⑃ t', durationMs: 10, tool: 'spawn_agent', arg: 't', agent: 'x' },
+		{ kind: 'thinking', label: 'Thought', durationMs: 1200, agent: 'x' } as ISessionWorkStep,
+	]);
+	assert.deepEqual(
+		sections[0]!.items.map(item => item.kind),
+		['agentGroup', 'step'],
+	);
+});
+
+// ── Plan rows as progress (2026-08-05) ──
+
+test('parsePlanProgress reads done/total, the in-flight step, and the full checklist', () => {
+	const detail = 'Plan (2/5 done):\n[x] 重读相关文件\n[x] 第1层: AGENTS.md\n[~] 第2层: grep 描述强化\n[ ] 第3层: 探测预算 hook\n[ ] 验证';
+	assert.deepEqual(parsePlanProgress(detail), {
+		done: 2,
+		total: 5,
+		current: '第2层: grep 描述强化',
+		items: [
+			{ state: 'done', text: '重读相关文件' },
+			{ state: 'done', text: '第1层: AGENTS.md' },
+			{ state: 'doing', text: '第2层: grep 描述强化' },
+			{ state: 'pending', text: '第3层: 探测预算 hook' },
+			{ state: 'pending', text: '验证' },
+		],
+	});
+});
+
+test('parsePlanProgress falls back to the next pending step when nothing is in flight', () => {
+	const detail = 'Plan (0/3 done):\n[ ] 第一步\n[ ] 第二步\n[ ] 第三步';
+	const parsed = parsePlanProgress(detail);
+	assert.equal(parsed?.done, 0);
+	assert.equal(parsed?.total, 3);
+	assert.equal(parsed?.current, '第一步');
+	assert.equal(parsed?.items.length, 3);
+});
+
+test('parsePlanProgress: a fully done plan has no current; non-plan text yields undefined', () => {
+	const full = parsePlanProgress('Plan (2/2 done):\n[x] a\n[x] b');
+	assert.equal(full?.done, 2);
+	assert.equal(full?.total, 2);
+	assert.equal(full?.current, undefined);
+	assert.deepEqual(
+		full?.items.map(item => item.state),
+		['done', 'done'],
+	);
+	assert.equal(parsePlanProgress('some random tool output'), undefined);
+	assert.equal(parsePlanProgress(undefined), undefined);
+});
+
+// ── 工具合并渲染 (2026-08-05): read-only shell folds, edit sweeps fold ──
+
+test('classifyShellRead: plain read commands classify by first segment', () => {
+	assert.equal(classifyShellRead('cat src/a.ts'), 'file');
+	assert.equal(classifyShellRead('sed -n 1,60p src/a.ts'), 'file');
+	assert.equal(classifyShellRead('ls -la src/'), 'dir');
+	assert.equal(classifyShellRead('grep -rn "x" src/ | head -20'), 'search');
+	assert.equal(classifyShellRead('git log --oneline -5'), 'search');
+});
+
+test('classifyShellRead fails closed: redirects, chains, substitutions, writes all refuse', () => {
+	assert.equal(classifyShellRead('cat a > b'), undefined);
+	assert.equal(classifyShellRead('cat a >> b'), undefined);
+	assert.equal(classifyShellRead('cat a && ls'), undefined);
+	assert.equal(classifyShellRead('echo $(rm x)'), undefined);
+	assert.equal(classifyShellRead('sed -i s/a/b/ f'), undefined);
+	assert.equal(classifyShellRead('git push origin master'), undefined);
+	assert.equal(classifyShellRead('npm run typecheck 2>&1 | tail -5'), undefined);
+	assert.equal(classifyShellRead('cat a | tee b'), undefined);
+});
+
+test('read-only bash folds into the same exploration rollup as read tools', () => {
+	const items = buildWorkRenderItems([tool('bash', 'cat src/a.ts'), tool('bash', 'cat src/b.ts'), tool('glob', '**/*.test.ts')]);
+	assert.equal(items.length, 1);
+	const rollup = items[0]!;
+	assert.equal(rollup.kind, 'rollup');
+	if (rollup.kind === 'rollup') {
+		assert.equal(rollup.files, 2);
+		assert.equal(rollup.searches, 1);
+		assert.equal(rollup.edits, 0);
+	}
+});
+
+test('an unclassifiable bash call breaks the read run and stays a visible row', () => {
+	const items = buildWorkRenderItems([tool('bash', 'cat src/a.ts'), tool('bash', 'npm test'), tool('bash', 'cat src/b.ts')]);
+	assert.deepEqual(
+		items.map(item => item.kind),
+		['step', 'step', 'step'],
+	);
+});
+
+test('consecutive edits fold into their OWN kind of rollup with deduped files', () => {
+	const items = buildWorkRenderItems([tool('edit_file', 'src/a.ts'), tool('edit_file', 'src/a.ts'), tool('edit_file', 'src/b.ts')]);
+	assert.equal(items.length, 1);
+	const rollup = items[0]!;
+	assert.equal(rollup.kind, 'rollup');
+	if (rollup.kind === 'rollup') {
+		assert.equal(rollup.edits, 3);
+		assert.equal(rollup.files, 2);
+	}
+});
+
+test('reads and writes never mix: a read breaks the edit sweep and vice versa', () => {
+	const items = buildWorkRenderItems([tool('edit_file', 'a'), tool('edit_file', 'b'), tool('read_file', 'c'), tool('edit_file', 'd')]);
+	assert.deepEqual(
+		items.map(item => (item.kind === 'rollup' ? `rollup:${item.edits > 0 ? 'edit' : 'read'}` : item.kind)),
+		['rollup:edit', 'step', 'step'],
+	);
+});
+
+test('an errored edit breaks the sweep and stays a visible row', () => {
+	const items = buildWorkRenderItems([tool('edit_file', 'a'), tool('edit_file', 'b', { outcome: 'error' }), tool('edit_file', 'c')]);
+	assert.deepEqual(
+		items.map(item => item.kind),
+		['step', 'step', 'step'],
+	);
 });

@@ -138,7 +138,7 @@ test('paths that escape the workspace are refused', async () => {
 test('mutating tools appear only with includeMutations, marked non-read-only', () => {
 	const cwd = tmpdir();
 	const readOnly = createWorkspaceTools([cwd]).map(tool => tool.name);
-	assert.deepEqual(readOnly, ['update_plan', 'propose_plan', 'write_walkthrough', 'render_ui', 'read_file', 'list_dir', 'glob', 'grep']);
+	assert.deepEqual(readOnly, ['update_plan', 'propose_plan', 'write_walkthrough', 'render_ui', 'read_file', 'list_dir', 'glob', 'grep', 'remember_fact']);
 
 	const all = byName(createWorkspaceTools([cwd], { includeMutations: true }));
 	for (const name of ['write_file', 'edit_file', 'bash']) {
