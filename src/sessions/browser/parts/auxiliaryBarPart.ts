@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../common/i18n/i18n.js';
+import { reportFailure } from '../../common/diagnostics.js';
 import { LayoutPriority } from '../../base/browser/grid.js';
 import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import { ChangesView } from '../../contrib/changes/browser/changesView.js';
@@ -160,7 +161,10 @@ export class AuxiliaryBarPart extends Part {
 					request.set(undefined);
 					this.openTab('data');
 					const tab = this.openTabs.find(candidate => candidate.kind === 'data');
-					void tab?.dataView?.applyBrowseRequest(browse);
+					const dataView = tab?.dataView;
+					if (dataView) {
+						void dataView.applyBrowseRequest(browse).catch(error => reportFailure('auxiliaryBar.dataBrowse.apply', error));
+					}
 				}),
 			);
 		}

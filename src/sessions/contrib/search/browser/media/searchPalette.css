@@ -80,7 +80,8 @@
 	font-size: var(--vscode-agents-size-icon);
 }
 
-.search-palette-tab:hover {
+.search-palette-tab:hover,
+.search-palette-tab:focus-visible {
 	background: var(--vscode-agents-color-control-hoverBackground);
 	color: var(--vscode-agents-color-text-primary);
 }

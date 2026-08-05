@@ -13,7 +13,7 @@
 	max-height: 320px;
 	overflow-y: auto;
 	padding: var(--vscode-agents-space-4);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	box-shadow: var(--vscode-agents-elevation-menu);
@@ -87,7 +87,7 @@
 	align-items: center;
 	gap: var(--vscode-agents-space-3);
 	padding: var(--vscode-agents-space-2) var(--vscode-agents-space-6);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 75%, transparent);
 	font-size: 0.85em;
@@ -110,7 +110,7 @@
 	position: relative;
 	width: 56px;
 	height: 56px;
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	overflow: hidden;
 }
@@ -139,6 +139,11 @@
 	cursor: pointer;
 }
 
+.composer-image-remove:hover,
+.composer-image-remove:focus-visible {
+	background: var(--vscode-agents-color-danger);
+}
+
 .composer-drop-active {
 	outline: var(--vscode-agents-space-2) dashed color-mix(in srgb, var(--vscode-agents-color-focusBorder) 70%, transparent);
 	outline-offset: calc(-1 * var(--vscode-agents-space-2));
@@ -150,7 +155,7 @@
 	display: inline-flex;
 	max-width: 200px;
 	max-height: 160px;
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	overflow: hidden;
 }
@@ -174,7 +179,7 @@
 .sessions-skills-input,
 .sessions-skills-body {
 	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-primary);

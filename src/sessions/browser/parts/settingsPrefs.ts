@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { applyThemeTokens, getTokenCssVariableName, type ThemeId } from '../../platform/theme/theme.js';
+import { applyThemeTokens, getTokenCssVariableName } from '../../platform/theme/theme.js';
 import { withLegacyAliases } from '../../common/theme.js';
 import { deriveTheme, type IThemeSeed } from '../../common/themeSeed.js';
 import { findThemePreset, THEME_PRESETS } from '../../common/themePresets.js';
@@ -30,7 +30,7 @@ export interface IAppearancePrefs {
 
 export interface IUiPreferences {
 	/** Legacy single-theme field — kept in sync with the resolved slot for anything still reading it; `appearance` is the source of truth. */
-	readonly theme: ThemeId;
+	readonly theme: string;
 	readonly reduceMotion: boolean;
 	/** #9: 'system' follows the OS; a pinned locale takes effect on next reload
 	 *  (i18n.ts resolves the active locale once at module load — same model
@@ -40,7 +40,7 @@ export interface IUiPreferences {
 }
 
 const STORAGE_KEY = 'agentChat.preferences';
-const THEMES: readonly ThemeId[] = ['dark', 'light', 'highContrast'];
+const THEMES: readonly string[] = ['dark', 'light', 'highContrast'];
 const DEFAULT_APPEARANCE: IAppearancePrefs = { mode: 'dark', light: { presetId: 'light' }, dark: { presetId: 'dark' } };
 const DEFAULTS: IUiPreferences = { theme: 'dark', reduceMotion: false, locale: 'system', appearance: DEFAULT_APPEARANCE };
 
@@ -63,7 +63,7 @@ function sanitizeSlot(raw: unknown, fallback: IAppearanceSlotPrefs, polarity: 'l
 	return { presetId: preset.id, ...(validSeed ? { seed: seed as IThemeSeed } : {}) };
 }
 
-function sanitizeAppearance(raw: unknown, legacyTheme: ThemeId): IAppearancePrefs {
+function sanitizeAppearance(raw: unknown, legacyTheme: string): IAppearancePrefs {
 	// Pre-#8 prefs carried only `theme` — migrate it: highContrast is a DARK
 	// preset in the new model, not a mode.
 	const migrated: IAppearancePrefs =
@@ -87,7 +87,7 @@ function sanitizeAppearance(raw: unknown, legacyTheme: ThemeId): IAppearancePref
 export function readPreferences(): IUiPreferences {
 	try {
 		const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-		const theme = THEMES.includes(raw['theme'] as ThemeId) ? (raw['theme'] as ThemeId) : DEFAULTS.theme;
+		const theme = typeof raw['theme'] === 'string' && THEMES.includes(raw['theme']) ? raw['theme'] : DEFAULTS.theme;
 		return {
 			theme,
 			reduceMotion: typeof raw['reduceMotion'] === 'boolean' ? raw['reduceMotion'] : DEFAULTS.reduceMotion,
@@ -119,10 +119,10 @@ export function resolveActiveSlot(appearance: IAppearancePrefs): { readonly pola
 	return { polarity, slot: appearance[polarity] };
 }
 
-/** The ThemeId whose BASE tokens (and data-agents-theme attr) back the active slot — highContrast keeps its identity, every other preset rides its polarity. */
-function resolveActiveThemeId(appearance: IAppearancePrefs): ThemeId {
-	const { polarity, slot } = resolveActiveSlot(appearance);
-	return slot.presetId === 'highContrast' ? 'highContrast' : polarity;
+/** The theme id whose BASE tokens (and data-agents-theme attr) back the active slot. */
+function resolveActiveThemeId(appearance: IAppearancePrefs): string {
+	const { slot } = resolveActiveSlot(appearance);
+	return slot.presetId;
 }
 
 /** The seed the active slot renders: the user's customized seed, else the preset's. */
@@ -170,8 +170,11 @@ export function applyUiPreferences(prefs: IUiPreferences = readPreferences()): v
 	}
 	root.classList.toggle('reduce-motion', prefs.reduceMotion);
 
-	// mode 'system' re-applies live when the OS flips (registered once).
-	if (prefs.appearance.mode === 'system' && systemModeListener === undefined && typeof matchMedia === 'function') {
+	// mode 'system' re-applies live when the OS flips (registered once per call).
+	systemModeListener?.();
+	systemModeListener = undefined;
+
+	if (prefs.appearance.mode === 'system' && typeof matchMedia === 'function') {
 		const media = matchMedia('(prefers-color-scheme: light)');
 		const onChange = (): void => applyUiPreferences();
 		media.addEventListener('change', onChange);

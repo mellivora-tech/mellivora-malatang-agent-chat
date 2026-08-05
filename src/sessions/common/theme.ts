@@ -9,6 +9,7 @@ import { registerColor, registerTheme } from '../platform/theme/theme.js';
 // — re-exported here so existing imports keep working.
 export { semanticColorTokenIds, type SemanticColorTokenId, type SemanticColorMap, type IThemeSeed, deriveTheme, BUILTIN_THEME_SEEDS } from './themeSeed.js';
 import { BUILTIN_THEME_SEEDS, deriveTheme, type SemanticColorMap, type SemanticColorTokenId } from './themeSeed.js';
+import { THEME_PRESETS } from './themePresets.js';
 
 type LegacyColorTokenId =
 	| 'agents.background'
@@ -56,6 +57,15 @@ registerTheme({ id: 'dark', label: 'Dark', values: darkThemeValues });
 registerTheme({ id: 'light', label: 'Light', values: lightThemeValues });
 registerTheme({ id: 'highContrast', label: 'High Contrast', values: highContrastThemeValues });
 
+for (const preset of THEME_PRESETS) {
+	if (preset.id === 'dark' || preset.id === 'light' || preset.id === 'highContrast') {
+		continue;
+	}
+	const values = withLegacyAliases(deriveTheme(preset.seed));
+	registerColorTokens(values);
+	registerTheme({ id: preset.id, label: preset.label, values });
+}
+
 export const agentsColorBackground = registeredColorTokens.get('agents.color.background')!;
 export const agentsColorPanelBackground = registeredColorTokens.get('agents.color.panel.background')!;
 export const agentsColorPanelBorder = registeredColorTokens.get('agents.color.panel.border')!;
@@ -79,7 +89,9 @@ export const inactiveSessionViewBackground = registeredColorTokens.get('inactive
 
 function registerColorTokens(tokens: Readonly<Record<string, string>>): void {
 	for (const [id, value] of Object.entries(tokens)) {
-		registeredColorTokens.set(id, registerColor(id, value));
+		if (!registeredColorTokens.has(id)) {
+			registeredColorTokens.set(id, registerColor(id, value));
+		}
 	}
 }
 

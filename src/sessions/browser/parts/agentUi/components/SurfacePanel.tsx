@@ -99,6 +99,162 @@ const surfaceRows = (value: SurfaceValue | undefined): (string | number | boolea
 /** A field_mapping node's declared source-endpoint fields (arg 1) as strings. */
 const surfaceStrings = (value: SurfaceValue | undefined): string[] => (value?.kind === 'array' ? value.items.map(cellText) : []);
 
+const literal = (value: SurfaceValue | undefined): FormValue => (value?.kind === 'literal' ? value.value : null);
+const asText = (value: FormValue): string => (value === null ? '' : String(value));
+
+interface ISurfaceRenderContext {
+	readonly edits: Readonly<Record<string, FormValue>>;
+	readonly setEdits: React.Dispatch<React.SetStateAction<Record<string, FormValue>>>;
+	readonly mappingEdits: Readonly<Record<string, readonly IFieldMappingLink[]>>;
+	readonly setMappingEdits: React.Dispatch<React.SetStateAction<Record<string, readonly IFieldMappingLink[]>>>;
+	readonly read: (key: string) => FormValue;
+	readonly runAction: (steps: readonly { readonly step: string; readonly args: readonly SurfaceValue[] }[]) => void;
+}
+
+interface ISurfaceNodeViewProps extends ISurfaceRenderContext {
+	readonly node: ISurfaceNode;
+}
+
+const renderSurfaceValue = (value: SurfaceValue, key: React.Key, context: ISurfaceRenderContext): React.ReactNode => {
+	if (value.kind === 'node') {
+		return <SurfaceNodeView key={key} node={value.node} {...context} />;
+	}
+	if (value.kind === 'dangling') {
+		return (
+			<span key={key} className="surface-hole">
+				{localize('surface.hole', value.name)}
+			</span>
+		);
+	}
+	if (value.kind === 'literal') {
+		return <span key={key}>{asText(value.value)}</span>;
+	}
+	return null;
+};
+
+function SurfaceNodeView({ node, edits, setEdits, mappingEdits, setMappingEdits, read, runAction }: ISurfaceNodeViewProps): React.ReactElement {
+	const context: ISurfaceRenderContext = { edits, setEdits, mappingEdits, setMappingEdits, read, runAction };
+
+	switch (node.component) {
+		case 'Stack': {
+			const children = node.args[0];
+			return <div className="surface-stack">{children?.kind === 'array' ? children.items.map((item, index) => renderSurfaceValue(item, index, context)) : null}</div>;
+		}
+		case 'Text': {
+			const variant = literal(node.args[1]);
+			const className = variant === 'title' ? 'surface-text-title' : variant === 'caption' ? 'surface-text-caption' : 'surface-text-body';
+			return <div className={className}>{asText(literal(node.args[0]))}</div>;
+		}
+		case 'Code': {
+			const language = asText(literal(node.args[1]));
+			return (
+				<div className="surface-code">
+					{language !== '' ? <div className="surface-code-lang">{language}</div> : null}
+					<pre className="surface-code-body">
+						<code>{asText(literal(node.args[0]))}</code>
+					</pre>
+				</div>
+			);
+		}
+		case 'Table': {
+			const columns = node.args[0]?.kind === 'array' ? node.args[0].items : [];
+			const rows = node.args[1]?.kind === 'array' ? node.args[1].items : [];
+			const { colNames, editable, validators } = readTableCaps(node);
+			return (
+				<table className="surface-table">
+					<thead>
+						<tr>
+							{columns.map((column, index) => (
+								<th key={index}>{column.kind === 'literal' ? asText(column.value) : null}</th>
+							))}
+						</tr>
+					</thead>
+					<tbody>
+						{rows.map((row, rowIndex) => (
+							<tr key={rowIndex}>
+								{row.kind === 'array'
+									? row.items.map((cell, cellIndex) => {
+											const colName = colNames[cellIndex] ?? '';
+											const key = cellKey(node.name, colName, rowIndex);
+											const current: FormValue = key in edits ? (edits[key] ?? null) : cell.kind === 'literal' ? cell.value : null;
+											const validator = validators.get(colName);
+											const invalid = validator !== undefined && !regexOk(validator.pattern, asText(current));
+											return (
+												<td key={cellIndex} className={invalid ? 'surface-cell-invalid' : undefined} title={invalid ? validator.hint : undefined}>
+													{editable.has(colName) ? (
+														<input
+															type="text"
+															className="surface-cell-input"
+															value={asText(current)}
+															placeholder={editable.get(colName) || undefined}
+															aria-invalid={invalid || undefined}
+															onChange={event => setEdits(previous => ({ ...previous, [key]: event.target.value }))}
+														/>
+													) : (
+														asText(current)
+													)}
+												</td>
+											);
+										})
+									: null}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			);
+		}
+		case 'TextField': {
+			const binding = node.args[1]?.kind === 'state' ? node.args[1].name : `#${node.name}`;
+			return (
+				<label className="surface-field">
+					<span>{asText(literal(node.args[0]))}</span>
+					<input type="text" value={asText(read(binding))} onChange={event => setEdits(previous => ({ ...previous, [binding]: event.target.value }))} />
+				</label>
+			);
+		}
+		case 'Select': {
+			const options = node.args[1]?.kind === 'array' ? node.args[1].items : [];
+			const binding = node.args[2]?.kind === 'state' ? node.args[2].name : `#${node.name}`;
+			return (
+				<label className="surface-field">
+					<span>{asText(literal(node.args[0]))}</span>
+					<select value={asText(read(binding))} onChange={event => setEdits(previous => ({ ...previous, [binding]: event.target.value }))}>
+						{options.map((option, index) => (
+							<option key={index} value={option.kind === 'literal' ? asText(option.value) : ''}>
+								{option.kind === 'literal' ? asText(option.value) : ''}
+							</option>
+						))}
+					</select>
+				</label>
+			);
+		}
+		case 'Button': {
+			const action = node.args[1];
+			return (
+				<button type="button" className="surface-button" onClick={() => action?.kind === 'action' && runAction(action.steps)}>
+					{asText(literal(node.args[0]))}
+				</button>
+			);
+		}
+		case 'field_mapping': {
+			const key = `${node.name}.mappings`;
+			const links = mappingEdits[key] ?? parseFieldLinks(surfaceRows(node.args[4]));
+			return (
+				<FieldMappingView
+					sourceLabel={asText(literal(node.args[0]))}
+					sourceFields={surfaceStrings(node.args[1])}
+					targetLabel={asText(literal(node.args[2]))}
+					targetFields={surfaceStrings(node.args[3])}
+					links={links}
+					onChange={next => setMappingEdits(previous => ({ ...previous, [key]: next }))}
+				/>
+			);
+		}
+		default:
+			return <div className="surface-hole">{localize('surface.hole', node.component)}</div>;
+	}
+}
+
 export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): React.ReactElement {
 	const folded = useMemo(() => foldSurface(batches, SMOKE_CATALOG), [batches]);
 	const [edits, setEdits] = useState<Record<string, FormValue>>({});
@@ -181,145 +337,13 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 		}
 	};
 
-	const literal = (value: SurfaceValue | undefined): FormValue => (value?.kind === 'literal' ? value.value : null);
-	const asText = (value: FormValue): string => (value === null ? '' : String(value));
-
-	const renderValue = (value: SurfaceValue, key: React.Key): React.ReactNode => {
-		if (value.kind === 'node') {
-			return <SurfaceNodeView key={key} node={value.node} />;
-		}
-		if (value.kind === 'dangling') {
-			return (
-				<span key={key} className="surface-hole">
-					{localize('surface.hole', value.name)}
-				</span>
-			);
-		}
-		if (value.kind === 'literal') {
-			return <span key={key}>{asText(value.value)}</span>;
-		}
-		return null;
-	};
-
-	const SurfaceNodeView = ({ node }: { readonly node: ISurfaceNode }): React.ReactElement => {
-		switch (node.component) {
-			case 'Stack': {
-				const children = node.args[0];
-				return <div className="surface-stack">{children?.kind === 'array' ? children.items.map((item, index) => renderValue(item, index)) : null}</div>;
-			}
-			case 'Text': {
-				const variant = literal(node.args[1]);
-				const className = variant === 'title' ? 'surface-text-title' : variant === 'caption' ? 'surface-text-caption' : 'surface-text-body';
-				return <div className={className}>{asText(literal(node.args[0]))}</div>;
-			}
-			case 'Code': {
-				const language = asText(literal(node.args[1]));
-				return (
-					<div className="surface-code">
-						{language !== '' ? <div className="surface-code-lang">{language}</div> : null}
-						<pre className="surface-code-body">
-							<code>{asText(literal(node.args[0]))}</code>
-						</pre>
-					</div>
-				);
-			}
-			case 'Table': {
-				const columns = node.args[0]?.kind === 'array' ? node.args[0].items : [];
-				const rows = node.args[1]?.kind === 'array' ? node.args[1].items : [];
-				const { colNames, editable, validators } = readTableCaps(node);
-				return (
-					<table className="surface-table">
-						<thead>
-							<tr>
-								{columns.map((column, index) => (
-									<th key={index}>{column.kind === 'literal' ? asText(column.value) : null}</th>
-								))}
-							</tr>
-						</thead>
-						<tbody>
-							{rows.map((row, rowIndex) => (
-								<tr key={rowIndex}>
-									{row.kind === 'array'
-										? row.items.map((cell, cellIndex) => {
-												const colName = colNames[cellIndex] ?? '';
-												const key = cellKey(node.name, colName, rowIndex);
-												const current: FormValue = key in edits ? (edits[key] ?? null) : cell.kind === 'literal' ? cell.value : null;
-												const validator = validators.get(colName);
-												const invalid = validator !== undefined && !regexOk(validator.pattern, asText(current));
-												return (
-													<td key={cellIndex} className={invalid ? 'surface-cell-invalid' : undefined} title={invalid ? validator.hint : undefined}>
-														{editable.has(colName) ? (
-															<input
-																type="text"
-																className="surface-cell-input"
-																value={asText(current)}
-																placeholder={editable.get(colName) || undefined}
-																aria-invalid={invalid || undefined}
-																onChange={event => setEdits(previous => ({ ...previous, [key]: event.target.value }))}
-															/>
-														) : (
-															asText(current)
-														)}
-													</td>
-												);
-											})
-										: null}
-								</tr>
-							))}
-						</tbody>
-					</table>
-				);
-			}
-			case 'TextField': {
-				const binding = node.args[1]?.kind === 'state' ? node.args[1].name : `#${node.name}`;
-				return (
-					<label className="surface-field">
-						<span>{asText(literal(node.args[0]))}</span>
-						<input type="text" value={asText(read(binding))} onChange={event => setEdits(previous => ({ ...previous, [binding]: event.target.value }))} />
-					</label>
-				);
-			}
-			case 'Select': {
-				const options = node.args[1]?.kind === 'array' ? node.args[1].items : [];
-				const binding = node.args[2]?.kind === 'state' ? node.args[2].name : `#${node.name}`;
-				return (
-					<label className="surface-field">
-						<span>{asText(literal(node.args[0]))}</span>
-						<select value={asText(read(binding))} onChange={event => setEdits(previous => ({ ...previous, [binding]: event.target.value }))}>
-							{options.map((option, index) => (
-								<option key={index} value={option.kind === 'literal' ? asText(option.value) : ''}>
-									{option.kind === 'literal' ? asText(option.value) : ''}
-								</option>
-							))}
-						</select>
-					</label>
-				);
-			}
-			case 'Button': {
-				const action = node.args[1];
-				return (
-					<button type="button" className="surface-button" onClick={() => action?.kind === 'action' && runAction(action.steps)}>
-						{asText(literal(node.args[0]))}
-					</button>
-				);
-			}
-			case 'field_mapping': {
-				const key = `${node.name}.mappings`;
-				const links = mappingEdits[key] ?? parseFieldLinks(surfaceRows(node.args[4]));
-				return (
-					<FieldMappingView
-						sourceLabel={asText(literal(node.args[0]))}
-						sourceFields={surfaceStrings(node.args[1])}
-						targetLabel={asText(literal(node.args[2]))}
-						targetFields={surfaceStrings(node.args[3])}
-						links={links}
-						onChange={next => setMappingEdits(previous => ({ ...previous, [key]: next }))}
-					/>
-				);
-			}
-			default:
-				return <div className="surface-hole">{localize('surface.hole', node.component)}</div>;
-		}
+	const nodeViewContext: ISurfaceRenderContext = {
+		edits,
+		setEdits,
+		mappingEdits,
+		setMappingEdits,
+		read,
+		runAction,
 	};
 
 	if (!folded.root) {
@@ -327,7 +351,7 @@ export function SurfacePanel({ batches, onToAssistant }: ISurfacePanelProps): Re
 	}
 	return (
 		<div className="surface-panel-body">
-			<SurfaceNodeView node={folded.root} />
+			<SurfaceNodeView node={folded.root} {...nodeViewContext} />
 			{folded.errors.length > 0 ? <div className="surface-text-caption">{localize('surface.errorNote', folded.errors.length)}</div> : null}
 		</div>
 	);

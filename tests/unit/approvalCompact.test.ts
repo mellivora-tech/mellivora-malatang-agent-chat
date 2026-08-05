@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { shouldRenderCompactApproval } from '../../src/sessions/browser/parts/conversationView.js';
+import { shouldRenderCompactApproval } from '../../src/sessions/browser/parts/approvalDock.js';
 
 test('early prompts render the full card; density drops after the threshold', () => {
 	// The first few prompts stay full so the user reads the ceremony at least once.

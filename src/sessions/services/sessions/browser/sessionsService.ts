@@ -62,11 +62,11 @@ export class SessionsService extends Disposable implements ISessionsService {
 		this._register(
 			this.managementService.onDidChangeSessions(() => {
 				this.visibleSessionsModel.setSessions(this.managementService.getSessions());
-				this.syncPart();
+				this.scheduleSyncPart();
 			}),
 		);
-		this._register(this.visibleSessions.subscribe(() => this.syncPart()));
-		this._register(this.activeSession.subscribe(() => this.syncPart()));
+		this._register(this.visibleSessions.subscribe(() => this.scheduleSyncPart()));
+		this._register(this.activeSession.subscribe(() => this.scheduleSyncPart()));
 		this.syncPart();
 	}
 
@@ -173,6 +173,19 @@ export class SessionsService extends Disposable implements ISessionsService {
 		}
 
 		return session;
+	}
+
+	private syncScheduled = false;
+
+	private scheduleSyncPart(): void {
+		if (this.syncScheduled) {
+			return;
+		}
+		this.syncScheduled = true;
+		queueMicrotask(() => {
+			this.syncScheduled = false;
+			this.syncPart();
+		});
 	}
 
 	private syncPart(): void {

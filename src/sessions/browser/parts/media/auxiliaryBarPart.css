@@ -38,7 +38,7 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	height: 26px;
+	height: var(--vscode-agents-size-auxiliary-tabHeight);
 	min-width: 0;
 	padding: 0 10px;
 	white-space: nowrap;
@@ -83,7 +83,8 @@
 	font-size: var(--vscode-agents-fontSize-label2);
 }
 
-.auxiliary-tab-close:hover {
+.auxiliary-tab-close:hover,
+.auxiliary-tab-close:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
@@ -98,8 +99,8 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 26px;
-	height: 26px;
+	width: var(--vscode-agents-size-auxiliary-tabHeight);
+	height: var(--vscode-agents-size-auxiliary-tabHeight);
 	flex: 0 0 auto;
 	border: 1px solid transparent;
 	border-radius: 6px;
@@ -110,7 +111,9 @@
 }
 
 .auxiliary-tab-add:hover,
-.auxiliary-tab-maximize:hover {
+.auxiliary-tab-add:focus-visible,
+.auxiliary-tab-maximize:hover,
+.auxiliary-tab-maximize:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
@@ -312,7 +315,9 @@
 }
 
 .changes-file-row:hover,
-.files-tree-row:hover {
+.changes-file-row:focus-visible,
+.files-tree-row:hover,
+.files-tree-row:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 }
 
@@ -612,7 +617,8 @@
 	cursor: default;
 }
 
-.surface-button:hover {
+.surface-button:hover,
+.surface-button:focus-visible {
 	background: var(--vscode-agents-color-control-hoverBackground);
 }
 

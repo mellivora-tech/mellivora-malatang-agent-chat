@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../common/i18n/i18n.js';
+import { reportFailure } from '../../common/diagnostics.js';
 import { append } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
 import type { IGitBridge } from '../../services/git/common/git.js';
@@ -72,13 +73,22 @@ export class ConversationContext extends Disposable {
 		if (!this.git || !session || !projectId) {
 			return;
 		}
-		const result = await this.git.branches(projectId);
-		// The active session may have changed while we awaited.
-		if (this.session !== session) {
-			return;
+		try {
+			const result = await this.git.branches(projectId);
+			// The active session may have changed while we awaited.
+			if (this.session !== session) {
+				return;
+			}
+			this.branchCurrent = result?.current;
+			this.branchList = result?.branches ?? [];
+			this.branchError = undefined;
+		} catch (error) {
+			if (this.session !== session) {
+				return;
+			}
+			this.branchError = error instanceof Error ? error.message : String(error);
+			reportFailure('conversationContext.refreshBranches', error, session.sessionId);
 		}
-		this.branchCurrent = result?.current;
-		this.branchList = result?.branches ?? [];
 		this.render();
 	}
 
@@ -249,16 +259,24 @@ export class ConversationContext extends Disposable {
 		if (!this.git || !session || !projectId || branch === this.branchCurrent) {
 			return;
 		}
-		const result = await this.git.checkout(projectId, branch);
-		if (this.session !== session) {
-			return;
-		}
-		if (result.ok) {
-			this.branchCurrent = result.current;
-			this.branchError = undefined;
-		} else {
-			// Keep the old branch on screen; the pill's tooltip carries the reason.
-			this.branchError = result.error;
+		try {
+			const result = await this.git.checkout(projectId, branch);
+			if (this.session !== session) {
+				return;
+			}
+			if (result.ok) {
+				this.branchCurrent = result.current;
+				this.branchError = undefined;
+			} else {
+				// Keep the old branch on screen; the pill's tooltip carries the reason.
+				this.branchError = result.error;
+			}
+		} catch (error) {
+			if (this.session !== session) {
+				return;
+			}
+			this.branchError = error instanceof Error ? error.message : String(error);
+			reportFailure('conversationContext.checkout', error, session.sessionId);
 		}
 		this.render();
 	}

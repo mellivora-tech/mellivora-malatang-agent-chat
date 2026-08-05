@@ -212,10 +212,21 @@ export function deriveTheme(seed: IThemeSeed): SemanticColorMap {
 	const fg = clampToContrast(fgRaw, bg);
 	const fgHex = toHex(fg);
 
-	// Elevation: dark surfaces climb toward white in fitted steps; light
-	// surfaces jump to white outright (the light built-in's panels are pure
-	// white); a flat (bordered) theme has no elevation at all.
-	const surface = (step: number): string => (flat ? toHex(bg) : isDark ? toHex(mix(bg, white, step)) : toHex(mix(bg, white, 1)));
+	// Elevation: dark surfaces climb toward white in fitted steps; light surfaces
+	// also climb toward white so custom light seeds get a real elevation ladder.
+	// To keep the shipped light theme pixel-identical (its background is already
+	// near-white), any mixed channel within one step of white snaps to #ffffff.
+	const surface = (step: number): string => {
+		if (flat) {
+			return toHex(bg);
+		}
+		const mixed = mix(bg, white, step);
+		const snapThreshold = 246;
+		if (mixed.r >= snapThreshold && mixed.g >= snapThreshold && mixed.b >= snapThreshold) {
+			return '#ffffff';
+		}
+		return toHex(mixed);
+	};
 
 	const border = (value: number): string => seed.border ?? alpha(fgRaw, value);
 

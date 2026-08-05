@@ -4,19 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { getActiveLocale, localize } from '../../common/i18n/i18n.js';
-import { append, clearNode } from '../../base/browser/dom.js';
+import { append } from '../../base/browser/dom.js';
 import { Disposable, DisposableStore } from '../../base/common/lifecycle.js';
 import type { IModelsService } from '../../services/models/browser/modelsService.js';
 import type { IProjectsService } from '../../services/projects/browser/projectsService.js';
-import type {
-	IActiveSession,
-	IPlanComment,
-	ISession,
-	ISessionAttachment,
-	ISessionDataBrowse,
-	ISessionMessage,
-	ISessionPendingApproval,
-} from '../../services/sessions/common/session.js';
+import type { IActiveSession, IPlanComment, ISession, ISessionAttachment } from '../../services/sessions/common/session.js';
 import { SessionInteractivity, SessionStatus, estimateSessionTokens } from '../../services/sessions/common/session.js';
 import type { IPendingImage } from '../../services/sessions/common/sessionsProvider.js';
 import type { ISessionsPartService } from '../../services/sessions/browser/sessionsPartService.js';
@@ -29,17 +21,13 @@ import { installFileMentions, installSessionMentions, installSkillMentions, type
 import { ConversationContext } from './conversationContext.js';
 import { installEffortPicker, installModelPicker, installPermissionPicker } from './modelPicker.js';
 import { installQuotaIndicator, type IQuotaIndicator } from './quotaIndicator.js';
+import { TimelineRail } from './timelineRail.js';
+import { ApprovalDock } from './approvalDock.js';
+import { TranscriptView } from './transcriptView.js';
 import type { IModelsBridge } from '../../services/models/common/models.js';
 import { permissionMode } from '../../services/agent/browser/permissionModeService.js';
 import type { PermissionMode } from '../../services/agent/common/agent.js';
 import { toDisposable } from '../../base/common/lifecycle.js';
-import { createElement, type ReactNode } from 'react';
-import type { Root } from 'react-dom/client';
-import { mountOrUpdateReactRow } from './agentUi/bridge/mountReactRow.js';
-import { WorkBlock } from './agentUi/components/WorkBlock.js';
-import { PlanCard } from './agentUi/components/PlanCard.js';
-import { MessageRow } from './agentUi/components/MessageRow.js';
-import { UiCard } from './agentUi/components/UiCard.js';
 
 export interface ISessionMessageSender {
 	sendMessage(sessionId: string, query: string, options?: { readonly attachments?: readonly ISessionAttachment[]; readonly images?: readonly IPendingImage[] }): Promise<unknown>;
@@ -64,21 +52,14 @@ export interface ISessionMessageSender {
 // A reader within this band above the live end counts as "following the
 // output" — renders keep them pinned; anything further up is a deliberate
 // scroll-back whose position must be preserved.
-const FOLLOW_BAND_PX = 48;
-// settleScrollAtBottom's termination cap: ~1s at 60fps.
-const MAX_SETTLE_FRAMES = 60;
 
 export class ConversationView extends Disposable {
 	readonly element: HTMLElement;
 
-	private readonly transcript: HTMLElement;
-	private readonly timeline: HTMLElement;
-	private timelinePreview: HTMLElement | undefined;
-	// Which tick a rail scrub is previewing, and the turn each tick maps to.
-	private previewTick: HTMLElement | undefined;
-	private readonly tickTurns = new Map<HTMLElement, { user?: ISessionMessage; work?: ISessionMessage; assistant?: ISessionMessage }>();
+	private readonly transcriptView: TranscriptView;
+	private readonly timelineRail: TimelineRail;
 	private readonly composer: HTMLFormElement;
-	private readonly approvalDock: HTMLElement;
+	private readonly approvalDock: ApprovalDock;
 	private readonly input: HTMLTextAreaElement;
 	private readonly sendButton: HTMLButtonElement;
 	private readonly stopButton: HTMLButtonElement;
@@ -100,26 +81,9 @@ export class ConversationView extends Disposable {
 	// A follow-up typed while a run is live is held here and sent when it settles,
 	// so a second run never overlaps the first (single slot; a newer one replaces it).
 	private queuedFollowUp: string | undefined;
-	/** The approval request whose Allow button already got initial focus (re-render guard). */
-	private focusedApprovalId: string | undefined;
-	/** requestIds currently materialized in the dock — the DOM (typed reason text,
-	 *  focus) survives renders whose approval set is unchanged. */
-	private renderedApprovalKey = '';
-	/** Approval request ids seen per session — drives the compact-density switch. */
-	private readonly approvalsSeen = new Map<string, Set<string>>();
-	private scrollToBottomOnRender = false;
-	// rAF handle of the settle loop that re-pins a forced scroll-to-bottom
-	// while the transcript is still growing (see settleScrollAtBottom).
-	private scrollSettleFrame: number | undefined;
 	// Fan-out for the session-aware permission picker (the underlying observable
 	// swaps whenever another session becomes active).
 	private readonly permissionListeners = new Set<() => void>();
-	private workTicker: ReturnType<typeof setInterval> | undefined;
-	// Rendered rows keyed by message id, so a streaming delta patches only the
-	// row that actually changed instead of tearing down the whole transcript —
-	// rebuilding every row on every token would restart hover-revealed UI (e.g.
-	// the message action bar's fade-in) on unrelated, unchanged messages too.
-	private readonly renderedRows = new Map<string, { element: HTMLElement; message: ISessionMessage; reactRoot?: Root }>();
 
 	private readonly mentions: IMentionController;
 	private readonly skillMentions: IMentionController;
@@ -143,13 +107,19 @@ export class ConversationView extends Disposable {
 		const bodyWrap = append(this.element, document.createElement('div'));
 		bodyWrap.className = 'conversation-body';
 
-		this.timeline = append(bodyWrap, document.createElement('div'));
-		this.timeline.className = 'conversation-timeline';
-		this.timeline.setAttribute('role', 'navigation');
-		this.timeline.setAttribute('aria-label', localize('conv.timeline'));
+		this.transcriptView = this._register(
+			new TranscriptView({
+				messageSender,
+				sessionsPartService,
+				dataFiles,
+				onScroll: () => this.timelineRail.updateCurrent(),
+				onFocusComposer: () => this.input.focus(),
+			}),
+		);
 
-		this.transcript = append(bodyWrap, document.createElement('div'));
-		this.transcript.className = 'conversation-transcript';
+		this.timelineRail = this._register(new TimelineRail(this.element, this.transcriptView.element));
+		bodyWrap.insertBefore(this.timelineRail.element, this.transcriptView.element);
+		bodyWrap.appendChild(this.transcriptView.element);
 
 		this.composer = append(this.element, document.createElement('form'));
 		this.composer.className = 'conversation-composer';
@@ -158,11 +128,8 @@ export class ConversationView extends Disposable {
 		// in a FIXED spot — the transcript is the record of what happened, the
 		// composer zone is what needs the user NOW. Parallel tool batches stack
 		// several cards; each resolves independently.
-		this.approvalDock = append(this.composer, document.createElement('div'));
-		this.approvalDock.className = 'conversation-approval-dock';
-		this.approvalDock.setAttribute('role', 'region');
-		this.approvalDock.setAttribute('aria-label', localize('appr.dockAria'));
-		this.approvalDock.hidden = true;
+		this.approvalDock = this._register(new ApprovalDock());
+		this.composer.appendChild(this.approvalDock.element);
 
 		this.composer.appendChild(this.header.element);
 		this.header.element.hidden = true;
@@ -424,25 +391,8 @@ export class ConversationView extends Disposable {
 		this.render();
 	}
 
-	/**
-	 * Scroll a message into view and flash it. Two async producers must finish
-	 * first: React commits row content after the synchronous reconcile
-	 * (createRoot), and a freshly opened session runs settleScrollAtBottom,
-	 * which would re-pin the bottom right over this scroll — so retry frames
-	 * until the row exists and the settle loop has terminated (~2s cap, then
-	 * give up silently: the message no longer exists).
-	 */
-	private revealMessage(messageId: string, attempt = 0): void {
-		const row = this.transcript.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
-		if (!row || this.scrollSettleFrame !== undefined) {
-			if (attempt < 120) {
-				requestAnimationFrame(() => this.revealMessage(messageId, attempt + 1));
-			}
-			return;
-		}
-		row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		row.classList.add('artifact-reveal-highlight');
-		setTimeout(() => row.classList.remove('artifact-reveal-highlight'), 2000);
+	private revealMessage(messageId: string): void {
+		this.transcriptView.revealMessage(messageId);
 	}
 
 	openSession(session: IActiveSession | undefined): void {
@@ -455,8 +405,7 @@ export class ConversationView extends Disposable {
 		this.sessionDisposables.clear();
 		// Row identities belong to the session that produced them — a fresh
 		// session gets a clean slate rather than reusing stale nodes.
-		clearNode(this.transcript);
-		this.renderedRows.clear();
+		this.transcriptView.clear();
 		this.header.openSession(session);
 		this.setSendError(undefined);
 		this.queuedFollowUp = undefined;
@@ -468,7 +417,7 @@ export class ConversationView extends Disposable {
 		this.images.reset();
 		this.promptHistory.reset();
 		// A freshly opened conversation starts at its latest message.
-		this.scrollToBottomOnRender = true;
+		this.transcriptView.stickToBottomOnNextRender();
 
 		if (session) {
 			this.sessionDisposables.add(session.messages.subscribe(() => this.render()));
@@ -510,40 +459,6 @@ export class ConversationView extends Disposable {
 		this.element.focus();
 	}
 
-	private buildMessageActions(message: ISessionMessage): IMessageActions | undefined {
-		const session = this.session;
-		if (!session || (message.role !== 'assistant' && message.role !== 'user')) {
-			return undefined;
-		}
-		const sender = this.messageSender;
-		return {
-			copy: () => void navigator.clipboard.writeText(message.text),
-			...(message.role === 'assistant' && sender?.setMessageFeedback
-				? {
-						feedback: (value: 'like' | 'dislike') => {
-							// Clicking the active choice clears it.
-							void sender.setMessageFeedback!(session.sessionId, message.id, message.feedback === value ? undefined : value);
-						},
-					}
-				: {}),
-			...(sender?.forkSession ? { fork: () => void sender.forkSession!(session.sessionId, message.id) } : {}),
-		};
-	}
-
-	/** Path → data URL for image attachments in the transcript; undefined when the sender can't resolve media. */
-	private buildImageResolver(): ((path: string) => Promise<string | undefined>) | undefined {
-		const sessionId = this.session?.sessionId;
-		const resolve = this.messageSender?.resolveMedia?.bind(this.messageSender);
-		return sessionId && resolve ? path => resolve(sessionId, path) : undefined;
-	}
-
-	/** Path → markdown for document attachments (the split answer's full text); undefined when the sender can't resolve it. */
-	private buildDocumentResolver(): ((path: string) => Promise<string | undefined>) | undefined {
-		const sessionId = this.session?.sessionId;
-		const resolve = this.messageSender?.resolveDocumentText?.bind(this.messageSender);
-		return sessionId && resolve ? path => resolve(sessionId, path) : undefined;
-	}
-
 	private notifyPermissionListeners(): void {
 		for (const listener of this.permissionListeners) {
 			listener();
@@ -582,7 +497,7 @@ export class ConversationView extends Disposable {
 		// and its animation frame cannot resurrect the magnification.
 		let magnifyPointerY: number | undefined;
 		let magnifyScheduled = false;
-		this.timeline.addEventListener('mousemove', event => {
+		this.timelineRail.element.addEventListener('mousemove', event => {
 			magnifyPointerY = event.clientY;
 			if (magnifyScheduled) {
 				return;
@@ -590,44 +505,13 @@ export class ConversationView extends Disposable {
 			magnifyScheduled = true;
 			requestAnimationFrame(() => {
 				magnifyScheduled = false;
-				this.magnifyTicks(magnifyPointerY);
+				this.timelineRail.magnify(magnifyPointerY);
 			});
 		});
-		this.timeline.addEventListener('mouseleave', () => {
+		this.timelineRail.element.addEventListener('mouseleave', () => {
 			magnifyPointerY = undefined;
-			this.magnifyTicks(undefined);
+			this.timelineRail.magnify(undefined);
 		});
-
-		// Keep the timeline's position marker in sync with the reading position.
-		let scrollScheduled = false;
-		this.transcript.addEventListener('scroll', () => {
-			if (scrollScheduled) {
-				return;
-			}
-			scrollScheduled = true;
-			requestAnimationFrame(() => {
-				scrollScheduled = false;
-				this.updateTimelineCurrent();
-			});
-		});
-
-		// Attachment thumbnails resolve and decode AFTER their row committed
-		// (resolveMedia is async) — possibly past the settle loop's window. An
-		// <img> growing under a reader pinned at the bottom would push the live
-		// end out of view, so re-pin; `load` doesn't bubble, hence capture.
-		// By `load` the image has ALREADY grown the transcript (reading scroll
-		// geometry forces the post-decode layout), so "was the reader at the
-		// bottom" needs the image's own height added back onto the band —
-		// against the bare band, any image taller than it defeats the re-pin.
-		this.transcript.addEventListener(
-			'load',
-			event => {
-				if (event.target instanceof HTMLImageElement && this.isNearBottom(FOLLOW_BAND_PX + event.target.getBoundingClientRect().height)) {
-					this.transcript.scrollTop = this.transcript.scrollHeight;
-				}
-			},
-			true,
-		);
 	}
 
 	private render(): void {
@@ -636,411 +520,31 @@ export class ConversationView extends Disposable {
 		this.element.dataset.interactivity = this.session?.interactivity.get() ?? 'none';
 		this.header.element.hidden = !this.session;
 
-		// A structural change (new/removed row) can move scrollTop; a pure content
-		// patch never does. Follow the output while the reader is at (or near) the
-		// bottom; preserve their position otherwise.
-		const forcedScrollToBottom = this.scrollToBottomOnRender;
-		const stickToBottom = forcedScrollToBottom || this.isNearBottom(FOLLOW_BAND_PX);
-		const previousScrollTop = this.transcript.scrollTop;
-		this.scrollToBottomOnRender = false;
-
-		// Digest messages are hidden context for the next run's transcript, not
-		// conversation — drop them before any rendering (rows, timeline, tickers).
 		const messages = (this.session?.messages.get() ?? []).filter(message => message.role !== 'digest');
-		this.reconcileTranscript(messages);
-
-		const hasLiveWork = messages.some(message => message.role === 'work' && message.durationMs === undefined);
 		const approvals = this.session?.pendingApprovals.get() ?? [];
-		// These trailing rows aren't part of the keyed reconciliation above (they
-		// aren't backed by a message id) — always re-evaluate them.
-		this.transcript.querySelector('.conversation-working-row')?.remove();
-		this.transcript.querySelector('.conversation-thinking-row')?.remove();
-		this.renderApprovalDock(approvals);
-		if (approvals.length === 0 && this.session?.status.get() === SessionStatus.InProgress && !hasLiveWork) {
-			// Mock/legacy runs without a work block keep the plain progress rows.
-			this.transcript.appendChild(this.createWorkingRow());
-			this.transcript.appendChild(this.createThinkingRow());
-		}
+		const session = this.session;
+		this.transcriptView.render({
+			messages,
+			sessionId: session?.sessionId,
+			projectId: session?.projectId,
+			status: session?.status.get() ?? SessionStatus.Untitled,
+			createdAt: session?.createdAt,
+			hasPendingApprovals: approvals.length > 0,
+			interactivity: session?.interactivity.get() ?? SessionInteractivity.Full,
+			planComments: session?.planComments,
+		});
 
-		// The approval dock lives OUTSIDE the transcript (above the composer), so
-		// a pending question never needs a forced scroll — just honor stickiness.
-		if (stickToBottom) {
-			this.transcript.scrollTop = this.transcript.scrollHeight;
-		} else {
-			this.transcript.scrollTop = previousScrollTop;
-		}
-		if (forcedScrollToBottom) {
-			this.settleScrollAtBottom();
-		}
+		this.approvalDock.render(approvals, session?.sessionId, {
+			shouldFocusComposer: () => !(document.activeElement === this.input && this.input.value !== ''),
+			focusComposer: () => this.input.focus(),
+		});
 
-		this.updateWorkTicker(hasLiveWork);
-		this.renderTimeline(messages);
+		this.timelineRail.render(messages);
 		this.updateComposerState();
 		this.updateContextRing();
 	}
 
-	/**
-	 * Re-pin a forced scroll-to-bottom across the frames in which the transcript
-	 * is still growing. Row content is React-rendered (mountOrUpdateReactRow),
-	 * and createRoot().render() commits ASYNCHRONOUSLY — the synchronous
-	 * `scrollTop = scrollHeight` in render() measures host divs whose content
-	 * hasn't committed yet, so a single shot lands short of the real bottom
-	 * and the freshly opened conversation stays scrolled to the TOP. Keep
-	 * pinning every frame until the scroll height holds steady for two
-	 * consecutive frames (React commits and fast-decoding thumbnails settled),
-	 * capped so the loop always terminates. Late-arriving growth (a slow image
-	 * decode) is covered by the capture-phase `load` listener instead.
-	 */
-	private settleScrollAtBottom(): void {
-		if (this.scrollSettleFrame !== undefined) {
-			cancelAnimationFrame(this.scrollSettleFrame);
-		}
-		let lastHeight = -1;
-		let steadyFrames = 0;
-		let framesLeft = MAX_SETTLE_FRAMES;
-		const step = () => {
-			this.transcript.scrollTop = this.transcript.scrollHeight;
-			const height = this.transcript.scrollHeight;
-			steadyFrames = height === lastHeight ? steadyFrames + 1 : 0;
-			lastHeight = height;
-			framesLeft -= 1;
-			this.scrollSettleFrame = steadyFrames >= 2 || framesLeft <= 0 ? undefined : requestAnimationFrame(step);
-		};
-		this.scrollSettleFrame = requestAnimationFrame(step);
-	}
-
-	/** Whether the reader is within `bandPx` of the live end — the shared "still following" predicate. */
-	private isNearBottom(bandPx: number): boolean {
-		return this.transcript.scrollHeight - this.transcript.scrollTop - this.transcript.clientHeight < bandPx;
-	}
-
-	/**
-	 * Keyed diff against {@link renderedRows}: a row is created once and then
-	 * patched in place for as long as its message id survives. This is what
-	 * keeps hover-revealed UI (the message action bar's fade-in, a work step's
-	 * expanded detail) from restarting on every streamed token — only the row
-	 * whose content actually changed gets touched; every other row, including
-	 * ones the reader is currently hovering, is left completely alone.
-	 */
-	private reconcileTranscript(messages: readonly ISessionMessage[]): void {
-		if (messages.length === 0) {
-			if (this.renderedRows.size > 0) {
-				clearNode(this.transcript);
-				this.renderedRows.clear();
-			}
-			if (!this.transcript.querySelector('.conversation-empty')) {
-				const empty = append(this.transcript, document.createElement('div'));
-				empty.className = 'conversation-empty';
-				empty.textContent = this.session ? localize('conv.noMessages') : localize('conv.noSession');
-			}
-			return;
-		}
-		this.transcript.querySelector('.conversation-empty')?.remove();
-
-		const seen = new Set<string>();
-		let cursor: ChildNode | null = this.transcript.firstChild;
-
-		for (const message of messages) {
-			seen.add(message.id);
-			const existing = this.renderedRows.get(message.id);
-
-			let element: HTMLElement;
-			if (existing) {
-				element = existing.element;
-				// A work block's rendering also depends on state outside the message
-				// itself — its own expand/step-detail state and the live ticker — so
-				// it always resyncs; React bails out on an unchanged subtree, so this
-				// is cheap. Everything else is identity-gated: an unchanged message
-				// means unchanged content, because PlanCard subscribes to its own
-				// external store and MessageRow is a pure function of the message prop
-				// (no hand-split "patch only the dynamic bits" needed — React's own
-				// diffing already leaves untouched DOM, like the action bar's
-				// hover-fade, alone).
-				if (message.role === 'work' || existing.message !== message) {
-					existing.reactRoot = mountOrUpdateReactRow(element, existing.reactRoot, this.createRowElement(message));
-				}
-				existing.message = message;
-			} else {
-				// A bare host div — the React component owns everything inside it,
-				// including its own root element and data-message-id; the extra
-				// wrapper is inert for layout (every row type sizes itself via
-				// margin/its own grid, not parent gap/child-selectors) and
-				// transparent to `[data-message-id]` queries (querySelectorAll
-				// reaches through it).
-				element = document.createElement('div');
-				const reactRoot = mountOrUpdateReactRow(element, undefined, this.createRowElement(message));
-				this.renderedRows.set(message.id, { element, message, reactRoot });
-			}
-
-			if (element === cursor) {
-				cursor = cursor.nextSibling;
-			} else {
-				this.transcript.insertBefore(element, cursor);
-			}
-		}
-
-		for (const [id, entry] of this.renderedRows) {
-			if (!seen.has(id)) {
-				entry.reactRoot?.unmount();
-				entry.element.remove();
-				this.renderedRows.delete(id);
-			}
-		}
-	}
-
-	/** "Worked for 16m 56s ⌄" — one collapsible block per agent run, holding the thinking stretches and tool calls with their durations. React-rendered (see reconcileTranscript); this just builds the element. */
-	private createWorkBlockElement(message: ISessionMessage): ReactNode {
-		const sessionsPartService = this.sessionsPartService;
-		return createElement(WorkBlock, {
-			message,
-			onOpenDataBrowser: sessionsPartService && ((browse: ISessionDataBrowse) => sessionsPartService.openDataBrowser(browse)),
-		});
-	}
-
-	/**
-	 * The reviewable plan artifact card (`role:'plan'`): sectioned content with
-	 * the version in the header. A draft card carries the review actions
-	 * (按此执行 / 让它改); a superseded one collapses to its header. A message
-	 * whose structured payload is missing falls back to its markdown text.
-	 * React-rendered (see reconcileTranscript); this just builds the element.
-	 */
-	private createPlanCardElement(message: ISessionMessage): ReactNode {
-		return createElement(PlanCard, {
-			message,
-			sessionId: this.session?.sessionId,
-			planComments: this.session?.planComments,
-			messageSender: this.messageSender,
-			onFocusComposer: () => this.input.focus(),
-		});
-	}
-
-	/** Dispatches a message to its React row element by role (see reconcileTranscript). */
-	private createRowElement(message: ISessionMessage): ReactNode {
-		switch (message.role) {
-			case 'work':
-				return this.createWorkBlockElement(message);
-			case 'plan':
-				return this.createPlanCardElement(message);
-			case 'ui':
-				return createElement(UiCard, {
-					message,
-					sessionId: this.session?.sessionId,
-					messageSender: this.messageSender,
-					onFocusComposer: () => this.input.focus(),
-					openSurface: this.sessionsPartService ? () => this.sessionsPartService!.openSurfacePanel() : undefined,
-					// The card supplies sessionId + title; only the view knows the
-					// project, so it enriches meta here (#13 P0 export capture).
-					exportText: this.dataFiles
-						? (defaultName, content, meta) =>
-								this.dataFiles!.exportText(defaultName, content, meta && { ...meta, ...(this.session?.projectId !== undefined ? { projectId: this.session.projectId } : {}) })
-						: undefined,
-				});
-			default:
-				return createElement(MessageRow, {
-					message,
-					actions: this.buildMessageActions(message),
-					resolveImage: this.buildImageResolver(),
-					resolveDocument: this.buildDocumentResolver(),
-				});
-		}
-	}
-
-	private renderTimeline(messages: readonly ISessionMessage[]): void {
-		clearNode(this.timeline);
-		this.closeTimelinePreview();
-		this.previewTick = undefined;
-		this.tickTurns.clear();
-
-		interface ITurn {
-			user?: ISessionMessage;
-			work?: ISessionMessage;
-			assistant?: ISessionMessage;
-			blocks: ISessionMessage[];
-		}
-		const turns: ITurn[] = [];
-		for (const message of messages) {
-			if (message.role === 'tool') {
-				continue;
-			}
-			if (message.role === 'user' || turns.length === 0) {
-				turns.push({ blocks: [] });
-			}
-			const turn = turns[turns.length - 1]!;
-			turn.blocks.push(message);
-			if (message.role === 'user') {
-				turn.user = message;
-			} else if (message.role === 'work') {
-				turn.work = message;
-			} else if (message.role === 'assistant') {
-				turn.assistant = message;
-			}
-		}
-
-		this.timeline.classList.toggle('empty', turns.length < 2);
-
-		for (const turn of turns) {
-			const firstBlock = turn.blocks[0]!;
-			const tick = append(this.timeline, document.createElement('button')) as HTMLButtonElement;
-			tick.className = 'conversation-timeline-tick';
-			tick.type = 'button';
-			tick.dataset.targetId = firstBlock.id;
-			// The turn's member ids, so the scroll marker can map any visible
-			// message back to its tick.
-			tick.dataset.blockIds = turn.blocks.map(block => block.id).join(' ');
-			tick.setAttribute('aria-label', localize('conv.jumpToTurn'));
-			tick.addEventListener('click', () => {
-				this.transcript.querySelector(`[data-message-id="${firstBlock.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			});
-			// Preview is driven by rail proximity (see magnifyTicks), not by
-			// hovering the 2px-tall tick itself — that was near impossible to hit.
-			this.tickTurns.set(tick, turn);
-		}
-
-		this.updateTimelineCurrent();
-	}
-
-	/**
-	 * Dock-style magnification driven by pointer proximity, plus the scrub
-	 * preview: the tick nearest the pointer previews its turn. Relaxes on leave.
-	 */
-	private magnifyTicks(pointerY: number | undefined): void {
-		// A bit above the tick spacing (~12px) so the nearest tick clearly leads
-		// while its immediate neighbour still tapers — wider reads as a sticky blob.
-		const radius = 22;
-		if (pointerY === undefined) {
-			for (const tick of this.timeline.querySelectorAll<HTMLElement>('.conversation-timeline-tick')) {
-				tick.style.transform = '';
-				tick.style.background = '';
-			}
-			this.previewTick = undefined;
-			this.closeTimelinePreview();
-			return;
-		}
-
-		let nearest: HTMLElement | undefined;
-		let nearestDistance = Infinity;
-		for (const tick of this.timeline.querySelectorAll<HTMLElement>('.conversation-timeline-tick')) {
-			const rect = tick.getBoundingClientRect();
-			const distance = Math.abs(pointerY - (rect.top + rect.height / 2));
-			if (distance < nearestDistance) {
-				nearestDistance = distance;
-				nearest = tick;
-			}
-			const factor = Math.max(0, 1 - distance / radius);
-			// Length only — thickness stays constant.
-			tick.style.transform = factor > 0 ? `scaleX(${1 + factor * 3.5})` : '';
-			// Ticks within reach also brighten toward the pointer (22% at the
-			// edge of the radius up to ~90% under it).
-			tick.style.background = factor > 0 ? `color-mix(in srgb, var(--vscode-agents-color-text-primary) ${Math.round(22 + factor * 68)}%, transparent)` : '';
-		}
-
-		// Scrubbing the rail previews the nearest turn; only rebuild on change.
-		if (nearest && nearest !== this.previewTick) {
-			this.previewTick = nearest;
-			const turn = this.tickTurns.get(nearest);
-			if (turn) {
-				this.openTimelinePreview(nearest, turn);
-			}
-		}
-	}
-
-	/** Highlight the tick for the message at the top of the viewport. */
-	private updateTimelineCurrent(): void {
-		const rows = this.transcript.querySelectorAll<HTMLElement>('[data-message-id]');
-		let currentId: string | undefined;
-		// Tighter band than FOLLOW_BAND_PX: highlighting the last tick is about
-		// being AT the end, not merely following it.
-		const atBottom = this.isNearBottom(8);
-		if (atBottom && rows.length > 0) {
-			// Reading the live end — the last message is current.
-			currentId = rows[rows.length - 1]!.dataset.messageId;
-		} else {
-			const anchor = this.transcript.scrollTop + 48;
-			for (const row of rows) {
-				if (row.offsetTop <= anchor) {
-					currentId = row.dataset.messageId;
-				} else {
-					break;
-				}
-			}
-		}
-		for (const tick of this.timeline.querySelectorAll<HTMLElement>('.conversation-timeline-tick')) {
-			tick.classList.toggle('current', currentId !== undefined && (tick.dataset.blockIds ?? '').split(' ').includes(currentId));
-		}
-	}
-
-	/** One card per turn: the question as title, the reply excerpt, files touched. */
-	private openTimelinePreview(tick: HTMLElement, turn: { user?: ISessionMessage; work?: ISessionMessage; assistant?: ISessionMessage }): void {
-		this.closeTimelinePreview();
-
-		const card = document.createElement('div');
-		card.className = 'conversation-timeline-preview';
-
-		if (turn.user) {
-			const title = append(card, document.createElement('div'));
-			title.className = 'conversation-timeline-preview-title';
-			title.textContent = turn.user.text;
-		}
-
-		const excerpt = append(card, document.createElement('div'));
-		excerpt.className = 'conversation-timeline-preview-text';
-		excerpt.textContent = turn.assistant ? turn.assistant.text.slice(0, 240) : localize('conv.workingEllipsis');
-
-		const files = extractWorkFiles(turn.work);
-		if (files.length > 0) {
-			const chips = append(card, document.createElement('div'));
-			chips.className = 'conversation-timeline-preview-files';
-			for (const file of files.slice(0, 3)) {
-				const chip = append(chips, document.createElement('span'));
-				chip.className = 'conversation-timeline-preview-file';
-				const icon = append(chip, document.createElement('span'));
-				icon.className = 'codicon codicon-code';
-				icon.setAttribute('aria-hidden', 'true');
-				const name = append(chip, document.createElement('span'));
-				name.className = 'conversation-timeline-preview-file-name';
-				name.textContent = file;
-			}
-			if (files.length > 3) {
-				const more = append(chips, document.createElement('span'));
-				more.className = 'conversation-timeline-preview-file';
-				more.textContent = `+${files.length - 3}`;
-			}
-		}
-
-		this.element.appendChild(card);
-		const viewRect = this.element.getBoundingClientRect();
-		const tickRect = tick.getBoundingClientRect();
-		const top = Math.min(Math.max(8, tickRect.top - viewRect.top - 12), this.element.clientHeight - card.offsetHeight - 8);
-		card.style.top = `${top}px`;
-		card.style.left = `${this.timeline.offsetWidth + 6}px`;
-		this.timelinePreview = card;
-	}
-
-	private closeTimelinePreview(): void {
-		this.timelinePreview?.remove();
-		this.timelinePreview = undefined;
-	}
-
-	private updateWorkTicker(hasLiveWork: boolean): void {
-		if (hasLiveWork && this.workTicker === undefined) {
-			// The header shows elapsed seconds; deltas already re-render constantly,
-			// the ticker only covers quiet stretches (thinking, long tool calls).
-			this.workTicker = setInterval(() => this.render(), 1000);
-		} else if (!hasLiveWork && this.workTicker !== undefined) {
-			clearInterval(this.workTicker);
-			this.workTicker = undefined;
-		}
-	}
-
 	override dispose(): void {
-		if (this.workTicker !== undefined) {
-			clearInterval(this.workTicker);
-			this.workTicker = undefined;
-		}
-		if (this.scrollSettleFrame !== undefined) {
-			cancelAnimationFrame(this.scrollSettleFrame);
-			this.scrollSettleFrame = undefined;
-		}
 		// Portaled to <body>, outside `this.element` — removing the view's own
 		// root would never take this with it.
 		this.contextPopover.remove();
@@ -1198,31 +702,6 @@ export class ConversationView extends Disposable {
 		this.contextPopover.style.left = `${left}px`;
 	}
 
-	private createWorkingRow(): HTMLElement {
-		const row = document.createElement('div');
-		row.className = 'conversation-working-row';
-
-		const label = append(row, document.createElement('div'));
-		label.className = 'conversation-working-label';
-		label.textContent = formatWorkingDuration(this.session?.createdAt);
-
-		return row;
-	}
-
-	private createThinkingRow(): HTMLElement {
-		const row = document.createElement('div');
-		row.className = 'conversation-thinking-row';
-
-		const spinner = append(row, document.createElement('span'));
-		spinner.className = 'codicon codicon-loading codicon-modifier-spin';
-		spinner.setAttribute('aria-hidden', 'true');
-
-		const label = append(row, document.createElement('span'));
-		label.textContent = localize('conv.thinking');
-
-		return row;
-	}
-
 	private updateComposerState(): void {
 		const interactivity = this.session?.interactivity.get();
 		const isRunning = this.session?.status.get() === SessionStatus.InProgress;
@@ -1278,7 +757,7 @@ export class ConversationView extends Disposable {
 		this.setSendError(undefined);
 		this.updateComposerState();
 		// Sending returns the reader to the live end of the conversation.
-		this.scrollToBottomOnRender = true;
+		this.transcriptView.stickToBottomOnNextRender();
 
 		try {
 			const attachments = [...this.mentions.collectAttachments(query), ...this.skillMentions.collectAttachments(query), ...this.sessionMentions.collectAttachments(query)];
@@ -1323,356 +802,6 @@ export class ConversationView extends Disposable {
 		this.sendError.textContent = message ?? '';
 		this.sendError.hidden = !message;
 	}
-
-	/**
-	 * Rebuild the docked approval strip — but ONLY when the set of pending
-	 * requests actually changed: render() also fires for the 1s work ticker,
-	 * and rebuilding then would wipe a half-typed deny reason and the focus.
-	 */
-	private renderApprovalDock(approvals: readonly ISessionPendingApproval[]): void {
-		const key = approvals.map(approval => approval.requestId).join('\n');
-		if (key === this.renderedApprovalKey) {
-			return;
-		}
-		this.renderedApprovalKey = key;
-
-		// A staggered parallel batch rebuilds the dock while the user may be
-		// typing a deny reason in an earlier card — carry text and focus over.
-		const previousReasons = new Map<string, string>();
-		let refocusReasonId: string | undefined;
-		for (const card of this.approvalDock.querySelectorAll<HTMLElement>('.conversation-approval')) {
-			const requestId = card.dataset['requestId'];
-			const reasonInput = card.querySelector<HTMLInputElement>('.conversation-approval-reason');
-			if (requestId !== undefined && reasonInput) {
-				if (reasonInput.value !== '') {
-					previousReasons.set(requestId, reasonInput.value);
-				}
-				if (reasonInput === document.activeElement) {
-					refocusReasonId = requestId;
-				}
-			}
-		}
-		const hadFocus = this.approvalDock.contains(document.activeElement);
-
-		clearNode(this.approvalDock);
-		this.approvalDock.hidden = approvals.length === 0;
-		if (approvals.length === 0) {
-			this.focusedApprovalId = undefined;
-			// A decision emptied the dock from under the keyboard — hand focus back.
-			if (hadFocus) {
-				this.focus();
-			}
-			return;
-		}
-
-		approvals.forEach((approval, index) => {
-			// The first card follows the session's density rule; stacked followers
-			// are always compact — but only for tools ALLOWED to compact
-			// (run_on_server et al. keep the full ceremony even in a stack).
-			const compact = this.useCompactApproval(approval) || (index > 0 && shouldRenderCompactApproval(COMPACT_APPROVAL_AFTER, approval.toolName));
-			const card = createApprovalCard(approval, compact);
-			this.approvalDock.appendChild(card);
-			const carriedReason = previousReasons.get(approval.requestId);
-			const reasonInput = card.querySelector<HTMLInputElement>('.conversation-approval-reason');
-			if (carriedReason !== undefined && reasonInput) {
-				reasonInput.value = carriedReason;
-			}
-			if (approval.requestId === refocusReasonId) {
-				reasonInput?.focus();
-			}
-		});
-
-		// Focus the first card's Allow when the request is new — and also when the
-		// rebuild itself wiped a focus that lived in the dock (a staggered batch
-		// member arriving mid-decision would otherwise strand the keyboard on
-		// <body>). Never steal from a mid-sentence composer draft.
-		const first = approvals[0]!;
-		if ((first.requestId !== this.focusedApprovalId || hadFocus) && refocusReasonId === undefined && !(document.activeElement === this.input && this.input.value !== '')) {
-			this.approvalDock.querySelector<HTMLButtonElement>('.conversation-approval-allow')?.focus();
-		}
-		this.focusedApprovalId = first.requestId;
-	}
-
-	/** Count this request against its session and decide the card's density. */
-	private useCompactApproval(approval: ISessionPendingApproval): boolean {
-		const sessionId = this.session?.sessionId;
-		if (sessionId === undefined) {
-			return false;
-		}
-		let seen = this.approvalsSeen.get(sessionId);
-		if (!seen) {
-			seen = new Set();
-			this.approvalsSeen.set(sessionId, seen);
-		}
-		// The card re-renders every second (live ticker) — a request must count
-		// once, not once per render, or the threshold would trip on a single prompt.
-		const prior = seen.has(approval.requestId) ? seen.size - 1 : seen.size;
-		seen.add(approval.requestId);
-		return shouldRenderCompactApproval(prior, approval.toolName);
-	}
-}
-
-/** The gate paused on a mutating tool: say what it wants and offer Allow / Deny. */
-/** Per-tool presentation of an approval prompt: icon, human title, type chip, and how to show the detail. */
-function describeApproval(toolName: string, detail: string): { icon: string; title: string; chip: string; command?: string; path?: string } {
-	switch (toolName) {
-		case 'bash':
-			return { icon: 'codicon-terminal', title: localize('appr.runCommand'), chip: 'bash', command: detail };
-		case 'write_file':
-			return { icon: 'codicon-new-file', title: localize('appr.writeFile'), chip: 'write_file', path: detail.replace(/^write /, '') };
-		case 'edit_file':
-			return { icon: 'codicon-edit', title: localize('appr.editFile'), chip: 'edit_file', path: detail.replace(/^edit /, '') };
-		case 'execute_data_source':
-			// The SQL renders in the command slot — the user must see the exact
-			// statement they are approving, same treatment as a bash command.
-			return { icon: 'codicon-database', title: localize('appr.executeDataSource'), chip: 'execute_data_source', command: detail };
-		default:
-			return { icon: 'codicon-shield', title: localize('appr.generic'), chip: toolName };
-	}
-}
-
-/** Full cards a session answers before the density drops to compact single-row. */
-const COMPACT_APPROVAL_AFTER = 3;
-
-/**
- * Whether an approval renders as the compact single-row variant: once a session
- * has already been through a few full cards, later prompts shrink to one line so
- * an approval-dense run stops eating the transcript. Only tools with a guard
- * BEHIND the prompt (bash sandbox, file-tool code root) may shrink —
- * run_on_server's only gate is the prompt itself, so it always gets the full card.
- */
-export function shouldRenderCompactApproval(priorPrompts: number, toolName: string): boolean {
-	if (toolName !== 'bash' && toolName !== 'write_file' && toolName !== 'edit_file') {
-		return false;
-	}
-	return priorPrompts >= COMPACT_APPROVAL_AFTER;
-}
-
-/** Muted-dir + bold-filename path spans, shared by the full and compact bodies. */
-function appendApprovalPath(row: HTMLElement, path: string): void {
-	const slash = path.lastIndexOf('/');
-	if (slash >= 0) {
-		const dir = append(row, document.createElement('span'));
-		dir.className = 'conversation-approval-path-dir';
-		dir.textContent = path.slice(0, slash + 1);
-	}
-	const base = append(row, document.createElement('span'));
-	base.className = 'conversation-approval-path-base';
-	base.textContent = slash >= 0 ? path.slice(slash + 1) : path;
-}
-
-/** The card's typed-but-not-sent deny reason, if any. */
-function readDenyReason(card: HTMLElement): string | undefined {
-	const value = card.querySelector<HTMLInputElement>('.conversation-approval-reason')?.value.trim();
-	return value === undefined || value === '' ? undefined : value;
-}
-
-/** Trailing kbd hint (⏎ / Esc) — the ALTERNATE way to fire a row, not its
- *  identity, so it stays a quiet chip pinned to the row's far right. */
-function appendKeyHint(button: HTMLElement, text: string): void {
-	const key = append(button, document.createElement('kbd'));
-	key.className = 'conversation-approval-key';
-	key.textContent = text;
-}
-
-/** Leading row number (Antigravity's plain "1  2  3" list column) — the row's
- *  PRIMARY identity, so it renders as plain muted text, not a boxed chip. */
-function appendActionIndex(button: HTMLElement, digit: string): void {
-	const index = append(button, document.createElement('span'));
-	index.className = 'conversation-approval-action-index';
-	index.textContent = digit;
-}
-
-/**
- * Allow / always-allow / deny row. Full cards render as a plain numbered
- * list — one full-width row per option, the leading digit its identity,
- * hover/focus painting the whole row (a lighter, less "button toolbar" read
- * than the compact card's pills). Compact keeps the pill row unchanged: a
- * dense single line has no room for a spacious list.
- *
- * Digit hints number whatever ACTUALLY renders (1..N in DOM order) — a tool
- * with no grant (execute_data_source, run_on_server) only gets Allow + Deny,
- * so those must read "1 / 2", never "1 / 4" with two phantom slots in between.
- */
-function appendApprovalActions(card: HTMLElement, approval: ISessionPendingApproval, compact: boolean): void {
-	const actions = append(card, document.createElement('div'));
-	actions.className = 'conversation-approval-actions';
-	let nextDigit = 1;
-	const digitHint = (): string => String(nextDigit++);
-
-	const allow = append(actions, document.createElement('button')) as HTMLButtonElement;
-	allow.className = 'conversation-approval-allow';
-	allow.type = 'button';
-	if (!compact) {
-		appendActionIndex(allow, digitHint());
-	}
-	append(allow, document.createElement('span')).textContent = localize('appr.allow');
-	if (!compact) {
-		appendKeyHint(allow, '⏎');
-	}
-	allow.addEventListener('click', () => approval.respond(true));
-
-	// "Always allow [pattern]" — offered only for safe, always-allowable tools
-	// (main-side deriveGrant gates this; run_on_server never gets a label). The
-	// pattern is shown verbatim so the user sees exactly what they're granting.
-	if (approval.alwaysAllow !== undefined) {
-		const always = append(actions, document.createElement('button')) as HTMLButtonElement;
-		always.className = 'conversation-approval-always';
-		always.type = 'button';
-		always.title = localize('appr.alwaysTitle', approval.alwaysAllow);
-		if (!compact) {
-			appendActionIndex(always, digitHint());
-		}
-		append(always, document.createElement('span')).textContent = localize('appr.always');
-		const pattern = append(always, document.createElement('code'));
-		pattern.className = 'conversation-approval-pattern';
-		pattern.textContent = approval.alwaysAllow;
-		always.addEventListener('click', () => approval.respond(true, true, 'session'));
-
-		// The PERMANENT variant (persisted per project, personal & per-machine) —
-		// only ever offered for bash: grants inside a project (main-side gated),
-		// and only on the full card: a durable grant deserves the full ceremony.
-		if (approval.alwaysAllowProject && !compact) {
-			const forever = append(actions, document.createElement('button')) as HTMLButtonElement;
-			forever.className = 'conversation-approval-always conversation-approval-always-project';
-			forever.type = 'button';
-			forever.title = localize('appr.projectTitle', approval.alwaysAllow);
-			appendActionIndex(forever, digitHint());
-			append(forever, document.createElement('span')).textContent = localize('appr.project');
-			forever.addEventListener('click', () => approval.respond(true, true, 'project'));
-		}
-	}
-
-	const deny = append(actions, document.createElement('button')) as HTMLButtonElement;
-	deny.className = 'conversation-approval-deny';
-	deny.type = 'button';
-	if (!compact) {
-		appendActionIndex(deny, digitHint());
-	}
-	append(deny, document.createElement('span')).textContent = localize('appr.deny');
-	if (!compact) {
-		appendKeyHint(deny, 'Esc');
-	}
-	// A deny picks up whatever redirect the user typed in the reason field.
-	deny.addEventListener('click', () => approval.respond(false, undefined, undefined, readDenyReason(card)));
-}
-
-function createApprovalCard(approval: ISessionPendingApproval, compact = false): HTMLElement {
-	const card = document.createElement('div');
-	card.className = compact ? 'conversation-approval conversation-approval-compact' : 'conversation-approval';
-	card.dataset['requestId'] = approval.requestId;
-	card.setAttribute('role', 'alertdialog');
-	card.setAttribute('aria-label', localize('appr.aria'));
-	// Keyboard, scoped to the focused card (listeners die with it — no
-	// document-level leak): Esc = bare deny; digits 1–4 pick a button (compact
-	// keeps the keys, just not the hints); Enter inside the reason field denies
-	// WITH the typed redirect. Digits typed into the reason field stay text.
-	card.addEventListener('keydown', event => {
-		if (event.isComposing) {
-			return;
-		}
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			approval.respond(false);
-			return;
-		}
-		const inReason = event.target instanceof HTMLInputElement && event.target.classList.contains('conversation-approval-reason');
-		if (inReason) {
-			if (event.key === 'Enter') {
-				// Also blocks the surrounding composer <form>'s implicit submit.
-				event.preventDefault();
-				const reason = readDenyReason(card);
-				if (reason !== undefined) {
-					approval.respond(false, undefined, undefined, reason);
-				}
-			}
-			return;
-		}
-		// Digit N = the Nth actual button, in DOM order — same order the visible
-		// kbd hints were numbered in, so "2" always fires whatever button reads "2".
-		const digit = Number(event.key);
-		if (Number.isInteger(digit) && digit >= 1) {
-			const button = card.querySelectorAll<HTMLButtonElement>('.conversation-approval-actions button')[digit - 1];
-			if (button) {
-				event.preventDefault();
-				button.click();
-			}
-		}
-	});
-
-	const spec = describeApproval(approval.toolName, approval.detail);
-
-	if (compact) {
-		// One line: icon · detail (ellipsized, full text on hover) · small actions.
-		// The session has already read a few full cards — density over ceremony.
-		appendCodicon(card, spec.icon);
-		const body = append(card, document.createElement('span'));
-		body.className = 'conversation-approval-compact-detail';
-		body.title = spec.command ?? spec.path ?? approval.detail;
-		if (spec.command !== undefined) {
-			const marker = append(body, document.createElement('span'));
-			marker.className = 'conversation-approval-prompt';
-			marker.textContent = '$';
-			const cmd = append(body, document.createElement('code'));
-			cmd.className = 'conversation-approval-compact-command';
-			cmd.textContent = spec.command;
-		} else if (spec.path !== undefined) {
-			appendApprovalPath(body, spec.path);
-		} else {
-			const detail = append(body, document.createElement('code'));
-			detail.className = 'conversation-approval-compact-command';
-			detail.textContent = approval.detail;
-		}
-		appendApprovalActions(card, approval, true);
-		return card;
-	}
-
-	const header = append(card, document.createElement('div'));
-	header.className = 'conversation-approval-header';
-	appendCodicon(header, spec.icon);
-	const title = append(header, document.createElement('span'));
-	title.className = 'conversation-approval-title';
-	title.textContent = spec.title;
-	const chip = append(header, document.createElement('span'));
-	chip.className = 'conversation-approval-chip';
-	chip.textContent = spec.chip;
-
-	if (spec.command !== undefined) {
-		// Terminal-style block: a $ prompt marker, and the command WRAPS instead of
-		// scrolling off — a long path stays fully readable.
-		const term = append(card, document.createElement('div'));
-		term.className = 'conversation-approval-terminal';
-		const marker = append(term, document.createElement('span'));
-		marker.className = 'conversation-approval-prompt';
-		marker.textContent = '$';
-		const cmd = append(term, document.createElement('code'));
-		cmd.className = 'conversation-approval-command';
-		cmd.textContent = spec.command;
-	} else if (spec.path !== undefined) {
-		// Show the path with its directory muted and the filename emphasized.
-		const row = append(card, document.createElement('div'));
-		row.className = 'conversation-approval-path';
-		appendCodicon(row, 'codicon-file');
-		appendApprovalPath(row, spec.path);
-	} else {
-		const detail = append(card, document.createElement('code'));
-		detail.className = 'conversation-approval-command';
-		detail.textContent = approval.detail;
-	}
-
-	appendApprovalActions(card, approval, false);
-
-	// Deny-with-redirect (Antigravity's "tell the agent what to do instead"):
-	// a denial that says WHY reaches the model inside the deny message, so it
-	// changes course instead of retrying the same call. Optional — the Deny
-	// button and Esc still work bare. Full card only; compact keeps density.
-	const reason = append(card, document.createElement('input')) as HTMLInputElement;
-	reason.className = 'conversation-approval-reason';
-	reason.type = 'text';
-	reason.placeholder = localize('appr.reasonPlaceholder');
-	reason.setAttribute('aria-label', localize('appr.reasonPlaceholder'));
-
-	return card;
 }
 
 /** The #-picker's entries: other sessions, newest first, capped. */
@@ -1793,33 +922,6 @@ export interface IMessageActions {
 	copy(): void;
 	feedback?(value: 'like' | 'dislike'): void;
 	fork?(): void;
-}
-
-/** File names touched by a work block's write/edit tool steps. */
-function extractWorkFiles(work: ISessionMessage | undefined): string[] {
-	const files: string[] = [];
-	for (const step of work?.steps ?? []) {
-		const match = /^(?:write_file|edit_file|read_file) (.+)$/.exec(step.label);
-		if (step.kind === 'tool' && match) {
-			const name = match[1]!.split('/').pop()!;
-			if (!files.includes(name)) {
-				files.push(name);
-			}
-		}
-	}
-	return files;
-}
-
-function formatWorkingDuration(startedAt: Date | undefined): string {
-	const elapsedMs = Math.max(0, Date.now() - (startedAt?.getTime() ?? Date.now()));
-	const totalSeconds = Math.floor(elapsedMs / 1000);
-	const minutes = Math.floor(totalSeconds / 60);
-	const seconds = totalSeconds % 60;
-	if (minutes > 0) {
-		return localize('conv.workingForMS', minutes, seconds);
-	}
-
-	return localize('conv.workingForS', seconds);
 }
 
 function conversationStatusId(status: SessionStatus): string {

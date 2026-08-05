@@ -22,14 +22,16 @@ const TARGET_PREFIX = 't:';
 const ROW_HEIGHT = 44;
 const COLUMN_GAP = 240;
 
-function nodeLabel(data: NodeProps['data']): string {
-	return String((data as { label?: unknown }).label ?? '');
+type FieldNodeData = { label: string };
+
+function nodeLabel(data: FieldNodeData | undefined): string {
+	return data?.label ?? '';
 }
 
 function SourceFieldNode({ data }: NodeProps): React.ReactElement {
 	return (
 		<div className="fm-node fm-node-source">
-			<span>{nodeLabel(data)}</span>
+			<span>{nodeLabel(data as FieldNodeData | undefined)}</span>
 			<Handle type="source" position={Position.Right} />
 		</div>
 	);
@@ -39,7 +41,7 @@ function TargetFieldNode({ data }: NodeProps): React.ReactElement {
 	return (
 		<div className="fm-node fm-node-target">
 			<Handle type="target" position={Position.Left} />
-			<span>{nodeLabel(data)}</span>
+			<span>{nodeLabel(data as FieldNodeData | undefined)}</span>
 		</div>
 	);
 }

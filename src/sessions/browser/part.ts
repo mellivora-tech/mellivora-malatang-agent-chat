@@ -12,6 +12,7 @@ export abstract class Part extends Disposable implements IGridView {
 	abstract readonly minimumWidth: number;
 	abstract readonly minimumHeight: number;
 	abstract readonly priority: LayoutPriority;
+	private created = false;
 
 	constructor(
 		readonly id: string,
@@ -24,6 +25,10 @@ export abstract class Part extends Disposable implements IGridView {
 	}
 
 	create(parent: HTMLElement): void {
+		if (this.created) {
+			return;
+		}
+		this.created = true;
 		parent.appendChild(this.element);
 		this.render(this.element);
 	}

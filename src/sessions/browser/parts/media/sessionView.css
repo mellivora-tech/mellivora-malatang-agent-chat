@@ -151,7 +151,7 @@
 	max-height: 280px;
 	overflow-y: auto;
 	padding: var(--vscode-agents-space-4);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	box-shadow: var(--vscode-agents-elevation-menu);
@@ -178,7 +178,8 @@
 	opacity: 0.5;
 }
 
-.conversation-branch-menu-item:hover {
+.conversation-branch-menu-item:hover,
+.conversation-branch-menu-item:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-input-foreground) 9%, transparent);
 }
 
@@ -260,7 +261,8 @@
 	will-change: transform;
 }
 
-.conversation-timeline-tick:hover {
+.conversation-timeline-tick:hover,
+.conversation-timeline-tick:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 65%, transparent);
 }
 
@@ -382,7 +384,7 @@
 
 .conversation-message {
 	display: grid;
-	grid-template-columns: 28px minmax(0, 1fr);
+	grid-template-columns: var(--vscode-agents-size-message-avatar) minmax(0, 1fr);
 	gap: var(--vscode-agents-space-10);
 	max-width: var(--vscode-agents-size-conversation-width);
 	margin: 0 auto var(--vscode-agents-space-18);
@@ -392,8 +394,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 28px;
+	width: var(--vscode-agents-size-message-avatar);
+	height: var(--vscode-agents-size-message-avatar);
 	border-radius: 6px;
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
 	color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 82%, transparent);
@@ -596,7 +598,8 @@
 	cursor: default;
 }
 
-.conversation-work-header:hover {
+.conversation-work-header:hover,
+.conversation-work-header:focus-visible {
 	color: var(--vscode-agents-color-text-primary);
 }
 
@@ -729,9 +732,6 @@ button.conversation-work-step-row:hover {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	vertical-align: bottom;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 /* Structured rows carry the verb in normal prose — undo the legacy all-mono tool row. */
@@ -882,7 +882,8 @@ button.conversation-work-step-row:hover {
 	cursor: default;
 }
 
-.conversation-work-step-browse:hover {
+.conversation-work-step-browse:hover,
+.conversation-work-step-browse:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
@@ -1024,7 +1025,8 @@ button.conversation-work-step-row:hover {
 	cursor: pointer;
 }
 
-.conversation-document-toggle:hover {
+.conversation-document-toggle:hover,
+.conversation-document-toggle:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
@@ -1143,7 +1145,8 @@ button.conversation-work-step-row:hover {
 	cursor: default;
 }
 
-.conversation-plan-comment-resolve:hover {
+.conversation-plan-comment-resolve:hover,
+.conversation-plan-comment-resolve:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 }
 
@@ -1238,7 +1241,8 @@ button.conversation-plan-header {
 	color: var(--vscode-agents-color-accent-foreground);
 }
 
-.conversation-plan-approve:hover:not(:disabled) {
+.conversation-plan-approve:hover:not(:disabled),
+.conversation-plan-approve:focus-visible:not(:disabled) {
 	background: color-mix(in srgb, var(--vscode-agents-color-success) 88%, var(--vscode-agents-color-text-inverse));
 }
 
@@ -1248,7 +1252,8 @@ button.conversation-plan-header {
 	color: var(--vscode-agents-color-text-primary);
 }
 
-.conversation-plan-revise:hover:not(:disabled) {
+.conversation-plan-revise:hover:not(:disabled),
+.conversation-plan-revise:focus-visible:not(:disabled) {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 }
 
@@ -1531,7 +1536,8 @@ button.conversation-plan-header {
 	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 40%, transparent);
 }
 
-.conversation-approval-compact .conversation-approval-allow:hover {
+.conversation-approval-compact .conversation-approval-allow:hover,
+.conversation-approval-compact .conversation-approval-allow:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-success) 28%, transparent);
 	border-color: color-mix(in srgb, var(--vscode-agents-color-success) 55%, transparent);
 }
@@ -1541,7 +1547,8 @@ button.conversation-plan-header {
 	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
 }
 
-.conversation-approval-compact .conversation-approval-deny:hover {
+.conversation-approval-compact .conversation-approval-deny:hover,
+.conversation-approval-compact .conversation-approval-deny:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
@@ -1551,7 +1558,8 @@ button.conversation-plan-header {
 	border-color: color-mix(in srgb, var(--vscode-agents-color-text-primary) 16%, transparent);
 }
 
-.conversation-approval-compact .conversation-approval-always:hover {
+.conversation-approval-compact .conversation-approval-always:hover,
+.conversation-approval-compact .conversation-approval-always:focus-visible {
 	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
 	color: var(--vscode-agents-color-text-primary);
 }
@@ -1690,7 +1698,7 @@ button.conversation-plan-header {
 .conversation-working-row,
 .conversation-thinking-row {
 	display: grid;
-	grid-template-columns: 28px minmax(0, 1fr);
+	grid-template-columns: var(--vscode-agents-size-message-avatar) minmax(0, 1fr);
 	gap: var(--vscode-agents-space-10);
 	max-width: var(--vscode-agents-size-conversation-width);
 	margin: 0 auto;
@@ -1917,7 +1925,8 @@ button.conversation-plan-header {
 	cursor: default;
 }
 
-.conversation-paused-banner-resume:hover:not(:disabled) {
+.conversation-paused-banner-resume:hover:not(:disabled),
+.conversation-paused-banner-resume:focus-visible:not(:disabled) {
 	background: var(--vscode-agents-color-control-hoverBackground);
 }
 
@@ -1944,7 +1953,8 @@ button.conversation-plan-header {
 	border-radius: var(--vscode-agents-radius-control);
 }
 
-.conversation-quota-refresh:hover {
+.conversation-quota-refresh:hover,
+.conversation-quota-refresh:focus-visible {
 	color: var(--vscode-agents-color-text-primary);
 	background: var(--vscode-agents-color-control-hoverBackground);
 }
@@ -2107,7 +2117,7 @@ button.conversation-plan-header {
 }
 
 .conversation-context-popover-footnote {
-	font-size: 10px;
+	font-size: var(--vscode-agents-fontSize-label3);
 	color: var(--vscode-agents-color-text-secondary);
 	text-align: center;
 	opacity: 0.75;
@@ -2199,10 +2209,10 @@ button.conversation-plan-header {
 }
 
 .conversation-send-error {
-	margin: 4px auto 0;
+	margin: var(--vscode-agents-space-4) auto 0;
 	max-width: var(--vscode-agents-size-conversation-width);
 	color: var(--vscode-agents-color-danger);
-	font-size: 12px;
+	font-size: var(--vscode-agents-fontSize-label1);
 }
 
 /* surface_patch projection card (#12 M4): a light reference — the surface

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { localize } from '../../../../common/i18n/i18n.js';
 import { DOCUMENT_SPLIT_MARKER } from '../../../../services/sessions/common/session.js';
 import type { ISessionAttachment, ISessionMessage } from '../../../../services/sessions/common/session.js';
@@ -224,20 +224,15 @@ function useBubbleCollapse(bubbleRef: RefObject<HTMLDivElement | null>, text: st
 	const [state, setState] = useState<'collapsed' | 'expanded' | undefined>(undefined);
 	const [collapsible, setCollapsible] = useState(false);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		const bubble = bubbleRef.current;
 		if (!bubble || text.trim() === '') {
 			setState(undefined);
 			setCollapsible(false);
 			return;
 		}
-		// Write the clamp to the DOM directly, synchronously — a setState here
-		// wouldn't commit until React's next render pass, which isn't guaranteed
-		// to land before the rAF below fires, so the measurement could read the
-		// un-clamped (natural) height and wrongly conclude nothing overflows.
-		// The setState calls alongside it just keep React's model in sync for
-		// re-renders triggered some other way before the rAF settles.
-		bubble.dataset['collapse'] = 'collapsed';
+		// Synchronous state commit via useLayoutEffect so the data-collapse
+		// attribute is already on the DOM when the rAF below measures height.
 		setState('collapsed');
 		setCollapsible(false);
 		const raf = requestAnimationFrame(() => {
@@ -247,7 +242,6 @@ function useBubbleCollapse(bubbleRef: RefObject<HTMLDivElement | null>, text: st
 			if (bubble.scrollHeight > bubble.clientHeight) {
 				setCollapsible(true);
 			} else {
-				delete bubble.dataset['collapse'];
 				setState(undefined);
 			}
 		});

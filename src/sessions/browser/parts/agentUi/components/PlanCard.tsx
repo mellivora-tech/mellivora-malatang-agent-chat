@@ -115,13 +115,20 @@ interface IPlanBodyProps {
 function PlanBody(props: IPlanBodyProps): JSX.Element {
 	const { plan, allComments, sessionId, messageSender, submitting, setSubmitting, onFocusComposer } = props;
 	// Comments are version-scoped via section ids; only a draft accepts new ones.
-	const commentable = plan.state === 'draft' && sessionId !== undefined && messageSender?.setPlanComment !== undefined;
+	const commentableSessionId = sessionId;
+	const commentable = plan.state === 'draft' && commentableSessionId !== undefined && messageSender?.setPlanComment !== undefined;
 
 	const resolveComment = (comment: IPlanComment) => {
-		void messageSender?.setPlanComment?.(sessionId!, { ...comment, resolved: true });
+		if (commentableSessionId === undefined || !messageSender?.setPlanComment) {
+			return;
+		}
+		void messageSender.setPlanComment(commentableSessionId, { ...comment, resolved: true });
 	};
 	const submitComment = (sectionId: string, body: string) => {
-		void messageSender?.setPlanComment?.(sessionId!, {
+		if (commentableSessionId === undefined || !messageSender?.setPlanComment) {
+			return;
+		}
+		void messageSender.setPlanComment(commentableSessionId, {
 			id: `${sectionId}-c${Date.now().toString(36)}`,
 			planId: plan.id,
 			sectionId,

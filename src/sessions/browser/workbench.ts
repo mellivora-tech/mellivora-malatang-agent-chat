@@ -5,8 +5,9 @@
 
 import { WorkbenchGrid } from '../base/browser/grid.js';
 import { localize } from '../common/i18n/i18n.js';
+import { reportFailure } from '../common/diagnostics.js';
 import { auxiliaryBarWidthPx, editorWidthPx, panelHeightPx, sidebarWidthPx, titlebarHeightPx } from '../common/sizes.js';
-import { DisposableStore, toDisposable, type IDisposable } from '../base/common/lifecycle.js';
+import { DisposableStore, toDisposable, type IDisposable, Disposable } from '../base/common/lifecycle.js';
 import { registerFileSessionsProvider } from '../contrib/fileProvider/browser/fileSessions.contribution.js';
 import { ServiceCollection } from '../platform/instantiation/instantiation.js';
 import { applyThemeTokens } from '../platform/theme/theme.js';
@@ -55,9 +56,11 @@ type AgentWindowGlobals = typeof globalThis & {
 	};
 };
 
-export class Workbench {
+export class Workbench extends Disposable {
 	private readonly root = document.createElement('div');
 	private readonly services = new ServiceCollection();
+	private readonly sashDisposables = this._register(new DisposableStore());
+	private readonly partSubscriptions = this._register(new DisposableStore());
 	private readonly projectsService = new ProjectsService((globalThis as AgentWindowGlobals).agentWindow?.projects, (globalThis as AgentWindowGlobals).agentWindow?.appState);
 	private readonly modelsService = new ModelsService((globalThis as AgentWindowGlobals).agentWindow?.models);
 	private readonly skillsService = new SkillsService((globalThis as AgentWindowGlobals).agentWindow?.skills);
@@ -98,7 +101,6 @@ export class Workbench {
 	});
 	private readonly editorPart = new EditorPart();
 	private readonly panelPart = new PanelPart();
-	private readonly partSubscriptions = new DisposableStore();
 	private readonly agentBridge = (globalThis as AgentWindowGlobals).agentWindow?.agent;
 	private readonly grid = new WorkbenchGrid(
 		{
@@ -130,15 +132,17 @@ export class Workbench {
 	private readonly sash = document.createElement('div');
 
 	constructor(private readonly container: HTMLElement) {
+		super();
 		this.root.classList.add('monaco-workbench', 'agent-sessions-workbench', 'shell-gradient-background', `platform-${getPlatform()}`);
+		this._register(toDisposable(() => this.resizeListener?.dispose()));
 	}
 
 	startup(): void {
 		this.services.set(IProjectsService, this.projectsService);
 		this.services.set(ISessionsProvidersService, this.providersService);
-		void this.projectsService.initialize();
-		void this.modelsService.initialize();
-		void this.skillsService.initialize();
+		void this.projectsService.initialize().catch(error => reportFailure('workbench.projects.initialize', error));
+		void this.modelsService.initialize().catch(error => reportFailure('workbench.models.initialize', error));
+		void this.skillsService.initialize().catch(error => reportFailure('workbench.skills.initialize', error));
 		this.services.set(ISessionsManagementService, this.managementService);
 		this.services.set(ISessionsService, this.sessionsService);
 		this.services.set(ISessionsPartService, this.sessionsPartService);
@@ -153,7 +157,7 @@ export class Workbench {
 				this.agentBridge,
 				this.modelsService,
 			);
-			void provider.initialize();
+			void provider.initialize().catch(error => reportFailure('workbench.sessionsProvider.initialize', error));
 		}
 
 		this.container.replaceChildren(this.root);
@@ -185,12 +189,13 @@ export class Workbench {
 	 * (persisted), and a double-click returns to automatic.
 	 */
 	private createSash(): void {
+		this.sashDisposables.clear();
 		this.sash.className = 'workbench-sash';
 		this.sash.style.display = 'none';
 		this.sash.title = localize('wb.sashTitle');
 		this.root.appendChild(this.sash);
 
-		this.sash.addEventListener('pointerdown', event => {
+		const onPointerDown = (event: PointerEvent): void => {
 			event.preventDefault();
 			this.sash.setPointerCapture(event.pointerId);
 			this.sash.classList.add('dragging');
@@ -229,8 +234,8 @@ export class Workbench {
 			this.sash.addEventListener('pointermove', onMove);
 			this.sash.addEventListener('pointerup', onUp);
 			this.sash.addEventListener('pointercancel', onUp);
-		});
-		this.sash.addEventListener('dblclick', () => {
+		};
+		const onDblClick = (): void => {
 			this.grid.setAuxiliaryBarWidthOverride(undefined);
 			try {
 				localStorage.removeItem(SIDE_PANE_WIDTH_KEY);
@@ -238,7 +243,16 @@ export class Workbench {
 				// Best-effort.
 			}
 			this.layout();
-		});
+		};
+
+		this.sash.addEventListener('pointerdown', onPointerDown);
+		this.sash.addEventListener('dblclick', onDblClick);
+		this.sashDisposables.add(
+			toDisposable(() => {
+				this.sash.removeEventListener('pointerdown', onPointerDown);
+				this.sash.removeEventListener('dblclick', onDblClick);
+			}),
+		);
 
 		// A width the user pinned in an earlier session comes back on launch.
 		try {

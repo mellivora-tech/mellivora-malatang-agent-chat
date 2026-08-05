@@ -752,7 +752,7 @@
 .sessions-list-row-bottom .codicon {
 	flex: 0 0 auto;
 	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-space-14);
+	font-size: var(--vscode-agents-fontSize-body0);
 }
 
 .sessions-list-row-bottom .sessions-list-diff,
@@ -1017,7 +1017,7 @@
 
 .sessions-settings-main-content {
 	min-height: 100%;
-	max-width: 960px;
+	max-width: var(--vscode-agents-size-settings-contentMax);
 	margin-inline: auto;
 	padding: var(--vscode-agents-space-52) var(--vscode-agents-space-56);
 	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
@@ -1070,7 +1070,11 @@
 .sessions-settings-search {
 	min-width: 0;
 	padding: 0 var(--vscode-agents-space-10);
+}
+
+.sessions-settings-search:focus-visible {
 	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
 }
 
 .sessions-settings-marketplace,
@@ -1133,7 +1137,7 @@
 	align-items: stretch;
 	gap: var(--vscode-agents-space-24);
 	width: 100%;
-	max-width: 960px;
+	max-width: var(--vscode-agents-size-settings-contentMax);
 	min-height: 100%;
 	margin-inline: auto;
 	box-sizing: border-box;
@@ -1143,7 +1147,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: var(--vscode-agents-space-4);
-	flex: 0 0 168px;
+	flex: 0 0 var(--vscode-agents-size-settings-providersRail);
 	padding-right: var(--vscode-agents-space-20);
 	border-right: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
 }
@@ -1578,7 +1582,7 @@
 	flex-direction: column;
 	gap: var(--vscode-agents-space-24);
 	width: 100%;
-	max-width: 720px;
+	max-width: var(--vscode-agents-size-settings-pageMax);
 	margin-inline: auto;
 }
 
@@ -1646,14 +1650,19 @@
 /* Toggle switch */
 .sessions-settings-toggle {
 	position: relative;
-	width: 38px;
-	height: 22px;
+	width: var(--vscode-agents-size-toggle-width);
+	height: var(--vscode-agents-size-toggle-height);
 	padding: 0;
 	border: none;
 	border-radius: var(--vscode-agents-radius-round);
 	background: var(--vscode-agents-color-control-border);
 	cursor: default;
 	transition: background var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
+}
+
+.sessions-settings-toggle:focus-visible {
+	outline: var(--vscode-agents-space-1) solid var(--vscode-agents-color-focusBorder);
+	outline-offset: var(--vscode-agents-space-2);
 }
 
 .sessions-settings-toggle.on {
@@ -1664,15 +1673,15 @@
 	position: absolute;
 	top: 2px;
 	left: 2px;
-	width: 18px;
-	height: 18px;
+	width: var(--vscode-agents-size-toggle-knob);
+	height: var(--vscode-agents-size-toggle-knob);
 	border-radius: var(--vscode-agents-radius-round);
 	background: var(--vscode-agents-color-text-inverse);
 	transition: transform var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
 }
 
 .sessions-settings-toggle.on .sessions-settings-toggle-knob {
-	transform: translateX(16px);
+	transform: translateX(calc(var(--vscode-agents-size-toggle-width) - var(--vscode-agents-size-toggle-knob) - 4px));
 }
 
 .sessions-settings-btn {
@@ -1735,7 +1744,7 @@
 	width: 360px;
 	max-width: calc(100vw - var(--vscode-agents-space-32));
 	padding: var(--vscode-agents-space-16);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
@@ -1751,7 +1760,7 @@
 
 .sessions-rename-input {
 	padding: var(--vscode-agents-space-5) var(--vscode-agents-space-8);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: transparent;
 	color: var(--vscode-agents-color-text-primary);
@@ -1926,7 +1935,7 @@
 	width: 560px;
 	max-width: calc(100vw - var(--vscode-agents-space-32));
 	max-height: calc(100vh - var(--vscode-agents-space-44));
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	color: var(--vscode-agents-color-text-primary);
@@ -2399,7 +2408,7 @@
 	flex-direction: column;
 	gap: var(--vscode-agents-space-2);
 	flex: 0 0 auto;
-	width: 168px;
+	width: var(--vscode-agents-size-settings-providersRail);
 	padding: var(--vscode-agents-space-8);
 	border-right: var(--vscode-agents-space-1) solid var(--vscode-agents-color-divider);
 	background: color-mix(in srgb, var(--vscode-agents-color-background) 45%, transparent);

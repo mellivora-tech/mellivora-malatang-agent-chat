@@ -56,7 +56,6 @@ class DerivedObservable<T> implements IObservable<T>, IDisposable {
 	}
 
 	get(): T {
-		this.currentValue = this.read();
 		return this.currentValue;
 	}
 

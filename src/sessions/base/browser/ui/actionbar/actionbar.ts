@@ -6,6 +6,7 @@
 import { ActionRunner, type IAction, type IActionRunner, type IRunEvent } from '../../../common/actions.js';
 import { Emitter, type Event } from '../../../common/event.js';
 import { Disposable, DisposableStore } from '../../../common/lifecycle.js';
+import { reportFailure } from '../../../../common/diagnostics.js';
 
 export interface IActionViewItem {
 	readonly action: IAction;
@@ -121,6 +122,7 @@ export class ActionBar extends Disposable implements IActionRunner {
 export class ActionViewItem extends Disposable implements IActionViewItem {
 	readonly element = document.createElement('a');
 	private context: unknown;
+	private rendered = false;
 
 	constructor(
 		context: unknown,
@@ -132,6 +134,10 @@ export class ActionViewItem extends Disposable implements IActionViewItem {
 	}
 
 	render(container: HTMLElement): void {
+		if (this.rendered) {
+			return;
+		}
+		this.rendered = true;
 		this.element.className = this.getActionLabelClass();
 		this.element.href = '#';
 		this.element.setAttribute('role', 'button');
@@ -184,7 +190,11 @@ export class ActionViewItem extends Disposable implements IActionViewItem {
 			return;
 		}
 
-		await this.actionRunner.run(this.action, this.context);
+		try {
+			await this.actionRunner.run(this.action, this.context);
+		} catch (error) {
+			reportFailure(`actionbar.run.${this.action.id}`, error);
+		}
 	}
 
 	private getActionLabelClass(): string {

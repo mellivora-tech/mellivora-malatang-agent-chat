@@ -59,7 +59,7 @@
 	flex-direction: column;
 	width: 100%;
 	min-height: 146px;
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-composer);
 	background: color-mix(in srgb, var(--vscode-agents-color-panel-background) 82%, var(--vscode-agents-color-stage-background));
 	color: var(--vscode-agents-color-input-foreground);
@@ -224,7 +224,7 @@
 	min-width: 220px;
 	max-width: 340px;
 	padding: var(--vscode-agents-space-4);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	box-shadow: var(--vscode-agents-elevation-menu);
@@ -278,7 +278,7 @@
 	max-height: 320px;
 	overflow-y: auto;
 	padding: var(--vscode-agents-space-4);
-	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 15%, transparent);
+	border: var(--vscode-agents-space-1) solid var(--vscode-agents-color-panel-border);
 	border-radius: var(--vscode-agents-radius-control);
 	background: var(--vscode-agents-color-panel-background);
 	box-shadow: var(--vscode-agents-elevation-menu);

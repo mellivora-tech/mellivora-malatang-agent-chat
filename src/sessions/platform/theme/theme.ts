@@ -16,7 +16,7 @@ export interface ISizeToken {
 export type ThemeId = 'dark' | 'light' | 'highContrast';
 
 export interface IThemeDefinition {
-	readonly id: ThemeId;
+	readonly id: string;
 	readonly label: string;
 	readonly values: Readonly<Record<string, string>>;
 }

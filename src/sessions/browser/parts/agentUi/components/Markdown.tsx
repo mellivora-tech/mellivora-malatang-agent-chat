@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { useEffect, useRef, type JSX } from 'react';
+import { useLayoutEffect, useRef, type JSX } from 'react';
 import { renderMarkdown } from '../../markdownRenderer.js';
 
 export interface IMarkdownProps {
@@ -20,7 +20,7 @@ export function Markdown(props: IMarkdownProps): JSX.Element {
 	const { text, className } = props;
 	const ref = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		ref.current?.replaceChildren(renderMarkdown(text));
 	}, [text]);
 

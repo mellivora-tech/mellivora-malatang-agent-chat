@@ -149,7 +149,7 @@ body {
 .agent-sessions-workbench .workbench-sash {
 	position: absolute;
 	z-index: var(--vscode-agents-z-sash);
-	width: 8px;
+	width: var(--vscode-agents-size-sash-width);
 	cursor: col-resize;
 	-webkit-app-region: no-drag;
 }
@@ -164,4 +164,14 @@ body {
 	cursor: col-resize;
 	user-select: none;
 	-webkit-user-select: none;
+}
+
+/* Respect OS reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+	}
 }
