@@ -81,8 +81,8 @@ export class ConversationView extends Disposable {
 		);
 
 		this.timelineRail = this._register(new TimelineRail(this.element, this.transcriptView.element));
-		bodyWrap.insertBefore(this.timelineRail.element, this.transcriptView.element);
 		bodyWrap.appendChild(this.transcriptView.element);
+		bodyWrap.insertBefore(this.timelineRail.element, this.transcriptView.element);
 
 		this.composerView = this._register(
 			new ComposerView({
