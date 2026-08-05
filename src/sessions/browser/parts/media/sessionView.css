@@ -1732,6 +1732,10 @@ button.conversation-plan-header {
    at the SAME conversation.width here) land flush with the transcript's actual
    message column instead of the stage's raw center. */
 .conversation-composer {
+	/* Anchors the composer dropdowns (model/effort/permission menus) — their
+	   JS computes top/left against this form's rect, so it must be the
+	   positioned ancestor (the pre-split anchor was .conversation-view). */
+	position: relative;
 	flex: 0 0 auto;
 	padding: var(--vscode-agents-space-10) max(var(--vscode-agents-space-18), calc((100% - var(--vscode-agents-space-44) - var(--vscode-agents-size-conversation-width)) / 2))
 		var(--vscode-agents-space-22)

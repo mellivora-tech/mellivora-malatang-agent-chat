@@ -189,8 +189,9 @@ export class ComposerView extends Disposable {
 		const accessIcon = appendCodicon(access, 'codicon-shield');
 		const accessLabel = append(access, document.createElement('span'));
 		appendCodicon(access, 'codicon-chevron-down');
-		// Menu hosted on the view root — the composer clips overflow. The picker
-		// reads and writes the ACTIVE session's mode (global default as fallback).
+		// Menu hosted on the composer form — it's the positioned ancestor
+		// (.conversation-composer has position: relative). The picker reads and
+		// writes the ACTIVE session's mode (global default as fallback).
 		this._register(
 			installPermissionPicker(
 				{ host: this.element, trigger: access, label: accessLabel, icon: accessIcon },
@@ -250,7 +251,7 @@ export class ComposerView extends Disposable {
 		appendCodicon(effort, 'codicon-chevron-down');
 
 		if (this.options.modelsService) {
-			// Host the menus on the view root — the composer clips overflow.
+			// Menus hosted on the composer form — same anchor as the permission picker above.
 			this._register(installModelPicker({ host: this.element, trigger: model, label: modelLabel, modelsService: this.options.modelsService }));
 			this._register(installEffortPicker({ host: this.element, trigger: effort, label: effortLabel, modelsService: this.options.modelsService }));
 		}

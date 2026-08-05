@@ -12,7 +12,11 @@ import { listEnabledModels, type IModelsService } from '../../services/models/br
 import type { ModelEffort } from '../../services/models/common/models.js';
 
 export interface IDropdownAnchor {
-	/** Positioned ancestor that hosts the dropdown (the composer clips overflow). */
+	/**
+	 * Element the dropdown is appended to AND measured against — it must be
+	 * positioned (e.g. `position: relative`), since the menu is absolutely
+	 * positioned and its top/left are computed from this element's rect.
+	 */
 	readonly host: HTMLElement;
 	readonly trigger: HTMLButtonElement;
 }
