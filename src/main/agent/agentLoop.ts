@@ -31,15 +31,18 @@ import { isReplyVerifierEnabled } from './replyVerifier.js';
 import { HookRegistry, runHooksUntilBlock, type IHook } from './hooks/hooks.js';
 import {
 	EXPLORE_TOOLS,
+	LOW_YIELD_RESULT_CHARS,
 	createActionClaimNudgeHook,
 	createFanOutNudgeHook,
 	createGroundingNudgeHook,
 	createLiveSystemNudgeHook,
+	createProbeBudgetNudgeHook,
 	createReplyVerifierHook,
 	createStaleClaimNudgeHook,
 	createWalkthroughNudgeHook,
 	isFanOutNudgeEnabled,
 	isLiveSystemNudgeEnabled,
+	isProbeBudgetNudgeEnabled,
 	type IReplyVerifierData,
 } from './hooks/builtinHooks.js';
 import { isToolPruneEnabled, pruneToolOutputs } from './toolOutputPrune.js';
@@ -214,7 +217,10 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	//    query so a diff of a moving target gets caught.
 	//  · W2 — after a streak of single-exploration-tool turns, nudge toward parallel
 	//    spawn_agent fan-out. `singleExploreStreak` is maintained below per turn.
+	//  · W5 — after a streak of near-empty single-exploration results, nudge toward
+	//    switching retrieval strategy. `lowYieldStreak` is maintained below per turn.
 	let singleExploreStreak = 0;
+	let lowYieldStreak = 0;
 	const spawnAgentAvailable = config.tools.some(tool => tool.name === 'spawn_agent');
 	const preToolHooks: IHook[] = [];
 	if (dataSourceToolsAvailable && isLiveSystemNudgeEnabled(process.env)) {
@@ -222,6 +228,9 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 	}
 	if (spawnAgentAvailable && isFanOutNudgeEnabled(process.env)) {
 		preToolHooks.push(createFanOutNudgeHook({ streak: () => singleExploreStreak, spawnAvailable: true }));
+	}
+	if (isProbeBudgetNudgeEnabled(process.env)) {
+		preToolHooks.push(createProbeBudgetNudgeHook({ lowYieldStreak: () => lowYieldStreak }));
 	}
 	// User hooks register AFTER the built-ins (§4: built-ins are the safety floor).
 	// Only Stop and PreToolUse have live dispatch points today; hooks for other
@@ -570,6 +579,15 @@ export async function* runAgentLoop(initialMessages: readonly IAgentMessage[], c
 		// W2 streak: a turn that made exactly ONE exploration tool call extends the
 		// serial-probe streak; anything else (a batch, a non-explore tool) breaks it.
 		singleExploreStreak = toolUses.length === 1 && EXPLORE_TOOLS.has(toolUses[0]!.name) ? singleExploreStreak + 1 : 0;
+		// W5 low-yield streak: a single exploration call whose result was near-empty
+		// (not an error — an error IS information) extends the low-yield probe
+		// streak, the "keep grepping the same place, getting nothing" anti-pattern;
+		// anything else breaks it. `toolResults` keeps the call order of `toolUses`.
+		const firstResult = toolResults[0];
+		lowYieldStreak =
+			toolUses.length === 1 && EXPLORE_TOOLS.has(toolUses[0]!.name) && firstResult !== undefined && !firstResult.isError && firstResult.content.length < LOW_YIELD_RESULT_CHARS
+				? lowYieldStreak + 1
+				: 0;
 		messages.push({ role: 'user', content: toolResults });
 
 		// A sub-agent's result carries its own <work-digest> block: fold those

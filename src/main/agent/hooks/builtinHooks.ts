@@ -198,3 +198,50 @@ export function createFanOutNudgeHook(deps: { readonly streak: () => number; rea
 		},
 	};
 }
+
+// --- W5: low-yield probe discipline ------------------------------------------
+// The "recent request" run's anti-pattern: four consecutive greps in the same
+// source area, each returning almost nothing (one measured 82 bytes), because
+// the model kept re-searching the same track instead of switching retrieval —
+// runtime facts need runtime probes (bash / echo $ENV / listing the data dir),
+// not more source greps. This PreToolUse hook watches the streak of consecutive
+// single-exploration turns whose result was near-empty (measured by the loop
+// after each tool run) and injects a switch-strategy reminder once it crosses
+// the threshold. Inject, never block (Q1): a low-yield streak is a hint to
+// change approach, not a fault.
+
+/** A single exploration result under this many chars is "no new information". */
+export const LOW_YIELD_RESULT_CHARS = 200;
+
+/** After this many consecutive near-empty single-exploration turns, the next probe gets the switch-strategy reminder. */
+export const PROBE_STREAK_THRESHOLD = 2;
+
+export const PROBE_BUDGET_NUDGE =
+	'<system-reminder>Your recent probes each returned almost nothing — you are re-searching the same place without gathering new information. SWITCH STRATEGY instead of probing harder in the same spot: change the retrieval channel (runtime state via bash / echo $ENV / listing the data dir, rather than more source greps), scope much narrower (path / glob / filesOnly), or ask the user for runtime data only they can see. Two consecutive near-empty results is the signal to change approach.</system-reminder>';
+
+/** Kill switch: MELLIVORA_PROBE_BUDGET_NUDGE=off. */
+export function isProbeBudgetNudgeEnabled(env: NodeJS.ProcessEnv): boolean {
+	return env['MELLIVORA_PROBE_BUDGET_NUDGE'] !== 'off';
+}
+
+/** Injects the switch-strategy reminder once the low-yield streak crosses the threshold; re-arms when it breaks. */
+export function createProbeBudgetNudgeHook(deps: { readonly lowYieldStreak: () => number; readonly threshold?: number }): IHook {
+	const threshold = deps.threshold ?? PROBE_STREAK_THRESHOLD;
+	let nudged = false;
+	return {
+		id: 'builtin:probe-budget-nudge',
+		event: 'PreToolUse',
+		toolMatcher: EXPLORE_TOOLS_MATCHER,
+		run: () => {
+			if (deps.lowYieldStreak() < threshold) {
+				nudged = false; // streak reset below the line — re-arm for next time it crosses.
+				return { decision: 'allow' };
+			}
+			if (nudged) {
+				return { decision: 'allow' };
+			}
+			nudged = true;
+			return { decision: 'allow', additionalContext: PROBE_BUDGET_NUDGE };
+		},
+	};
+}

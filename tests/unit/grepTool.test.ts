@@ -78,3 +78,35 @@ test('grep rejects out-of-range context', async () => {
 		assert.equal(tool.validateInput({ pattern: 'x', context: 1.5 }).ok, false);
 	});
 });
+
+test('grep filesOnly returns matching paths only, no match lines', async () => {
+	await withWorkspace({ 'a.txt': 'target one', 'b.txt': 'nothing here', 'c.txt': 'target two' }, async root => {
+		const result = await run(createGrepTool([root]), { pattern: 'target', filesOnly: true });
+		assert.match(result.content, /a\.txt/);
+		assert.match(result.content, /c\.txt/);
+		assert.doesNotMatch(result.content, /b\.txt/);
+		assert.doesNotMatch(result.content, /target one/, 'no match text leaks in');
+		assert.doesNotMatch(result.content, /:1: /, 'no "path:line:" form');
+	});
+});
+
+test('grep filesOnly is bounded by the match budget and reports truncation', async () => {
+	const files: Record<string, string> = {};
+	for (let i = 0; i < 300; i++) {
+		files[`f${i}.txt`] = 'hit';
+	}
+	await withWorkspace(files, async root => {
+		const result = await run(createGrepTool([root]), { pattern: 'hit', filesOnly: true });
+		const paths = result.content
+			.trim()
+			.split('\n')
+			.filter(line => line.includes('.txt'));
+		assert.ok(paths.length <= 200, `path list bounded by MAX_MATCHES (got ${paths.length})`);
+		assert.match(result.content, /stopped at 200 matches/, 'truncation note still present');
+	});
+});
+
+test('grep rejects non-boolean filesOnly', async () => {
+	const tool = createGrepTool(['.']);
+	assert.equal(tool.validateInput({ pattern: 'x', filesOnly: 'yes' }).ok, false);
+});

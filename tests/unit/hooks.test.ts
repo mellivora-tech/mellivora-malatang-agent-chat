@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { HookRegistry, runHooks, runHooksUntilBlock, type IHook, type IHookDecision } from '../../src/main/agent/hooks/hooks.js';
-import { createFanOutNudgeHook, createReplyVerifierHook } from '../../src/main/agent/hooks/builtinHooks.js';
+import { createFanOutNudgeHook, createProbeBudgetNudgeHook, createReplyVerifierHook } from '../../src/main/agent/hooks/builtinHooks.js';
 import type { IModelClient } from '../../src/main/agent/agentTypes.js';
 
 /** A trivial hook that returns a fixed decision, ignoring its input. */
@@ -185,6 +185,34 @@ test('W2 fan-out hook: nudges once after the single-exploration streak crosses t
 test('W2 fan-out hook: never nudges when spawn_agent is unavailable', () => {
 	const hook = createFanOutNudgeHook({ streak: () => 99, spawnAvailable: false, threshold: 3 });
 	assert.equal((hook.run({ event: 'PreToolUse', toolName: 'grep' }) as IHookDecision).additionalContext, undefined);
+});
+
+// --- W5 low-yield probe-budget nudge hook -----------------------------------------
+
+test('W5 probe-budget hook: nudges once after the low-yield streak crosses threshold, re-arms when it breaks', () => {
+	let streak = 0;
+	const hook = createProbeBudgetNudgeHook({ lowYieldStreak: () => streak, threshold: 2 });
+	const ctx = (): string | undefined => (hook.run({ event: 'PreToolUse', toolName: 'grep' }) as IHookDecision).additionalContext;
+
+	streak = 1;
+	assert.equal(ctx(), undefined, 'below threshold — no nudge');
+	streak = 2;
+	assert.match(ctx() ?? '', /SWITCH STRATEGY/i, 'crossing the threshold nudges');
+	streak = 3;
+	assert.equal(ctx(), undefined, 'still over but already nudged — no repeat');
+	streak = 0;
+	assert.equal(ctx(), undefined, 'streak broke — re-armed, no nudge below threshold');
+	streak = 2;
+	assert.match(ctx() ?? '', /SWITCH STRATEGY/i, 're-crossing nudges again');
+});
+
+test('W5 probe-budget hook: matcher limits it to explore tools at dispatch', async () => {
+	const registry = new HookRegistry();
+	registry.register(createProbeBudgetNudgeHook({ lowYieldStreak: () => 99, threshold: 2 }));
+	const grepOutcome = await runHooksUntilBlock(registry.forEvent('PreToolUse', 'grep'), { event: 'PreToolUse', toolName: 'grep' });
+	assert.match(grepOutcome.additionalContext ?? '', /SWITCH STRATEGY/i);
+	const readOutcome = await runHooksUntilBlock(registry.forEvent('PreToolUse', 'read_file'), { event: 'PreToolUse', toolName: 'read_file' });
+	assert.equal(readOutcome.additionalContext, undefined, 'non-explore tools bypass the hook');
 });
 
 test('a hook that THROWS still allows, but leaves a fail-open record (it must not vanish)', async () => {

@@ -6,7 +6,10 @@
 /**
  * Per-run work digest: a deterministic, zero-model summary of what a run
  * actually did — which files it read, wrote, edited, or listed, plus a count of
- * the searches and shell commands it ran.
+ * the searches and shell commands it ran, and the CONFIRMED runtime facts the
+ * model recorded via `remember_fact` (data paths, env vars, locations). Unlike
+ * the file buckets, facts are content meant to be USED as-is in later runs —
+ * the whole point is to stop a later run re-deriving them.
  *
  * Why it exists: the cross-run transcript keeps only user/assistant TEXT —
  * thinking and tool_use/tool_result blocks are dropped at the run boundary (see
@@ -35,6 +38,10 @@ import type { IAgentMessage } from './agentTypes.js';
 /** Cap the per-list file count so a sprawling run can't bloat the digest. */
 const MAX_LISTED_FILES = 40;
 
+/** Caps for the confirmed-facts bucket: how many facts, and how long each. */
+const MAX_FACTS = 8;
+const MAX_FACT_LENGTH = 200;
+
 const DIGEST_OPEN = '<work-digest>';
 const DIGEST_CLOSE = '</work-digest>';
 /** The label each bucket renders under, and the set it re-seeds into. */
@@ -50,12 +57,14 @@ export interface IWorkDigest {
 	readonly filesWritten: Set<string>;
 	readonly filesEdited: Set<string>;
 	readonly dirsListed: Set<string>;
+	/** Confirmed runtime facts (`remember_fact`), carried across runs — capped at MAX_FACTS. */
+	readonly facts: string[];
 	searches: number;
 	commands: number;
 }
 
 export function createWorkDigest(): IWorkDigest {
-	return { filesRead: new Set(), filesWritten: new Set(), filesEdited: new Set(), dirsListed: new Set(), searches: 0, commands: 0 };
+	return { filesRead: new Set(), filesWritten: new Set(), filesEdited: new Set(), dirsListed: new Set(), facts: [], searches: 0, commands: 0 };
 }
 
 function inputPath(input: unknown): string | undefined {
@@ -106,6 +115,15 @@ export function recordWorkDigest(digest: IWorkDigest, name: string, input: unkno
 		case 'bash':
 			digest.commands += 1;
 			return true;
+		case 'remember_fact': {
+			if (typeof input === 'object' && input !== null) {
+				const fact = (input as { fact?: unknown }).fact;
+				if (typeof fact === 'string' && fact.trim() !== '' && digest.facts.length < MAX_FACTS) {
+					digest.facts.push(fact.slice(0, MAX_FACT_LENGTH));
+				}
+			}
+			return true;
+		}
 		default:
 			return false;
 	}
@@ -123,7 +141,7 @@ export function summarizeWorkDigest(digest: IWorkDigest): IWorkDigestSummary {
 	return {
 		filesRead: digest.filesRead.size,
 		filesWritten: digest.filesWritten.size + digest.filesEdited.size,
-		toolCalls: digest.filesRead.size + digest.filesWritten.size + digest.filesEdited.size + digest.dirsListed.size + digest.searches + digest.commands,
+		toolCalls: digest.filesRead.size + digest.filesWritten.size + digest.filesEdited.size + digest.dirsListed.size + digest.searches + digest.commands + digest.facts.length,
 	};
 }
 
@@ -147,6 +165,9 @@ export function buildWorkDigestText(digest: IWorkDigest): string | undefined {
 			lines.push(`${label}: ${formatList(digest[key])}`);
 		}
 	}
+	if (digest.facts.length > 0) {
+		lines.push(`Known facts: ${digest.facts.join(' | ')}`);
+	}
 	const activity: string[] = [];
 	if (digest.searches > 0) {
 		activity.push(`${digest.searches} search${digest.searches === 1 ? '' : 'es'}`);
@@ -164,13 +185,15 @@ export function buildWorkDigestText(digest: IWorkDigest): string | undefined {
 	// model in a LATER run, after the boundary dropped every tool result — so it
 	// must read as a map, never as "content you already have". An earlier
 	// "no need to re-read" phrasing made the model quote code from memory.
-	return `${DIGEST_OPEN}\nFiles explored earlier in this session — NAMES ONLY, their contents are no longer in your context. Use this list to go straight to the right files, but re-read a file before quoting it or making claims about its details:\n${lines.join('\n')}\n${DIGEST_CLOSE}`;
+	// "Known facts" are the deliberate exception: confirmed runtime facts are
+	// content by design, safe to use as-is.
+	return `${DIGEST_OPEN}\nFiles explored earlier in this session — NAMES ONLY, their contents are no longer in your context. Use this list to go straight to the right files, but re-read a file before quoting it or making claims about its details. "Known facts" (when listed) are confirmed runtime facts you may use as-is:\n${lines.join('\n')}\n${DIGEST_CLOSE}`;
 }
 
 /**
  * Re-seed an accumulator from a digest block previously rendered by
  * {@link buildWorkDigestText} — the inverse of the render, so a run inherits
- * every file its predecessors touched. Only file buckets are carried (the
+ * every file its predecessors touched. File buckets and facts are carried (the
  * activity counts are per-run telemetry, not cumulative); the truncation
  * marker and unparsable lines are ignored, and a body without a digest block
  * is a no-op.
@@ -188,6 +211,15 @@ export function seedWorkDigestFromText(digest: IWorkDigest, text: string): void 
 			continue;
 		}
 		const label = line.slice(0, separator).trim();
+		if (label === 'Known facts') {
+			for (const raw of line.slice(separator + 2).split(' | ')) {
+				const fact = raw.trim();
+				if (fact !== '' && digest.facts.length < MAX_FACTS) {
+					digest.facts.push(fact.slice(0, MAX_FACT_LENGTH));
+				}
+			}
+			continue;
+		}
 		const bucket = BUCKET_LABELS.find(([name]) => name === label);
 		if (!bucket) {
 			continue;

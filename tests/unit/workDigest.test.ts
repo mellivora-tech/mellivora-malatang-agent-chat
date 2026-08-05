@@ -216,3 +216,33 @@ test('kill switch: MELLIVORA_WORK_DIGEST=off disables, anything else enables', (
 	assert.equal(isWorkDigestEnabled({ MELLIVORA_WORK_DIGEST: '1' }), true);
 	assert.equal(isWorkDigestEnabled({}), true);
 });
+
+test('remember_fact records facts into the digest, capped at MAX_FACTS', () => {
+	const digest = createWorkDigest();
+	for (let i = 0; i < 10; i++) {
+		recordWorkDigest(digest, 'remember_fact', { fact: `fact-${i}` });
+	}
+	assert.equal(digest.facts.length, 8, 'capped at MAX_FACTS');
+	assert.equal(recordWorkDigest(digest, 'remember_fact', { fact: '   ' }), true, 'tracked as a tool call even when the fact is blank');
+	assert.equal(recordWorkDigest(digest, 'remember_fact', {}), true);
+	assert.equal(digest.facts.length, 8, 'blank/malformed facts add nothing');
+});
+
+test('known facts render as one line and round-trip through seed', () => {
+	const original = createWorkDigest();
+	recordWorkDigest(original, 'remember_fact', { fact: 'data root = ~/.mellivora' });
+	recordWorkDigest(original, 'remember_fact', { fact: 'run logs live in logs/' });
+	const text = buildWorkDigestText(original);
+	assert.ok(text?.includes('Known facts: data root = ~/.mellivora | run logs live in logs/'));
+
+	const seeded = createWorkDigest();
+	seedWorkDigestFromText(seeded, text!);
+	assert.deepEqual(seeded.facts, ['data root = ~/.mellivora', 'run logs live in logs/']);
+});
+
+test('facts count toward the summary toolCalls', () => {
+	const digest = createWorkDigest();
+	recordWorkDigest(digest, 'remember_fact', { fact: 'a = 1' });
+	recordWorkDigest(digest, 'remember_fact', { fact: 'b = 2' });
+	assert.equal(summarizeWorkDigest(digest).toolCalls, 2);
+});

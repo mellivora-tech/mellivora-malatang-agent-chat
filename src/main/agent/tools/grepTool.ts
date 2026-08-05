@@ -22,6 +22,7 @@ interface IGrepInput {
 	readonly glob?: string;
 	readonly ignoreCase?: boolean;
 	readonly context?: number;
+	readonly filesOnly?: boolean;
 }
 
 /** Merge match indices into inclusive line ranges, coalescing overlapping/adjacent windows. */
@@ -57,7 +58,9 @@ export function createGrepTool(roots: readonly string[]): IAgentTool {
 		name: 'grep',
 		description:
 			'Search file contents by JavaScript regular expression. Returns "path:line: text" matches; ignores node_modules, .git, build output and binary files. ' +
-			'Set `context` to also return N lines around each match (context lines use "path-line- text") — one grep with context often answers what would otherwise be a grep followed by a read_file.',
+			'Set `context` to also return N lines around each match (context lines use "path-line- text") — one grep with context often answers what would otherwise be a grep followed by a read_file. ' +
+			'Probe NARROW first: give a `path` or `glob` (or use `filesOnly`) — a wide, case-insensitive single-word search dumps huge output and buries the answer. ' +
+			'A hit on a parameter/identifier DECLARATION is not the answer — grep finds text, not meaning; if matches are only declaration noise, switch retrieval: runtime facts come from runtime probes (bash / echo $ENV / listing data files), not from re-grepping the same source area.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -70,6 +73,10 @@ export function createGrepTool(roots: readonly string[]): IAgentTool {
 					minimum: 0,
 					maximum: MAX_CONTEXT,
 					description: `Lines of surrounding context to include on each side of a match (0–${MAX_CONTEXT}, default 0). Prefer this over a follow-up read_file when you just need to see a match in situ.`,
+				},
+				filesOnly: {
+					type: 'boolean',
+					description: 'Return only the matching file paths (one per line) instead of match lines — a quick way to see WHERE hits are before reading the files.',
 				},
 			},
 			required: ['pattern'],
@@ -99,13 +106,16 @@ export function createGrepTool(roots: readonly string[]): IAgentTool {
 			if (record.ignoreCase !== undefined && typeof record.ignoreCase !== 'boolean') {
 				return invalid('"ignoreCase" must be a boolean');
 			}
+			if (record.filesOnly !== undefined && typeof record.filesOnly !== 'boolean') {
+				return invalid('"filesOnly" must be a boolean');
+			}
 			if (record.context !== undefined && (typeof record.context !== 'number' || !Number.isInteger(record.context) || record.context < 0 || record.context > MAX_CONTEXT)) {
 				return invalid(`"context" must be an integer between 0 and ${MAX_CONTEXT}`);
 			}
 			return valid(record);
 		},
 		call: async (input, context) => {
-			const { pattern, path, glob, ignoreCase, context: ctxInput } = input as IGrepInput;
+			const { pattern, path, glob, ignoreCase, filesOnly, context: ctxInput } = input as IGrepInput;
 			const ctx = typeof ctxInput === 'number' ? ctxInput : 0;
 			// A `path` scopes to one directory; otherwise every code root is searched.
 			const searchDirs = path !== undefined ? [resolveInWorkspace(roots, path)] : [...roots];
@@ -141,6 +151,9 @@ export function createGrepTool(roots: readonly string[]): IAgentTool {
 					for (let i = 0; i < fileLines.length; i++) {
 						if (regExp.test(fileLines[i]!)) {
 							matchIdx.push(i);
+							if (filesOnly) {
+								break; // one hit is enough to name the file
+							}
 							if (matchCount + matchIdx.length >= MAX_MATCHES) {
 								truncated = true;
 								break;
@@ -150,9 +163,16 @@ export function createGrepTool(roots: readonly string[]): IAgentTool {
 					if (matchIdx.length === 0) {
 						continue;
 					}
-					matchCount += matchIdx.length;
+					matchCount += filesOnly ? 1 : matchIdx.length;
+					if (filesOnly && matchCount >= MAX_MATCHES) {
+						truncated = true; // bound the path list at the match budget too.
+					}
 
-					if (ctx === 0) {
+					if (filesOnly) {
+						// One path per line — enough to see WHERE the hits are before reading files.
+						blocks.push([display]);
+						emittedLines += 1;
+					} else if (ctx === 0) {
 						// Flat "path:line: text" — one line per match (original behaviour).
 						blocks.push(matchIdx.map(i => `${display}:${i + 1}: ${trim(fileLines[i]!)}`));
 						emittedLines += matchIdx.length;

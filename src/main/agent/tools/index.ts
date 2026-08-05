@@ -14,6 +14,7 @@ import { createListDirTool } from './listDirTool.js';
 import { createProposePlanTool } from './proposePlanTool.js';
 import { createReadFileTool } from './readFileTool.js';
 import { createReadSymbolTool } from './readSymbolTool.js';
+import { createRememberFactTool } from './rememberFactTool.js';
 import { createRenderUiTool } from './renderUiTool.js';
 import { createUpdatePlanTool } from './updatePlanTool.js';
 import { createWalkthroughTool } from './walkthroughTool.js';
@@ -56,6 +57,7 @@ export function createWorkspaceTools(roots: readonly string[], options: IWorkspa
 		createGlobTool(roots),
 		createGrepTool(roots),
 		...(options.languageServers ? [createReadSymbolTool({ roots, manager: options.languageServers })] : []),
+		createRememberFactTool(),
 	];
 	if (!options.includeMutations) {
 		return readOnly;
