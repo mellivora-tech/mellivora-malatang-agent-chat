@@ -45,9 +45,7 @@ export function MessageRow(props: IMessageRowProps): JSX.Element {
 				{message.role === 'user' ? (
 					<UserContent message={message} resolveImage={resolveImage} />
 				) : message.role === 'assistant' ? (
-					// The split marker tail is transcript wire format (the next run's
-					// model reads it) — the human gets the document card instead.
-					<Markdown className="conversation-message-text" text={message.text.replace(DOCUMENT_SPLIT_MARKER, '')} />
+					<AssistantText message={message} />
 				) : (
 					<div className="conversation-message-text">{message.text}</div>
 				)}
@@ -62,6 +60,22 @@ export function MessageRow(props: IMessageRowProps): JSX.Element {
 			</div>
 		</article>
 	);
+}
+
+/**
+ * 播报封口 (2026-08-06 B 方案): the body holds only the run's UNSEALED text
+ * stretch — narration seals into the work block as it happens, so what
+ * remains here is the answer. While a run's tools execute, every stretch so
+ * far has sealed and the body is empty. The split marker tail is transcript
+ * wire format (the next run's model reads it) — the human gets the document
+ * card instead.
+ */
+function AssistantText(props: { readonly message: ISessionMessage }): JSX.Element | null {
+	const { message } = props;
+	if (message.text.trim() === '') {
+		return null;
+	}
+	return <Markdown className="conversation-message-text" text={message.text.replace(DOCUMENT_SPLIT_MARKER, '')} />;
 }
 
 interface IDocumentCardProps {

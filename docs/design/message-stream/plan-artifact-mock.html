@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<!--
+  计划 artifact 独立呈现 — 完整页面原型 2026-08-06
+  方向(用户裁定): update_plan 不再是工作块里的"每次调用一行 + 全清单",
+  而是独立结构化 artifact —— 覆盖式更新、只呈现最新状态。
+  依据主流调研:
+  - Claude Code TodoWrite 在对话流里渲染为 null, 计划住独立面板, 全量覆盖更新
+  - ChatGPT/Cursor 折叠 reasoning, 计划作为结构化 artifact 单独呈现
+  - todos 回答 "走到哪了"(状态机), narration 回答 "为什么"(散文) — 职责正交
+
+  两个完整页面状态(含会话头 + 输入框):
+  A. 运行中: 工作块展开(无计划行) + 计划卡实时更新 + 输入框变停止钮
+  B. 运行结束: 工作块收口 + 计划卡收口一行 + 正文结论 + 输入框恢复
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 artifact 独立呈现 — 完整页面 Preview</title>
+<style>
+  :root {
+    /* 对应 deriveTheme 推导的 token, mock 里手写近似值 */
+    --bg-stage: #f3f3f1;
+    --bg-panel: #fbfbfa;
+    --bg-raised: #ffffff;
+    --bg-sunken: #f6f6f4;
+    --text-1: #1f2328;
+    --text-2: #4b5158;
+    --text-3: #8b9199;
+    --text-4: #b3b8bf;
+    --hairline: #e6e6e2;
+    --hairline-strong: #d8d8d3;
+    --accent: #5b5fc7;
+    --accent-soft: #eeeefb;
+    --success: #2da44e;
+    --success-soft: #eef7f0;
+    --danger: #d1242f;
+    --radius: 10px;
+    --radius-sm: 7px;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg-stage);
+    color: var(--text-1);
+    font-size: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 48px 0 96px;
+  }
+
+  .stage-label {
+    width: 780px;
+    font-size: 12px;
+    color: var(--text-3);
+    letter-spacing: 0.04em;
+  }
+  .stage-label b { color: var(--text-2); font-weight: 600; }
+
+  /* ============ 应用框架 ============ */
+  .app {
+    width: 780px;
+    height: 880px;
+    background: var(--bg-panel);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ============ 会话头 ============ */
+  .context-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 12px;
+    color: var(--text-3);
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+  }
+  .context-bar .session-title { font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: 99px;
+    background: var(--bg-raised);
+    color: var(--text-2);
+    font-size: 11.5px;
+    cursor: default;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  .context-bar .spacer { flex: 1; }
+  .quota { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-3); }
+  .quota b { color: var(--text-2); font-weight: 600; }
+
+  /* ============ 消息流 ============ */
+  .stream {
+    flex: 1;
+    padding: 24px 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    overflow: hidden;
+  }
+
+  /* —— 用户消息 —— */
+  .user-row { display: flex; justify-content: flex-end; }
+  .user-bubble {
+    max-width: 620px;
+    background: var(--accent-soft);
+    border-radius: 14px 14px 4px 14px;
+    padding: 9px 14px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* —— 正文(亮) —— */
+  .prose {
+    max-width: 620px;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .prose code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  /* ============ 工作块 ============ */
+  .work { max-width: 720px; }
+  .work-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    margin-left: -10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-2);
+    cursor: default;
+    user-select: none;
+  }
+  .work-header:hover { background: var(--bg-sunken); }
+  .work-header .title { font-weight: 600; }
+  .work-header .meta { color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .work-header .chev { color: var(--text-3); font-size: 11px; }
+
+  .spinner {
+    width: 12px; height: 12px;
+    border: 1.5px solid var(--hairline-strong);
+    border-top-color: var(--text-2);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* rail: 一条安静的竖线 */
+  .work-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    margin-left: 4px;
+    border-left: 1.5px solid color-mix(in srgb, var(--text-1) 12%, transparent);
+    padding-left: 15px;
+  }
+
+  /* 播报散文(灰) */
+  .narration {
+    max-width: 600px;
+    margin: 4px 0 6px;
+    color: var(--text-3);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .narration code {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: color-mix(in srgb, var(--text-1) 6%, transparent);
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px;
+    margin-left: -8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-2);
+    position: relative;
+  }
+  .step-row:hover { background: var(--bg-sunken); }
+  .step-row .icon { color: var(--text-3); font-size: 12px; width: 14px; text-align: center; flex-shrink: 0; }
+  .step-row .chip {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-3);
+    background: color-mix(in srgb, var(--text-1) 5%, transparent);
+    border-radius: 4px;
+    padding: 1px 6px;
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .step-row .dur { margin-left: auto; color: var(--text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+  /* 折叠组(探查) */
+  .rollup-row { font-weight: 500; color: var(--text-1); }
+  .rollup-row::before {
+    content: '';
+    position: absolute;
+    left: -18.5px;
+    top: 50%;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-4);
+    transform: translateY(-50%);
+  }
+  .rollup-members {
+    margin-left: 14px;
+    padding-left: 10px;
+    border-left: 1px solid color-mix(in srgb, var(--text-1) 8%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* ============ 计划卡(主角) ============ */
+  .plan-card {
+    max-width: 620px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+    overflow: hidden;
+  }
+  .plan-card.live { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+  .plan-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 14px;
+    cursor: default;
+    user-select: none;
+  }
+  .plan-head:hover { background: var(--bg-sunken); }
+  .plan-head .icon { color: var(--accent); font-size: 13px; }
+  .plan-card.done .plan-head .icon { color: var(--success); }
+  .plan-head .title { font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .plan-head .count { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .plan-head .bar {
+    width: 72px; height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--text-1) 8%, transparent);
+    overflow: hidden;
+  }
+  .plan-head .bar i {
+    display: block; height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 300ms ease;
+  }
+  .plan-card.done .plan-head .bar i { background: var(--success); }
+  .plan-head .chev { margin-left: auto; color: var(--text-3); font-size: 11px; }
+  .plan-head .done-mark { margin-left: auto; color: var(--success); font-size: 12px; font-weight: 600; }
+
+  .plan-items {
+    border-top: 1px solid var(--hairline);
+    padding: 8px 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .plan-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 8px;
+    margin: 0 -8px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .plan-item .box {
+    width: 14px; height: 14px;
+    border: 1.5px solid var(--hairline-strong);
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #fff;
+  }
+  .plan-item.done .box { background: var(--success); border-color: var(--success); }
+  .plan-item.done .text { color: var(--text-3); text-decoration: line-through; text-decoration-color: var(--text-4); }
+  .plan-item.pending .text { color: var(--text-2); }
+
+  /* in-progress: 呼吸高亮 + mini spinner, 全页唯一动效焦点 */
+  .plan-item.active {
+    background: var(--accent-soft);
+    animation: breathe 2.2s ease-in-out infinite;
+  }
+  .plan-item.active .box { border-color: var(--accent); }
+  .plan-item.active .text { color: var(--text-1); font-weight: 500; }
+  .plan-item.active .mini-spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    margin-left: auto;
+  }
+  @keyframes breathe {
+    0%, 100% { background: var(--accent-soft); }
+    50% { background: color-mix(in srgb, var(--accent-soft) 55%, var(--bg-raised)); }
+  }
+
+  /* ============ 输入框 ============ */
+  .composer-zone {
+    flex-shrink: 0;
+    padding: 10px 24px 16px;
+    border-top: 1px solid var(--hairline);
+    background: var(--bg-panel);
+  }
+  .composer {
+    border: 1px solid var(--hairline-strong);
+    border-radius: 14px;
+    background: var(--bg-raised);
+    padding: 11px 14px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .composer:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .composer .placeholder { font-size: 14px; color: var(--text-4); }
+  .composer-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .composer-bar .tool-icon {
+    width: 24px; height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: var(--text-3);
+    font-size: 13px;
+    cursor: default;
+  }
+  .composer-bar .tool-icon:hover { background: var(--bg-sunken); color: var(--text-2); }
+  .composer-bar .spacer { flex: 1; }
+  .model-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    color: var(--text-2);
+    padding: 3px 9px;
+    border-radius: 99px;
+    background: var(--bg-sunken);
+  }
+  .model-pill .chev { font-size: 9px; color: var(--text-3); }
+  .send-btn {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .send-btn.idle { background: color-mix(in srgb, var(--text-1) 14%, transparent); }
+  .stop-btn {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--danger);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+  .composer-hint {
+    margin-top: 7px;
+    text-align: center;
+    font-size: 10.5px;
+    color: var(--text-4);
+  }
+
+  /* 对比注解 */
+  .note {
+    width: 780px;
+    font-size: 12.5px;
+    color: var(--text-3);
+    line-height: 1.7;
+    border-left: 2px solid var(--hairline-strong);
+    padding-left: 12px;
+    margin-bottom: 24px;
+  }
+  .note code { font-family: var(--mono); font-size: 11.5px; background: color-mix(in srgb, var(--text-1) 6%, transparent); border-radius: 4px; padding: 1px 4px; }
+</style>
+</head>
+<body>
+
+<div class="stage-label"><b>状态 A — 运行中</b> · 工作块展开(无计划行) · 计划卡覆盖式实时更新 · 输入框变为停止态</div>
+
+<div class="app">
+  <!-- 会话头 -->
+  <div class="context-bar">
+    <span class="session-title">README 追加项目简介并验证</span>
+    <span class="pill"><span class="dot"></span>master</span>
+    <span class="pill">mellivora-malatang-agent-chat</span>
+    <span class="spacer"></span>
+    <span class="quota">上下文 <b>41.2k</b> / 1M</span>
+  </div>
+
+  <!-- 消息流 -->
+  <div class="stream">
+
+    <div class="user-row"><div class="user-bubble">给 README.md 末尾加一行项目简介,然后跑完整验证:tsc、eslint、单元测试,最后汇报结果。</div></div>
+
+    <!-- 工作块: 时间线只有 播报散文 + 工具行,update_plan 一行不留 -->
+    <div class="work">
+      <div class="work-header">
+        <div class="spinner"></div>
+        <span class="title">Working for 48s</span>
+        <span class="chev">▾</span>
+      </div>
+      <div class="work-steps">
+        <div class="narration">README 的简介已经加好了(文件末尾,未提交)。现在跑完整验证——tsc 和 eslint 互不依赖,并行跑;单测依赖 dist 产物,等 tsc 完成后再跑。</div>
+
+        <div class="step-row rollup-row">
+          <span class="icon">⌕</span><span>探索了 1 个文件</span>
+          <span class="dur">3s</span><span class="chev">▾</span>
+        </div>
+        <div class="rollup-members">
+          <div class="step-row"><span class="icon">⇪</span><span>读取</span><span class="chip">README.md</span><span class="dur">3.8 KB</span></div>
+        </div>
+
+        <div class="step-row"><span class="icon">✎</span><span>编辑</span><span class="chip">README.md</span><span class="dur">1s</span></div>
+
+        <div class="narration">已追加。现在跑完整验证——先并行跑 tsc 和 eslint:</div>
+
+        <div class="step-row"><span class="icon">▸</span><span>运行</span><span class="chip">npx tsc -p tsconfig.json</span><span class="dur">9s</span></div>
+        <div class="step-row"><span class="icon">▸</span><span>运行</span><span class="chip">npx eslint WorkBlock.tsx</span><span class="dur">4s</span></div>
+
+        <div class="narration">tsc 和 eslint 都通过(无输出)。现在跑单元测试:</div>
+
+        <div class="step-row"><span class="icon">▸</span><span>运行</span><span class="chip">node --test dist/tests/unit/*.test.js</span><div class="spinner" style="margin-left:auto"></div></div>
+      </div>
+    </div>
+
+    <!-- 计划卡: 独立 artifact, 覆盖式更新, 永远只呈现当前状态 -->
+    <div class="plan-card live">
+      <div class="plan-head">
+        <span class="icon">☰</span>
+        <span class="title">计划</span>
+        <span class="count">4/6</span>
+        <span class="bar"><i style="width:67%"></i></span>
+        <span class="chev">▾</span>
+      </div>
+      <div class="plan-items">
+        <div class="plan-item done"><span class="box">✓</span><span class="text">读取 README.md,确认末尾内容</span></div>
+        <div class="plan-item done"><span class="box">✓</span><span class="text">在 README.md 末尾加一行项目简介</span></div>
+        <div class="plan-item done"><span class="box">✓</span><span class="text">运行 npx tsc -p tsconfig.json</span></div>
+        <div class="plan-item done"><span class="box">✓</span><span class="text">运行 npx eslint 检查 WorkBlock.tsx</span></div>
+        <div class="plan-item active"><span class="box"></span><span class="text">运行 node --test 单元测试</span><span class="mini-spinner"></span></div>
+        <div class="plan-item pending"><span class="box"></span><span class="text">汇报结果</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 输入框: 运行中 = 停止态 -->
+  <div class="composer-zone">
+    <div class="composer">
+      <span class="placeholder">给 Mellivora 发消息…</span>
+      <div class="composer-bar">
+        <span class="tool-icon">＠</span>
+        <span class="tool-icon">/</span>
+        <span class="tool-icon">＃</span>
+        <span class="model-pill">K3 <span class="chev">▾</span></span>
+        <span class="model-pill">完全自动 <span class="chev">▾</span></span>
+        <span class="spacer"></span>
+        <span class="stop-btn">■</span>
+      </div>
+    </div>
+    <div class="composer-hint">运行中 — 发送将排队到本轮结束后</div>
+  </div>
+</div>
+
+<div class="note">
+  <b>对照旧渲染:</b> 同样的 run,旧版工作块里会有 <code>Update plan 1/6</code> ~ <code>Update plan 5/6</code> 六行,每行可展开一份几乎相同的全清单(6 行 × 6 条 = 36 条清单项)。
+  现在:工作块零计划行,计划卡一张,覆盖式更新 —— 信息从 O(n²) 降到 O(n)。
+</div>
+
+<div class="stage-label"><b>状态 B — 运行结束</b> · 工作块收口一行 · 计划卡收口为终态行 · 正文是结论 · 输入框恢复</div>
+
+<div class="app">
+  <!-- 会话头 -->
+  <div class="context-bar">
+    <span class="session-title">README 追加项目简介并验证</span>
+    <span class="pill"><span class="dot"></span>master</span>
+    <span class="pill">mellivora-malatang-agent-chat</span>
+    <span class="spacer"></span>
+    <span class="quota">上下文 <b>58.7k</b> / 1M</span>
+  </div>
+
+  <!-- 消息流 -->
+  <div class="stream">
+
+    <div class="user-row"><div class="user-bubble">给 README.md 末尾加一行项目简介,然后跑完整验证:tsc、eslint、单元测试,最后汇报结果。</div></div>
+
+    <!-- 工作块: 收口为一行 -->
+    <div class="work">
+      <div class="work-header">
+        <span class="title">Worked for 1m 12s</span>
+        <span class="meta">14 steps</span>
+        <span class="chev">▸</span>
+      </div>
+    </div>
+
+    <!-- 计划卡: 完成收口为一行终态; 点击展开看清单 -->
+    <div class="plan-card done">
+      <div class="plan-head">
+        <span class="icon">☑</span>
+        <span class="title">计划</span>
+        <span class="count">6/6</span>
+        <span class="bar"><i style="width:100%"></i></span>
+        <span class="done-mark">全部完成 ✓</span>
+        <span class="chev">▸</span>
+      </div>
+    </div>
+
+    <!-- 正文: 结论(亮) -->
+    <div class="prose">
+      完成。README 已追加一行项目简介,三项验证全部通过:<code>tsc</code> 与 <code>eslint</code> 无输出,单元测试 691/691。
+    </div>
+
+  </div>
+
+  <!-- 输入框: 空闲态 -->
+  <div class="composer-zone">
+    <div class="composer">
+      <span class="placeholder">给 Mellivora 发消息…</span>
+      <div class="composer-bar">
+        <span class="tool-icon">＠</span>
+        <span class="tool-icon">/</span>
+        <span class="tool-icon">＃</span>
+        <span class="model-pill">K3 <span class="chev">▾</span></span>
+        <span class="model-pill">完全自动 <span class="chev">▾</span></span>
+        <span class="spacer"></span>
+        <span class="send-btn idle">↑</span>
+      </div>
+    </div>
+    <div class="composer-hint">＠ 引用文件 · / 技能 · ＃ 会话</div>
+  </div>
+</div>
+
+<div class="note">
+  <b>行为规则(录制侧,与 mock 配套):</b>
+  update_plan 调用不再落 work step(CC 的 <code>renderToolUseMessage → null</code> 同款);
+  每次调用全量覆盖计划卡状态;卡片位置 = 工作块之后、正文之前(与 walkthrough 卡同坑位);
+  完成态默认收口(全部完成 ✓),失败/中断的 run 卡片保持展开并标出卡住的那一项;
+  无计划的 run 不出现卡片,零成本。
+</div>
+
+</body>
+</html>

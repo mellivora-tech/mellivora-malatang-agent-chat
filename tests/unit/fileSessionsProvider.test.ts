@@ -1662,15 +1662,14 @@ test("a restored total carries through the next run's first breakdown without de
 	assert.equal(usage.breakdown?.systemChars, 10, 'the live breakdown still updates');
 });
 
-test('assistant text is never reclassified as narration — it stays in the answer across every turn, tool calls or not', async () => {
+test('播报封口: text before a tool batch seals into a kind:text work step; the body keeps only the final stretch', async () => {
 	const bridge = createFakeBridge();
 	let listener: ((payload: IAgentEventPayload) => void) | undefined;
 	const agent: IAgentBridge = {
 		run: async sessionId => {
 			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
-			// Turn 1 speaks, then calls a tool; turn 2 speaks again. Neither
-			// segment is guessed at as "narration" and pulled out of the answer —
-			// there is no such classification anymore.
+			// Turn 1 narrates, then calls a tool — the stretch seals into the work
+			// block. Turn 2's stretch is never followed by a tool: it is the answer.
 			emit({ event: { type: 'turn_start', turn: 1 } });
 			emit({ event: { type: 'thinking_delta', text: 'planning the sweep' } });
 			emit({ event: { type: 'assistant_delta', text: '我来梳理一下这个项目。' } });
@@ -1698,23 +1697,160 @@ test('assistant text is never reclassified as narration — it stays in the answ
 	const session = await provider.startSession('梳理下项目');
 	await new Promise(resolve => setTimeout(resolve, 15));
 
-	// Both turns' text survive, concatenated in the order the model said them.
+	// The body holds only the unsealed final stretch — narration left it.
 	const assistant = session.messages.get().find(message => message.role === 'assistant');
 	assert.ok(assistant, 'assistant reply exists');
-	assert.equal(assistant.text, '我来梳理一下这个项目。项目结构如下：…');
+	assert.equal(assistant.text, '项目结构如下：…');
 
-	// The work block holds the thinking stretch and the tool call — never a
-	// narration step, because the kind no longer exists.
+	// The sealed stretch is a work step at its chronological position.
 	const work = session.messages.get().find(message => message.role === 'work');
 	assert.ok(work, 'work block exists');
 	assert.deepEqual(
 		(work.steps ?? []).map(step => step.kind),
-		['thinking', 'tool'],
+		['thinking', 'text', 'tool'],
 	);
+	const narration = (work.steps ?? []).find(step => step.kind === 'text');
+	assert.equal(narration?.detail, '我来梳理一下这个项目。');
 
+	// Persisted facts match the live view (Q3): sealed narration rides the work
+	// entry, the assistant entry holds the answer only.
 	const persistedAssistant = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'assistant');
 	assert.ok(persistedAssistant, 'assistant message persisted');
-	assert.equal((persistedAssistant.entry as { text: string }).text, '我来梳理一下这个项目。项目结构如下：…');
+	assert.equal((persistedAssistant.entry as { text: string }).text, '项目结构如下：…');
+	const persistedWork = bridge.appends.find(call => call.entry.type === 'message' && call.entry.role === 'work');
+	assert.ok(persistedWork, 'work message persisted');
+	assert.deepEqual(
+		((persistedWork.entry as { steps?: { kind: string }[] }).steps ?? []).map(step => step.kind),
+		['thinking', 'text', 'tool'],
+	);
+});
+
+test('播报封口: delivery tools (write_walkthrough) do not seal — a final report stays the answer', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'turn_start', turn: 1 } });
+			emit({ event: { type: 'assistant_delta', text: '完成。结果如下:全部通过。' } });
+			// The walkthrough is the run's period, not new work — the report before
+			// it must NOT seal into narration (2026-08-06 倒置修正).
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'write_walkthrough', input: {} } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: 'ok', isError: false } });
+			emit({ done: { reason: 'completed', turns: 1 } });
+			return { reason: 'completed', turns: 1 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('跑验证并汇报');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	const assistant = session.messages.get().find(message => message.role === 'assistant');
+	assert.ok(assistant, 'assistant reply exists');
+	assert.equal(assistant.text, '完成。结果如下:全部通过。', 'the report was never sealed out of the body');
+	const work = session.messages.get().find(message => message.role === 'work');
+	assert.ok(
+		(work?.steps ?? []).every(step => step.kind !== 'text'),
+		'no narration step was created',
+	);
+});
+
+test('计划卡: update_plan updates ONE wholesale tasklist message and leaves no work step', async () => {
+	const bridge = createFakeBridge();
+	let listener: ((payload: IAgentEventPayload) => void) | undefined;
+	const agent: IAgentBridge = {
+		run: async sessionId => {
+			const emit = (payload: object): void => listener?.({ sessionId, ...payload } as never);
+			emit({ event: { type: 'turn_start', turn: 1 } });
+			emit({
+				event: {
+					type: 'tool_use',
+					toolUseId: 'p1',
+					name: 'update_plan',
+					input: {
+						steps: [
+							{ title: '读 README', status: 'active' },
+							{ title: '跑验证', status: 'pending' },
+						],
+					},
+				},
+			});
+			emit({ event: { type: 'tool_result', toolUseId: 'p1', content: 'Plan (0/2 done): …', isError: false } });
+			emit({ event: { type: 'tool_use', toolUseId: 't1', name: 'read_file', input: { path: 'README.md' } } });
+			emit({ event: { type: 'tool_result', toolUseId: 't1', content: '…', isError: false } });
+			emit({ event: { type: 'turn_start', turn: 2 } });
+			// Second call: wholesale replace — the card shows the latest state only.
+			emit({
+				event: {
+					type: 'tool_use',
+					toolUseId: 'p2',
+					name: 'update_plan',
+					input: {
+						steps: [
+							{ title: '读 README', status: 'done' },
+							{ title: '跑验证', status: 'active' },
+						],
+					},
+				},
+			});
+			emit({ event: { type: 'tool_result', toolUseId: 'p2', content: 'Plan (1/2 done): …', isError: false } });
+			emit({ event: { type: 'assistant_delta', text: '完成。' } });
+			emit({ done: { reason: 'completed', turns: 2 } });
+			return { reason: 'completed', turns: 2 };
+		},
+		stop: async () => undefined,
+		onEvent: l => {
+			listener = l;
+			return () => {
+				listener = undefined;
+			};
+		},
+		onApprovalRequest: () => () => undefined,
+		respondApproval: async () => undefined,
+		generateTitle: async () => undefined,
+	};
+	const provider = new FileSessionsProvider(bridge, { responseDelayMs: 1 }, agent, titleModelsService);
+	await provider.initialize();
+
+	const session = await provider.startSession('加个简介');
+	await new Promise(resolve => setTimeout(resolve, 15));
+
+	// One card, latest state, sitting between the work block and the answer.
+	const messages = session.messages.get();
+	const cards = messages.filter(message => message.tasklist !== undefined);
+	assert.equal(cards.length, 1, 'two update_plan calls, one card');
+	assert.deepEqual(
+		cards[0]!.tasklist!.items.map(item => item.status),
+		['done', 'active'],
+		'wholesale replace — the first call leaves no trace',
+	);
+	assert.equal(cards[0]!.text, 'Plan (1/2 done):\n[x] 读 README\n[~] 跑验证', 'markdown fallback mirrors the tool echo');
+	assert.ok(messages.findIndex(message => message.id === cards[0]!.id) > messages.findIndex(message => message.role === 'work'), 'card lands after the work block');
+
+	// The calls left no work steps behind.
+	const work = messages.find(message => message.role === 'work');
+	assert.ok(
+		(work?.steps ?? []).every(step => step.tool !== 'update_plan'),
+		'no update_plan step in the timeline',
+	);
+
+	// Persisted: one tasklist entry, before the assistant entry (live order == disk order).
+	const taskListEntry = bridge.appends.find(call => call.entry.type === 'message' && (call.entry as { tasklist?: unknown }).tasklist !== undefined);
+	assert.ok(taskListEntry, 'tasklist persisted');
+	const roles = bridge.appends.filter(call => call.entry.type === 'message').map(call => (call.entry as { role: string }).role);
+	assert.ok(roles.indexOf('plan') < roles.lastIndexOf('assistant'), 'tasklist entry precedes the answer on disk');
 });
 
 test("a rejected reply's text never leaks into the work block or the retried answer", async () => {

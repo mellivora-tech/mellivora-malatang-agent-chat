@@ -24,6 +24,8 @@ import type {
 	ISessionDataBrowse,
 	ISessionWorkStep,
 	ISessionWorkspace,
+	ITaskListArtifact,
+	ITaskListItem,
 } from '../../../services/sessions/common/session.js';
 import {
 	DOCUMENT_SPLIT_MARKER_PREFIX,
@@ -594,6 +596,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 					...(message.outcome !== undefined ? { outcome: message.outcome } : {}),
 					...(message.steps !== undefined ? { steps: message.steps } : {}),
 					...(message.plan !== undefined ? { plan: message.plan } : {}),
+					...(message.tasklist !== undefined ? { tasklist: message.tasklist } : {}),
 					...(message.ui !== undefined ? { ui: message.ui } : {}),
 				});
 			}
@@ -667,6 +670,7 @@ export class FileSessionsProvider implements ISessionsProvider {
 				...(message.outcome !== undefined ? { outcome: message.outcome } : {}),
 				...(message.steps !== undefined ? { steps: message.steps } : {}),
 				...(message.plan !== undefined ? { plan: message.plan } : {}),
+				...(message.tasklist !== undefined ? { tasklist: message.tasklist } : {}),
 				...(message.ui !== undefined ? { ui: message.ui } : {}),
 				...(message.feedback !== undefined ? { feedback: message.feedback } : {}),
 				...(message.timestamp !== undefined ? { timestamp: new Date(message.timestamp) } : {}),
@@ -837,6 +841,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 		let text = '';
 		let created = false;
 		let finalized = false;
+		// 播报封口 (2026-08-06 B 方案): `text` holds only the CURRENT unsealed
+		// stretch. A tool batch seals the stretch before it into a kind:'text'
+		// work step at its chronological position; the run's last unsealed
+		// stretch is the answer. `textStart` times the open stretch.
+		let textStart = 0;
 		// A quota/rate-frozen terminal (#19 缺陷 2): captured from the done event,
 		// persisted by finalize, and surfaced as banner + humanized copy.
 		let pendingPause: IAgentPause | undefined;
@@ -873,6 +882,12 @@ export class FileSessionsProvider implements ISessionsProvider {
 		// materialized into a hidden role:'digest' message at finalize and carried
 		// on the next run's transcript to pay down the re-exploration tax.
 		let pendingDigest: string | undefined;
+		// The run's task list (update_plan, 2026-08-06 计划卡): structured STATE,
+		// one card per run — each call replaces it wholesale and leaves no work
+		// step behind (the plan answers "走到哪了"; the timeline can't).
+		const taskListId = `${sessionId}-tasklist-${generateId()}`;
+		let pendingTaskList: readonly ITaskListItem[] | undefined;
+		let taskListCreated = false;
 		// Reasoning text streamed since the last step boundary; becomes the
 		// closing thinking step's expandable detail. While streaming it also
 		// feeds the live synthetic thinking step, painted on a trailing throttle.
@@ -1012,6 +1027,31 @@ export class FileSessionsProvider implements ISessionsProvider {
 			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
 		};
 
+		// 计划卡: wholesale state replace, one card per run. The card slots
+		// between the work block and the answer bubble, live and on disk alike;
+		// an emptied list ("Plan cleared.") removes the card outright.
+		const updateTaskList = (): void => {
+			const messages = session.messages.get();
+			if (pendingTaskList === undefined || pendingTaskList.length === 0) {
+				if (taskListCreated) {
+					taskListCreated = false;
+					session.messages.set(messages.filter(message => message.id !== taskListId));
+					this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+				}
+				return;
+			}
+			const tasklist: ITaskListArtifact = { id: taskListId, items: pendingTaskList };
+			const message: ISessionMessage = { id: taskListId, role: 'plan', text: taskListToMarkdown(pendingTaskList), tasklist, timestamp: new Date() };
+			if (taskListCreated) {
+				session.messages.set(messages.map(existing => (existing.id === taskListId ? message : existing)));
+			} else {
+				taskListCreated = true;
+				const assistantIndex = messages.findIndex(existing => existing.id === assistantId);
+				session.messages.set(assistantIndex === -1 ? [...messages, message] : [...messages.slice(0, assistantIndex), message, ...messages.slice(assistantIndex)]);
+			}
+			this.onDidChangeSessionsEmitter.fire({ added: [], removed: [], changed: [session] });
+		};
+
 		// Torn down when the run settles, whatever ends it (done event, error,
 		// window unload).
 		const runCleanups: (() => void)[] = [];
@@ -1023,15 +1063,13 @@ export class FileSessionsProvider implements ISessionsProvider {
 		});
 
 		// What a killed run leaves in the transcript: the last thing the model was
-		// thinking/doing, distilled from the work steps. A bare "Stopped." erased
-		// a whole deploy investigation from the next run's memory — the model then
-		// honestly denied ever reporting the failure the user had watched live.
+		// thinking/doing, distilled from the work steps. Under 播报封口 the body
+		// text is empty whenever the run died mid-tools (narration already sealed
+		// into steps), so this summary is what the next run's model reads.
 		const abortSummary = (cause: string): string => {
-			// Only reachable when `text` is still empty (the caller's guard) — the
-			// model never spoke a word this run, thinking/tool activity is all
-			// there is to summarize. Text the model DID emit is never relocated
-			// away anymore, so it stands on its own instead of needing this digest.
-			const lastThought = [...steps].reverse().find(step => step.kind === 'thinking' && (step.detail ?? step.label).trim() !== '');
+			// Sealed narration is the model's own user-facing account — a better
+			// memory than the reasoning chain when it's the most recent.
+			const lastThought = [...steps].reverse().find(step => (step.kind === 'thinking' || step.kind === 'text') && (step.detail ?? step.label).trim() !== '');
 			const lastTool = [...steps].reverse().find(step => step.kind === 'tool');
 			const parts: string[] = [];
 			if (lastThought) {
@@ -1086,9 +1124,11 @@ export class FileSessionsProvider implements ISessionsProvider {
 			const runOutcome: 'ok' | 'error' = reason === 'completed' ? 'ok' : 'error';
 			updateWork(workDuration, runOutcome);
 
-			// A run that ends without any text (e.g. the step limit) must not leave a
-			// blank assistant bubble — say what happened, or persist no reply at all.
-			if (!created && text === '') {
+			// A run that ends without any unsealed text must not leave a blank
+			// assistant bubble — say what happened, or persist no reply at all.
+			// (播报封口: text === '' also means "everything said so far sealed
+			// into work steps" — the abort note is still owed to the transcript.)
+			if (text === '') {
 				if (reason === 'max_turns') {
 					text = 'I reached the step limit before finishing — ask me to continue, or narrow the task.';
 				} else if (reason === 'max_output_tokens') {
@@ -1112,6 +1152,10 @@ export class FileSessionsProvider implements ISessionsProvider {
 			const hasReply = text !== '';
 			if (hasReply) {
 				updateAssistant();
+			} else if (created) {
+				// 播报封口: everything the run said sealed into work steps and it
+				// ended on a tool batch — the live bubble would be an empty shell.
+				session.messages.set(session.messages.get().filter(message => message.id !== assistantId));
 			}
 			// 长答案分流 (#13, 原 #14 P2 / Q4 决议): a CLEAN completion's long answer
 			// keeps only whole-paragraph summary in the bubble — the full text lands
@@ -1232,6 +1276,19 @@ export class FileSessionsProvider implements ISessionsProvider {
 				for (const supersededId of supersededIds) {
 					await this.bridge.append(ref, { type: 'planState', messageId: supersededId, planState: 'superseded', timestamp: now.toISOString() });
 				}
+				// The task list persists BEFORE the plan/walkthrough artifacts so
+				// disk order matches the live order (card created mid-run lands
+				// ahead of the finalize-materialized artifacts).
+				if (pendingTaskList !== undefined && pendingTaskList.length > 0) {
+					await this.bridge.append(ref, {
+						type: 'message',
+						id: taskListId,
+						role: 'plan',
+						text: taskListToMarkdown(pendingTaskList),
+						tasklist: { id: taskListId, items: pendingTaskList },
+						timestamp: now.toISOString(),
+					});
+				}
 				for (const artifactMessage of artifactMessages) {
 					if (artifactMessage.plan || artifactMessage.ui) {
 						await this.bridge.append(ref, {
@@ -1347,9 +1404,14 @@ export class FileSessionsProvider implements ISessionsProvider {
 			if (event?.type === 'assistant_delta') {
 				// First text after thinking closes the stretch; text after a tool
 				// result belongs to the next thinking stretch, so only close once.
-				if (text === '' && openCalls.size === 0) {
-					closeStep('thinking', 'Thought');
-					updateWork();
+				// `text === ''` marks a stretch's first delta — true at run start
+				// and right after every seal (播报封口).
+				if (text === '') {
+					textStart = Date.now();
+					if (openCalls.size === 0) {
+						closeStep('thinking', 'Thought');
+						updateWork();
+					}
 				}
 				text += event.text;
 				updateAssistant();
@@ -1358,29 +1420,51 @@ export class FileSessionsProvider implements ISessionsProvider {
 				// result — only the FIRST open call closes the thinking stretch.
 				if (openCalls.size === 0) {
 					closeThinkingOrSkip();
-				}
-				if (event.name === 'propose_plan') {
-					// Malformed input stays on the previous capture — the tool result
-					// already told the model what was wrong.
-					pendingPlanInput = parsePlanInput(event.input) ?? pendingPlanInput;
-				} else if (event.name === 'write_walkthrough') {
-					pendingWalkthroughInput = parsePlanInput(event.input) ?? pendingWalkthroughInput;
-				} else if (event.name === 'render_ui') {
-					const parsedUi = parseUiInput(event.input);
-					if (parsedUi !== undefined) {
-						pendingUiInputs.push(parsedUi);
+					// 播报封口: the text stretch before this tool batch is interim
+					// narration — it leaves the message body and becomes a work
+					// step at its chronological position (free timeline). Delivery
+					// tools are the run's period, not new work: they don't seal,
+					// so a final report preceding them stays the answer.
+					if (text !== '' && event.name !== 'propose_plan' && event.name !== 'write_walkthrough') {
+						steps.push({ kind: 'text', label: '', durationMs: Date.now() - textStart, detail: text });
+						text = '';
+						updateAssistant();
 					}
 				}
-				const arg = workToolArg(event.input);
-				const browse = parseBrowsePayload(event.name, event.input);
-				openCalls.set(event.toolUseId, {
-					label: describeWorkTool(event.name, event.input),
-					name: event.name,
-					...(arg === undefined ? {} : { arg }),
-					...(browse === undefined ? {} : { browse }),
-					startedAt: Date.now(),
-				});
-				updateWork();
+				if (event.name === 'update_plan') {
+					// 计划卡 (2026-08-06): the plan is state, not an event — captured
+					// wholesale into the card, never a work step, never an open call
+					// (its tool_result is a plain echo; nothing to close).
+					const items = parseTaskListInput(event.input);
+					if (items !== undefined) {
+						pendingTaskList = items;
+						updateTaskList();
+					}
+					updateWork();
+				} else {
+					if (event.name === 'propose_plan') {
+						// Malformed input stays on the previous capture — the tool result
+						// already told the model what was wrong.
+						pendingPlanInput = parsePlanInput(event.input) ?? pendingPlanInput;
+					} else if (event.name === 'write_walkthrough') {
+						pendingWalkthroughInput = parsePlanInput(event.input) ?? pendingWalkthroughInput;
+					} else if (event.name === 'render_ui') {
+						const parsedUi = parseUiInput(event.input);
+						if (parsedUi !== undefined) {
+							pendingUiInputs.push(parsedUi);
+						}
+					}
+					const arg = workToolArg(event.input);
+					const browse = parseBrowsePayload(event.name, event.input);
+					openCalls.set(event.toolUseId, {
+						label: describeWorkTool(event.name, event.input),
+						name: event.name,
+						...(arg === undefined ? {} : { arg }),
+						...(browse === undefined ? {} : { browse }),
+						startedAt: Date.now(),
+					});
+					updateWork();
+				}
 			} else if (event?.type === 'tool_result') {
 				const call = openCalls.get(event.toolUseId);
 				if (call !== undefined) {
@@ -1398,8 +1482,9 @@ export class FileSessionsProvider implements ISessionsProvider {
 					// 结果态上行 (2026-08-05): coarse result semantics ride the step
 					// as a persisted fact — the row answers "and what came back?"
 					// without anyone re-parsing the detail text. An error needs no
-					// meta: it IS the information.
-					const meta = event.isError ? undefined : deriveWorkStepMeta(call.name, content);
+					// meta: it IS the information. bash gets its command so the
+					// verify classifier can recognize test/lint/typecheck calls.
+					const meta = event.isError ? undefined : deriveWorkStepMeta(call.name, content, call.arg);
 					closeStep(
 						'tool',
 						call.label,
@@ -1718,6 +1803,43 @@ function parseBrowsePayload(name: string, input: unknown): ISessionDataBrowse | 
 	}
 	const record = input as Record<string, unknown>;
 	return typeof record['source'] === 'string' && typeof record['sql'] === 'string' && record['sql'].trim() !== '' ? { source: record['source'], sql: record['sql'] } : undefined;
+}
+
+const TASK_LIST_STATUSES: readonly ITaskListItem['status'][] = ['pending', 'active', 'done'];
+
+/**
+ * update_plan's input → the card's items, fail-closed (mirrors the tool's own
+ * validateInput): a malformed call keeps the previous card state — the tool
+ * result already told the model what was wrong.
+ */
+function parseTaskListInput(input: unknown): readonly ITaskListItem[] | undefined {
+	if (typeof input !== 'object' || input === null) {
+		return undefined;
+	}
+	const steps = (input as { steps?: unknown }).steps;
+	if (!Array.isArray(steps)) {
+		return undefined;
+	}
+	const items: ITaskListItem[] = [];
+	for (const step of steps) {
+		if (typeof step !== 'object' || step === null) {
+			return undefined;
+		}
+		const { title, status } = step as { title?: unknown; status?: unknown };
+		if (typeof title !== 'string' || title === '' || !TASK_LIST_STATUSES.includes(status as ITaskListItem['status'])) {
+			return undefined;
+		}
+		items.push({ title, status: status as ITaskListItem['status'] });
+	}
+	return items;
+}
+
+const TASK_LIST_MARKS: Readonly<Record<ITaskListItem['status'], string>> = { pending: '[ ]', active: '[~]', done: '[x]' };
+
+/** The card message's markdown fallback — the same shape the tool echoes back, so the next run's transcript reads what the model saw. */
+function taskListToMarkdown(items: readonly ITaskListItem[]): string {
+	const done = items.filter(item => item.status === 'done').length;
+	return `Plan (${done}/${items.length} done):\n${items.map(item => `${TASK_LIST_MARKS[item.status]} ${item.title}`).join('\n')}`;
 }
 
 /** The most telling argument of a tool call, first-line bounded — the structured `arg` fact on work steps (#14 Q3). */

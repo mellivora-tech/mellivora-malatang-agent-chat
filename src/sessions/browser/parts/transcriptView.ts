@@ -16,6 +16,7 @@ import type { Root } from 'react-dom/client';
 import { mountOrUpdateReactRow } from './agentUi/bridge/mountReactRow.js';
 import { MessageRow } from './agentUi/components/MessageRow.js';
 import { PlanCard } from './agentUi/components/PlanCard.js';
+import { TaskListCard } from './agentUi/components/TaskListCard.js';
 import { UiCard } from './agentUi/components/UiCard.js';
 import { WorkBlock } from './agentUi/components/WorkBlock.js';
 import type { IMessageActions, ISessionMessageSender } from './conversationView.js';
@@ -309,7 +310,7 @@ export class TranscriptView extends Disposable {
 		}
 	}
 
-	/** "Worked for 16m 56s ⌄" — one collapsible block per agent run, holding the thinking stretches and tool calls with their durations. React-rendered (see reconcileTranscript); this just builds the element. */
+	/** "Worked for 16m 56s ⌄" — one collapsible block per agent run, holding the tool calls and sealed narration stretches with their durations. React-rendered (see reconcileTranscript); this just builds the element. */
 	private createWorkBlockElement(message: ISessionMessage): ReactNode {
 		const sessionsPartService = this.options.sessionsPartService;
 		return createElement(WorkBlock, {
@@ -341,7 +342,9 @@ export class TranscriptView extends Disposable {
 			case 'work':
 				return this.createWorkBlockElement(message);
 			case 'plan':
-				return this.createPlanCardElement(message, model);
+				// update_plan's task list rides role:'plan' too, but it's state
+				// (one card, wholesale-updated), not a reviewable artifact.
+				return message.tasklist !== undefined ? createElement(TaskListCard, { message }) : this.createPlanCardElement(message, model);
 			case 'ui':
 				return createElement(UiCard, {
 					message,

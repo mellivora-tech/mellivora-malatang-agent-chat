@@ -24,11 +24,12 @@ export interface IWorkBlockProps {
  * Content renders through buildWorkSections: parallel children de-interleave
  * into per-agent sub-blocks, main-loop read/edit sweeps fold into rollups —
  * all pure functions of persisted step facts, so replay matches the live run.
- * Thinking is not a row at all (2026-08-05 v2 用户裁定): its content renders
- * as dimmed markdown prose at its chronological position between the tool
- * rows — no tiers, no threshold, no "Thought for Xs" chrome. Assistant text
- * is never routed through here — it stays inline in the answer bubble
- * regardless of what tool calls surround it.
+ * Thinking steps persist (run logs keep the full reasoning) but never render
+ * (2026-08-06 用户裁定). What the model SAID while working renders instead:
+ * each interim text stretch seals into a kind:'text' step at its
+ * chronological position (播报封口) and displays as dimmed markdown prose
+ * between the tool rows — the run's own narration, on the run's timeline.
+ * The final unsealed stretch stays in the message body, bright.
  */
 export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 	const { message, onOpenDataBrowser } = props;
@@ -72,8 +73,12 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 				? localize('conv.workingFor', formatDurationMs(Date.now() - (firstSeenRef.current ?? Date.now())))
 				: localize('conv.workedFor', formatDurationMs(message.durationMs ?? 0));
 
-	const sections = buildWorkSections(message.steps ?? []);
-	const stepCount = (message.steps ?? []).length;
+	// Thinking steps persist (they're the run's reasoning record) but never
+	// render — filtering BEFORE buildWorkSections also keeps invisible steps
+	// from breaking read/edit rollups.
+	const visibleSteps = (message.steps ?? []).filter(step => step.kind !== 'thinking');
+	const sections = buildWorkSections(visibleSteps);
+	const stepCount = visibleSteps.length;
 
 	return (
 		<section ref={rootRef} className={`conversation-work${live ? ' live' : ''}${failed ? ' failed' : ''}`} data-message-id={message.id}>
@@ -93,8 +98,10 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 								<AgentGroupRow key={`${message.id}:a${item.firstIndex}`} group={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
 							) : item.kind === 'rollup' ? (
 								<RollupRow key={`${message.id}:r${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
-							) : item.step.kind === 'thinking' ? (
-								<ThoughtProse key={`${message.id}:${item.index}`} step={item.step} />
+							) : item.kind === 'verify' ? (
+								<VerifyRow key={`${message.id}:v${item.steps[0]!.index}`} item={item} messageId={message.id} onOpenDataBrowser={onOpenDataBrowser} />
+							) : item.step.kind === 'text' ? (
+								<NarrationProse key={`${message.id}:${item.index}`} step={item.step} />
 							) : (
 								<WorkStepRow key={`${message.id}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
 							),
@@ -107,21 +114,16 @@ export function WorkBlock(props: IWorkBlockProps): JSX.Element {
 }
 
 /**
- * 思考正文 (2026-08-05 v2): a thinking stretch renders its content as dimmed
- * markdown prose at its chronological position — no row, no duration chip,
- * no expand interaction; the work block's own collapse is the only fold. A
- * live stretch streams its clamped tail (same prose shape, faded window). A
- * stretch without detail leaves no trace at all.
+ * 播报散文 (2026-08-06 B 方案): a sealed narration stretch renders its text
+ * as dimmed markdown prose at its chronological position — no row, no chip,
+ * no expand interaction; the work block's own collapse is the only fold.
  */
-function ThoughtProse(props: { readonly step: ISessionWorkStep }): JSX.Element | null {
+function NarrationProse(props: { readonly step: ISessionWorkStep }): JSX.Element | null {
 	const { step } = props;
 	if (step.detail === undefined) {
 		return null;
 	}
-	if (step.running === true) {
-		return <div className="conversation-work-thinking-stream">{step.detail}</div>;
-	}
-	return <Markdown className="conversation-work-think" text={step.detail} />;
+	return <Markdown className="conversation-work-narration" text={step.detail} />;
 }
 
 interface IAgentGroupRowProps {
@@ -159,8 +161,10 @@ function AgentGroupRow(props: IAgentGroupRowProps): JSX.Element {
 					{group.items.map(item =>
 						item.kind === 'rollup' ? (
 							<RollupRow key={`${messageId}:${group.agent}:r${item.steps[0]!.index}`} item={item} messageId={`${messageId}:${group.agent}`} onOpenDataBrowser={onOpenDataBrowser} />
-						) : item.step.kind === 'thinking' ? (
-							<ThoughtProse key={`${messageId}:${group.agent}:${item.index}`} step={item.step} />
+						) : item.kind === 'verify' ? (
+							<VerifyRow key={`${messageId}:${group.agent}:v${item.steps[0]!.index}`} item={item} messageId={`${messageId}:${group.agent}`} onOpenDataBrowser={onOpenDataBrowser} />
+						) : item.step.kind === 'text' ? (
+							<NarrationProse key={`${messageId}:${group.agent}:${item.index}`} step={item.step} />
 						) : (
 							<WorkStepRow key={`${messageId}:${group.agent}:${item.index}`} step={item.step} onOpenDataBrowser={onOpenDataBrowser} />
 						),
@@ -222,6 +226,55 @@ function RollupRow(props: IRollupRowProps): JSX.Element {
 			</button>
 			{open && (
 				<div className="conversation-work-rollup-steps">
+					{item.steps.map(member => (
+						<WorkStepRow key={`${messageId}:${member.index}`} step={member.step} onOpenDataBrowser={onOpenDataBrowser} />
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+interface IVerifyRowProps {
+	readonly item: Extract<WorkRenderItem, { kind: 'verify' }>;
+	readonly messageId: string;
+	readonly onOpenDataBrowser?: ((browse: ISessionDataBrowse) => void) | undefined;
+}
+
+const VERIFY_KIND_KEYS = {
+	test: 'conv.verify.test',
+	typecheck: 'conv.verify.typecheck',
+	lint: 'conv.verify.lint',
+	format: 'conv.verify.format',
+} as const;
+
+/**
+ * "✔ Verified typecheck ✓ · lint ✓ · 41/41 tests" — the run's conclusion row
+ * (2026-08-05): a trailing sweep of successful verification calls collapses
+ * into one green-dotted line. Starts CLOSED — the conclusion is the point;
+ * the underlying commands stay one click away as evidence.
+ */
+function VerifyRow(props: IVerifyRowProps): JSX.Element {
+	const { item, messageId, onOpenDataBrowser } = props;
+	const [open, setOpen] = useState(false);
+
+	const sep = localize('conv.rollup.sep');
+	const checksText = item.checks.map(kind => `${localize(VERIFY_KIND_KEYS[kind])} ✓`).join(sep);
+	const total = item.passed !== undefined ? item.passed + (item.failed ?? 0) : undefined;
+
+	return (
+		<div className="conversation-work-verify">
+			<button type="button" className="conversation-work-step-row conversation-work-verify-row" aria-expanded={open} onClick={() => setOpen(!open)}>
+				<span className="codicon codicon-verified" aria-hidden="true" />
+				<span className="conversation-work-step-label">{localize('conv.verify.title', checksText)}</span>
+				{total !== undefined && item.passed !== undefined && (
+					<span className="conversation-work-step-tag good">{localize('conv.verify.tests', String(item.passed), String(total))}</span>
+				)}
+				{item.durationMs >= MIN_SHOWN_DURATION_MS && <span className="conversation-work-step-duration">{formatDurationMs(item.durationMs)}</span>}
+				<span className={`codicon ${open ? 'codicon-chevron-down' : 'codicon-chevron-right'} conversation-work-step-chevron`} aria-hidden="true" />
+			</button>
+			{open && (
+				<div className="conversation-work-verify-steps">
 					{item.steps.map(member => (
 						<WorkStepRow key={`${messageId}:${member.index}`} step={member.step} onOpenDataBrowser={onOpenDataBrowser} />
 					))}

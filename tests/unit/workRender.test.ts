@@ -320,7 +320,7 @@ test('thinking steps pass through in chronological order, each its own item', ()
 test('a thought between sweep members splits the sweep at its position', () => {
 	const items = buildWorkRenderItems([tool('read_file', 'a'), think(2000, { detail: 'now the tests' }), tool('read_file', 'b')]);
 	assert.deepEqual(
-		items.map(item => (item.kind === 'rollup' ? 'rollup' : item.step.kind)),
+		items.map(item => (item.kind === 'step' ? item.step.kind : item.kind)),
 		['tool', 'thinking', 'tool'],
 		'lone reads stay steps and the thought sits between them',
 	);
@@ -336,6 +336,39 @@ test('agent-tagged thoughts render in the main stretch (current design)', () => 
 	assert.deepEqual(
 		sections[0]!.items.map(item => item.kind),
 		['agentGroup', 'step'],
+	);
+});
+
+// ── 播报封口 (2026-08-06 B 方案): kind:'text' steps are the run's narration ──
+
+function say(detail: string, extra: Partial<ISessionWorkStep> = {}): ISessionWorkStep {
+	return { kind: 'text', label: '', durationMs: 500, detail, ...extra } as ISessionWorkStep;
+}
+
+test('narration (text) steps pass through in chronological order, each its own item', () => {
+	const items = buildWorkRenderItems([say('先读一下 README'), tool('read_file', 'README.md'), say('已追加,现在跑验证'), tool('bash', 'npx tsc')]);
+	assert.deepEqual(
+		items.map(item => (item.kind === 'step' ? item.step.kind : item.kind)),
+		['text', 'tool', 'text', 'tool'],
+		'narration interleaves with tool rows on the run timeline',
+	);
+});
+
+test('a narration step between sweep members splits the sweep at its position', () => {
+	const items = buildWorkRenderItems([tool('read_file', 'a'), tool('read_file', 'b'), say('看完这两个文件,再看测试'), tool('read_file', 'c'), tool('read_file', 'd')]);
+	assert.deepEqual(
+		items.map(item => (item.kind === 'rollup' ? `rollup:${item.steps.length}` : ((item as { step: ISessionWorkStep }).step?.kind ?? item.kind))),
+		['rollup:2', 'text', 'rollup:2'],
+		'chronological honesty — narration breaks the fold like thinking did',
+	);
+});
+
+test('a trailing narration step keeps the verify sweep from becoming the conclusion row', () => {
+	const items = buildWorkRenderItems([tool('bash', 'npx tsc', { outcome: 'ok', resultMeta: { verify: { kind: 'typecheck' } } }), say('验证通过,汇报如下')]);
+	assert.deepEqual(
+		items.map(item => (item.kind === 'step' ? item.step.kind : item.kind)),
+		['tool', 'text'],
+		'the sweep is no longer the tail — no Verified row',
 	);
 });
 
@@ -444,5 +477,82 @@ test('an errored edit breaks the sweep and stays a visible row', () => {
 	assert.deepEqual(
 		items.map(item => item.kind),
 		['step', 'step', 'step'],
+	);
+});
+
+// ── Verified 结论行 (2026-08-05): trailing verify sweep synthesis ──
+
+function verify(kind: 'test' | 'typecheck' | 'lint' | 'format', command: string, extra: Partial<ISessionWorkStep> = {}): ISessionWorkStep {
+	return tool('bash', command, { resultMeta: { verify: { kind } }, ...extra });
+}
+
+test('a trailing sweep of ok verify calls collapses into one conclusion row', () => {
+	const items = buildWorkRenderItems([
+		tool('edit_file', 'src/a.ts'),
+		verify('typecheck', 'npx tsc -p tsconfig.json', { durationMs: 4000 }),
+		verify('lint', 'npx eslint src', { durationMs: 3000 }),
+		{
+			...tool('bash', 'node --test dist/tests', { durationMs: 20_000 }),
+			resultMeta: { verify: { kind: 'test', passed: 41, failed: 0 } },
+		} as ISessionWorkStep,
+	]);
+	assert.equal(items.length, 2);
+	const row = items[1]!;
+	assert.equal(row.kind, 'verify');
+	if (row.kind === 'verify') {
+		assert.deepEqual(row.checks, ['typecheck', 'lint', 'test']);
+		assert.equal(row.steps.length, 3);
+		assert.equal(row.durationMs, 27_000);
+	}
+});
+
+test('test counts sum across members; absent when no runner reported them', () => {
+	const withCounts = buildWorkRenderItems([
+		{
+			...tool('bash', 'npm test'),
+			resultMeta: { verify: { kind: 'test', passed: 10, failed: 0 } },
+		} as ISessionWorkStep,
+		{
+			...tool('bash', 'node --test dist/x'),
+			resultMeta: { verify: { kind: 'test', passed: 31 } },
+		} as ISessionWorkStep,
+	]);
+	const row = withCounts[0]!;
+	if (row.kind === 'verify') {
+		assert.equal(row.passed, 41);
+		assert.equal(row.failed, 0);
+	} else {
+		assert.fail('expected a verify row');
+	}
+
+	const noCounts = buildWorkRenderItems([verify('typecheck', 'npx tsc'), verify('lint', 'npx eslint src')]);
+	const plain = noCounts[0]!;
+	if (plain.kind === 'verify') {
+		assert.equal(plain.passed, undefined);
+		assert.equal(plain.failed, undefined);
+	} else {
+		assert.fail('expected a verify row');
+	}
+});
+
+test('a verify mid-run is not the conclusion — only the tail synthesizes', () => {
+	const items = buildWorkRenderItems([verify('typecheck', 'npx tsc'), tool('edit_file', 'src/a.ts')]);
+	assert.deepEqual(
+		items.map(item => item.kind),
+		['step', 'step'],
+	);
+});
+
+test('a failed or running verify never joins the conclusion row', () => {
+	const failed = buildWorkRenderItems([tool('bash', 'npm test', { outcome: 'error' })]);
+	assert.deepEqual(
+		failed.map(item => item.kind),
+		['step'],
+	);
+	const running = buildWorkRenderItems([verify('lint', 'npx eslint src'), tool('bash', 'npm test', { running: true })]);
+	assert.deepEqual(
+		running.map(item => item.kind),
+		['step', 'step'],
+		'the running call has no outcome yet — nothing to conclude',
 	);
 });

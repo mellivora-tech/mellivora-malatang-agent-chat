@@ -51,7 +51,7 @@ export interface ISessionHeader {
 
 /** One step inside a work block: a thinking stretch or a tool call. */
 export interface ISessionWorkStepData {
-	readonly kind: 'thinking' | 'tool';
+	readonly kind: 'thinking' | 'tool' | 'text';
 	readonly label: string;
 	readonly durationMs: number;
 	readonly detail?: string;
@@ -96,6 +96,17 @@ export interface IPlanArtifactData {
 	readonly kind?: 'plan' | 'walkthrough';
 }
 
+/** Wire twin of ITaskListArtifact (update_plan 计划卡, 2026-08-06). */
+export interface ITaskListArtifactData {
+	readonly id: string;
+	readonly items: readonly ITaskListItemData[];
+}
+
+export interface ITaskListItemData {
+	readonly title: string;
+	readonly status: 'pending' | 'active' | 'done';
+}
+
 /**
  * Wire mirror of IUiArtifact (session.ts). Nested under the message entry's
  * `ui` key — never a top-level entry field, so the fold's state branch can't
@@ -123,6 +134,8 @@ export interface ISessionMessageEntry {
 	readonly steps?: readonly ISessionWorkStepData[];
 	/** 'plan' entries carry the structured artifact; `text` is its markdown fallback. */
 	readonly plan?: IPlanArtifactData;
+	/** 'plan' entries may instead carry the run's task list (update_plan 计划卡). */
+	readonly tasklist?: ITaskListArtifactData;
 	/** 'ui' entries carry the structured card envelope; `text` is its markdown fallback. */
 	readonly ui?: IUiArtifactData;
 }
@@ -242,6 +255,7 @@ export interface ISessionSnapshotMessage {
 	readonly outcome?: 'ok' | 'error';
 	readonly steps?: readonly ISessionWorkStepData[];
 	readonly plan?: IPlanArtifactData;
+	readonly tasklist?: ITaskListArtifactData;
 	readonly ui?: IUiArtifactData;
 	readonly feedback?: 'like' | 'dislike';
 	readonly timestamp?: string;

@@ -70,9 +70,9 @@ export const RENDERED_TABLE_MARKER = /\n\[table:(.+)\]$/;
  *  through localize(). */
 export const SUBAGENT_END_ARG_PREFIX = '结束';
 
-/** One step inside a work block: a thinking stretch or a tool call. */
+/** One step inside a work block: a thinking stretch, a tool call, or a sealed narration stretch (播报, 2026-08-06). */
 export interface ISessionWorkStep {
-	readonly kind: 'thinking' | 'tool';
+	readonly kind: 'thinking' | 'tool' | 'text';
 	readonly label: string;
 	readonly durationMs: number;
 	/** Expandable detail — for tool steps, the (truncated) output. */
@@ -114,6 +114,84 @@ export interface IWorkStepResultMeta {
 	readonly bytes?: number;
 	/** read_file: the dedup guard rejected a re-read ("unchanged since last read") — the row should say so, not pretend a read happened. */
 	readonly unchanged?: boolean;
+	/** bash: the command was a recognized verification call (see {@link classifyBashVerify}) — the building block of the run's Verified conclusion row. */
+	readonly verify?: IWorkStepVerify;
+}
+
+/** bash-only verification semantics (2026-08-05 Verified 结论行). */
+export interface IWorkStepVerify {
+	/** Which check kind — drives the conclusion row's labels. */
+	readonly kind: 'test' | 'typecheck' | 'lint' | 'format';
+	/** Test counts, when the runner's output reported them (node --test's ℹ lines, jest/vitest/pytest/cargo summaries). */
+	readonly passed?: number;
+	readonly failed?: number;
+}
+
+/**
+ * Recognize a verification command (test / typecheck / lint / format-check).
+ * Fail-closed like classifyShellRead: chains, pipes, redirects and
+ * substitutions disqualify (a compound call's semantics are unknowable), and
+ * mutating forms (`prettier --write`, `eslint --fix`) never classify. Matches
+ * the command text, locale-independent by construction.
+ */
+export function classifyBashVerify(command: string): IWorkStepVerify['kind'] | undefined {
+	const cmd = command.trim();
+	if (/[>;`$]/.test(cmd) || cmd.includes('&&') || cmd.includes('|')) {
+		return undefined;
+	}
+	// Strip leading env assignments (CI=true npm test) before matching.
+	const stripped = cmd.replace(/^(?:\w+=\S+\s+)+/, '');
+	if (
+		/\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?::\S+)?\b/.test(stripped) ||
+		/^(?:npx\s+)?(?:vitest|jest|mocha|pytest)\b/.test(stripped) ||
+		/^node\s+--test\b/.test(stripped) ||
+		/^(?:cargo\s+test|go\s+test|mvn\s+test|dotnet\s+test)\b/.test(stripped)
+	) {
+		return 'test';
+	}
+	if (/^(?:npx\s+)?(?:tsc|vue-tsc|svelte-check)\b/.test(stripped)) {
+		return 'typecheck';
+	}
+	// --fix mutates — that's an edit, not a check.
+	if (/^(?:npx\s+)?(?:eslint|stylelint|pylint|flake8|ruff|golangci-lint)\b/.test(stripped) && !/--fix\b/.test(stripped)) {
+		return 'lint';
+	}
+	if (/^cargo\s+clippy\b/.test(stripped) && !/--fix\b/.test(stripped)) {
+		return 'lint';
+	}
+	if (/^(?:npx\s+)?prettier\s/.test(stripped) && (/--check\b/.test(stripped) || /--list-different\b|\s-l\b/.test(stripped))) {
+		return 'format';
+	}
+	if (/^cargo\s+fmt\s+--check\b/.test(stripped)) {
+		return 'format';
+	}
+	return undefined;
+}
+
+/** Test counts from a runner's summary — only called when the command classified as 'test', so a "N passed" line is near-certainly the summary. */
+function parseTestCounts(command: string, content: string): { readonly passed?: number; readonly failed?: number } {
+	if (/^node\s+--test\b/.test(command.trim().replace(/^(?:\w+=\S+\s+)+/, ''))) {
+		const pass = /^ℹ pass (\d+)$/m.exec(content);
+		const fail = /^ℹ fail (\d+)$/m.exec(content);
+		return {
+			...(pass === null ? {} : { passed: Number(pass[1]) }),
+			...(fail === null ? {} : { failed: Number(fail[1]) }),
+		};
+	}
+	const cargo = /test result: \w+\. (\d+) passed; (\d+) failed/.exec(content);
+	if (cargo !== null) {
+		return { passed: Number(cargo[1]), failed: Number(cargo[2]) };
+	}
+	// jest/vitest print a "Tests[:] …" summary line — match counts on THAT line
+	// so vitest's earlier "Test Files 5 passed" line can't win the first match.
+	const testsLine = /^\s*Tests:?\s+(.+)$/m.exec(content);
+	const pool = testsLine?.[1] ?? content;
+	const pass = /(\d+) passed/.exec(pool);
+	const fail = /(\d+) failed/.exec(pool);
+	return {
+		...(pass === null ? {} : { passed: Number(pass[1]) }),
+		...(fail === null ? {} : { failed: Number(fail[1]) }),
+	};
 }
 
 /**
@@ -122,8 +200,19 @@ export interface IWorkStepResultMeta {
  * formats, never localized text). Only called on success — an error IS
  * information of another kind and needs no meta.
  */
-export function deriveWorkStepMeta(tool: string, content: string): IWorkStepResultMeta | undefined {
+export function deriveWorkStepMeta(tool: string, content: string, arg?: string): IWorkStepResultMeta | undefined {
 	switch (tool) {
+		case 'bash': {
+			if (arg === undefined) {
+				return undefined;
+			}
+			const kind = classifyBashVerify(arg);
+			if (kind === undefined) {
+				return undefined;
+			}
+			const counts = kind === 'test' ? parseTestCounts(arg, content) : {};
+			return { verify: { kind, ...counts } };
+		}
 		case 'read_file': {
 			if (content.startsWith('File "') && content.includes('unchanged since last read')) {
 				return { unchanged: true };
@@ -216,6 +305,25 @@ export interface IPlanArtifact {
 }
 
 /**
+ * The run's task list (update_plan, 2026-08-06 计划 artifact 独立呈现):
+ * structured STATE, not events — each update_plan call replaces it wholesale,
+ * and the call leaves no work step behind (Claude Code's TodoWrite renders
+ * null in the transcript for the same reason: the plan answers "走到哪了",
+ * a question the timeline can't). Rides a `role:'plan'` message (text holds
+ * the markdown fallback the next run's transcript reads); TaskListCard, not
+ * PlanCard, renders it.
+ */
+export interface ITaskListArtifact {
+	readonly id: string;
+	readonly items: readonly ITaskListItem[];
+}
+
+export interface ITaskListItem {
+	readonly title: string;
+	readonly status: 'pending' | 'active' | 'done';
+}
+
+/**
  * A generic interactive card the model rendered via `render_ui`. Rides on a
  * `role:'ui'` message; the message's `text` holds a markdown fallback so older
  * builds, unregistered components, and the next run's transcript still see the
@@ -263,6 +371,8 @@ export interface ISessionMessage {
 	readonly steps?: readonly ISessionWorkStep[];
 	/** 'plan' messages carry the structured artifact; `text` is its markdown fallback. */
 	readonly plan?: IPlanArtifact;
+	/** 'plan' messages may instead carry the run's task list (update_plan) — TaskListCard territory, PlanCard never sees it. */
+	readonly tasklist?: ITaskListArtifact;
 	/** 'ui' messages carry the structured card envelope; `text` is its markdown fallback. */
 	readonly ui?: IUiArtifact;
 	readonly feedback?: 'like' | 'dislike';

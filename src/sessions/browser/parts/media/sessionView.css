@@ -523,7 +523,7 @@
 .conversation-markdown .md-inline-code {
 	padding: 0 var(--vscode-agents-space-4);
 	border-radius: var(--vscode-agents-radius-control);
-	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 9%, transparent);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 6%, transparent);
 	font-family: var(--vscode-agents-font-mono);
 	font-size: 0.92em;
 }
@@ -607,10 +607,10 @@
 	font-size: var(--vscode-agents-fontSize-label1);
 }
 
-/* 思考正文 (2026-08-05 v2 用户裁定): thinking renders as dimmed markdown
-   prose inside the work block — no row, no tiers, no threshold. Same
-   typography as the answer, one voice quieter. */
-.conversation-work-think {
+/* 播报散文 (2026-08-06 播报上移): the run's interim text stretches render as
+   dimmed markdown prose at the top of the work block — same typography as the
+   answer, one voice quieter. */
+.conversation-work-narration {
 	margin: var(--vscode-agents-space-8) 0 var(--vscode-agents-space-10);
 	max-width: var(--vscode-agents-size-conversation-width);
 	color: var(--vscode-agents-color-text-muted);
@@ -618,11 +618,11 @@
 	line-height: 1.7;
 }
 
-.conversation-work-think > :first-child {
+.conversation-work-narration > :first-child {
 	margin-top: 0;
 }
 
-.conversation-work-think > :last-child {
+.conversation-work-narration > :last-child {
 	margin-bottom: 0;
 }
 
@@ -642,12 +642,14 @@
    (rollup / agent) = small filled gray. */
 .conversation-work-rollup > .conversation-work-rollup-row,
 .conversation-work-agent > .conversation-work-agent-row,
+.conversation-work-verify > .conversation-work-verify-row,
 .conversation-work-step.error > .conversation-work-step-row {
 	position: relative;
 }
 
 .conversation-work-rollup > .conversation-work-rollup-row::before,
 .conversation-work-agent > .conversation-work-agent-row::before,
+.conversation-work-verify > .conversation-work-verify-row::before,
 .conversation-work-step.error > .conversation-work-step-row::before {
 	content: '';
 	position: absolute;
@@ -670,6 +672,23 @@
 	background: var(--vscode-agents-color-danger);
 }
 
+/* Verified 结论行: the run closed on green — the only success-colored dot. */
+.conversation-work-verify > .conversation-work-verify-row::before {
+	background: var(--vscode-agents-color-success);
+}
+
+.conversation-work-verify > .conversation-work-verify-row .codicon-verified,
+.conversation-work-verify > .conversation-work-verify-row .conversation-work-step-label {
+	color: var(--vscode-agents-color-success);
+}
+
+.conversation-work-verify-steps {
+	margin-left: var(--vscode-agents-space-20);
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-6);
+}
+
 /* Result-meta tags (结果态上行): quiet pills — 0-hit probes wear warning. */
 .conversation-work-step-tag {
 	flex: 0 0 auto;
@@ -679,6 +698,11 @@
 	color: var(--vscode-agents-color-text-secondary);
 	font-size: var(--vscode-agents-fontSize-label2);
 	font-variant-numeric: tabular-nums;
+}
+
+.conversation-work-step-tag.good {
+	background: color-mix(in srgb, var(--vscode-agents-color-success) 12%, transparent);
+	color: var(--vscode-agents-color-success);
 }
 
 .conversation-work-step-tag.zero {
@@ -1004,24 +1028,6 @@ button.conversation-work-step-row:hover {
 	font-variant-numeric: tabular-nums;
 }
 
-/* 思考直播: the running thinking stretch IS the same dimmed prose, clamped
-   to a top-faded tail window while it streams. */
-.conversation-work-thinking-stream {
-	margin: var(--vscode-agents-space-8) 0 var(--vscode-agents-space-10);
-	max-height: calc(3 * 1.7em);
-	overflow: hidden;
-	display: flex;
-	flex-direction: column;
-	justify-content: flex-end;
-	color: var(--vscode-agents-color-text-muted);
-	font-size: var(--vscode-agents-fontSize-label1);
-	line-height: 1.7;
-	white-space: pre-wrap;
-	word-break: break-word;
-	-webkit-mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);
-	mask-image: linear-gradient(to bottom, transparent 0, black 1.2em);
-}
-
 /* Read-class rollup: "探索了 8 个文件、2 个目录 · 3 次检索" with the folded rows indented beneath. */
 .conversation-work-rollup-row .conversation-work-step-label {
 	color: var(--vscode-agents-color-text-primary);
@@ -1073,6 +1079,144 @@ button.conversation-work-step-row:hover {
 	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
 	border-radius: var(--vscode-agents-radius-container);
 	overflow: hidden;
+}
+
+/* 计划卡 (2026-08-06, update_plan): one wholesale-updated artifact per run.
+   All done → collapses to the one-line conclusion; anything pending/active
+   stays expanded so an interrupted run's stuck item remains in view. */
+.conversation-tasklist {
+	display: flex;
+	flex-direction: column;
+	max-width: var(--vscode-agents-size-conversation-width);
+	margin: 0 auto var(--vscode-agents-space-18);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 14%, transparent);
+	border-radius: var(--vscode-agents-radius-container);
+	overflow: hidden;
+}
+
+.conversation-tasklist-header {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-10) var(--vscode-agents-space-14);
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+	border: none;
+	background: none;
+	cursor: pointer;
+	text-align: left;
+}
+
+.conversation-tasklist-header:hover {
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 4%, transparent);
+}
+
+.conversation-tasklist-header > .codicon:first-child {
+	color: var(--vscode-agents-color-accent);
+}
+
+.conversation-tasklist.done .conversation-tasklist-header > .codicon:first-child {
+	color: var(--vscode-agents-color-success);
+}
+
+.conversation-tasklist-count {
+	color: var(--vscode-agents-color-text-muted);
+	font-size: var(--vscode-agents-fontSize-label1);
+	font-variant-numeric: tabular-nums;
+	font-weight: var(--vscode-agents-fontWeight-regular);
+}
+
+.conversation-tasklist-bar {
+	width: 72px;
+	height: var(--vscode-agents-space-4);
+	border-radius: var(--vscode-agents-space-2);
+	background: color-mix(in srgb, var(--vscode-agents-color-text-primary) 8%, transparent);
+	overflow: hidden;
+}
+
+.conversation-tasklist-bar i {
+	display: block;
+	height: 100%;
+	background: var(--vscode-agents-color-accent);
+	border-radius: var(--vscode-agents-space-2);
+	transition: width var(--vscode-agents-motion-duration-base) var(--vscode-agents-motion-easing);
+}
+
+.conversation-tasklist.done .conversation-tasklist-bar i {
+	background: var(--vscode-agents-color-success);
+}
+
+.conversation-tasklist-done-mark {
+	color: var(--vscode-agents-color-success);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-tasklist-chevron {
+	margin-left: auto;
+	color: var(--vscode-agents-color-text-muted);
+}
+
+.conversation-tasklist-done-mark + .conversation-tasklist-chevron {
+	margin-left: 0;
+}
+
+.conversation-tasklist-items {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vscode-agents-space-2);
+	padding: var(--vscode-agents-space-8) var(--vscode-agents-space-14) var(--vscode-agents-space-10);
+	border-top: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 10%, transparent);
+}
+
+.conversation-tasklist-item {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-agents-space-8);
+	padding: var(--vscode-agents-space-3) var(--vscode-agents-space-8);
+	border-radius: var(--vscode-agents-radius-control);
+	font-size: var(--vscode-agents-fontSize-label1);
+}
+
+.conversation-tasklist-box {
+	width: var(--vscode-agents-space-14);
+	height: var(--vscode-agents-space-14);
+	border: var(--vscode-agents-space-1) solid color-mix(in srgb, var(--vscode-agents-color-text-primary) 25%, transparent);
+	border-radius: var(--vscode-agents-space-4);
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	color: var(--vscode-agents-color-text-inverse);
+}
+
+.conversation-tasklist-item.done .conversation-tasklist-box {
+	background: var(--vscode-agents-color-success);
+	border-color: var(--vscode-agents-color-success);
+}
+
+.conversation-tasklist-item.done .conversation-tasklist-item-text {
+	color: var(--vscode-agents-color-text-muted);
+	text-decoration: line-through;
+	text-decoration-color: var(--vscode-agents-color-text-subtle);
+}
+
+.conversation-tasklist-item.active {
+	background: color-mix(in srgb, var(--vscode-agents-color-accent) 9%, transparent);
+}
+
+.conversation-tasklist-item.active .conversation-tasklist-box {
+	border: none;
+	color: var(--vscode-agents-color-accent);
+}
+
+.conversation-tasklist-item.active .conversation-tasklist-item-text {
+	color: var(--vscode-agents-color-text-primary);
+	font-weight: var(--vscode-agents-fontWeight-semiBold);
+}
+
+.conversation-tasklist-item.pending .conversation-tasklist-item-text {
+	color: var(--vscode-agents-color-text-secondary);
 }
 
 .conversation-plan.superseded {

@@ -183,6 +183,18 @@ export type WorkRenderItem =
 			readonly durationMs: number;
 			/** The trailing member is the run's open call — the rollup carries the spinner. */
 			readonly running: boolean;
+	  }
+	| {
+			readonly kind: 'verify';
+			/** The aggregated verification steps, original indices preserved for stable React keys. */
+			readonly steps: readonly { readonly step: ISessionWorkStep; readonly index: number }[];
+			/** Deduped check kinds in first-seen order ("typecheck ✓ · lint ✓"). */
+			readonly checks: readonly ('test' | 'typecheck' | 'lint' | 'format')[];
+			/** Summed test counts across members whose runner reported them; absent when none did. */
+			readonly passed?: number;
+			readonly failed?: number;
+			/** Sum of member durations. */
+			readonly durationMs: number;
 	  };
 
 /** update_plan's progress, parsed from its persisted detail ("Plan (5/7 done):\n[x] …\n[~] …"). */
@@ -338,7 +350,65 @@ export function buildWorkRenderItems(steps: readonly ISessionWorkStep[]): WorkRe
 		}
 	}
 	flush();
-	return items;
+	return synthesizeVerifyRow(items);
+}
+
+/**
+ * Verified 结论行 (2026-08-05): a TRAILING run of successful verification
+ * calls (bash steps whose resultMeta.verify the provider persisted) collapses
+ * into one conclusion row — "Verified typecheck ✓ · lint ✓ · tests 41/41".
+ * Tail-only by design: verification mid-run (test → more edits) is not the
+ * run's conclusion and stays ordinary rows; a FAILED verify never joins (its
+ * error row is the evidence, Q1); a still-running one waits for its outcome.
+ * Pure over persisted facts — replay renders identically (Q3).
+ */
+function synthesizeVerifyRow(items: readonly WorkRenderItem[]): WorkRenderItem[] {
+	const tail: { step: ISessionWorkStep; index: number }[] = [];
+	let cut = items.length;
+	while (cut > 0) {
+		const item = items[cut - 1]!;
+		const verify = item.kind === 'step' && item.step.kind === 'tool' && item.step.outcome === 'ok' && item.step.running !== true ? item.step.resultMeta?.verify : undefined;
+		if (item.kind !== 'step' || verify === undefined) {
+			break;
+		}
+		tail.unshift({ step: item.step, index: item.index });
+		cut--;
+	}
+	if (tail.length === 0) {
+		return items.slice();
+	}
+	const checks: ('test' | 'typecheck' | 'lint' | 'format')[] = [];
+	let passed = 0;
+	let failed = 0;
+	let anyPassed = false;
+	let anyFailed = false;
+	let durationMs = 0;
+	for (const member of tail) {
+		durationMs += member.step.durationMs;
+		const verify = member.step.resultMeta!.verify!;
+		if (!checks.includes(verify.kind)) {
+			checks.push(verify.kind);
+		}
+		if (verify.passed !== undefined) {
+			passed += verify.passed;
+			anyPassed = true;
+		}
+		if (verify.failed !== undefined) {
+			failed += verify.failed;
+			anyFailed = true;
+		}
+	}
+	return [
+		...items.slice(0, cut),
+		{
+			kind: 'verify',
+			steps: tail,
+			checks,
+			...(anyPassed ? { passed } : {}),
+			...(anyFailed ? { failed } : {}),
+			durationMs,
+		},
+	];
 }
 
 /** A child loop's sub-block inside a section: its steps de-interleaved from siblings, so rollups fold whole sweeps again. */

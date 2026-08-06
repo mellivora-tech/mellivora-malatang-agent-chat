@@ -45,3 +45,40 @@ test('tools without a derivable semantics get no meta', () => {
 	assert.equal(deriveWorkStepMeta('bash', 'total 42'), undefined);
 	assert.equal(deriveWorkStepMeta('edit_file', 'Edited src/a.ts (1 replacement).'), undefined);
 });
+
+// ── bash verify 分类 (2026-08-05 Verified 结论行) ──
+
+test('bash: test runners classify as test, with counts parsed from the summary', () => {
+	const nodeTest = deriveWorkStepMeta('bash', 'ℹ tests 41\nℹ pass 41\nℹ fail 0\n', 'node --test dist/tests/unit/*.test.js');
+	assert.deepEqual(nodeTest, { verify: { kind: 'test', passed: 41, failed: 0 } });
+
+	const vitest = deriveWorkStepMeta('bash', ' Test Files  5 passed (5)\n      Tests  38 passed (38)\n', 'npm test');
+	assert.deepEqual(vitest, { verify: { kind: 'test', passed: 38 } }, 'no failures reported → no failed key');
+
+	const jest = deriveWorkStepMeta('bash', 'Tests:       2 failed, 38 passed, 40 total\n', 'pnpm test');
+	assert.deepEqual(jest, { verify: { kind: 'test', passed: 38, failed: 2 } });
+
+	const cargo = deriveWorkStepMeta('bash', 'test result: ok. 12 passed; 0 failed; 0 ignored\n', 'cargo test');
+	assert.deepEqual(cargo, { verify: { kind: 'test', passed: 12, failed: 0 } });
+
+	// A runner with no countable summary (go test) still classifies, just without counts.
+	assert.deepEqual(deriveWorkStepMeta('bash', 'ok  \texample.com/pkg\t0.3s\n', 'go test ./...'), { verify: { kind: 'test' } });
+});
+
+test('bash: typecheck / lint / format classify; mutating forms never do', () => {
+	assert.deepEqual(deriveWorkStepMeta('bash', '', 'npx tsc -p tsconfig.json'), { verify: { kind: 'typecheck' } });
+	assert.deepEqual(deriveWorkStepMeta('bash', '', 'npx eslint src/'), { verify: { kind: 'lint' } });
+	assert.deepEqual(deriveWorkStepMeta('bash', 'All matched files use Prettier code style!\n', 'npx prettier --check src'), { verify: { kind: 'format' } });
+	assert.deepEqual(deriveWorkStepMeta('bash', '', 'CI=true npm test'), { verify: { kind: 'test' } }, 'env prefixes are stripped');
+
+	assert.equal(deriveWorkStepMeta('bash', '', 'npx prettier --write src'), undefined, '--write mutates');
+	assert.equal(deriveWorkStepMeta('bash', '', 'npx eslint --fix src'), undefined, '--fix mutates');
+});
+
+test('bash: fail-closed — chains, pipes and ordinary commands never classify', () => {
+	assert.equal(deriveWorkStepMeta('bash', '', 'npm test && git push'), undefined);
+	assert.equal(deriveWorkStepMeta('bash', '', 'npm test | tee out.log'), undefined);
+	assert.equal(deriveWorkStepMeta('bash', '', 'npm run build'), undefined);
+	assert.equal(deriveWorkStepMeta('bash', '', 'git status'), undefined);
+	assert.equal(deriveWorkStepMeta('bash', ''), undefined, 'no command, no classification');
+});

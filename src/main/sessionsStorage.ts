@@ -283,6 +283,7 @@ async function loadSessionFromFile(file: string, projectId: string | undefined):
 				...(entry.outcome !== undefined ? { outcome: entry.outcome } : {}),
 				...(entry.steps !== undefined ? { steps: entry.steps } : {}),
 				...(entry.plan !== undefined ? { plan: entry.plan } : {}),
+				...(entry.tasklist !== undefined ? { tasklist: entry.tasklist } : {}),
 				...(entry.ui !== undefined ? { ui: entry.ui } : {}),
 				timestamp: entry.timestamp,
 			});
